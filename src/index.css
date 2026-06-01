@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-charcoal: #1A1A1A;
+  --color-charcoal-light: #2D2D2D;
+  --color-gold: #C9A84C;
+  --color-cream: #FFFFFF; /* Now pure white for the light theme */
+  --color-cream-dark: #FAFAFA; /* Off-white for subtle contrasts */
+  --color-wine: #2D0B14;
+  --color-whisky: #C9A84C;
+  --color-beer: #D97706; /* amber */
+  --color-wine-badge: #166534; /* green tint for wine */
+  --color-gin: #4F46E5; /* indigo/purple */
+  
+  --font-serif: "Cormorant Garamond", serif;
+  --font-sans: Inter, sans-serif;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-charcoal);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+}
+
+button {
+  border-radius: 2px !important;
+}
+
+.border-half {
+  border-width: 0.5px;
+}
+
+/* Base custom classes to avoid overly long class strings */
+.btn-gold {
+  background-color: var(--color-gold);
+  color: #FFFFFF; /* White text on gold button for better contrast in light theme */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.3s ease;
+  border: 0.5px solid var(--color-gold);
+}
+.btn-gold:hover {
+  background-color: transparent;
+  color: var(--color-gold);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--color-charcoal);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.3s ease;
+  border: 0.5px solid var(--color-charcoal);
+}
+.btn-ghost:hover {
+  background-color: var(--color-charcoal);
+  color: var(--color-cream);
+}
