@@ -31,7 +31,7 @@ const Home = () => {
             </p>
           </Link>
 
-          {/* Right Promo: make father's day*/}
+          {/* Right Promo: Make Father's Day*/}
           <Link to="/shop?category=Gifts" className="group flex flex-col cursor-pointer">
             <div className="overflow-hidden mb-4 relative w-full h-[400px]">
               <img 
