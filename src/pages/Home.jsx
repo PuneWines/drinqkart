@@ -31,7 +31,7 @@ const Home = () => {
             </p>
           </Link>
 
-          {/* Right Promo: Father's Day */}
+          {/* Right Promo: */}
           <Link to="/shop?category=Gifts" className="group flex flex-col cursor-pointer">
             <div className="overflow-hidden mb-4 relative w-full h-[400px]">
               <img 
@@ -40,9 +40,9 @@ const Home = () => {
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
               />
               <div className="absolute top-8 left-8">
-                <span className="text-[#FDE047] font-serif text-5xl md:text-7xl leading-none font-light drop-shadow-md block">Make</span>
-                <span className="text-[#FDE047] font-serif text-5xl md:text-7xl leading-none uppercase drop-shadow-md block mb-1">FATHER'S</span>
-                <span className="text-[#FDE047] font-serif text-5xl md:text-7xl leading-none uppercase drop-shadow-md block border-b-2 border-[#FDE047] pb-2 inline-block">DAY</span>
+                <span className="text-[#FDE047] font-serif text-5xl md:text-7xl leading-none font-light drop-shadow-md block"></span>
+                <span className="text-[#FDE047] font-serif text-5xl md:text-7xl leading-none uppercase drop-shadow-md block mb-1"></span>
+                <span className="text-[#FDE047] font-serif text-5xl md:text-7xl leading-none uppercase drop-shadow-md block border-b-2 border-[#FDE047] pb-2 inline-block"></span>
               </div>
             </div>
             <h3 className="text-[26px] text-[#1A1A1A] font-sans font-light tracking-wide mb-2">
