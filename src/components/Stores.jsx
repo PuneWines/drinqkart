@@ -5,14 +5,14 @@ const storesData = [
   {
     id: 1,
     title: 'THE LIQUOR STORY - KUNAL WINE',
-    image: '/stores/kunal-wine.webp',
+    image: '/Kunal wine frunt side image.png',
     address: 'Kunal Fine wine South Seas Dist.& Shop No.15&16 Plot No.168 Mahaveer Mannat Panvel',
     mapLink: 'https://www.google.com/search?q=THE+LIQUOR+STORY+KUNAL+WINE+Mahaveer+Mannat+Panvel'
   },
   {
     id: 2,
     title: 'THE LIQUOR STORY - VISHAL WINE',
-    image: '/stores/vishal-wine.webp',
+    image: '/TLS - vishal Frunt final image.png',
     address: 'Maga Police Saphron Building No A7 Shop No 1/2 Rajiv Gandhi Infotech Park Hinjewadi Phase 3',
     mapLink: 'https://www.google.com/search?q=THE+LIQUOR+STORY+VISHAL+WINE+Hinjewadi+Phase+3'
   }

@@ -223,9 +223,7 @@ const Shop = () => {
           {/* Page Header */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4 border-b-[0.5px] border-[#1A1A1A]/10 pb-8">
             <div>
-              <span className="text-[10px] uppercase tracking-[0.3em] text-[#C9A84C] mb-2 block font-bold">The Cellar</span>
-              <h1 className="text-5xl font-serif text-[#1A1A1A] font-bold">All Collections</h1>
-              <p className="text-[#1A1A1A]/50 text-xs mt-2 font-sans font-medium">{filtered.length} bottles available</p>
+              <p className="text-[#1A1A1A]/50 text-xs font-sans font-medium">{filtered.length} bottles available</p>
             </div>
 
             {/* Mobile filter button + sort */}
