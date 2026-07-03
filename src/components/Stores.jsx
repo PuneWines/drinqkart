@@ -12,7 +12,7 @@ const storesData = [
   {
     id: 2,
     title: 'THE LIQUOR STORY - VISHAL WINE',
-    image: '/TLS - vishal Frunt final image.png',
+    image: '',
     address: 'Maga Police Saphron Building No A7 Shop No 1/2 Rajiv Gandhi Infotech Park Hinjewadi Phase 3',
     mapLink: 'https://www.google.com/search?q=THE+LIQUOR+STORY+VISHAL+WINE+Hinjewadi+Phase+3'
   }
@@ -45,12 +45,14 @@ const Stores = () => {
               {store.title}
             </h3>
             
-            <div className="overflow-hidden mb-6 relative w-full h-[400px]">
-              <img 
-                src={store.image} 
-                alt={store.title} 
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 shadow-xl"
-              />
+            <div className="overflow-hidden mb-6 relative w-full h-[400px] bg-gray-100">
+              {store.image && (
+                <img
+                  src={store.image}
+                  alt={store.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 shadow-xl"
+                />
+              )}
             </div>
             
             <p className="text-[#1A1A1A]/70 text-sm leading-relaxed mb-6 h-16">
