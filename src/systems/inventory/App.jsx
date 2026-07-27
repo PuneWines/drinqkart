@@ -53,25 +53,92 @@ function App() {
     localStorage.setItem('vishal_snacks_page', currentPage);
   }, [currentPage]);
 
-  // Guard routes dynamically based on user's granular page_access JSON array permissions
+  // Guard routes dynamically based on user's granular page_access & master_user_system_page_access permissions
   useEffect(() => {
     if (currentUser) {
       const allowed = currentUser.page_access || [];
+      const userRole = (currentUser.role || '').toLowerCase();
+      const isMasterAdmin = (currentUser.user_name || currentUser.username || '').toLowerCase() === 'masteradmin';
+
+      let masterAccessList = [];
+      try {
+        const rawObj = currentUser.master_user_system_page_access;
+        const rawStorage = localStorage.getItem('master_user_system_page_access');
+        const parseList = (r) => {
+          if (!r) return [];
+          let cur = r;
+          while (typeof cur === 'string') {
+            try {
+              const t = JSON.parse(cur);
+              if (t === cur) break;
+              cur = t;
+            } catch { break; }
+          }
+          if (Array.isArray(cur)) return cur;
+          if (cur && typeof cur === 'object') return Object.keys(cur);
+          return [];
+        };
+        masterAccessList = [...parseList(rawObj), ...parseList(rawStorage)];
+      } catch (e) {
+        console.error('Error parsing master access in App.jsx:', e);
+      }
+
+      const hasMasterPerm = (pageName) => {
+        const viewKey = `inventory.${pageName}.view`;
+        const modifyKey = `inventory.${pageName}.modify`;
+        return masterAccessList.includes(viewKey) || masterAccessList.includes(modifyKey);
+      };
+
       const hasAccess = (page) => {
+        if (isMasterAdmin || userRole === 'admin') return true;
+
         if (page === 'entry') {
-          return allowed.includes('entry_dashboard') || currentUser?.role === 'admin';
+          return (
+            hasMasterPerm('Daily Entry Dashboard Logs') ||
+            hasMasterPerm('Dashboard') ||
+            allowed.includes('entry_dashboard')
+          );
         }
         if (page === 'form_entry') {
-          return allowed.includes('entry_purchases') || allowed.includes('entry_closing') || allowed.includes('entry_cashtally');
+          return (
+            hasMasterPerm('Purchase Form Entry') ||
+            hasMasterPerm('Closing Stock Form Entry') ||
+            hasMasterPerm('Cash Tally Form Entry') ||
+            hasMasterPerm('Form Entry') ||
+            allowed.includes('entry_purchases') ||
+            allowed.includes('entry_closing') ||
+            allowed.includes('entry_cashtally')
+          );
         }
         if (page === 'ledger') {
-          return allowed.includes('ledger_table') || allowed.includes('ledger_reports') || allowed.includes('ledger_purchases') || allowed.includes('ledger_sales') || allowed.includes('ledger_closing') || allowed.includes('manager_report');
+          return (
+            hasMasterPerm('Stock Ledger') ||
+            hasMasterPerm('Table View') ||
+            hasMasterPerm('Reports & Charts') ||
+            hasMasterPerm('Purchase Items') ||
+            hasMasterPerm('Sales History') ||
+            hasMasterPerm('Current Stock Details') ||
+            hasMasterPerm('Manager Report') ||
+            allowed.includes('ledger_table') ||
+            allowed.includes('ledger_reports') ||
+            allowed.includes('ledger_purchases') ||
+            allowed.includes('ledger_sales') ||
+            allowed.includes('ledger_closing') ||
+            allowed.includes('manager_report')
+          );
         }
         if (page === 'master') {
-          return allowed.includes('master_items') || allowed.includes('master_vendors');
+          return (
+            hasMasterPerm('Master Items') ||
+            allowed.includes('master_items') ||
+            allowed.includes('master_vendors')
+          );
         }
         if (page === 'users') {
-          return allowed.includes('users_management');
+          return (
+            hasMasterPerm('Users Management') ||
+            allowed.includes('users_management')
+          );
         }
         return false;
       };

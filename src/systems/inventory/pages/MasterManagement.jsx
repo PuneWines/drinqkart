@@ -16,10 +16,41 @@ import {
 } from '../services/dbService';
 
 export default function MasterManagement({ currentUser }) {
+  const isMasterAdmin = (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'masteradmin';
+  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+
+  const masterAccessList = useMemo(() => {
+    let list = [];
+    try {
+      const rawObj = currentUser?.master_user_system_page_access;
+      const rawStorage = localStorage.getItem('master_user_system_page_access');
+      const parseList = (r) => {
+        if (!r) return [];
+        let cur = r;
+        while (typeof cur === 'string') {
+          try {
+            const t = JSON.parse(cur);
+            if (t === cur) break;
+            cur = t;
+          } catch { break; }
+        }
+        if (Array.isArray(cur)) return cur;
+        if (cur && typeof cur === 'object') return Object.keys(cur);
+        return [];
+      };
+      list = [...parseList(rawObj), ...parseList(rawStorage)];
+    } catch (e) {
+      console.error('Error parsing master access in MasterManagement:', e);
+    }
+    return list;
+  }, [currentUser]);
+
+  const isMasterItemsAllowed = isMasterAdmin || isAdmin || masterAccessList.includes('inventory.Master Items.view') || masterAccessList.includes('inventory.Master Items.modify') || (currentUser?.page_access || []).includes('master_items');
+  const isVendorsAllowed = isMasterAdmin || isAdmin || masterAccessList.includes('inventory.Vendors Directory.view') || masterAccessList.includes('inventory.Vendors Directory.modify') || (currentUser?.page_access || []).includes('master_vendors');
+
   const [activeTab, setActiveTab] = useState(() => {
-    const allowed = currentUser?.page_access || [];
-    if (allowed.includes('master_items')) return 'items';
-    if (allowed.includes('master_vendors')) return 'vendors';
+    if (isMasterItemsAllowed) return 'items';
+    if (isVendorsAllowed) return 'vendors';
     return 'items';
   });
   const [items, setItems] = useState([]);
@@ -328,7 +359,7 @@ export default function MasterManagement({ currentUser }) {
         <div className="p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-50/20">
           {/* Tabs */}
           <div className="flex bg-slate-100 p-1.5 rounded-xl self-start">
-            {currentUser?.page_access?.includes('master_items') && (
+            {isMasterItemsAllowed && (
               <button
                 onClick={() => { setActiveTab('items'); setSearchQuery(''); }}
                 className={`px-4.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'items'
@@ -339,7 +370,7 @@ export default function MasterManagement({ currentUser }) {
                 Master Items
               </button>
             )}
-            {currentUser?.page_access?.includes('master_vendors') && (
+            {isVendorsAllowed && (
               <button
                 onClick={() => { setActiveTab('vendors'); setSearchQuery(''); }}
                 className={`px-4.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'vendors'
@@ -350,7 +381,7 @@ export default function MasterManagement({ currentUser }) {
                 Vendors Directory
               </button>
             )}
-            {(currentUser?.role === 'admin' || currentUser?.page_access?.includes('master_items') || currentUser?.page_access?.includes('master_vendors')) && (
+            {(isAdmin || isMasterAdmin || isMasterItemsAllowed || isVendorsAllowed) && (
               <button
                 onClick={() => { setActiveTab('shops'); setSearchQuery(''); }}
                 className={`px-4.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'shops'
