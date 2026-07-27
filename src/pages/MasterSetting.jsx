@@ -20,27 +20,93 @@ const AVAILABLE_SYSTEMS = [
   {
     id: 'checklist',
     name: 'Checklist Delegation',
-    pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'Admin Approval', 'Settings']
+    sections: [
+      {
+        title: 'CHECKLIST DELEGATION MODULES',
+        pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'Admin Approval', 'Settings']
+      }
+    ]
   },
   {
     id: 'hr',
     name: 'HR System',
-    pages: ['Dashboard', 'Employees', 'Joining shop', 'Leave Management', 'Daily Attendance', 'Payroll', 'Roster', 'Admin advanced']
+    sections: [
+      {
+        title: 'HR SYSTEM MODULES',
+        pages: ['Dashboard', 'Employees', 'Joining shop', 'Leave Management', 'Daily Attendance', 'Payroll', 'Roster', 'Admin advanced']
+      }
+    ]
   },
   {
     id: 'inventory',
     name: 'Inventory System',
-    pages: ['Dashboard', 'Form Entry', 'Stock Ledger', 'Master Items', 'Users Management']
+    sections: [
+      {
+        title: 'DAILY ENTRY DASHBOARD & FORMS',
+        pages: [
+          'Daily Entry Dashboard Logs',
+          'Purchase Form Entry',
+          'Closing Stock Form Entry',
+          'Cash Tally Form Entry'
+        ]
+      },
+      {
+        title: 'STOCK LEDGER & AUDITS',
+        pages: [
+          'Table View',
+          'Reports & Charts',
+          'Purchase Items',
+          'Sales History',
+          'Current Stock Details',
+          'Manager Report'
+        ]
+      },
+      {
+        title: 'MASTER CATALOG DIRECTORY',
+        pages: [
+          'Master Items',
+          'Vendors Directory'
+        ]
+      },
+      {
+        title: 'USER MANAGEMENT',
+        pages: [
+          'Users Management'
+        ]
+      }
+    ]
   },
   {
     id: 'petty-cash',
     name: 'Petty Cash',
-    pages: ['Dashboard', 'Form Entry', 'Counter 1', 'Counter 2', 'Counter 3', 'Financial Reports']
+    sections: [
+      {
+        title: 'PETTY CASH MODULES',
+        pages: ['Dashboard', 'Form Entry', 'Counter 1', 'Counter 2', 'Counter 3', 'Financial Reports']
+      }
+    ]
   },
   {
     id: 'purchase',
     name: 'Purchase System',
-    pages: ['Dashboard', 'Indent', 'Approval', 'PO', 'PO History', 'Orders Pipeline', 'Trader', 'Transporter', 'Receiving', 'Settings']
+    sections: [
+      {
+        title: 'OVERVIEW',
+        pages: ['Dashboard']
+      },
+      {
+        title: 'PROCUREMENT',
+        pages: ['Indent', 'Approval', 'PO', 'PO History', 'Orders Pipeline']
+      },
+      {
+        title: 'VERIFICATION',
+        pages: ['Trader', 'Transporter', 'Receiving']
+      },
+      {
+        title: 'ADMIN',
+        pages: ['Settings']
+      }
+    ]
   }
 ];
 
@@ -493,79 +559,98 @@ export default function MasterSetting() {
                 </div>
 
                 {!jsonMode ? (
-                  /* Interactive UI - One Row Per Page */
+                  /* Interactive UI - Hierarchy by Section */
                   <div className="space-y-6 border border-[#1A1A1A]/10 p-5 bg-white">
-                    {AVAILABLE_SYSTEMS.map((sys) => (
-                      <div key={sys.id} className="space-y-3 border-b border-[#1A1A1A]/10 pb-5 last:border-0 last:pb-0">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-serif font-bold text-[#1A1A1A] uppercase tracking-wider bg-[#FAFAFA] border border-[#1A1A1A]/10 px-3 py-1">
-                            {sys.name} (<span className="font-mono text-[#C9A84C] font-bold">{sys.id}</span>)
-                          </span>
-                        </div>
+                    {AVAILABLE_SYSTEMS.map((sys) => {
+                      const sectionsToRender = sys.sections || [{ title: null, pages: sys.pages || [] }];
 
-                        {/* One Row Per Page List */}
-                        <div className="space-y-2 pt-1">
-                          {sys.pages.map((pg) => {
-                            const currentLevel = getPageLevel(sys.id, pg);
+                      return (
+                        <div key={sys.id} className="space-y-4 border-b border-[#1A1A1A]/10 pb-6 last:border-0 last:pb-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-serif font-bold text-[#1A1A1A] uppercase tracking-wider bg-[#FAFAFA] border border-[#1A1A1A]/10 px-3 py-1">
+                              {sys.name} (<span className="font-mono text-[#C9A84C] font-bold">{sys.id}</span>)
+                            </span>
+                          </div>
 
-                            return (
-                              <div
-                                key={pg}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[#FAFAFA] border border-[#1A1A1A]/10 hover:border-[#C9A84C]/40 transition-colors"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] shrink-0" />
-                                  <span className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
-                                    {pg}
-                                  </span>
-                                </div>
+                          {/* Sections & Pages Hierarchy List */}
+                          <div className="space-y-4 pt-1">
+                            {sectionsToRender.map((sec, secIdx) => (
+                              <div key={secIdx} className="space-y-2">
+                                {sec.title && (
+                                  <div className="pt-2 pb-1 flex items-center gap-2">
+                                    <span className="text-[11px] font-sans font-extrabold text-[#1A1A1A]/60 uppercase tracking-widest">
+                                      {sec.title}
+                                    </span>
+                                    <div className="h-[1px] flex-1 bg-[#1A1A1A]/10" />
+                                  </div>
+                                )}
 
-                                <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/10 shadow-xs shrink-0">
-                                  {/* None Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setPageLevel(sys.id, pg, 'none')}
-                                    className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${
-                                      currentLevel === 'none'
-                                        ? 'bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20'
-                                        : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
-                                    }`}
-                                  >
-                                    None
-                                  </button>
+                                <div className="space-y-2">
+                                  {sec.pages.map((pg) => {
+                                    const currentLevel = getPageLevel(sys.id, pg);
 
-                                  {/* View Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setPageLevel(sys.id, pg, 'view')}
-                                    className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
-                                      currentLevel === 'view'
-                                        ? 'bg-[#1A1A1A] text-white font-bold shadow-sm'
-                                        : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                    }`}
-                                  >
-                                    .view
-                                  </button>
+                                    return (
+                                      <div
+                                        key={pg}
+                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[#FAFAFA] border border-[#1A1A1A]/10 hover:border-[#C9A84C]/40 transition-colors"
+                                      >
+                                        <div className="flex items-center gap-2.5 min-w-0 pl-1">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] shrink-0" />
+                                          <span className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
+                                            {pg}
+                                          </span>
+                                        </div>
 
-                                  {/* Modify Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setPageLevel(sys.id, pg, 'modify')}
-                                    className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
-                                      currentLevel === 'modify'
-                                        ? 'bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm'
-                                        : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                    }`}
-                                  >
-                                    .modify
-                                  </button>
+                                        <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/10 shadow-xs shrink-0">
+                                          {/* None Button */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setPageLevel(sys.id, pg, 'none')}
+                                            className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                              currentLevel === 'none'
+                                                ? 'bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20'
+                                                : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
+                                            }`}
+                                          >
+                                            None
+                                          </button>
+
+                                          {/* View Button */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setPageLevel(sys.id, pg, 'view')}
+                                            className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
+                                              currentLevel === 'view'
+                                                ? 'bg-[#1A1A1A] text-white font-bold shadow-sm'
+                                                : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                            }`}
+                                          >
+                                            .view
+                                          </button>
+
+                                          {/* Modify Button */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setPageLevel(sys.id, pg, 'modify')}
+                                            className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
+                                              currentLevel === 'modify'
+                                                ? 'bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm'
+                                                : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                            }`}
+                                          >
+                                            .modify
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   /* JSON Editor */

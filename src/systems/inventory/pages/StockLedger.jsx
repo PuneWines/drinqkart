@@ -24,6 +24,60 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 const toDateStr = (d) => d.toISOString().split('T')[0];
 
 export default function StockLedger({ currentUser }) {
+  const isMasterAdmin = (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'masteradmin';
+  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+
+  const masterAccessList = useMemo(() => {
+    let list = [];
+    try {
+      const rawObj = currentUser?.master_user_system_page_access;
+      const rawStorage = localStorage.getItem('master_user_system_page_access');
+      const parseList = (r) => {
+        if (!r) return [];
+        let cur = r;
+        while (typeof cur === 'string') {
+          try {
+            const t = JSON.parse(cur);
+            if (t === cur) break;
+            cur = t;
+          } catch { break; }
+        }
+        if (Array.isArray(cur)) return cur;
+        if (cur && typeof cur === 'object') return Object.keys(cur);
+        return [];
+      };
+      list = [...parseList(rawObj), ...parseList(rawStorage)];
+    } catch (e) {
+      console.error('Error parsing master access in StockLedger:', e);
+    }
+    return list;
+  }, [currentUser]);
+
+  const isTabAllowed = (tabName, legacyKey) => {
+    if (isMasterAdmin || isAdmin) return true;
+    if (masterAccessList.length > 0) {
+      const viewKey = `inventory.${tabName}.view`;
+      const modifyKey = `inventory.${tabName}.modify`;
+      const genericViewKey = `inventory.Stock Ledger.view`;
+      const genericModifyKey = `inventory.Stock Ledger.modify`;
+      if (masterAccessList.includes(viewKey) || masterAccessList.includes(modifyKey) || masterAccessList.includes(genericViewKey) || masterAccessList.includes(genericModifyKey)) {
+        return true;
+      }
+    }
+    const legacy = currentUser?.page_access || [];
+    if (Array.isArray(legacyKey)) {
+      return legacyKey.some(k => legacy.includes(k));
+    }
+    return legacy.includes(legacyKey);
+  };
+
+  const isTableAllowed = isTabAllowed('Table View', 'ledger_table') || isTabAllowed('Ledger Table View', 'ledger_table');
+  const isReportsAllowed = isTabAllowed('Reports & Charts', 'ledger_reports') || isTabAllowed('Valuation Reports & Charts', 'ledger_reports');
+  const isPurchasesAllowed = isTabAllowed('Purchase Items', 'ledger_purchases') || isTabAllowed('Purchase Audit Logs', 'ledger_purchases');
+  const isSalesAllowed = isTabAllowed('Sales History', 'ledger_sales') || isTabAllowed('Sales History Logs', 'ledger_sales');
+  const isClosingAllowed = isTabAllowed('Current Stock Details', 'ledger_closing') || isTabAllowed('Current Stock Audit Logs', 'ledger_closing');
+  const isManagerReportAllowed = isTabAllowed('Manager Report', ['manager_report', 'Inventory_manager_report']);
+
   const [itemsList, setItemsList] = useState([]);
   const [shopsList, setShopsList] = useState([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
@@ -44,12 +98,12 @@ export default function StockLedger({ currentUser }) {
 
   // Tab state dynamically initialized based on user's page_access granular permissions
   const [activeTab, setActiveTab] = useState(() => {
-    const allowed = currentUser?.page_access || [];
-    if (allowed.includes('ledger_table')) return 'table';
-    if (allowed.includes('ledger_reports')) return 'reports';
-    if (allowed.includes('ledger_purchases')) return 'purchases';
-    if (allowed.includes('ledger_sales')) return 'sales';
-    if (allowed.includes('ledger_closing')) return 'closing';
+    if (isTableAllowed) return 'table';
+    if (isReportsAllowed) return 'reports';
+    if (isPurchasesAllowed) return 'purchases';
+    if (isSalesAllowed) return 'sales';
+    if (isClosingAllowed) return 'closing';
+    if (isManagerReportAllowed) return 'Inventory_manager_report';
     return 'table';
   });
   const [reportsSubTab, setReportsSubTab] = useState('overview'); // 'overview' | 'sales'
@@ -563,7 +617,7 @@ export default function StockLedger({ currentUser }) {
       {/* Tabs */}
       <div className="border-b border-slate-200">
         <nav className="-mb-px flex flex-wrap space-x-6 sm:space-x-8" aria-label="Tabs">
-          {currentUser?.page_access?.includes('ledger_table') && (
+          {isTableAllowed && (
             <button
               onClick={() => setActiveTab('table')}
               className={`
@@ -581,7 +635,7 @@ export default function StockLedger({ currentUser }) {
               </span>
             </button>
           )}
-          {currentUser?.page_access?.includes('ledger_reports') && (
+          {isReportsAllowed && (
             <button
               onClick={() => setActiveTab('reports')}
               className={`
@@ -599,7 +653,7 @@ export default function StockLedger({ currentUser }) {
               </span>
             </button>
           )}
-          {currentUser?.page_access?.includes('ledger_purchases') && (
+          {isPurchasesAllowed && (
             <button
               onClick={() => setActiveTab('purchases')}
               className={`
@@ -617,7 +671,7 @@ export default function StockLedger({ currentUser }) {
               </span>
             </button>
           )}
-          {currentUser?.page_access?.includes('ledger_sales') && (
+          {isSalesAllowed && (
             <button
               onClick={() => setActiveTab('sales')}
               className={`
@@ -635,7 +689,7 @@ export default function StockLedger({ currentUser }) {
               </span>
             </button>
           )}
-          {currentUser?.page_access?.includes('ledger_closing') && (
+          {isClosingAllowed && (
             <button
               onClick={() => setActiveTab('closing')}
               className={`
@@ -653,8 +707,8 @@ export default function StockLedger({ currentUser }) {
               </span>
             </button>
           )}
-          {/* NEW: Manager Report Tab */}
-          {(currentUser?.page_access?.includes('manager_report') || currentUser?.page_access?.includes('Inventory_manager_report')) && (
+          {/* Manager Report Tab */}
+          {isManagerReportAllowed && (
             <button
               onClick={() => setActiveTab('Inventory_manager_report')}
               className={`

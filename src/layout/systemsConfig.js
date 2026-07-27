@@ -51,7 +51,7 @@ export const systems = [
     base: '/systems/inventory',
     icon: Store,
     subtabs: [
-      { label: 'Dashboard', to: '/systems/inventory?page=entry' },
+      { label: 'Daily Entry Dashboard Logs', to: '/systems/inventory?page=entry' },
       { label: 'Form Entry', to: '/systems/inventory?page=form_entry' },
       { label: 'Stock Ledger', to: '/systems/inventory?page=ledger' },
       { label: 'Master Items', to: '/systems/inventory?page=master' },
@@ -140,18 +140,47 @@ export const getVisibleSystems = (user) => {
       const labelsToCheck = [sub.label];
       if (sub.label === 'All Tasks') labelsToCheck.push('Task');
       if (sub.label === 'User & System Access') labelsToCheck.push('Master Setting');
+      if (systemId === 'inventory') {
+        if (sub.label === 'Daily Entry Dashboard Logs' || sub.label === 'Dashboard') {
+          labelsToCheck.push('Daily Entry Dashboard Logs', 'Dashboard');
+        }
+        if (sub.label === 'Form Entry') {
+          labelsToCheck.push('Purchase Form Entry', 'Closing Stock Form Entry', 'Cash Tally Form Entry', 'Form Entry');
+        }
+        if (sub.label === 'Stock Ledger') {
+          labelsToCheck.push('Stock Ledger', 'Table View', 'Reports & Charts', 'Purchase Items', 'Sales History', 'Current Stock Details', 'Manager Report');
+        }
+      }
 
-      return labelsToCheck.some((lbl) => {
+      const hasMasterPerm = labelsToCheck.some((lbl) => {
         const viewKey = `${systemId}.${lbl}.view`;
         const modifyKey = `${systemId}.${lbl}.modify`;
         return masterAccessList.includes(viewKey) || masterAccessList.includes(modifyKey);
       });
+      if (hasMasterPerm) return true;
     }
 
     if (userRole === 'admin') return true;
 
     const legacyPageAccess = parseMasterAccessList(userObj.page_access);
     if (legacyPageAccess.length > 0) {
+      if (systemId === 'inventory') {
+        if (sub.label === 'Daily Entry Dashboard Logs' || sub.label === 'Dashboard') {
+          return legacyPageAccess.includes('entry_dashboard') || legacyPageAccess.includes('Dashboard') || legacyPageAccess.includes('Daily Entry Dashboard Logs');
+        }
+        if (sub.label === 'Form Entry') {
+          return legacyPageAccess.includes('entry_purchases') || legacyPageAccess.includes('entry_closing') || legacyPageAccess.includes('entry_cashtally') || legacyPageAccess.includes('Form Entry');
+        }
+        if (sub.label === 'Stock Ledger') {
+          return legacyPageAccess.includes('ledger_table') || legacyPageAccess.includes('Stock Ledger');
+        }
+        if (sub.label === 'Master Items') {
+          return legacyPageAccess.includes('master_items') || legacyPageAccess.includes('Master Items');
+        }
+        if (sub.label === 'Users Management') {
+          return legacyPageAccess.includes('users_management') || legacyPageAccess.includes('Users Management');
+        }
+      }
       return legacyPageAccess.includes(sub.label);
     }
 

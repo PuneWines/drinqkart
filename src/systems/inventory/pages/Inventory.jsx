@@ -35,12 +35,80 @@ const yesterday = () => {
 };
 
 export default function Inventory({ currentUser }) {
+  const isMasterAdmin = (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'masteradmin';
+  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+
+  const masterAccessList = useMemo(() => {
+    let list = [];
+    try {
+      const rawObj = currentUser?.master_user_system_page_access;
+      const rawStorage = localStorage.getItem('master_user_system_page_access');
+      const parseList = (r) => {
+        if (!r) return [];
+        let cur = r;
+        while (typeof cur === 'string') {
+          try {
+            const t = JSON.parse(cur);
+            if (t === cur) break;
+            cur = t;
+          } catch { break; }
+        }
+        if (Array.isArray(cur)) return cur;
+        if (cur && typeof cur === 'object') return Object.keys(cur);
+        return [];
+      };
+      list = [...parseList(rawObj), ...parseList(rawStorage)];
+    } catch (e) {
+      console.error('Error parsing master access in Inventory:', e);
+    }
+    return list;
+  }, [currentUser]);
+
+  const hasMasterPerm = useCallback((pageName) => {
+    const viewKey = `inventory.${pageName}.view`;
+    const modifyKey = `inventory.${pageName}.modify`;
+    return masterAccessList.includes(viewKey) || masterAccessList.includes(modifyKey);
+  }, [masterAccessList]);
+
+  const allowedPermissions = useMemo(() => currentUser?.page_access || [], [currentUser]);
+
+  const isPurchaseAllowed = useMemo(() => (
+    isMasterAdmin ||
+    isAdmin ||
+    hasMasterPerm('Purchase Form Entry') ||
+    hasMasterPerm('Form Entry') ||
+    allowedPermissions.includes('entry_purchases')
+  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+
+  const isClosingAllowed = useMemo(() => (
+    isMasterAdmin ||
+    isAdmin ||
+    hasMasterPerm('Closing Stock Form Entry') ||
+    hasMasterPerm('Form Entry') ||
+    allowedPermissions.includes('entry_closing')
+  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+
+  const isCashTallyAllowed = useMemo(() => (
+    isMasterAdmin ||
+    isAdmin ||
+    hasMasterPerm('Cash Tally Form Entry') ||
+    hasMasterPerm('Form Entry') ||
+    allowedPermissions.includes('entry_cashtally')
+  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+
+  const allowedTypes = useMemo(() => {
+    const types = [];
+    if (isPurchaseAllowed) types.push('Purchase Quantity');
+    if (isClosingAllowed) types.push('Closing Quantity');
+    if (isCashTallyAllowed) types.push('Sale Amount');
+    return types;
+  }, [isPurchaseAllowed, isClosingAllowed, isCashTallyAllowed]);
+
   // Dynamically initialize based on granular page tab permissions
   const [quantityType, setQuantityType] = useState(() => {
-    const allowed = currentUser?.page_access || [];
-    if (allowed.includes('entry_purchases')) return 'Purchase Quantity';
-    if (allowed.includes('entry_closing')) return 'Closing Quantity';
-    if (allowed.includes('entry_cashtally')) return 'Sale Amount';
+    if (isPurchaseAllowed) return 'Purchase Quantity';
+    if (isClosingAllowed) return 'Closing Quantity';
+    if (isCashTallyAllowed) return 'Sale Amount';
     return 'Purchase Quantity';
   });
   const [date, setDate] = useState(() => toDateStr(new Date()));
@@ -50,12 +118,17 @@ export default function Inventory({ currentUser }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardTab, setDashboardTab] = useState(() => {
-    const allowed = currentUser?.page_access || [];
-    if (allowed.includes('entry_purchases')) return 'purchases';
-    if (allowed.includes('entry_closing')) return 'closing';
-    if (allowed.includes('entry_cashtally')) return 'cashtally';
+    if (isPurchaseAllowed) return 'purchases';
+    if (isClosingAllowed) return 'closing';
+    if (isCashTallyAllowed) return 'cashtally';
     return 'purchases';
   });
+
+  useEffect(() => {
+    if (allowedTypes.length > 0 && !allowedTypes.includes(quantityType)) {
+      setQuantityType(allowedTypes[0]);
+    }
+  }, [allowedTypes, quantityType]);
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
 
   // Items & vendors
@@ -640,7 +713,7 @@ export default function Inventory({ currentUser }) {
         <div className="p-6 md:p-8">
           {/* Sub-tab navigation */}
           <div className="flex border-b border-slate-200 mb-6 space-x-6 overflow-x-auto scrollbar-none">
-            {currentUser?.page_access?.includes('entry_purchases') && (
+            {isPurchaseAllowed && (
               <button
                 onClick={() => setDashboardTab('purchases')}
                 className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${dashboardTab === 'purchases'
@@ -654,7 +727,7 @@ export default function Inventory({ currentUser }) {
                 Purchase Logs
               </button>
             )}
-            {currentUser?.page_access?.includes('entry_closing') && (
+            {isClosingAllowed && (
               <button
                 onClick={() => setDashboardTab('closing')}
                 className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${dashboardTab === 'closing'
@@ -668,7 +741,7 @@ export default function Inventory({ currentUser }) {
                 Current Stock Details
               </button>
             )}
-            {currentUser?.page_access?.includes('entry_closing') && (
+            {isClosingAllowed && (
               <button
                 onClick={() => setDashboardTab('closing_logs')}
                 className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${dashboardTab === 'closing_logs'
@@ -682,7 +755,7 @@ export default function Inventory({ currentUser }) {
                 Closing Stock
               </button>
             )}
-            {currentUser?.page_access?.includes('entry_cashtally') && (
+            {isCashTallyAllowed && (
               <button
                 onClick={() => setDashboardTab('cashtally')}
                 className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${dashboardTab === 'cashtally'
@@ -777,15 +850,18 @@ export default function Inventory({ currentUser }) {
                     <select
                       value={quantityType}
                       onChange={(e) => { setQuantityType(e.target.value); setErrors({}); }}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                      disabled={allowedTypes.length <= 1}
+                      className={`w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
+                        allowedTypes.length <= 1 ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white cursor-pointer'
+                      }`}
                     >
-                      {currentUser?.page_access?.includes('entry_purchases') && (
+                      {isPurchaseAllowed && (
                         <option value="Purchase Quantity">Purchase Quantity</option>
                       )}
-                      {currentUser?.page_access?.includes('entry_closing') && (
+                      {isClosingAllowed && (
                         <option value="Closing Quantity">Closing Quantity</option>
                       )}
-                      {currentUser?.page_access?.includes('entry_cashtally') && (
+                      {isCashTallyAllowed && (
                         <option value="Sale Amount">Sale Amount</option>
                       )}
                     </select>

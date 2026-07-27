@@ -18,14 +18,88 @@ import {
 const toDateStr = (d) => d.toISOString().split('T')[0];
 
 export default function FormEntry({ currentUser }) {
+  const isMasterAdmin = (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'masteradmin';
+  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+
+  const masterAccessList = useMemo(() => {
+    let list = [];
+    try {
+      const rawObj = currentUser?.master_user_system_page_access;
+      const rawStorage = localStorage.getItem('master_user_system_page_access');
+      const parseList = (r) => {
+        if (!r) return [];
+        let cur = r;
+        while (typeof cur === 'string') {
+          try {
+            const t = JSON.parse(cur);
+            if (t === cur) break;
+            cur = t;
+          } catch { break; }
+        }
+        if (Array.isArray(cur)) return cur;
+        if (cur && typeof cur === 'object') return Object.keys(cur);
+        return [];
+      };
+      list = [...parseList(rawObj), ...parseList(rawStorage)];
+    } catch (e) {
+      console.error('Error parsing master access in FormEntry:', e);
+    }
+    return list;
+  }, [currentUser]);
+
+  const hasMasterPerm = useCallback((pageName) => {
+    const viewKey = `inventory.${pageName}.view`;
+    const modifyKey = `inventory.${pageName}.modify`;
+    return masterAccessList.includes(viewKey) || masterAccessList.includes(modifyKey);
+  }, [masterAccessList]);
+
+  const allowedPermissions = useMemo(() => currentUser?.page_access || [], [currentUser]);
+
+  const isPurchaseAllowed = useMemo(() => (
+    isMasterAdmin ||
+    isAdmin ||
+    hasMasterPerm('Purchase Form Entry') ||
+    hasMasterPerm('Form Entry') ||
+    allowedPermissions.includes('entry_purchases')
+  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+
+  const isClosingAllowed = useMemo(() => (
+    isMasterAdmin ||
+    isAdmin ||
+    hasMasterPerm('Closing Stock Form Entry') ||
+    hasMasterPerm('Form Entry') ||
+    allowedPermissions.includes('entry_closing')
+  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+
+  const isCashTallyAllowed = useMemo(() => (
+    isMasterAdmin ||
+    isAdmin ||
+    hasMasterPerm('Cash Tally Form Entry') ||
+    hasMasterPerm('Form Entry') ||
+    allowedPermissions.includes('entry_cashtally')
+  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+
+  const allowedTypes = useMemo(() => {
+    const types = [];
+    if (isPurchaseAllowed) types.push('Purchase Quantity');
+    if (isClosingAllowed) types.push('Closing Quantity');
+    if (isCashTallyAllowed) types.push('Sale Amount');
+    return types;
+  }, [isPurchaseAllowed, isClosingAllowed, isCashTallyAllowed]);
+
   // Filter and select default quantityType based on user page permissions
   const [quantityType, setQuantityType] = useState(() => {
-    const allowed = currentUser?.page_access || [];
-    if (allowed.includes('entry_purchases')) return 'Purchase Quantity';
-    if (allowed.includes('entry_closing')) return 'Closing Quantity';
-    if (allowed.includes('entry_cashtally')) return 'Sale Amount';
+    if (isPurchaseAllowed) return 'Purchase Quantity';
+    if (isClosingAllowed) return 'Closing Quantity';
+    if (isCashTallyAllowed) return 'Sale Amount';
     return 'Purchase Quantity';
   });
+
+  useEffect(() => {
+    if (allowedTypes.length > 0 && !allowedTypes.includes(quantityType)) {
+      setQuantityType(allowedTypes[0]);
+    }
+  }, [allowedTypes, quantityType]);
 
   const [date, setDate] = useState(() => toDateStr(new Date()));
   const [notification, setNotification] = useState(null);
@@ -472,10 +546,7 @@ export default function FormEntry({ currentUser }) {
     }
   };
 
-  const allowedPermissions = currentUser?.page_access || [];
-  const hasAccessToForm = allowedPermissions.includes('entry_purchases') ||
-                         allowedPermissions.includes('entry_closing') ||
-                         allowedPermissions.includes('entry_cashtally');
+  const hasAccessToForm = isPurchaseAllowed || isClosingAllowed || isCashTallyAllowed;
 
   if (!hasAccessToForm) {
     return (
@@ -579,18 +650,18 @@ export default function FormEntry({ currentUser }) {
                 <select
                   value={quantityType}
                   onChange={(e) => { setQuantityType(e.target.value); setErrors({}); }}
-                  disabled={allowedTypesCount <= 1}
+                  disabled={allowedTypes.length <= 1}
                   className={`w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
-                    allowedTypesCount <= 1 ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white cursor-pointer'
+                    allowedTypes.length <= 1 ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white cursor-pointer'
                   }`}
                 >
-                  {allowedPermissions.includes('entry_purchases') && (
+                  {isPurchaseAllowed && (
                     <option value="Purchase Quantity">Purchase Quantity</option>
                   )}
-                  {allowedPermissions.includes('entry_closing') && (
+                  {isClosingAllowed && (
                     <option value="Closing Quantity">Closing Quantity</option>
                   )}
-                  {allowedPermissions.includes('entry_cashtally') && (
+                  {isCashTallyAllowed && (
                     <option value="Sale Amount">Sale Amount</option>
                   )}
                 </select>
@@ -600,7 +671,7 @@ export default function FormEntry({ currentUser }) {
             {/* ════════════════════════════════════════════════════════
                   MODE 1 — PURCHASE QUANTITY
               ═══════════════════════════════════════════════════════════ */}
-            {quantityType === 'Purchase Quantity' && allowedPermissions.includes('entry_purchases') && (
+            {quantityType === 'Purchase Quantity' && isPurchaseAllowed && (
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 gap-4">
                   <h3 className="text-lg font-bold text-slate-800 flex items-center whitespace-nowrap">
@@ -779,7 +850,7 @@ export default function FormEntry({ currentUser }) {
             {/* ════════════════════════════════════════════════════════
                   MODE 2 — CLOSING QUANTITY
               ═══════════════════════════════════════════════════════════ */}
-            {quantityType === 'Closing Quantity' && allowedPermissions.includes('entry_closing') && (
+            {quantityType === 'Closing Quantity' && isClosingAllowed && (
               <div className="space-y-6">
                 <div className="pb-3 border-b border-slate-200">
                   <h3 className="text-lg font-bold text-slate-800 flex items-center">
@@ -922,7 +993,7 @@ export default function FormEntry({ currentUser }) {
             {/* ════════════════════════════════════════════════════════
                   MODE 3 — SALE AMOUNT
               ═══════════════════════════════════════════════════════════ */}
-            {quantityType === 'Sale Amount' && allowedPermissions.includes('entry_cashtally') && (
+            {quantityType === 'Sale Amount' && isCashTallyAllowed && (
               <div className="space-y-6">
                 <div className="pb-3 border-b border-slate-200">
                   <h3 className="text-lg font-bold text-slate-800 flex items-center">
