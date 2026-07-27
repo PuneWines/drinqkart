@@ -226,6 +226,29 @@ export default function MasterSetting() {
     setRawJsonText(JSON.stringify(Object.keys(updated), null, 2));
   };
 
+  const setSystemLevel = (system, level) => {
+    const allPages = [];
+    if (system.sections) {
+      system.sections.forEach(sec => allPages.push(...sec.pages));
+    } else if (system.pages) {
+      allPages.push(...system.pages);
+    }
+    const updated = { ...accessPermissions };
+    allPages.forEach(pg => {
+      const viewKey = `${system.id}.${pg}.view`;
+      const modifyKey = `${system.id}.${pg}.modify`;
+      delete updated[viewKey];
+      delete updated[modifyKey];
+      if (level === 'view') {
+        updated[viewKey] = viewKey;
+      } else if (level === 'modify') {
+        updated[modifyKey] = modifyKey;
+      }
+    });
+    setAccessPermissions(updated);
+    setRawJsonText(JSON.stringify(Object.keys(updated), null, 2));
+  };
+
   const handleJsonChange = (val) => {
     setRawJsonText(val);
     try {
@@ -475,7 +498,7 @@ export default function MasterSetting() {
             className="bg-white rounded-none border border-[#1A1A1A]/20 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
           >
             {/* Modal Header */}
-            <div className="p-6 border-b border-[#1A1A1A]/10 flex items-center justify-between bg-[#FAFAFA]">
+            <div className="p-5 pt-3 pb-2 border-b border-[#1A1A1A]/10 flex items-center justify-between bg-[#FAFAFA]">
               <div>
                 <span className="text-[#C9A84C] uppercase tracking-[0.25em] text-[9.5px] font-bold block mb-1">
                   Access Management
@@ -559,57 +582,80 @@ export default function MasterSetting() {
                 </div>
 
                 {!jsonMode ? (
-                  /* Interactive UI - Hierarchy by Section */
-                  <div className="space-y-6 border border-[#1A1A1A]/10 p-5 bg-white">
+                  /* Interactive UI - Distinct System Cards, Section Banners & Page Rows */
+                  <div className="space-y-2 bg-slate-50/50  rounded-xl">
                     {AVAILABLE_SYSTEMS.map((sys) => {
                       const sectionsToRender = sys.sections || [{ title: null, pages: sys.pages || [] }];
 
                       return (
-                        <div key={sys.id} className="space-y-4 border-b border-[#1A1A1A]/10 pb-6 last:border-0 last:pb-0">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-serif font-bold text-[#1A1A1A] uppercase tracking-wider bg-[#FAFAFA] border border-[#1A1A1A]/10 px-3 py-1">
-                              {sys.name} (<span className="font-mono text-[#C9A84C] font-bold">{sys.id}</span>)
-                            </span>
+                        <div
+                          key={sys.id}
+                          className="bg-white rounded-xl border-1 border-slate-200 shadow-sm overflow-hidden transition-all hover:border-[#C9A84C]/50"
+                        >
+                          {/* SYSTEM HEADER BAR - Prominent Dark Card Header */}
+                          <div className="bg-[#1C120C] text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#C9A84C]/30">
+                            <div className="flex items-center gap-3">
+                              <span className="w-3 h-3 rounded-full bg-[#C9A84C] shrink-0" />
+                              <div>
+                                <h4 className="text-sm font-bold tracking-wide text-white uppercase font-serif">
+                                  {sys.name}
+                                </h4>
+                                <span className="text-[10px] font-mono text-[#C9A84C] font-semibold tracking-wider">
+                                  System ID: {sys.id}
+                                </span>
+                              </div>
+                            </div>
+
+                          
                           </div>
 
-                          {/* Sections & Pages Hierarchy List */}
-                          <div className="space-y-4 pt-1">
+                          {/* SYSTEM CONTENT (SECTIONS & PAGES) */}
+                          <div className="p-5 space-y-6 bg-slate-50/40">
                             {sectionsToRender.map((sec, secIdx) => (
-                              <div key={secIdx} className="space-y-2">
+                              <div key={secIdx} className="space-y-3">
+                                {/* SECTION HEADER - Highlighted Category Banner */}
                                 {sec.title && (
-                                  <div className="pt-2 pb-1 flex items-center gap-2">
-                                    <span className="text-[11px] font-sans font-extrabold text-[#1A1A1A]/60 uppercase tracking-widest">
+                                  <div className="flex items-center gap-2 border-l-4 border-[#C9A84C] bg-[#C9A84C]/10 px-3.5 py-2 rounded-r-lg">
+                                    <span className="text-xs font-black text-[#1C120C] uppercase tracking-widest font-sans">
                                       {sec.title}
                                     </span>
-                                    <div className="h-[1px] flex-1 bg-[#1A1A1A]/10" />
                                   </div>
                                 )}
 
-                                <div className="space-y-2">
+                                {/* PAGE ROWS */}
+                                <div className="space-y-2 pl-0 sm:pl-2">
                                   {sec.pages.map((pg) => {
                                     const currentLevel = getPageLevel(sys.id, pg);
 
                                     return (
                                       <div
                                         key={pg}
-                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[#FAFAFA] border border-[#1A1A1A]/10 hover:border-[#C9A84C]/40 transition-colors"
+                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 pl-3.5 bg-white border border-slate-200 rounded-lg hover:border-[#C9A84C] h transition-all"
                                       >
-                                        <div className="flex items-center gap-2.5 min-w-0 pl-1">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] shrink-0" />
-                                          <span className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
+                                        {/* Page Title & Bullet */}
+                                        <div className="flex items-center gap-3 min-w-0">
+                                          <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                            currentLevel === 'modify' 
+                                              ? 'bg-[#C9A84C] ring-2 ring-[#C9A84C]/30' 
+                                              : currentLevel === 'view' 
+                                              ? 'bg-slate-900' 
+                                              : 'bg-slate-300'
+                                          }`} />
+                                          <span className="text-xs font-bold text-slate-800 tracking-tight font-serif truncate">
                                             {pg}
                                           </span>
                                         </div>
 
-                                        <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/10 shadow-xs shrink-0">
+                                        {/* Page Level Access Toggle Buttons */}
+                                        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 shrink-0 self-end sm:self-auto">
                                           {/* None Button */}
                                           <button
                                             type="button"
                                             onClick={() => setPageLevel(sys.id, pg, 'none')}
-                                            className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                            className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${
                                               currentLevel === 'none'
-                                                ? 'bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20'
-                                                : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
+                                                ? 'bg-slate-300 text-slate-800 font-extrabold shadow-xs'
+                                                : 'text-slate-500 hover:text-slate-900'
                                             }`}
                                           >
                                             None
@@ -619,10 +665,10 @@ export default function MasterSetting() {
                                           <button
                                             type="button"
                                             onClick={() => setPageLevel(sys.id, pg, 'view')}
-                                            className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
+                                            className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
                                               currentLevel === 'view'
-                                                ? 'bg-[#1A1A1A] text-white font-bold shadow-sm'
-                                                : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                                ? 'bg-[#1C120C] text-white font-extrabold shadow-sm'
+                                                : 'text-slate-600 hover:text-slate-900'
                                             }`}
                                           >
                                             .view
@@ -632,10 +678,10 @@ export default function MasterSetting() {
                                           <button
                                             type="button"
                                             onClick={() => setPageLevel(sys.id, pg, 'modify')}
-                                            className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
+                                            className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
                                               currentLevel === 'modify'
-                                                ? 'bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm'
-                                                : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                                ? 'bg-[#C9A84C] text-[#1C120C] font-black shadow-sm'
+                                                : 'text-slate-600 hover:text-slate-900'
                                             }`}
                                           >
                                             .modify
@@ -670,7 +716,7 @@ export default function MasterSetting() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-5 border-t border-[#1A1A1A]/10 bg-[#FAFAFA] flex items-center justify-end gap-3">
+            <div className="p-2 border-t border-[#1A1A1A]/10 bg-[#FAFAFA] flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
