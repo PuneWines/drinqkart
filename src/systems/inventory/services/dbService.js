@@ -10,10 +10,10 @@ import { supabase } from '../lib/supabase';
 export async function getItems(shopId = null) {
   try {
     let query = supabase
-      .from('items')
+      .from('Inventory_items')
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `);
 
     if (shopId) {
@@ -25,9 +25,9 @@ export async function getItems(shopId = null) {
 
     if (error) throw error;
 
-    // Fetch the latest purchase rates from purchase_items
+    // Fetch the latest purchase rates from Inventory_purchase_items
     const { data: latestRates, error: ratesError } = await supabase
-      .from('purchase_items')
+      .from('Inventory_purchase_items')
       .select('item_id, purchase_rate')
       .order('created_at', { ascending: false });
 
@@ -62,10 +62,10 @@ export async function getItems(shopId = null) {
 export async function getVendors(shopId = null) {
   try {
     let query = supabase
-      .from('vendors')
+      .from('Inventory_vendors')
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `);
 
     if (shopId) {
@@ -85,12 +85,12 @@ export async function getVendors(shopId = null) {
 
 /**
  * Fetch the latest recorded closing stock total quantity for a given itemId.
- * Queries public.closing_stock_items ordered by created_at.
+ * Queries public.Inventory_closing_stock_items ordered by created_at.
  */
 export async function getLastClosingQty(itemId) {
   try {
     const { data, error } = await supabase
-      .from('closing_stock_items')
+      .from('Inventory_closing_stock_items')
       .select('total_qty')
       .eq('item_id', itemId)
       .order('created_at', { ascending: false })
@@ -114,7 +114,7 @@ export async function submitPurchaseTransaction(date, vendorId, itemsList, shopI
   try {
     // 1. Insert transaction
     const { data: tx, error: txErr } = await supabase
-      .from('inventory_transactions')
+      .from('Inventory_inventory_transactions')
       .insert([{
         transaction_date: date,
         transaction_type: 'purchase',
@@ -140,7 +140,7 @@ export async function submitPurchaseTransaction(date, vendorId, itemsList, shopI
 
     // 3. Insert items detail
     const { error: detailsErr } = await supabase
-      .from('purchase_items')
+      .from('Inventory_purchase_items')
       .insert(purchaseItems);
 
     if (detailsErr) throw detailsErr;
@@ -158,10 +158,10 @@ export async function submitPurchaseTransaction(date, vendorId, itemsList, shopI
 export async function getDailyClosingTotal(itemId, date) {
   try {
     const { data, error } = await supabase
-      .from('closing_stock_items')
-      .select('total_qty, inventory_transactions!inner(transaction_date)')
+      .from('Inventory_closing_stock_items')
+      .select('total_qty, inventory_transactions:Inventory_inventory_transactions!inner(transaction_date)')
       .eq('item_id', itemId)
-      .eq('inventory_transactions.transaction_date', date);
+      .eq('Inventory_inventory_transactions.transaction_date', date);
     if (error) throw error;
     return (data || []).reduce((sum, row) => sum + (parseFloat(row.total_qty) || 0), 0);
   } catch (err) {
@@ -179,12 +179,12 @@ export async function getDailyClosingTotal(itemId, date) {
 export async function hasClosingStockForDate(date, shopId) {
   try {
     let query = supabase
-      .from('closing_stock_items')
-      .select('id, inventory_transactions!inner(transaction_date, shop_id)')
-      .eq('inventory_transactions.transaction_date', date)
+      .from('Inventory_closing_stock_items')
+      .select('id, inventory_transactions:Inventory_inventory_transactions!inner(transaction_date, shop_id)')
+      .eq('Inventory_inventory_transactions.transaction_date', date)
       .limit(1);
 
-    if (shopId) query = query.eq('inventory_transactions.shop_id', parseInt(shopId, 10));
+    if (shopId) query = query.eq('Inventory_inventory_transactions.shop_id', parseInt(shopId, 10));
 
     const { data, error } = await query;
     if (error) throw error;
@@ -202,7 +202,7 @@ export async function submitClosingStockTransaction(date, itemId, itemName, last
   try {
     // 1. Insert transaction
     const { data: tx, error: txErr } = await supabase
-      .from('inventory_transactions')
+      .from('Inventory_inventory_transactions')
       .insert([{
         transaction_date: date,
         transaction_type: 'closing_stock',
@@ -215,7 +215,7 @@ export async function submitClosingStockTransaction(date, itemId, itemName, last
 
     // 2. Insert detail
     const { error: detailErr } = await supabase
-      .from('closing_stock_items')
+      .from('Inventory_closing_stock_items')
       .insert([{
         transaction_id: tx.id,
         item_id: itemId,
@@ -245,14 +245,14 @@ export async function submitClosingStockTransaction(date, itemId, itemName, last
 export async function getSaleHistory({ fromDate, toDate, shopId, itemName, limit = 500 } = {}) {
   try {
     let query = supabase
-      .from('sale_history')
+      .from('Inventory_sale_history')
       .select(`
         id,
         created_at,
         transaction_date,
         item_name,
         sale_qty,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -290,7 +290,7 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
   try {
     // 1. Insert transaction
     const { data: tx, error: txErr } = await supabase
-      .from('inventory_transactions')
+      .from('Inventory_inventory_transactions')
       .insert([{
         transaction_date: date,
         transaction_type: 'sale_amount',
@@ -303,19 +303,19 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
 
     // 2. Get items with their MRP (scoped to this shop)
     const { data: itemsData, error: itemsError } = await supabase
-      .from('items')
+      .from('Inventory_items')
       .select('id, item_name, mrp')
       .eq('shop_id', shopId ? parseInt(shopId, 10) : null);
 
     if (itemsError) throw itemsError;
 
-    // 3. Get today's sale_qty straight from stock_ledger (real-time, unlike
+    // 3. Get today's sale_qty straight from Inventory_stock_ledger (real-time, unlike
     // sale_history which is only backfilled for past dates by the midnight sync)
     const itemIds = (itemsData || []).map(item => item.id);
     let salesData = [];
     if (itemIds.length > 0) {
       const { data, error: salesError } = await supabase
-        .from('stock_ledger')
+        .from('Inventory_stock_ledger')
         .select('item_id, sale_qty')
         .eq('ledger_date', date)
         .in('item_id', itemIds);
@@ -342,7 +342,7 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
 
     // 4. Insert detail with Total_sales_amt
     const { error: detailErr } = await supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .insert([{
         transaction_id: tx.id,
         gpay_amount: parseFloat(gpay) || 0,
@@ -361,7 +361,7 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
 
     // Get shop name
     const { data: shopData, error: shopErr } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .select('shop_name')
       .eq('id', parseInt(shopId, 10))
       .single();
@@ -370,7 +370,7 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
 
     // Get previous balance for this shop
     const { data: prevReport, error: prevErr } = await supabase
-      .from('manager_report')
+      .from('Inventory_manager_report')
       .select('balance')
       .eq('shop_name', shopData.shop_name)
       .order('report_date', { ascending: false })
@@ -389,7 +389,7 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
     const balance = prevBalance + gpayAmt + cashAmt - expenseAmt - withdrawalAmt;
 
     const { error: managerErr } = await supabase
-      .from('manager_report')
+      .from('Inventory_manager_report')
       .insert([{
         report_date: date,
         shop_name: shopData.shop_name,
@@ -426,7 +426,7 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
 export async function getStockLedger({ fromDate, toDate, itemId, limit = 500 } = {}) {
   try {
     let query = supabase
-      .from('stock_ledger')
+      .from('Inventory_stock_ledger')
       .select(`
         id,
         item_id,
@@ -466,7 +466,7 @@ export async function updateStockLedgerRow(rowId, fields) {
     const cl = fields.closing_qty != null ? parseFloat(fields.closing_qty) : null;
 
     const { data, error } = await supabase
-      .from('stock_ledger')
+      .from('Inventory_stock_ledger')
       .update({
         opening_qty:   op,
         purchase_qty:  pu,
@@ -492,11 +492,11 @@ export async function updateStockLedgerRow(rowId, fields) {
 export async function getStockLedgerItems(shopId = null) {
   try {
     let query = supabase
-      .from('stock_ledger')
-      .select('item_id, item_name, items!inner(shop_id)');
+      .from('Inventory_stock_ledger')
+      .select('item_id, item_name, items:Inventory_items!inner(shop_id)');
 
     if (shopId) {
-      query = query.eq('items.shop_id', parseInt(shopId, 10));
+      query = query.eq('Inventory_items.shop_id', parseInt(shopId, 10));
     }
 
     const { data, error } = await query;
@@ -535,7 +535,7 @@ export async function getStockLedgerItems(shopId = null) {
 export async function getStockLedgerView({ fromDate, toDate, itemName } = {}) {
   try {
     let query = supabase
-      .from('stock_ledger_view')
+      .from('Inventory_stock_ledger_view')
       .select('*')
       .order('Date', { ascending: false })
       .limit(500);
@@ -560,7 +560,7 @@ export async function getStockLedgerView({ fromDate, toDate, itemName } = {}) {
 export async function getShops() {
   try {
     const { data, error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .select('*')
       .order('shop_name', { ascending: true });
 
@@ -578,7 +578,7 @@ export async function addShop(shopName) {
   }
   try {
     const { data, error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .insert([{ shop_name: shopName.trim() }])
       .select()
       .single();
@@ -597,7 +597,7 @@ export async function updateShop(shopId, shopName) {
   }
   try {
     const { data, error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .update({ shop_name: shopName.trim() })
       .eq('id', shopId)
       .select()
@@ -617,7 +617,8 @@ export async function deleteShop(shopId) {
   }
   try {
     const { error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
+      .delete()
       .delete()
       .eq('id', shopId);
 
@@ -636,7 +637,7 @@ export async function deleteShop(shopId) {
 export async function getStockLedgerSnapshot(date) {
   try {
     const { data, error } = await supabase
-      .from('stock_ledger')
+      .from('Inventory_stock_ledger')
       .select('item_id, ledger_date, opening_qty, purchase_qty, current_stock, closing_qty')
       .lte('ledger_date', date)
       .order('ledger_date', { ascending: false });
@@ -670,7 +671,7 @@ export async function getStockLedgerSnapshot(date) {
 export async function getPurchasedItems({ fromDate, toDate, itemId, vendorId, shopId, limit = 500 } = {}) {
   try {
     let query = supabase
-      .from('purchase_items')
+      .from('Inventory_purchase_items')
       .select(`
         id,
         purchase_rate,
@@ -680,26 +681,26 @@ export async function getPurchasedItems({ fromDate, toDate, itemId, vendorId, sh
         discount_type,
         total_amount,
         created_at,
-        inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!inner(
           transaction_date,
-          shop:shop(id, shop_name)
+          shop:Inventory_shop(id, shop_name)
         ),
-        items!inner(
+        items:Inventory_items!inner(
           item_name,
           mrp
         ),
-        vendors(
+        vendors:Inventory_vendors(
           vendor_name
         )
       `)
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (fromDate) query = query.gte('inventory_transactions.transaction_date', fromDate);
-    if (toDate) query = query.lte('inventory_transactions.transaction_date', toDate);
+    if (fromDate) query = query.gte('Inventory_inventory_transactions.transaction_date', fromDate);
+    if (toDate) query = query.lte('Inventory_inventory_transactions.transaction_date', toDate);
     if (itemId) query = query.eq('item_id', itemId);
     if (vendorId) query = query.eq('vendor_id', vendorId);
-    if (shopId) query = query.eq('inventory_transactions.shop_id', shopId);
+    if (shopId) query = query.eq('Inventory_inventory_transactions.shop_id', shopId);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -733,7 +734,7 @@ export async function getPurchasedItems({ fromDate, toDate, itemId, vendorId, sh
 export async function getClosingStockItems({ fromDate, toDate, itemId, shopId, limit = 500 } = {}) {
   try {
     let query = supabase
-      .from('closing_stock_items')
+      .from('Inventory_closing_stock_items')
       .select(`
         id,
         last_closing_qty,
@@ -741,21 +742,21 @@ export async function getClosingStockItems({ fromDate, toDate, itemId, shopId, l
         counter_qty,
         total_qty,
         created_at,
-        inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!inner(
           transaction_date,
-          shop:shop(id, shop_name)
+          shop:Inventory_shop(id, shop_name)
         ),
-        items!inner(
+        items:Inventory_items!inner(
           item_name
         )
       `)
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (fromDate) query = query.gte('inventory_transactions.transaction_date', fromDate);
-    if (toDate) query = query.lte('inventory_transactions.transaction_date', toDate);
+    if (fromDate) query = query.gte('Inventory_inventory_transactions.transaction_date', fromDate);
+    if (toDate) query = query.lte('Inventory_inventory_transactions.transaction_date', toDate);
     if (itemId) query = query.eq('item_id', itemId);
-    if (shopId) query = query.eq('inventory_transactions.shop_id', shopId);
+    if (shopId) query = query.eq('Inventory_inventory_transactions.shop_id', shopId);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -785,7 +786,7 @@ export async function getClosingStockItems({ fromDate, toDate, itemId, shopId, l
 export async function updatePurchaseItemRow(rowId, fields) {
   try {
     const { data, error } = await supabase
-      .from('purchase_items')
+      .from('Inventory_purchase_items')
       .update({
         purchase_rate: parseFloat(fields.purchase_rate) || 0,
         quantity:      parseFloat(fields.quantity)      || 0,
@@ -816,7 +817,7 @@ export async function deletePurchaseItemRow(rowId) {
   try {
     // Fetch transaction_id before deleting (for parent cleanup)
     const { data: row, error: fetchErr } = await supabase
-      .from('purchase_items')
+      .from('Inventory_purchase_items')
       .select('transaction_id')
       .eq('id', rowId)
       .single();
@@ -825,7 +826,7 @@ export async function deletePurchaseItemRow(rowId) {
     const txId = row.transaction_id;
 
     const { error: deleteErr } = await supabase
-      .from('purchase_items')
+      .from('Inventory_purchase_items')
       .delete()
       .eq('id', rowId);
 
@@ -835,13 +836,13 @@ export async function deletePurchaseItemRow(rowId) {
     // Clean up transaction header if no other items remain
     if (txId) {
       const { count, error: countErr } = await supabase
-        .from('purchase_items')
+        .from('Inventory_purchase_items')
         .select('*', { count: 'exact', head: true })
         .eq('transaction_id', txId);
 
       if (!countErr && count === 0) {
         await supabase
-          .from('inventory_transactions')
+          .from('Inventory_inventory_transactions')
           .delete()
           .eq('id', txId);
       }
@@ -864,7 +865,7 @@ export async function updateClosingStockItemRow(rowId, fields) {
     const newTotal = (parseFloat(fields.godown_qty) || 0) + (parseFloat(fields.counter_qty) || 0);
 
     const { data, error } = await supabase
-      .from('closing_stock_items')
+      .from('Inventory_closing_stock_items')
       .update({
         godown_qty:  parseFloat(fields.godown_qty)  || 0,
         counter_qty: parseFloat(fields.counter_qty) || 0,
@@ -892,7 +893,7 @@ export async function deleteClosingStockItemRow(rowId) {
   try {
     // Fetch transaction_id before deleting (for parent cleanup)
     const { data: oldRow, error: fetchErr } = await supabase
-      .from('closing_stock_items')
+      .from('Inventory_closing_stock_items')
       .select('transaction_id')
       .eq('id', rowId)
       .single();
@@ -901,7 +902,7 @@ export async function deleteClosingStockItemRow(rowId) {
     const txId = oldRow.transaction_id;
 
     const { error: deleteErr } = await supabase
-      .from('closing_stock_items')
+      .from('Inventory_closing_stock_items')
       .delete()
       .eq('id', rowId);
 
@@ -911,7 +912,7 @@ export async function deleteClosingStockItemRow(rowId) {
     // Delete parent transaction (closing entries are always 1-per-transaction)
     if (txId) {
       await supabase
-        .from('inventory_transactions')
+        .from('Inventory_inventory_transactions')
         .delete()
         .eq('id', txId);
     }
@@ -930,7 +931,7 @@ export async function deleteClosingStockItemRow(rowId) {
 export async function addItem(itemName, mrp, shopId = null) {
   try {
     const { data, error } = await supabase
-      .from('items')
+      .from('Inventory_items')
       .insert([{
         item_name: itemName.trim(),
         mrp: parseFloat(mrp) || 0,
@@ -938,7 +939,7 @@ export async function addItem(itemName, mrp, shopId = null) {
       }])
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .single();
 
@@ -953,7 +954,7 @@ export async function addItem(itemName, mrp, shopId = null) {
 export async function updateItem(itemId, itemName, mrp, shopId = null) {
   try {
     const { data, error } = await supabase
-      .from('items')
+      .from('Inventory_items')
       .update({
         item_name: itemName.trim(),
         mrp: parseFloat(mrp) || 0,
@@ -962,7 +963,7 @@ export async function updateItem(itemId, itemName, mrp, shopId = null) {
       .eq('id', itemId)
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .single();
 
@@ -977,7 +978,7 @@ export async function updateItem(itemId, itemName, mrp, shopId = null) {
 export async function deleteItem(itemId) {
   try {
     const { error } = await supabase
-      .from('items')
+      .from('Inventory_items')
       .delete()
       .eq('id', itemId);
 
@@ -997,8 +998,8 @@ export async function getCurrentStockItems({ shopId, itemId } = {}) {
   try {
     // 1. Fetch items
     let itemQuery = supabase
-      .from('items')
-      .select('*, shop:shop(id, shop_name)');
+      .from('Inventory_items')
+      .select('*, shop:Inventory_shop(id, shop_name)');
     if (shopId) itemQuery = itemQuery.eq('shop_id', parseInt(shopId, 10));
     if (itemId) itemQuery = itemQuery.eq('id', parseInt(itemId, 10));
     const { data: items, error: itemsErr } = await itemQuery.order('item_name', { ascending: true });
@@ -1006,7 +1007,7 @@ export async function getCurrentStockItems({ shopId, itemId } = {}) {
 
     // 2. Fetch latest purchase rates
     const { data: latestRates } = await supabase
-      .from('purchase_items')
+      .from('Inventory_purchase_items')
       .select('item_id, purchase_rate')
       .order('created_at', { ascending: false });
     const rateMap = {};
@@ -1016,7 +1017,7 @@ export async function getCurrentStockItems({ shopId, itemId } = {}) {
 
     // 3. Fetch latest stock_ledger row per item (ordered DESC so first = most recent)
     const { data: ledgerRows } = await supabase
-      .from('stock_ledger')
+      .from('Inventory_stock_ledger')
       .select('item_id, ledger_date, opening_qty, purchase_qty, current_stock, closing_qty')
       .order('ledger_date', { ascending: false });
     const ledgerMap = {};
@@ -1067,12 +1068,12 @@ export async function updateCurrentStockItem(itemId, fields) {
     }
 
     const { data, error } = await supabase
-      .from('items')
+      .from('Inventory_items')
       .update(updateData)
       .eq('id', itemId)
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .single();
 
@@ -1092,7 +1093,7 @@ export async function updateCurrentStockItem(itemId, fields) {
 export async function addVendor(vendorName, contactNumber, shopId = null) {
   try {
     const { data, error } = await supabase
-      .from('vendors')
+      .from('Inventory_vendors')
       .insert([{
         vendor_name: vendorName.trim(),
         contact_number: contactNumber || '',
@@ -1100,7 +1101,7 @@ export async function addVendor(vendorName, contactNumber, shopId = null) {
       }])
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .single();
 
@@ -1115,7 +1116,7 @@ export async function addVendor(vendorName, contactNumber, shopId = null) {
 export async function updateVendor(vendorId, vendorName, contactNumber, shopId = null) {
   try {
     const { data, error } = await supabase
-      .from('vendors')
+      .from('Inventory_vendors')
       .update({
         vendor_name: vendorName.trim(),
         contact_number: contactNumber || '',
@@ -1124,7 +1125,7 @@ export async function updateVendor(vendorId, vendorName, contactNumber, shopId =
       .eq('id', vendorId)
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .single();
 
@@ -1138,7 +1139,7 @@ export async function updateVendor(vendorId, vendorName, contactNumber, shopId =
 export async function deleteVendor(vendorId) {
   try {
     const { error } = await supabase
-      .from('vendors')
+      .from('Inventory_vendors')
       .delete()
       .eq('id', vendorId);
 
@@ -1159,7 +1160,7 @@ export async function deleteVendor(vendorId) {
 export async function getDailySalesSummary({ fromDate, toDate, shopId, limit = 500 } = {}) {
   try {
     let query = supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .select(`
         id,
         transaction_id,
@@ -1170,17 +1171,17 @@ export async function getDailySalesSummary({ fromDate, toDate, shopId, limit = 5
         Total_sales_amt,
         withdrawal_amount,
         created_at,
-        inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!inner(
           transaction_date,
-          shop:shop(id, shop_name)
+          shop:Inventory_shop(id, shop_name)
         )
       `)
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (fromDate) query = query.gte('inventory_transactions.transaction_date', fromDate);
-    if (toDate) query = query.lte('inventory_transactions.transaction_date', toDate);
-    if (shopId) query = query.eq('inventory_transactions.shop_id', shopId);
+    if (fromDate) query = query.gte('Inventory_inventory_transactions.transaction_date', fromDate);
+    if (toDate) query = query.lte('Inventory_inventory_transactions.transaction_date', toDate);
+    if (shopId) query = query.eq('Inventory_inventory_transactions.shop_id', shopId);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -1212,7 +1213,7 @@ export async function recalculateManagerReportBalances(shopName, startDate) {
   try {
     // 1. Get the balance of the last record before startDate
     const { data: prevReport, error: prevErr } = await supabase
-      .from('manager_report')
+      .from('Inventory_manager_report')
       .select('balance')
       .eq('shop_name', shopName)
       .lt('report_date', startDate)
@@ -1226,7 +1227,7 @@ export async function recalculateManagerReportBalances(shopName, startDate) {
 
     // 2. Fetch all records from startDate onwards, sorted ascending
     const { data: reports, error: fetchErr } = await supabase
-      .from('manager_report')
+      .from('Inventory_manager_report')
       .select('*')
       .eq('shop_name', shopName)
       .gte('report_date', startDate)
@@ -1244,7 +1245,7 @@ export async function recalculateManagerReportBalances(shopName, startDate) {
       runningBalance = runningBalance + gpay + cash - expense - withdrawal;
 
       const { error: updateErr } = await supabase
-        .from('manager_report')
+        .from('Inventory_manager_report')
         .update({
           balance: runningBalance,
           updated_at: new Date().toISOString()
@@ -1266,12 +1267,12 @@ export async function updateDailySalesSummaryRow(rowId, fields) {
   try {
     // 1. Fetch current transaction date and shop name first
     const { data: rowInfo, error: fetchErr } = await supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .select(`
         transaction_id,
-        inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!inner(
           transaction_date,
-          shop:shop(id, shop_name)
+          shop:Inventory_shop(id, shop_name)
         )
       `)
       .eq('id', rowId)
@@ -1283,7 +1284,7 @@ export async function updateDailySalesSummaryRow(rowId, fields) {
 
     // 2. Update daily_sales_summary
     const { data, error } = await supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .update({
         gpay_amount: parseFloat(fields.gpay_amount) || 0,
         cash_amount: parseFloat(fields.cash_amount) || 0,
@@ -1299,7 +1300,7 @@ export async function updateDailySalesSummaryRow(rowId, fields) {
     // 3. Update manager_report if date and shop name exist
     if (reportDate && shopName) {
       const { data: existingReport, error: checkError } = await supabase
-        .from('manager_report')
+        .from('Inventory_manager_report')
         .select('id')
         .eq('report_date', reportDate)
         .eq('shop_name', shopName)
@@ -1313,7 +1314,7 @@ export async function updateDailySalesSummaryRow(rowId, fields) {
 
       if (existingReport) {
         const { error: managerUpdateErr } = await supabase
-          .from('manager_report')
+          .from('Inventory_manager_report')
           .update({
             gpay_amount: gpayAmt,
             cash_amount: cashAmt,
@@ -1325,7 +1326,7 @@ export async function updateDailySalesSummaryRow(rowId, fields) {
         if (managerUpdateErr) throw managerUpdateErr;
       } else {
         const { error: managerInsertErr } = await supabase
-          .from('manager_report')
+          .from('Inventory_manager_report')
           .insert([{
             report_date: reportDate,
             shop_name: shopName,
@@ -1358,12 +1359,12 @@ export async function deleteDailySalesSummaryRow(rowId) {
   try {
     // 1. Fetch transaction_id, date, and shop name
     const { data: rowInfo, error: fetchErr } = await supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .select(`
         transaction_id,
-        inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!inner(
           transaction_date,
-          shop:shop(id, shop_name)
+          shop:Inventory_shop(id, shop_name)
         )
       `)
       .eq('id', rowId)
@@ -1377,7 +1378,7 @@ export async function deleteDailySalesSummaryRow(rowId) {
     // 2. Delete corresponding manager report if date and shop name exist
     if (reportDate && shopName) {
       const { error: managerDeleteErr } = await supabase
-        .from('manager_report')
+        .from('Inventory_manager_report')
         .delete()
         .eq('report_date', reportDate)
         .eq('shop_name', shopName);
@@ -1392,7 +1393,7 @@ export async function deleteDailySalesSummaryRow(rowId) {
 
     // 3. Delete from daily_sales_summary
     const { error: deleteErr } = await supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .delete()
       .eq('id', rowId);
 
@@ -1401,7 +1402,7 @@ export async function deleteDailySalesSummaryRow(rowId) {
     // 4. Delete parent transaction
     if (txId) {
       const { error: txDeleteErr } = await supabase
-        .from('inventory_transactions')
+        .from('Inventory_inventory_transactions')
         .delete()
         .eq('id', txId);
       if (txDeleteErr) throw txDeleteErr;
@@ -1505,10 +1506,10 @@ export async function loginUser(username, password) {
 
   try {
     const { data, error } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .eq('username', username.trim()) // case-sensitive username matching
       .single();
@@ -1572,7 +1573,7 @@ export async function registerUser(username, password, shopId) {
 
   try {
     const { data: existingUser } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .select('id')
       .eq('username', normalizedUsername)
       .maybeSingle();
@@ -1582,7 +1583,7 @@ export async function registerUser(username, password, shopId) {
     }
 
     const { data, error } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .insert([{
         username: normalizedUsername,
         password: password,
@@ -1613,7 +1614,7 @@ export async function getAppUsers() {
 
   try {
     const { data, error } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .select(`
         id,
         username,
@@ -1623,7 +1624,7 @@ export async function getAppUsers() {
         is_approved,
         page_access,
         created_at,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .order('created_at', { ascending: false });
 
@@ -1674,7 +1675,7 @@ export async function updateAppUser(userId, fields) {
 
   try {
     const { data, error } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .update({
         role: fields.role,
         shop_id: fields.shop_id ? parseInt(fields.shop_id, 10) : null,
@@ -1684,7 +1685,7 @@ export async function updateAppUser(userId, fields) {
       .eq('id', userId)
       .select(`
         *,
-        shop:shop(id, shop_name)
+        shop:Inventory_shop(id, shop_name)
       `)
       .single();
 
@@ -1721,7 +1722,7 @@ export async function deleteAppUser(userId) {
 
   try {
     const { error } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .delete()
       .eq('id', userId);
 
@@ -1766,7 +1767,7 @@ export async function adminCreateUser(username, password, role, shopId, isApprov
 
   try {
     const { data: existingUser } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .select('id')
       .eq('username', normalizedUsername)
       .maybeSingle();
@@ -1776,7 +1777,7 @@ export async function adminCreateUser(username, password, role, shopId, isApprov
     }
 
     const { data, error } = await supabase
-      .from('app_users')
+      .from('Inventory_app_users')
       .insert([{
         username: normalizedUsername,
         password: password,
@@ -1813,23 +1814,23 @@ export async function getTodayTotalSales(shopId = null) {
     const today = new Date().toISOString().split('T')[0];
 
     let query = supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .select(`
         gpay_amount,
         cash_amount,
         expense_amount,
         total_closing_amount,
         Total_sales_amt,
-        inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!inner(
           transaction_date,
-          shop:shop(id, shop_name)
+          shop:Inventory_shop(id, shop_name)
         )
       `)
-      .eq('inventory_transactions.transaction_date', today);
+      .eq('Inventory_inventory_transactions.transaction_date', today);
 
     // Filter by shop if provided
     if (shopId) {
-      query = query.eq('inventory_transactions.shop_id', parseInt(shopId, 10));
+      query = query.eq('Inventory_inventory_transactions.shop_id', parseInt(shopId, 10));
     }
 
     const { data, error } = await query;
@@ -1860,10 +1861,10 @@ export async function getSalesByDate(date, shopId = null) {
   try {
     // 1. Fetch from daily_sales_summary
     const { data: summaryData, error: summaryError } = await supabase
-      .from('daily_sales_summary')
+      .from('Inventory_daily_sales_summary')
       .select(`
         *,
-        inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!inner(
           transaction_date,
           shop_id
         )
@@ -1892,7 +1893,7 @@ export async function getSalesByDate(date, shopId = null) {
 
     // 2. Fetch from sale_history for the selected date and shop
     let historyQuery = supabase
-      .from('sale_history')
+      .from('Inventory_sale_history')
       .select('item_name, sale_qty, shop_id, transaction_date')
       .eq('transaction_date', date);
 
@@ -1905,7 +1906,7 @@ export async function getSalesByDate(date, shopId = null) {
 
     // 3. Fetch items to map item_name to its mrp
     let itemsQuery = supabase
-      .from('items')
+      .from('Inventory_items')
       .select('item_name, mrp, shop_id');
 
     if (shopId) {
@@ -1947,7 +1948,7 @@ export async function getSalesByDate(date, shopId = null) {
  */
 export async function getManagerReports({ fromDate, toDate, shopName }) {
   let query = supabase
-    .from("manager_report")
+    .from("Inventory_manager_report")
     .select("*")
     .order("report_date", { ascending: false });
 
