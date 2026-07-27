@@ -654,12 +654,12 @@ export default function StockLedger({ currentUser }) {
             </button>
           )}
           {/* NEW: Manager Report Tab */}
-          {currentUser?.page_access?.includes('Inventory_manager_report') && (
+          {(currentUser?.page_access?.includes('manager_report') || currentUser?.page_access?.includes('Inventory_manager_report')) && (
             <button
               onClick={() => setActiveTab('Inventory_manager_report')}
               className={`
           py-4 px-1 border-b-2 font-bold text-xs sm:text-sm uppercase tracking-wider
-          ${activeTab === 'Inventory_manager_report'
+          ${(activeTab === 'Inventory_manager_report' || activeTab === 'manager_report')
                   ? 'border-indigo-600 text-indigo-600 font-extrabold'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}
         `}
@@ -1152,7 +1152,7 @@ export default function StockLedger({ currentUser }) {
         <div className="bg-white border border-slate-200 p-6 rounded-2xl">
           <CurrentStockItems hideHeader={true} currentUser={currentUser} showActions={false} />
         </div>
-      ) : activeTab === 'Inventory_manager_report' && currentUser?.page_access?.includes('Inventory_manager_report') ? (
+      ) : (activeTab === 'Inventory_manager_report' || activeTab === 'manager_report') && (currentUser?.page_access?.includes('manager_report') || currentUser?.page_access?.includes('Inventory_manager_report')) ? (
         <div className="bg-white border border-slate-200 p-6 rounded-2xl">
           <ManagerReport currentUser={currentUser} />
         </div>

@@ -491,38 +491,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     >
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-16 items-center justify-between border-b border-purple-100 bg-white px-4 md:px-6 shadow-sm z-30">
-          <div className="flex md:hidden w-8"></div>
-          <div className="flex flex-col items-center">
-            <h1 className="text-lg font-bold bg-gradient-to-r from-blue-700 to-purple-700 bg-clip-text text-transparent">
-              TaskDesk
-            </h1>
-            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-[0.2em] -mt-1 hidden xs:block">
-              TaskDesk
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex flex-col items-end mr-1">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Welcome</span>
-              <span className="text-sm font-black text-purple-700 -mt-1">Hello, {username || 'User'}</span>
-            </div>
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center shadow-lg border-2 border-white ring-2 ring-purple-100/50 overflow-hidden">
-              {profileImage ? (
-                <img
-                  src={profileImage}
-                  alt={username}
-                  className="h-full w-full object-cover"
-                  onError={() => {
-                    console.error("❌ AdminLayout Image Failed to Load:", profileImage);
-                    setProfileImage(""); // Fallback to initials
-                  }}
-                />
-              ) : (
-                <span className="text-white text-sm font-black uppercase">{username ? username.charAt(0) : 'U'}</span>
-              )}
-            </div>
-          </div>
-        </header>
+       
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-purple-50/50 pb-24 md:pb-6">
           {children}
