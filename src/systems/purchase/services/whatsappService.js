@@ -1,0 +1,710 @@
+// ============================================================
+// WhatsApp Notification Service (Maytapi)
+// ============================================================
+import { supabase } from "../lib/supabase";
+// Hardcoded recipient number for pharmacy indent approvals.
+// Change APPROVAL_PHONE_NUMBER to the actual WhatsApp number
+// (include country code, no + or spaces, e.g. "919876543210").
+// ============================================================
+
+const MAYTAPI_PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
+const MAYTAPI_PHONE_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
+const MAYTAPI_TOKEN = import.meta.env.VITE_MAYTAPI_ACCESS_TOKEN || import.meta.env.VITE_MAYTAPI_TOKEN;
+// ⬇️ Hardcoded recipients – change these numbers as needed
+// Numbers should include country code, no + or spaces (e.g. "919876543210")
+const APPROVAL_PHONE_NUMBERS = [
+  "917089161648",
+  "917000520856",
+  "919340821622",
+  "916267799443",
+];
+
+// ⬇️ Hardcoded recipient for dressing notifications
+// Change DRESSING_PHONE_NUMBER to the actual WhatsApp number
+const DRESSING_PHONE_NUMBER = "916267799443"; // Update this with the specific number for dressing notifications
+
+// ⬇️ Hardcoded recipients for OT notifications
+// Change OT_PHONE_NUMBERS to the actual WhatsApp numbers
+const OT_PHONE_NUMBERS = [
+  "916267799443", // Update with specific numbers for OT notifications
+];
+
+export { DRESSING_PHONE_NUMBER, OT_PHONE_NUMBERS };
+
+/**
+ * Build the approval WhatsApp message for a pharmacy indent.
+ *
+ * @param {Object} indent - The inserted pharmacy record from Supabase
+ * @param {Array}  medicines - Array of { name, quantity } objects
+ * @param {Object} requestTypes - { medicineSlip, investigation, package, nonPackage }
+ * @param {string} approvalUrl - Full URL to the pharmacy approval page
+ * @returns {string} Formatted WhatsApp message
+ */
+export const buildIndentApprovalMessage = (
+  indent,
+  medicines,
+  requestTypes,
+  approvalUrl,
+) => {
+  const isDepartmental =
+    indent?.indent_scope === "departmental" ||
+    indent?.request_source === "departmental" ||
+    (!!indent?.requested_by &&
+      !indent?.patient_name &&
+      !indent?.admission_number &&
+      !indent?.ipd_number);
+
+  // Determine request type label
+  const requestTypeLabels = [];
+  if (requestTypes?.medicineSlip) requestTypeLabels.push("Medicine Slip");
+  if (requestTypes?.investigation) requestTypeLabels.push("Investigation");
+  if (requestTypes?.package) requestTypeLabels.push("Package");
+  if (requestTypes?.nonPackage) requestTypeLabels.push("Non-Package");
+  const requestTypeStr = requestTypeLabels.join(", ") || "N/A";
+
+  // For medicine slip, list the first medicine (or summarise)
+  let medicineName = "N/A";
+  let medicineQty = "N/A";
+  if (requestTypes?.medicineSlip && medicines?.length > 0) {
+    medicineName = medicines[0].name || "N/A";
+    medicineQty = medicines.map((m) => m.quantity).join(", ") || "N/A";
+    if (medicines.length > 1) {
+      medicineName = medicines.map((m) => m.name).join(", ");
+    }
+  }
+
+  const serialNo = indent.id || "N/A";
+
+  const message = `⚡ Approval Request – Medicine
+
+🆔 Indent No.: ${indent.indent_no || "N/A"}
+🔢 Serial No.: ${serialNo}
+🏥 Admission No.: ${indent.admission_number || "N/A"}
+👨‍💼 Requested By: ${indent.staff_name || "N/A"}
+👨‍⚕️ Consultant: ${indent.consultant_name || "N/A"}
+🧑‍🦱 Patient: ${indent.patient_name || "N/A"}
+📂 Category: ${indent.category || "N/A"}
+🛏️ Ward Location: ${indent.ward_location || "N/A"}
+🚻 Gender: ${indent.gender || "N/A"}
+🩺 Diagnosis: ${indent.diagnosis || "N/A"}
+
+📑 Request Type: ${requestTypeStr}
+💊 Medicine: ${medicineName}
+🔢 Quantity: ${medicineQty}
+
+👉 Please review & approve:
+✅ ${approvalUrl}
+
+✍️ NIKHIL KUMAR URANW
+TEAM MAMTA HOSPITAL`;
+
+  return message;
+};
+
+/**
+ * Send a WhatsApp message via Maytapi.
+ *
+ * @param {string} toNumber - Recipient phone number (with country code, no +)
+ * @param {string} message  - Text message to send
+ * @returns {Promise<boolean>} true on success, false on failure
+ */
+export const sendWhatsAppMessage = async (toNumber, message) => {
+  if (!MAYTAPI_PRODUCT_ID || !MAYTAPI_PHONE_ID || !MAYTAPI_TOKEN) {
+    console.warn("[WhatsApp] Maytapi credentials are not configured in .env");
+    return false;
+  }
+
+  const url = `https://api.maytapi.com/api/${MAYTAPI_PRODUCT_ID}/${MAYTAPI_PHONE_ID}/sendMessage`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-maytapi-key": MAYTAPI_TOKEN,
+      },
+      body: JSON.stringify({
+        to_number: toNumber,
+        type: "text",
+        message: message,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error("[WhatsApp] Failed to send text message:", data);
+      return false;
+    }
+
+    console.log(`[WhatsApp] Message sent successfully to ${toNumber}:`, data);
+    return true;
+  } catch (error) {
+    console.error("[WhatsApp] Error sending message:", error);
+    return false;
+  }
+};
+
+/**
+ * Send a WhatsApp media message (like a PDF document or image) via Maytapi.
+ *
+ * @param {string} toNumber - Recipient phone number (with country code, no +)
+ * @param {string} mediaUrl  - Public URL of the media file (PDF, PNG, etc.)
+ * @param {string} caption  - Caption text for the media message
+ * @returns {Promise<boolean>} true on success, false on failure
+ */
+export const sendWhatsAppMediaMessage = async (toNumber, mediaUrl, caption) => {
+  if (!MAYTAPI_PRODUCT_ID || !MAYTAPI_PHONE_ID || !MAYTAPI_TOKEN) {
+    console.warn("[WhatsApp] Maytapi credentials are not configured in .env");
+    return false;
+  }
+
+  const url = `https://api.maytapi.com/api/${MAYTAPI_PRODUCT_ID}/${MAYTAPI_PHONE_ID}/sendMessage`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-maytapi-key": MAYTAPI_TOKEN,
+      },
+      body: JSON.stringify({
+        to_number: toNumber,
+        type: "media",
+        message: mediaUrl,
+        text: caption,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      console.error("[WhatsApp] Failed to send media message:", data);
+      return false;
+    }
+
+    console.log(`[WhatsApp] Media message sent successfully to ${toNumber}:`, data);
+    return true;
+  } catch (error) {
+    console.error("[WhatsApp] Error sending media message:", error);
+    return false;
+  }
+};
+
+/**
+ * Send the same WhatsApp message to multiple numbers in parallel.
+ * Returns an array of result objects { number, success }.
+ */
+export const sendWhatsAppMessages = async (numbers, message) => {
+  if (!Array.isArray(numbers) || numbers.length === 0) return [];
+
+  const promises = numbers.map(async (num) => {
+    try {
+      const ok = await sendWhatsAppMessage(num, message);
+      return { number: num, success: !!ok };
+    } catch (err) {
+      console.error("[WhatsApp] Error sending to", num, err);
+      return { number: num, success: false };
+    }
+  });
+
+  return Promise.all(promises);
+};
+
+/**
+ * High-level helper: send the pharmacy indent approval notification.
+ *
+ * @param {Object} indent      - Inserted pharmacy record from Supabase
+ * @param {Array}  medicines   - Array of medicine objects
+ * @param {Object} requestTypes - Request type flags
+ */
+export const sendIndentApprovalNotification = async (
+  indent,
+  medicines,
+  requestTypes,
+) => {
+  try {
+    console.log("[WhatsApp] Sending indent approval notification...");
+    // Build the approval URL pointing to the pharmacy approval page
+    const approvalUrl = `${window.location.origin}/admin/pharmacy/approval`;
+
+    const message = buildIndentApprovalMessage(
+      indent,
+      medicines,
+      requestTypes,
+      approvalUrl,
+    );
+
+    const results = await sendWhatsAppMessages(APPROVAL_PHONE_NUMBERS, message);
+
+    const successful = results.filter((r) => r.success).map((r) => r.number);
+    const failed = results.filter((r) => !r.success).map((r) => r.number);
+
+    if (successful.length > 0) {
+      console.log(
+        "[WhatsApp] Indent approval notification sent to",
+        successful.join(", "),
+      );
+    }
+    if (failed.length > 0) {
+      console.warn(
+        "[WhatsApp] Failed to send indent approval notification to",
+        failed.join(", "),
+      );
+    }
+
+    return successful.length === APPROVAL_PHONE_NUMBERS.length;
+  } catch (error) {
+    console.error("[WhatsApp] sendIndentApprovalNotification error:", error);
+    return false;
+  }
+};
+
+export const sendDepartmentalIndentApprovalNotification = async (
+  indent,
+  medicines,
+  requestTypes,
+) => {
+  try {
+    console.log(
+      "[WhatsApp] Sending departmental indent approval notification...",
+    );
+    const approvalUrl = `${window.location.origin}/admin/pharmacy/approval`;
+
+    const requestTypeLabels = [];
+    if (requestTypes?.medicineSlip) requestTypeLabels.push("Medicine Slip");
+    if (requestTypes?.investigation) requestTypeLabels.push("Investigation");
+    if (requestTypes?.package) requestTypeLabels.push("Package");
+    if (requestTypes?.nonPackage) requestTypeLabels.push("Non-Package");
+
+    const medicineName =
+      medicines?.length > 0
+        ? medicines
+          .map((item) => item.name)
+          .filter(Boolean)
+          .join(", ")
+        : "N/A";
+    const medicineQty =
+      medicines?.length > 0
+        ? medicines
+          .map((item) => item.quantity)
+          .filter(Boolean)
+          .join(", ")
+        : "N/A";
+
+    const message = `⚡ Approval Request – Departmental Medicine
+
+🆔 Indent No.: ${indent.indent_no || "N/A"}
+🏥 Ward/Location: ${indent.ward_location || indent.ward || "N/A"}
+👨‍💼 Requested By: ${indent.requested_by || indent.staff_name || "N/A"}
+📝 Remarks: ${indent.remarks || indent.purpose || "N/A"}
+
+📑 Request Type: ${requestTypeLabels.join(", ") || "N/A"}
+💊 Medicine: ${medicineName}
+🔢 Quantity: ${medicineQty}
+
+👉 Please review & approve:
+✅ ${approvalUrl}
+
+✍️ NIKHIL KUMAR URANW
+TEAM MAMTA HOSPITAL`;
+
+    const results = await sendWhatsAppMessages(APPROVAL_PHONE_NUMBERS, message);
+    return results.every((item) => item.success);
+  } catch (error) {
+    console.error(
+      "[WhatsApp] sendDepartmentalIndentApprovalNotification error:",
+      error,
+    );
+    return false;
+  }
+};
+
+/**
+ * Build the dressing notification WhatsApp message.
+ *
+ * @param {Object} dressingData - The dressing record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ * @param {string} completeUrl - Full URL to the dressing page
+ * @returns {string} Formatted WhatsApp message
+ */
+export const buildDressingNotificationMessage = (
+  dressingData,
+  patientData,
+  completeUrl,
+) => {
+  const message = `📌 Dressing Intimation
+
+👤 Patient Name: ${dressingData.patient_name || "N/A"}
+🆔 Admission No.: ${dressingData.admission_number || "N/A"}
+🏨 Wards: ${dressingData.ward_type || "N/A"} | Bed: ${dressingData.bed_no || "N/A"}
+
+🎯 Reason for Visit: ${patientData?.reason_for_visit || "N/A"}
+📅 Age/Gender: ${patientData?.age || "N/A"} / ${patientData?.gender || "N/A"}
+
+✅ Complete Link: ${completeUrl}
+
+📢 Kindly proceed for patient dressing at the scheduled time.
+
+THANKS & REGARDS
+NIKHIL KUMAR URANW
+MIS`;
+
+  return message;
+};
+
+/**
+ * High-level helper: send the dressing notification.
+ *
+ * @param {Object} dressingData - The dressing record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ */
+export const sendDressingNotification = async (dressingData, patientData) => {
+  try {
+    console.log("[WhatsApp] Sending dressing notification...");
+    const patientId =
+      dressingData.patient_id || dressingData.patientId || dressingData.id;
+    // Build the complete URL pointing to the dressing page
+    const completeUrl = `${window.location.origin}/admin/patient-profile${patientId ? `/${patientId}/dressing` : ""
+      }`;
+
+    const message = buildDressingNotificationMessage(
+      dressingData,
+      patientData,
+      completeUrl,
+    );
+
+    const success = await sendWhatsAppMessage(DRESSING_PHONE_NUMBER, message);
+
+    if (success) {
+      console.log("[WhatsApp] Dressing notification sent successfully");
+    } else {
+      console.warn("[WhatsApp] Failed to send dressing notification");
+    }
+
+    return success;
+  } catch (error) {
+    console.error("[WhatsApp] sendDressingNotification error:", error);
+    return false;
+  }
+};
+
+/**
+ * Build the OT notification WhatsApp message.
+ *
+ * @param {Object} otData - The OT record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ * @param {string} completeUrl - Full URL to the OT page
+ * @returns {string} Formatted WhatsApp message
+ */
+export const buildOTNotificationMessage = (
+  otData,
+  patientData,
+  completeUrl,
+  isUpdate = false,
+) => {
+  const operationDateTime =
+    otData.ot_date && otData.ot_time
+      ? `${otData.ot_date} ${otData.ot_time}`
+      : "N/A";
+
+  const title = isUpdate
+    ? "📌 OT SURGICAL PATIENT ALERT - UPDATED"
+    : "📌 OT SURGICAL PATIENT ALERT";
+
+  const message = `${title}
+
+👤 Patient Name: ${otData.patient_name || "N/A"}
+🆔 Admission No.: ${otData.ipd_number || "N/A"}
+🏥 Ward: ${otData.ward_type || "N/A"} | Bed: ${otData.bed_no || "N/A"}
+🎯 Reason for Visit: ${patientData?.reason_for_visit || "N/A"}
+📅 Age/Gender: ${patientData?.age || "N/A"} / ${patientData?.gender || "N/A"}
+📂 Category: ${patientData?.category || "N/A"}
+
+⏰ Operation Timing Fixed: ${operationDateTime}
+👨‍⚕️ Surgeon: ${otData.doctor || "N/A"}
+👨‍⚕️ RMO: ${otData.rmo || "N/A"}
+
+📢 Kindly be present in OT as per the scheduled timing.
+✅ Complete Link: ${completeUrl}
+
+NIKHIL KUMAR URANW (MIS)
+TEAM MAMTA HOSPITAL`;
+
+  return message;
+};
+
+/**
+ * High-level helper: send the OT notification.
+ *
+ * @param {Object} otData - The OT record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ * @param {boolean} isUpdate - Whether this is an update notification
+ */
+export const sendOTNotification = async (
+  otData,
+  patientData,
+  isUpdate = false,
+) => {
+  try {
+    console.log("[WhatsApp] Sending OT notification...");
+    // Build the complete URL pointing to the OT page
+    const completeUrl = `${window.location.origin}/admin/ot/assign-ot-time`;
+
+    const message = buildOTNotificationMessage(
+      otData,
+      patientData,
+      completeUrl,
+      isUpdate,
+    );
+
+    const results = await sendWhatsAppMessages(OT_PHONE_NUMBERS, message);
+
+    const successful = results.filter((r) => r.success).map((r) => r.number);
+    const failed = results.filter((r) => !r.success).map((r) => r.number);
+
+    if (successful.length > 0) {
+      console.log("[WhatsApp] OT notification sent to", successful.join(", "));
+    }
+    if (failed.length > 0) {
+      console.warn(
+        "[WhatsApp] Failed to send OT notification to",
+        failed.join(", "),
+      );
+    }
+
+    return successful.length === OT_PHONE_NUMBERS.length;
+  } catch (error) {
+    console.error("[WhatsApp] sendOTNotification error:", error);
+    return false;
+  }
+};
+
+// NOTE: One-time token generation removed.
+// Vendor and Transporter now use permanent portal links stored in the
+// vendors.portal_link and transporters.portal_link database columns.
+
+/**
+ * Resolve the transporter's name from their phone number.
+ */
+const resolveTransporterName = async (phoneNumber) => {
+  if (!phoneNumber) return "Transporter";
+  try {
+    const cleanNum = phoneNumber.replace(/\D/g, "");
+    const last10 = cleanNum.substring(cleanNum.length - 10);
+    const { data } = await supabase
+      .from("purchase_transporters")
+      .select("name")
+      .or(`contact_number.eq.${cleanNum},contact_number.eq.${last10}`)
+      .limit(1);
+    if (data && data.length > 0) {
+      return data[0].name;
+    }
+  } catch (err) {
+    console.error("[WhatsApp] Error resolving transporter name:", err);
+  }
+  return "Transporter";
+};
+
+/**
+ * Resolve the receiver's name from their phone number.
+ */
+const resolveReceiverName = async (phoneNumber) => {
+  if (!phoneNumber) return "Receiver";
+  try {
+    const cleanNum = phoneNumber.replace(/\D/g, "");
+    const last10 = cleanNum.substring(cleanNum.length - 10);
+    const { data } = await supabase
+      .from("purchase_receivers")
+      .select("name")
+      .or(`contact_number.eq.${cleanNum},contact_number.eq.${last10}`)
+      .limit(1);
+    if (data && data.length > 0) {
+      return data[0].name;
+    }
+  } catch (err) {
+    console.error("[WhatsApp] Error resolving receiver name:", err);
+  }
+  return "Receiver";
+};
+
+/**
+ * Resolve the shop name from the PO number.
+ */
+const resolveShopName = async (poNumber) => {
+  if (!poNumber) return "";
+  try {
+    const { data: poRes } = await supabase
+      .from("purchase_purchase_orders")
+      .select("indent_id")
+      .eq("po_number", poNumber)
+      .limit(1);
+    
+    if (poRes && poRes.length > 0 && poRes[0].indent_id) {
+      const uniqueIndentId = poRes[0].indent_id;
+      const { data: itemResApproved } = await supabase
+        .from("purchase_approved_indent_items")
+        .select("indent_id")
+        .eq("unique_indent_id", uniqueIndentId)
+        .limit(1);
+        
+      let itemRes = itemResApproved;
+      if (!itemRes || itemRes.length === 0) {
+        const { data: itemResActive } = await supabase
+          .from("purchase_indent_items")
+          .select("indent_id")
+          .eq("unique_indent_id", uniqueIndentId)
+          .limit(1);
+        itemRes = itemResActive;
+      }
+        
+      if (itemRes && itemRes.length > 0 && itemRes[0].indent_id) {
+        const parentIndentId = itemRes[0].indent_id;
+        const { data: indentRes } = await supabase
+          .from("purchase_indents")
+          .select("shop_name")
+          .eq("id", parentIndentId)
+          .single();
+          
+        if (indentRes) {
+          return indentRes.shop_name;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[WhatsApp] Error resolving shop name:", err);
+  }
+  return "";
+};
+
+/**
+ * Send the purchase order confirmation message
+ *
+ * @param {string} phoneNumber - Vendor's phone number
+ * @param {string} vendorName - Vendor name
+ * @param {string} poNumber - PO Number
+ * @param {string} portalLink - Vendor's permanent portal link
+ * @param {string} companyName - Company/Shop Name
+ * @param {number|string} totalQty - Total Order Quantity
+ * @param {string} pdfUrl - URL of the generated PO PDF
+ */
+export const sendPOConfirmationMessage = async (phoneNumber, vendorName, poNumber, portalLink, companyName, totalQty, pdfUrl) => {
+  try {
+    console.log("[WhatsApp] Sending PO confirmation notification...");
+    const shopName = await resolveShopName(poNumber);
+    const finalShopName = shopName || companyName || 'DRINQKART';
+
+    const message = `📩 *Trader - Purchase Order*
+
+*Trader Name:* ${vendorName}
+*PO Number:* ${poNumber}
+*Shop Name:* ${finalShopName}
+*Total Qty:* ${totalQty}
+*Link:* ${portalLink}
+
+Please click on above link to see orders`;
+
+    const success = await sendWhatsAppMessage(phoneNumber, message);
+
+    if (success) {
+      console.log("[WhatsApp] PO confirmation sent to", phoneNumber);
+    } else {
+      console.warn("[WhatsApp] Failed to send PO confirmation to", phoneNumber);
+    }
+
+    return { success };
+  } catch (error) {
+    console.error("[WhatsApp] sendPOConfirmationMessage error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send the transporter confirmation message
+ *
+ * @param {string} phoneNumber - Transporter's phone number
+ * @param {string} poNumber - PO Number
+ * @param {string} portalLink - Transporter's permanent portal link
+ * @param {string} companyName - Company/Shop Name
+ * @param {string} vendorName - Vendor name
+ * @param {string} pdfUrl - URL of the generated PO PDF
+ */
+export const sendTransporterConfirmationMessage = async (phoneNumber, poNumber, portalLink, companyName, vendorName, pdfUrl) => {
+  try {
+    console.log("[WhatsApp] Sending Transporter confirmation notification...");
+    const transporterName = await resolveTransporterName(phoneNumber);
+    const shopName = await resolveShopName(poNumber);
+    const finalShopName = shopName || companyName || 'DRINQKART';
+
+    const message = `🚚 *Pick-up Request Notification*
+
+Dear *${transporterName}*,
+
+You have a new pick-up request from *${finalShopName}*.
+
+*PO Number:* ${poNumber}
+*Shop Name:* ${finalShopName}
+*Vendor Name:* ${vendorName}
+*Link:* ${portalLink}
+
+Please click on above link to see details
+`;
+
+    const success = await sendWhatsAppMessage(phoneNumber, message);
+
+    if (success) {
+      console.log("[WhatsApp] Transporter confirmation sent to", phoneNumber);
+    } else {
+      console.warn("[WhatsApp] Failed to send Transporter confirmation to", phoneNumber);
+    }
+
+    return { success };
+  } catch (error) {
+    console.error("[WhatsApp] sendTransporterConfirmationMessage error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send the receiver confirmation message
+ * 
+ * @param {string} phoneNumber - Receiver's phone number
+ * @param {string} poNumber - PO Number
+ * @param {string} portalLink - Receiver's permanent portal link
+ * @param {string} companyName - Company/Shop Name
+ * @param {string} vendorName - Vendor name
+ * @param {string} pdfUrl - URL of the generated PO PDF
+ */
+export const sendReceiverConfirmationMessage = async (phoneNumber, poNumber, portalLink, companyName, vendorName, pdfUrl) => {
+  try {
+    console.log("[WhatsApp] Sending Receiver confirmation notification...");
+    const receiverName = await resolveReceiverName(phoneNumber);
+    const shopName = await resolveShopName(poNumber);
+    const finalShopName = shopName || companyName || 'DRINQKART';
+
+    const message = `📦 *Delivery Alert*
+
+Dear *${receiverName}*,
+
+A new delivery from *${vendorName}* is on its way to *${finalShopName}*.
+
+*PO Number:* ${poNumber}
+*Shop Name:* ${finalShopName}
+*Link:* ${portalLink}
+
+Please click on above link to see details`;
+
+    const success = await sendWhatsAppMessage(phoneNumber, message);
+
+    if (success) {
+      console.log("[WhatsApp] Receiver confirmation sent to", phoneNumber);
+    } else {
+      console.warn("[WhatsApp] Failed to send Receiver confirmation to", phoneNumber);
+    }
+
+    return { success };
+  } catch (error) {
+    console.error("[WhatsApp] sendReceiverConfirmationMessage error:", error);
+    return { success: false, error: error.message };
+  }
+};

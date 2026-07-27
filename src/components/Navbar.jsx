@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, User, Menu, X, ChevronDown } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -9,22 +9,37 @@ const Navbar = ({ toggleCart }) => {
   const { cartCount } = useCart();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isHomeDropdownOpen, setIsHomeDropdownOpen] = useState(false);
   const [isMobileHomeOpen, setIsMobileHomeOpen] = useState(false);
+  const [isSystemsDropdownOpen, setIsSystemsDropdownOpen] = useState(false);
+  const [isMobileSystemsOpen, setIsMobileSystemsOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const systemsDropdownRef = useRef(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setIsHomeDropdownOpen(false);
       }
-    };
+      if (systemsDropdownRef.current && !systemsDropdownRef.current.contains(e.target)) {
+        setIsSystemsDropdownOpen(false);
+      }
+    };  
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const systemLinks = [
+    { label: 'Checklist Delegation', url: '/dashboard/admin', enabled: true, isInternal: true },
+    { label: 'HR System', url: '/systems/hr', enabled: true, isInternal: true },
+    { label: 'Inventory', url: '/systems/inventory', enabled: true, isInternal: true },
+    { label: 'Petty Cash', url: '/systems/petty-cash', enabled: true, isInternal: true },
+    { label: 'Purchase', url: import.meta.env.VITE_PURCHASE_SYSTEM_URL, enabled: false },
+  ];
 
   const scrollToSection = (id) => {
     setIsHomeDropdownOpen(false);
@@ -146,6 +161,10 @@ const Navbar = ({ toggleCart }) => {
                 Contact
                 <span className="absolute bottom-0 left-0 w-0 h-[0.5px] bg-[#C9A84C] transition-all duration-300 group-hover:w-full"></span>
               </button>
+
+            
+
+
             </div>
 
             {/* Mobile Menu Button */}
@@ -285,6 +304,8 @@ const Navbar = ({ toggleCart }) => {
               >
                 Contact
               </button>
+
+
 
               <div className="mt-auto border-t-[0.5px] border-[#1A1A1A]/10 pt-8 flex items-center gap-4">
                 {user ? (

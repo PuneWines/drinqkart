@@ -1,40 +1,44 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
+import { ShieldCheck, User, Briefcase } from 'lucide-react';
 
 const Login = () => {
-  const [role, setRole] = useState('user');
-  const [username, setUsername] = useState('');
+  const [roleType, setRoleType] = useState('user'); // 'admin' | 'user' | 'manager'
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleRoleSelect = (selectedRole) => {
-    setRole(selectedRole);
-    setUsername(selectedRole);
-    setPassword(`${selectedRole}123`);
-    setError('');
-  };
-
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (username && password) {
-      const result = login(username, password);
+    if (!email || !password) {
+      setError('Please fill in all credential fields');
+      return;
+    }
 
-      if (result.success) {
-        navigate('/');
-      } else {
-        setError(result.message);
-      }
+    setLoading(true);
+    const result = await login(email, password, roleType);
+    setLoading(false);
+
+    if (result.success) {
+      navigate(result.redirect || '/dashboard/admin');
     } else {
-      setError('Please fill in all fields');
+      setError(result.message);
     }
   };
+
+  const roleOptions = [
+    { id: 'admin', label: 'Admin', icon: ShieldCheck },
+    { id: 'user', label: 'User', icon: User },
+    { id: 'manager', label: 'Manager', icon: Briefcase },
+  ];
 
   return (
     <div className="min-h-screen flex bg-white font-sans">
@@ -88,40 +92,49 @@ const Login = () => {
             <p className="text-[#1A1A1A]/50 text-xs uppercase tracking-[0.2em] font-bold">Sign in to your account</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-5">
             {error && (
               <div className="bg-red-50 text-red-700 text-xs p-4 border-[0.5px] border-red-200 text-center uppercase tracking-widest font-bold shadow-sm">
                 {error}
               </div>
             )}
 
+            {/* Role / Portal Selector (3 Credential Option) */}
             <div>
-              <label className="block text-[10px] uppercase tracking-widest text-[#1A1A1A]/60 mb-2 font-bold">Portal Type</label>
-              <div className="grid grid-cols-3 gap-3">
-                {['user', 'manager', 'admin'].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => handleRoleSelect(r)}
-                    className={`py-2 text-[10px] uppercase tracking-widest border-[0.5px] transition-all duration-300 font-bold ${role === r
-                        ? 'border-[#C9A84C] text-[#C9A84C] bg-[#C9A84C]/5 shadow-sm'
-                        : 'border-[#1A1A1A]/10 text-[#1A1A1A]/50 hover:border-[#1A1A1A]/30 bg-[#FAFAFA]'
+              <label className="block text-[10px] uppercase tracking-widest text-[#1A1A1A]/60 mb-2 font-bold">
+                Select Login Role / Portal
+              </label>
+              <div className="grid grid-cols-3 gap-2 bg-[#FAFAFA] p-1.5 ">
+                {roleOptions.map((opt) => {
+                  const Icon = opt.icon;
+                  const isSelected = roleType === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setRoleType(opt.id)}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 px-2 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#C9A84C] text-white shadow-sm border border-[#C9A84C]/30'
+                          : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:bg-white'
                       }`}
-                  >
-                    {r}
-                  </button>
-                ))}
+                    >
+                      <Icon size={14} className={isSelected ? 'text-white' : 'text-[#1A1A1A]/40'} />
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-widest text-[#1A1A1A]/60 mb-1 font-bold">Username</label>
+              <label className="block text-[10px] uppercase tracking-widest text-[#1A1A1A]/60 mb-1 font-bold">Username or Email</label>
               <input
                 type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-[#FAFAFA] border-[0.5px] border-[#1A1A1A]/20 text-[#1A1A1A] p-3 text-sm focus:outline-none focus:border-[#C9A84C] transition-colors shadow-inner font-medium"
-                placeholder={`Enter ${role} username`}
+                placeholder="Enter username or email"
               />
             </div>
 
@@ -138,9 +151,10 @@ const Login = () => {
 
             <button
               type="submit"
-              className="w-full btn-gold py-3 mt-2 shadow-lg shadow-[#C9A84C]/20 text-xs"
+              disabled={loading}
+              className="w-full btn-gold py-3 mt-2 shadow-lg shadow-[#C9A84C]/20 text-xs disabled:opacity-50 disabled:cursor-not-allowed uppercase font-bold tracking-widest"
             >
-              Log In
+              {loading ? 'Validating Credentials...' : `Log In as ${roleType.toUpperCase()}`}
             </button>
           </form>
 

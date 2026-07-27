@@ -35,6 +35,16 @@ const Footer = () => {
           </p>
         </div>
       </div>
+      <div className="bg-[#C9A84C] h-6 flex items-center justify-center px-4 shadow-md z-40 mt-8">
+        <a
+          href="https://www.botivate.in"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[9.5px] text-[#1A1A1A] font-medium tracking-[0.25em] uppercase hover:underline transition-colors"
+        >
+          Powered by <span className="font-bold">Botivate</span>
+        </a>
+      </div>
     </footer>
   );
 };
