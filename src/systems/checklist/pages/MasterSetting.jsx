@@ -182,17 +182,7 @@ export default function MasterSetting() {
     if (!editingUser) return;
     setSaving(true);
 
-    let finalAccess = Object.keys(accessPermissions);
-    if (jsonMode) {
-      try {
-        const parsed = JSON.parse(rawJsonText);
-        finalAccess = Array.isArray(parsed) ? parsed : Object.keys(parsed);
-      } catch (err) {
-        showToast('Please fix JSON formatting error before saving', 'error');
-        setSaving(false);
-        return;
-      }
-    }
+    const finalAccess = Object.keys(accessPermissions);
 
     try {
       const { error } = await supabase
@@ -241,7 +231,7 @@ export default function MasterSetting() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-8 rounded-none border-[0.5px] border-[#1A1A1A]/10 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#C9A84C]/5 rounded-full blur-3xl pointer-events-none" />
 
-       
+
 
         <div className="flex items-center gap-3">
           <button
@@ -465,112 +455,79 @@ export default function MasterSetting() {
                       Set permission level per page: <code className="font-mono text-[#C9A84C] font-bold">.view</code> or <code className="font-mono text-[#C9A84C] font-bold">.modify</code>
                     </p>
                   </div>
-
-                  <div className="flex items-center gap-1 bg-[#FAFAFA] p-1 border border-[#1A1A1A]/10">
-                    <button
-                      type="button"
-                      onClick={() => setJsonMode(false)}
-                      className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${!jsonMode ? 'bg-[#1A1A1A] text-[#C9A84C] shadow-sm' : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'}`}
-                    >
-                      Interactive UI
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setJsonMode(true)}
-                      className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 ${jsonMode ? 'bg-[#1A1A1A] text-[#C9A84C] shadow-sm' : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'}`}
-                    >
-                      <Code size={13} />
-                      <span>JSON Editor</span>
-                    </button>
-                  </div>
                 </div>
 
-                {!jsonMode ? (
-                  /* Interactive UI - One Row Per Page */
-                  <div className="space-y-6 border border-[#1A1A1A]/10 p-5 bg-white">
-                    {AVAILABLE_SYSTEMS.map((sys) => (
-                      <div key={sys.id} className="space-y-3 border-b border-[#1A1A1A]/10 pb-5 last:border-0 last:pb-0">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-serif font-bold text-[#1A1A1A] uppercase tracking-wider bg-[#FAFAFA] border border-[#1A1A1A]/10 px-3 py-1">
-                            {sys.name} (<span className="font-mono text-[#C9A84C] font-bold">{sys.id}</span>)
-                          </span>
-                        </div>
-
-                        {/* One Row Per Page List */}
-                        <div className="space-y-2 pt-1">
-                          {sys.pages.map((pg) => {
-                            const currentLevel = getPageLevel(sys.id, pg);
-
-                            return (
-                              <div
-                                key={pg}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[#FAFAFA] border border-[#1A1A1A]/10 hover:border-[#C9A84C]/40 transition-colors"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] shrink-0" />
-                                  <span className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
-                                    {pg}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/10 shadow-xs shrink-0">
-                                  {/* None Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setPageLevel(sys.id, pg, 'none')}
-                                    className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${currentLevel === 'none'
-                                      ? 'bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20'
-                                      : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
-                                      }`}
-                                  >
-                                    None
-                                  </button>
-
-                                  {/* View Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setPageLevel(sys.id, pg, 'view')}
-                                    className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${currentLevel === 'view'
-                                      ? 'bg-[#1A1A1A] text-white font-bold shadow-sm'
-                                      : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                      }`}
-                                  >
-                                    .view
-                                  </button>
-
-                                  {/* Modify Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setPageLevel(sys.id, pg, 'modify')}
-                                    className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${currentLevel === 'modify'
-                                      ? 'bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm'
-                                      : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                      }`}
-                                  >
-                                    .modify
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                {/* Interactive UI - One Row Per Page */}
+                <div className="space-y-6 border border-[#1A1A1A]/10 p-5 bg-white">
+                  {AVAILABLE_SYSTEMS.map((sys) => (
+                    <div key={sys.id} className="space-y-3 border-b border-[#1A1A1A]/10 pb-5 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-serif font-bold text-[#1A1A1A] uppercase tracking-wider bg-[#FAFAFA] border border-[#1A1A1A]/10 px-3 py-1">
+                          {sys.name} (<span className="font-mono text-[#C9A84C] font-bold">{sys.id}</span>)
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  /* JSON Editor */
-                  <div className="space-y-2">
-                    <textarea
-                      rows={14}
-                      value={rawJsonText}
-                      onChange={(e) => handleJsonChange(e.target.value)}
-                      className="w-full bg-[#1A1A1A] text-[#C9A84C] font-mono text-xs p-4 focus:outline-none border border-[#C9A84C]/30 shadow-inner"
-                    />
-                    {jsonError && (
-                      <p className="text-xs text-red-600 font-bold uppercase tracking-wider">{jsonError}</p>
-                    )}
-                  </div>
-                )}
+
+                      {/* One Row Per Page List */}
+                      <div className="space-y-2 pt-1">
+                        {sys.pages.map((pg) => {
+                          const currentLevel = getPageLevel(sys.id, pg);
+
+                          return (
+                            <div
+                              key={pg}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[#FAFAFA] border border-[#1A1A1A]/10 hover:border-[#C9A84C]/40 transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] shrink-0" />
+                                <span className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
+                                  {pg}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/10 shadow-xs shrink-0">
+                                {/* None Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setPageLevel(sys.id, pg, 'none')}
+                                  className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${currentLevel === 'none'
+                                    ? 'bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20'
+                                    : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
+                                    }`}
+                                >
+                                  None
+                                </button>
+
+                                {/* View Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setPageLevel(sys.id, pg, 'view')}
+                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${currentLevel === 'view'
+                                    ? 'bg-[#1A1A1A] text-white font-bold shadow-sm'
+                                    : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                    }`}
+                                >
+                                  .view
+                                </button>
+
+                                {/* Modify Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setPageLevel(sys.id, pg, 'modify')}
+                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${currentLevel === 'modify'
+                                    ? 'bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm'
+                                    : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                    }`}
+                                >
+                                  .modify
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

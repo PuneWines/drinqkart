@@ -271,17 +271,7 @@ export default function MasterSetting() {
     if (!editingUser) return;
     setSaving(true);
 
-    let finalAccess = Object.keys(accessPermissions);
-    if (jsonMode) {
-      try {
-        const parsed = JSON.parse(rawJsonText);
-        finalAccess = Array.isArray(parsed) ? parsed : Object.keys(parsed);
-      } catch (err) {
-        showToast('Please fix JSON formatting error before saving', 'error');
-        setSaving(false);
-        return;
-      }
-    }
+    const finalAccess = Object.keys(accessPermissions);
 
     try {
       const { error } = await supabase
@@ -317,11 +307,10 @@ export default function MasterSetting() {
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          className={`fixed top-5 right-5 z-50 px-5 py-3 rounded border text-xs font-bold uppercase tracking-wider shadow-xl transition-all ${
-            toastMessage.type === 'error'
+          className={`fixed top-5 right-5 z-50 px-5 py-3 rounded border text-xs font-bold uppercase tracking-wider shadow-xl transition-all ${toastMessage.type === 'error'
               ? 'bg-red-950 text-red-100 border-red-800'
               : 'bg-[#1A1A1A] text-[#C9A84C] border-[#C9A84C]'
-          }`}
+            }`}
         >
           {toastMessage.msg}
         </div>
@@ -330,9 +319,9 @@ export default function MasterSetting() {
       {/* Header Banner - Drinqkart Home Styling */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 bg-white p-2 rounded-none border-[0.5px] border-[#1A1A1A]/10 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#C9A84C]/5 rounded-full blur-3xl pointer-events-none" />
-        
+
         <div>
-        
+
           <h1 className="text-2xl font-serif text-[#1A1A1A] font-bold tracking-wide">
             Master Settings & System Access
           </h1>
@@ -463,11 +452,10 @@ export default function MasterSetting() {
                               return (
                                 <span
                                   key={key}
-                                  className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${
-                                    isModify
+                                  className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${isModify
                                       ? 'bg-[#C9A84C]/15 text-[#1A1A1A] border-[#C9A84C]/40 font-bold'
                                       : 'bg-[#1A1A1A]/5 text-[#1A1A1A] border-[#1A1A1A]/10'
-                                  }`}
+                                    }`}
                                 >
                                   {key}
                                 </span>
@@ -550,168 +538,131 @@ export default function MasterSetting() {
                 </div>
               </div>
 
-              {/* Permission Mode Switch */}
+              {/* Permission Management */}
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-slate-900">
                       master_user_system_page_access
                     </h4>
-                    <p className="text-[11px] text-[#1A1A1A]/60 mt-0.5">
-                      Set permission level per page: <code className="font-mono text-[#C9A84C] font-bold">.view</code> or <code className="font-mono text-[#C9A84C] font-bold">.modify</code>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Set permission level per page: <code className="font-mono text-[#8C6D23] font-bold">.view</code> or <code className="font-mono text-[#8C6D23] font-bold">.modify</code>
                     </p>
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-[#FAFAFA] p-1 border border-[#1A1A1A]/10">
-                    <button
-                      type="button"
-                      onClick={() => setJsonMode(false)}
-                      className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${!jsonMode ? 'bg-[#1A1A1A] text-[#C9A84C] shadow-sm' : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'}`}
-                    >
-                      Interactive UI
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setJsonMode(true)}
-                      className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 ${jsonMode ? 'bg-[#1A1A1A] text-[#C9A84C] shadow-sm' : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'}`}
-                    >
-                      <Code size={13} />
-                      <span>JSON Editor</span>
-                    </button>
                   </div>
                 </div>
 
-                {!jsonMode ? (
-                  /* Interactive UI - Distinct System Cards, Section Banners & Page Rows */
-                  <div className="space-y-2 bg-slate-50/50  rounded-xl">
-                    {AVAILABLE_SYSTEMS.map((sys) => {
-                      const sectionsToRender = sys.sections || [{ title: null, pages: sys.pages || [] }];
+                {/* Interactive UI - Distinct System Cards, Section Banners & Page Rows */}
+                <div className="space-y-2 bg-slate-50/50  rounded-xl">
+                  {AVAILABLE_SYSTEMS.map((sys) => {
+                    const sectionsToRender = sys.sections || [{ title: null, pages: sys.pages || [] }];
 
-                      return (
-                        <div
-                          key={sys.id}
-                          className="bg-white rounded-xl border-1 border-slate-200 shadow-sm overflow-hidden transition-all hover:border-[#C9A84C]/50"
-                        >
-                          {/* SYSTEM HEADER BAR - Prominent Dark Card Header */}
-                          <div className="bg-[#1C120C] text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#C9A84C]/30">
-                            <div className="flex items-center gap-3">
-                              <span className="w-3 h-3 rounded-full bg-[#C9A84C] shrink-0" />
-                              <div>
-                                <h4 className="text-sm font-bold tracking-wide text-white uppercase font-serif">
-                                  {sys.name}
-                                </h4>
-                                <span className="text-[10px] font-mono text-[#C9A84C] font-semibold tracking-wider">
-                                  System ID: {sys.id}
-                                </span>
-                              </div>
+                    return (
+                      <div
+                        key={sys.id}
+                        className="bg-white rounded-xl border-1 border-slate-200 shadow-sm overflow-hidden transition-all hover:border-[#C9A84C]/50"
+                      >
+                        {/* SYSTEM HEADER BAR - Prominent Dark Card Header */}
+                        <div className="bg-[#1C120C] text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#C9A84C]/30">
+                          <div className="flex items-center gap-3">
+                            <span className="w-3 h-3 rounded-full bg-[#C9A84C] shrink-0" />
+                            <div>
+                              <h4 className="text-sm font-bold tracking-wide text-white uppercase font-serif">
+                                {sys.name}
+                              </h4>
+                              <span className="text-[10px] font-mono text-[#C9A84C] font-semibold tracking-wider">
+                                System ID: {sys.id}
+                              </span>
                             </div>
-
-                          
                           </div>
 
-                          {/* SYSTEM CONTENT (SECTIONS & PAGES) */}
-                          <div className="p-5 space-y-6 bg-slate-50/40">
-                            {sectionsToRender.map((sec, secIdx) => (
-                              <div key={secIdx} className="space-y-3">
-                                {/* SECTION HEADER - Highlighted Category Banner */}
-                                {sec.title && (
-                                  <div className="flex items-center gap-2 border-l-4 border-[#C9A84C] bg-[#C9A84C]/10 px-3.5 py-2 rounded-r-lg">
-                                    <span className="text-xs font-black text-[#1C120C] uppercase tracking-widest font-sans">
-                                      {sec.title}
-                                    </span>
-                                  </div>
-                                )}
 
-                                {/* PAGE ROWS */}
-                                <div className="space-y-2 pl-0 sm:pl-2">
-                                  {sec.pages.map((pg) => {
-                                    const currentLevel = getPageLevel(sys.id, pg);
+                        </div>
 
-                                    return (
-                                      <div
-                                        key={pg}
-                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 pl-3.5 bg-white border border-slate-200 rounded-lg hover:border-[#C9A84C] h transition-all"
-                                      >
-                                        {/* Page Title & Bullet */}
-                                        <div className="flex items-center gap-3 min-w-0">
-                                          <span className={`w-2 h-2 rounded-full shrink-0 ${
-                                            currentLevel === 'modify' 
-                                              ? 'bg-[#C9A84C] ring-2 ring-[#C9A84C]/30' 
-                                              : currentLevel === 'view' 
-                                              ? 'bg-slate-900' 
+                        {/* SYSTEM CONTENT (SECTIONS & PAGES) */}
+                        <div className="p-5 space-y-6 bg-slate-50/40">
+                          {sectionsToRender.map((sec, secIdx) => (
+                            <div key={secIdx} className="space-y-3">
+                              {/* SECTION HEADER - Highlighted Category Banner */}
+                              {sec.title && (
+                                <div className="flex items-center gap-2 border-l-4 border-[#C9A84C] bg-[#C9A84C]/10 px-3.5 py-2 rounded-r-lg">
+                                  <span className="text-xs font-black text-[#1C120C] uppercase tracking-widest font-sans">
+                                    {sec.title}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* PAGE ROWS */}
+                              <div className="space-y-2 pl-0 sm:pl-2">
+                                {sec.pages.map((pg) => {
+                                  const currentLevel = getPageLevel(sys.id, pg);
+
+                                  return (
+                                    <div
+                                      key={pg}
+                                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 pl-3.5 bg-white border border-slate-200 rounded-lg hover:border-[#C9A84C] h transition-all"
+                                    >
+                                      {/* Page Title & Bullet */}
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${currentLevel === 'modify'
+                                            ? 'bg-[#C9A84C] ring-2 ring-[#C9A84C]/30'
+                                            : currentLevel === 'view'
+                                              ? 'bg-slate-900'
                                               : 'bg-slate-300'
                                           }`} />
-                                          <span className="text-xs font-bold text-slate-800 tracking-tight font-serif truncate">
-                                            {pg}
-                                          </span>
-                                        </div>
-
-                                        {/* Page Level Access Toggle Buttons */}
-                                        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 shrink-0 self-end sm:self-auto">
-                                          {/* None Button */}
-                                          <button
-                                            type="button"
-                                            onClick={() => setPageLevel(sys.id, pg, 'none')}
-                                            className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${
-                                              currentLevel === 'none'
-                                                ? 'bg-slate-300 text-slate-800 font-extrabold shadow-xs'
-                                                : 'text-slate-500 hover:text-slate-900'
-                                            }`}
-                                          >
-                                            None
-                                          </button>
-
-                                          {/* View Button */}
-                                          <button
-                                            type="button"
-                                            onClick={() => setPageLevel(sys.id, pg, 'view')}
-                                            className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
-                                              currentLevel === 'view'
-                                                ? 'bg-[#1C120C] text-white font-extrabold shadow-sm'
-                                                : 'text-slate-600 hover:text-slate-900'
-                                            }`}
-                                          >
-                                            .view
-                                          </button>
-
-                                          {/* Modify Button */}
-                                          <button
-                                            type="button"
-                                            onClick={() => setPageLevel(sys.id, pg, 'modify')}
-                                            className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
-                                              currentLevel === 'modify'
-                                                ? 'bg-[#C9A84C] text-[#1C120C] font-black shadow-sm'
-                                                : 'text-slate-600 hover:text-slate-900'
-                                            }`}
-                                          >
-                                            .modify
-                                          </button>
-                                        </div>
+                                        <span className="text-xs font-bold text-slate-800 tracking-tight font-serif truncate">
+                                          {pg}
+                                        </span>
                                       </div>
-                                    );
-                                  })}
-                                </div>
+
+                                      {/* Page Level Access Toggle Buttons */}
+                                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 shrink-0 self-end sm:self-auto">
+                                        {/* None Button */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setPageLevel(sys.id, pg, 'none')}
+                                          className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${currentLevel === 'none'
+                                              ? 'bg-slate-300 text-slate-800 font-extrabold shadow-xs'
+                                              : 'text-slate-500 hover:text-slate-900'
+                                            }`}
+                                        >
+                                          None
+                                        </button>
+
+                                        {/* View Button */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setPageLevel(sys.id, pg, 'view')}
+                                          className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'view'
+                                              ? 'bg-[#1C120C] text-white font-extrabold shadow-sm'
+                                              : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                            }`}
+                                        >
+                                          .view
+                                        </button>
+
+                                        {/* Modify Button */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setPageLevel(sys.id, pg, 'modify')}
+                                          className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'modify'
+                                              ? 'bg-[#C9A84C] text-[#1C120C] font-black shadow-sm'
+                                              : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                          .modify
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  /* JSON Editor */
-                  <div className="space-y-2">
-                    <textarea
-                      rows={14}
-                      value={rawJsonText}
-                      onChange={(e) => handleJsonChange(e.target.value)}
-                      className="w-full bg-[#1A1A1A] text-[#C9A84C] font-mono text-xs p-4 focus:outline-none border border-[#C9A84C]/30 shadow-inner"
-                    />
-                    {jsonError && (
-                      <p className="text-xs text-red-600 font-bold uppercase tracking-wider">{jsonError}</p>
-                    )}
-                  </div>
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

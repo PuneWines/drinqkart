@@ -350,18 +350,33 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
         };
     });
 
-    // 5. Idempotent batch upsert to Supabase
+    // 5. Save batch to Supabase
+    const monthName = monthNames[month - 1];
+    await supabase
+        .from('hr_management_attendance_monthly')
+        .delete()
+        .eq('year', year)
+        .eq('month', monthName)
+        .eq('serial_no', device.serial);
+
     if (finalData.length > 0) {
         const batchSize = 50;
         for (let i = 0; i < finalData.length; i += batchSize) {
             const batch = finalData.slice(i, i + batchSize);
-            const { error } = await supabase
-                .from('Hr_management_attendance_monthly')
-                .upsert(batch, { onConflict: 'year,month,employee_code,serial_no' });
+            let { error } = await supabase
+                .from('hr_management_attendance_monthly')
+                .insert(batch);
 
             if (error) {
-                console.error('Error batch upserting to Supabase:', error);
-                throw new Error(`Supabase Upsert Error: ${error.message}`);
+                const { error: upsertErr } = await supabase
+                    .from('hr_management_attendance_monthly')
+                    .upsert(batch);
+                error = upsertErr;
+            }
+
+            if (error) {
+                console.error('Error batch saving to Supabase:', error);
+                throw new Error(`Supabase Save Error: ${error.message}`);
             }
         }
     }
@@ -379,7 +394,7 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
 export const getMonthlyAttendanceFromSupabase = async (month, year, serialNo) => {
     const monthName = monthNames[month - 1];
     const { data, error } = await supabase
-        .from('Hr_management_attendance_monthly')
+        .from('hr_management_attendance_monthly')
         .select('*')
         .eq('year', year)
         .eq('month', monthName)

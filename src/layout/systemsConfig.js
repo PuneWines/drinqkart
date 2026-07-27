@@ -39,7 +39,14 @@ export const systems = [
       { label: 'Employees', to: '/systems/hr/employees' },
       { label: 'Joining shop', to: '/systems/hr/joining-shop' },
       { label: 'Leave Management', to: '/systems/hr/leave' },
-      { label: 'Daily Attendance', to: '/systems/hr/attendance/daily' },
+      {
+        label: 'Attendance',
+        to: '/systems/hr/attendance/daily',
+        children: [
+          { label: 'Daily Attendance', to: '/systems/hr/attendance/daily' },
+          { label: 'Monthly Attendance', to: '/systems/hr/attendance/monthly' }
+        ]
+      },
       { label: 'Payroll', to: '/systems/hr/payroll' },
       { label: 'Roster', to: '/systems/hr/roaster' },
       { label: 'Admin advanced', to: '/systems/hr/admin-advance' },
@@ -188,7 +195,14 @@ export const getVisibleSystems = (user) => {
   };
 
   return systems.map((system) => {
-    const allowedSubtabs = system.subtabs.filter((sub) => isSubtabAllowed(system.id, sub));
+    const allowedSubtabs = system.subtabs.map((sub) => {
+      if (sub.children) {
+        const allowedChildren = sub.children.filter((child) => isSubtabAllowed(system.id, child));
+        if (allowedChildren.length === 0 && !isSubtabAllowed(system.id, sub)) return null;
+        return { ...sub, children: allowedChildren };
+      }
+      return isSubtabAllowed(system.id, sub) ? sub : null;
+    }).filter(Boolean);
     return { ...system, subtabs: allowedSubtabs };
   }).filter((system) => system.subtabs.some((s) => s.type !== 'header'));
 };
