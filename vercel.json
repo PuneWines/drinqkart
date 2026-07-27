@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/hr_system", "destination": "/hr_system/index.html" },
+    { "source": "/hr_system/:path*", "destination": "/hr_system/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

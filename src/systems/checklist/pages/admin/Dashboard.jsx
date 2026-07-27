@@ -1,0 +1,1421 @@
+"use client"
+
+import { useState, useEffect, useRef } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { useDispatch, useSelector } from "react-redux"
+import supabase from "../../SupabaseClient"
+import AdminLayout from "../../components/layout/AdminLayout.jsx"
+import DashboardHeader from "./dashboard/DashboardHeader.jsx"
+import StatisticsCards from "./dashboard/StaticsCard.jsx"
+import TaskNavigationTabs from "./dashboard/TaskNavigationTab.jsx"
+import CompletionRateCard from "./dashboard/CompletionRateCard.jsx"
+import TasksOverviewChart from "./dashboard/Chart/TaskOverviewChart.jsx"
+import TasksCompletionChart from "./dashboard/Chart/TaskCompletionChart.jsx"
+import StaffTasksTable from "./dashboard/StaffTaskTable.jsx"
+import {
+  completeTaskInTable,
+  overdueTaskInTable,
+  pendingTaskInTable,
+  totalTaskInTable,
+} from "../../redux/slice/dashboardSlice.js"
+import {
+  fetchDashboardDataApi,
+  getUniqueShopsApi,
+  getStaffNamesByShopApi,
+  fetchChecklistDataByDateRangeApi,
+  getChecklistDateRangeStatsApi,
+  getDashboardSummaryApi,
+  fetchDashboardStatsApi
+} from "../../redux/api/dashboardApi.js"
+import { fetchMaintenanceDataSortByDate, fetchAllMaintenanceTasksForDashboard } from "../../redux/api/maintenanceApi.js"
+import { fetchRepairDataSortByDate, fetchAllRepairTasks } from "../../redux/api/repairApi.js"
+import DefaultView from "./dashboard/views/DefaultView.jsx"
+import MaintenanceView from "./dashboard/views/MaintenanceView.jsx"
+import RepairView from "./dashboard/views/RepairView.jsx"
+import EAView from "./dashboard/views/EAView.jsx"
+import TaskManagementTabs from "../../components/TaskManagementTabs.jsx"
+
+export default function AdminDashboard() {
+  const [dashboardType, setDashboardType] = useState("checklist")
+  const [taskView, setTaskView] = useState("recent")
+  const [filterStatus, setFilterStatus] = useState("all")
+  const [filterStaff, setFilterStaff] = useState("all")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [activeTab, setActiveTab] = useState("overview")
+  const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all")
+  const [availableStaff, setAvailableStaff] = useState([])
+  const userRole = localStorage.getItem("role")
+  const username = localStorage.getItem("user-name")
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMoreData, setHasMoreData] = useState(true)
+  const [allTasks, setAllTasks] = useState([])
+  const [batchSize] = useState(1000)
+  const [shopFilter, setShopFilter] = useState("all")
+  const [availableShops, setAvailableShops] = useState([])
+  const [mainTab, setMainTab] = useState("default") // "default", "maintenance", "repair", "ea"
+  const handleShopFilterChange = (newShop) => {
+    setShopFilter(newShop)
+    setDashboardStaffFilter("all")
+    setCurrentPage(1)
+    setHasMoreData(true)
+  }
+
+  const handleDashboardTypeChange = (newType) => {
+    setDashboardType(newType)
+    setDashboardStaffFilter("all")
+    if ((userRole || "").toLowerCase() !== "manager") {
+      setShopFilter("all")
+    }
+    setCurrentPage(1)
+    setHasMoreData(true)
+  }
+
+  useEffect(() => {
+    const initializeManagerShop = async () => {
+      if ((userRole || "").toLowerCase() === "manager" && username) {
+        try {
+          const { data: mgrData } = await supabase
+            .from("users")
+            .select("shop_name")
+            .ilike("user_name", username)
+            .maybeSingle();
+          if (mgrData?.shop_name) {
+            setShopFilter(mgrData.shop_name);
+          }
+        } catch (e) {
+          console.error("Error setting manager shop filter:", e);
+        }
+      }
+    };
+    initializeManagerShop();
+  }, [userRole, username]);
+
+  // Caching mechanism
+  // OLD: const shopDataCache = useRef({});
+  const queryClient = useQueryClient();
+
+  // State for shop data
+  const [shopData, setShopData] = useState({
+    allTasks: [],
+    staffMembers: [],
+    totalTasks: 0,
+    completedTasks: 0,
+    pendingTasks: 0,
+    overdueTasks: 0,
+    completionRate: 0,
+    barChartData: [],
+    pieChartData: [],
+    completedRatingOne: 0,
+    completedRatingTwo: 0,
+    completedRatingThreePlus: 0,
+  })
+
+  // New state for date range filtering
+  const [dateRange, setDateRange] = useState({
+    startDate: "",
+    endDate: "",
+    filtered: false,
+  })
+
+  // State to store filtered statistics
+  const [filteredDateStats, setFilteredDateStats] = useState({
+    totalTasks: 0,
+    completedTasks: 0,
+    pendingTasks: 0,
+    overdueTasks: 0,
+    completionRate: 0,
+  })
+
+  const { dashboard, totalTask, completeTask, pendingTask, overdueTask } = useSelector((state) => state.dashBoard)
+  const dispatch = useDispatch()
+
+  // Handle date range change from DashboardHeader
+  const handleDateRangeChange = async (startDate, endDate) => {
+    if (startDate && endDate) {
+      setDateRange({
+        startDate,
+        endDate,
+        filtered: true
+      });
+      await fetchShopData(1, false, shopFilter, dashboardStaffFilter, dashboardType, mainTab, startDate, endDate);
+    } else {
+      setDateRange({
+        startDate: "",
+        endDate: "",
+        filtered: false
+      });
+      setFilteredDateStats({
+        totalTasks: 0,
+        completedTasks: 0,
+        pendingTasks: 0,
+        overdueTasks: 0,
+        completionRate: 0,
+      });
+      await fetchShopData(1, false, shopFilter, dashboardStaffFilter, dashboardType, mainTab, null, null);
+    }
+  };
+
+  const fetchSummaryStats = async (
+    currentShopFilter = shopFilter,
+    currentStaffFilter = dashboardStaffFilter,
+    currentType = dashboardType
+  ) => {
+    try {
+      // OLD:
+      // const summary = await getDashboardSummaryApi(
+      //   currentType, 
+      //   currentStaffFilter === 'all' ? null : currentStaffFilter, 
+      //   currentShopFilter === 'all' ? null : currentShopFilter
+      // );
+      // NEW: React Query cached fetch
+      const summary = await queryClient.fetchQuery({
+        queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter],
+        queryFn: () => getDashboardSummaryApi(
+          currentType, 
+          currentStaffFilter === 'all' ? null : currentStaffFilter, 
+          currentShopFilter === 'all' ? null : currentShopFilter
+        ),
+        staleTime: 2 * 60 * 1000
+      });
+      
+      // Guard against race conditions: only update state if filters haven't changed since request started
+      if (
+        currentShopFilter !== shopFilter ||
+        currentStaffFilter !== dashboardStaffFilter ||
+        currentType !== dashboardType
+      ) {
+        return;
+      }
+      
+      setShopData(prev => ({
+        ...prev,
+        totalTasks: summary.totalTasks,
+        completedTasks: summary.completedTasks,
+        pendingTasks: summary.pendingTasks,
+        overdueTasks: summary.overdueTasks,
+        completionRate: summary.completionRate,
+      }));
+    } catch (error) {
+      console.error("Error fetching summary stats:", error);
+    }
+  };
+
+
+  const processFilteredData = async (data, stats) => {
+    const userRole = (localStorage.getItem("role") || "").toLowerCase();
+    const username = localStorage.getItem("user-name");
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    let reportingUsers = [username?.toLowerCase()];
+    if (userRole === "hod") {
+        const { data: reports } = await supabase
+            .from("users")
+            .select("user_name")
+            .eq("reported_by", username);
+        if (reports) {
+            reportingUsers = [username.toLowerCase(), ...reports.map(r => r.user_name.toLowerCase())];
+        }
+    } else if (userRole === "manager") {
+        const { data: allDbUsers } = await supabase
+            .from("users")
+            .select("user_name, shop_name, user_access");
+        if (allDbUsers) {
+            const userAccess = localStorage.getItem("user_access") || "";
+            const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+            const matchedUsers = allDbUsers.filter(u => {
+                const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+                const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+                return userShopsList.some(s => managerShopsList.includes(s));
+            }).map(u => (u.user_name || "").toLowerCase());
+            reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
+        }
+    }
+
+    let totalTasks = 0;
+    let completedTasks = 0;
+    let pendingTasks = 0;
+    let overdueTasks = 0;
+
+    const process = (dataStream, statsObject) => {
+        // ... nested processing logic or just call it after getReportees
+    };
+
+
+    const monthlyData = {
+      Jan: { completed: 0, pending: 0 },
+      Feb: { completed: 0, pending: 0 },
+      Mar: { completed: 0, pending: 0 },
+      Apr: { completed: 0, pending: 0 },
+      May: { completed: 0, pending: 0 },
+      Jun: { completed: 0, pending: 0 },
+      Jul: { completed: 0, pending: 0 },
+      Aug: { completed: 0, pending: 0 },
+      Sep: { completed: 0, pending: 0 },
+      Oct: { completed: 0, pending: 0 },
+      Nov: { completed: 0, pending: 0 },
+      Dec: { completed: 0, pending: 0 },
+    };
+
+    // Filter tasks based on role and reported hierarchy
+    const processedTasks = data
+      .map((task) => {
+        const currentUserName = (username || "").toLowerCase();
+        const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
+        const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+
+        if (userRole === "hod" || userRole === "manager") {
+            if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
+                return null;
+            }
+        } else if (userRole !== "admin") {
+          if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+            return null;
+          }
+        }
+
+        const taskStartDate = parseTaskStartDate(task.task_start_date);
+        const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
+
+        let status = "pending";
+        if (completionDate) {
+          status = "completed";
+        } else if (taskStartDate && isDateInPast(taskStartDate)) {
+          status = "overdue";
+        }
+
+        // Count tasks for statistics - include ALL tasks in the date range
+        if (taskStartDate) {
+          totalTasks++;
+
+          if (status === "completed") {
+            completedTasks++;
+          } else if (status === "overdue") {
+            overdueTasks++;
+          } else {
+            pendingTasks++; // This is 'Due Today'
+          }
+        }
+
+        // Update monthly data
+        if (taskStartDate) {
+          const monthName = taskStartDate.toLocaleString("default", { month: "short" });
+          if (monthlyData[monthName]) {
+            if (status === "completed") {
+              monthlyData[monthName].completed++;
+            } else {
+              monthlyData[monthName].pending++;
+            }
+          }
+        }
+
+        return {
+          id: task.id,
+          title: task.task_description,
+          assignedTo: task.name || "Unassigned",
+          taskStartDate: formatDateToDDMMYYYY(taskStartDate),
+          originalTaskStartDate: task.task_start_date,
+          submission_date: task.submission_date,
+          status,
+          frequency: task.frequency || "one-time",
+          rating: task.color_code_for || 0,
+          admin_done: task.admin_done || false, // Add admin_done for approval status
+        };
+      })
+      .filter(Boolean);
+
+    const barChartData = Object.entries(monthlyData).map(([name, data]) => ({
+      name,
+      completed: data.completed,
+      pending: data.pending,
+    }));
+
+    // Use stats from API if available, otherwise use our calculations
+    const finalStats = stats || {
+      totalTasks,
+      completedTasks,
+      pendingTasks,
+      overdueTasks,
+      completionRate: totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) : 0
+    };
+
+    const pieChartData = [
+      { name: "Completed", value: finalStats.completedTasks, color: "#22c55e" },
+      { name: "Pending", value: finalStats.pendingTasks, color: "#facc15" },
+      { name: "Overdue", value: finalStats.overdueTasks, color: "#ef4444" },
+    ];
+
+    // Update shop data with filtered results
+    setShopData(prev => ({
+      ...prev,
+      allTasks: processedTasks,
+      totalTasks: finalStats.totalTasks,
+      completedTasks: finalStats.completedTasks,
+      pendingTasks: finalStats.pendingTasks,
+      overdueTasks: finalStats.overdueTasks,
+      completionRate: finalStats.completionRate,
+      barChartData,
+      pieChartData,
+    }));
+
+    // Update filtered stats for StatisticsCards
+    setFilteredDateStats({
+      totalTasks: finalStats.totalTasks,
+      completedTasks: finalStats.completedTasks,
+      pendingTasks: finalStats.pendingTasks,
+      overdueTasks: finalStats.overdueTasks,
+      completionRate: finalStats.completionRate,
+    });
+  };
+
+  const fetchShopDataWithDateRange = async (startDate, endDate, page = 1, append = false, summary = null) => {
+    try {
+      // OLD:
+      // const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter, startDate, endDate);
+      // NEW: React Query cached fetch
+      const data = await queryClient.fetchQuery({
+        queryKey: ['dashboardTasks', dashboardType, mainTab, shopFilter, dashboardStaffFilter, page, startDate, endDate],
+        queryFn: () => fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter, startDate, endDate),
+        staleTime: 2 * 60 * 1000
+      });
+
+      // Filter data by date range on client side
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      const filteredData = data.filter(task => {
+        const dateValue = dashboardType === 'work' ? task.current_date : (task.planned_date || task.task_start_date || task.created_at);
+        const taskDate = parseTaskStartDate(dateValue);
+        return taskDate && taskDate >= start && taskDate <= end;
+      });
+
+      // Pass the filtered data to process function
+      // Use the true summary passed from handleDateRangeChange, or fallback to an empty stats object
+      processFilteredData(filteredData, summary || {
+        totalTasks: 0,
+        completedTasks: 0,
+        pendingTasks: 0,
+        overdueTasks: 0,
+        completionRate: 0
+      });
+    } catch (error) {
+      console.error("Error fetching data with date range:", error);
+    }
+  };
+
+  // Updated date parsing function to handle both formats
+  const parseTaskStartDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== "string") return null
+
+    // Handle YYYY-MM-DD format (ISO format from Supabase)
+    if (dateStr.includes("-") && dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const parsed = new Date(dateStr)
+      return isNaN(parsed) ? null : parsed
+    }
+
+    // Handle DD/MM/YYYY format (with or without time)
+    if (dateStr.includes("/")) {
+      // Split by space first to separate date and time
+      const parts = dateStr.split(" ")
+      const datePart = parts[0] // "25/08/2025"
+
+      const dateComponents = datePart.split("/")
+      if (dateComponents.length !== 3) return null
+
+      const [day, month, year] = dateComponents.map(Number)
+
+      if (!day || !month || !year) return null
+
+      // Create date object (month is 0-indexed)
+      const date = new Date(year, month - 1, day)
+
+      // If there's time component, parse it
+      if (parts.length > 1) {
+        const timePart = parts[1] // "09:00:00"
+        const timeComponents = timePart.split(":")
+        if (timeComponents.length >= 2) {
+          const [hours, minutes, seconds] = timeComponents.map(Number)
+          date.setHours(hours || 0, minutes || 0, seconds || 0)
+        }
+      }
+
+      return isNaN(date) ? null : date
+    }
+
+    // Fallback: Try ISO format
+    const parsed = new Date(dateStr)
+    return isNaN(parsed) ? null : parsed
+  }
+
+  // Helper function to format date from ISO format to DD/MM/YYYY
+  const formatLocalDate = (isoDate) => {
+    if (!isoDate) return ""
+    const date = new Date(isoDate)
+    return formatDateToDDMMYYYY(date)
+  }
+
+  // Format date as DD/MM/YYYY
+  const formatDateToDDMMYYYY = (date) => {
+    if (!date || !(date instanceof Date) || isNaN(date)) return ""
+    const day = date.getDate().toString().padStart(2, "0")
+    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  }
+
+  // Check if date is today
+  const isDateToday = (date) => {
+    if (!date || !(date instanceof Date)) return false
+    const today = new Date()
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    )
+  }
+
+  // Check if date is in the past (excluding today)
+  const isDateInPast = (date) => {
+    if (!date || !(date instanceof Date)) return false
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const checkDate = new Date(date)
+    checkDate.setHours(0, 0, 0, 0)
+    return checkDate < today
+  }
+
+  // Check if date is in the future (excluding today)
+  const isDateFuture = (date) => {
+    if (!date || !(date instanceof Date)) return false
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const checkDate = new Date(date)
+    checkDate.setHours(0, 0, 0, 0)
+    return checkDate > today
+  }
+
+  // Function to check if a date is tomorrow
+  const isDateTomorrow = (dateStr) => {
+    const date = parseTaskStartDate(dateStr)
+    if (!date) return false
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(0, 0, 0, 0)
+    date.setHours(0, 0, 0, 0)
+    return date.getTime() === tomorrow.getTime()
+  }
+
+  const fetchShopData = async (
+    page = 1,
+    append = false,
+    currentShopFilter = shopFilter,
+    currentStaffFilter = dashboardStaffFilter,
+    currentType = dashboardType,
+    currentMainTab = mainTab,
+    start = dateRange.filtered ? dateRange.startDate : null,
+    end = dateRange.filtered ? dateRange.endDate : null
+  ) => {
+    try {
+      // NEW: React Query based cache check for processed data
+      const queryKey = ['dashboardProcessedData', currentType, currentMainTab, currentShopFilter, currentStaffFilter, page, start, end];
+      if (!append) {
+        const cachedQueryState = queryClient.getQueryState(queryKey);
+        if (cachedQueryState && cachedQueryState.data && (Date.now() - cachedQueryState.dataUpdatedAt < 2 * 60 * 1000)) {
+          const cached = cachedQueryState.data;
+          if (
+            currentShopFilter === shopFilter &&
+            currentStaffFilter === dashboardStaffFilter &&
+            currentType === dashboardType &&
+            currentMainTab === mainTab
+          ) {
+            setShopData(cached.shopData);
+            setAvailableStaff(cached.availableStaff);
+            if (page === 1 && cached.summary) {
+              setFilteredDateStats(cached.summary);
+            }
+          }
+          return; // Instant load, skip API calls
+        }
+      }
+
+      setIsLoadingMore(true);
+      if (page === 1) {
+        setHasMoreData(true);
+        if (!append) {
+          setShopData(prev => ({ ...prev, allTasks: [] }));
+        }
+      }
+
+      // Optimized: Only fetch the requested page of data
+      let data = [];
+      let summary = null;
+
+      if (start && end) {
+        // Fetch from Edge Function when date range is active
+        const result = await fetchDashboardStatsApi({
+          dashboardType: currentType,
+          shopFilter: currentShopFilter,
+          staffFilter: currentStaffFilter,
+          startDate: start,
+          endDate: end
+        });
+
+        if (result) {
+          data = result.tasks || [];
+          summary = result.summaryStats || null;
+          
+          // Sync filteredDateStats state
+          if (page === 1 && summary) {
+            setFilteredDateStats(summary);
+          }
+        }
+      } else {
+        // Standard month logic:
+        if (page === 1) {
+          summary = await queryClient.fetchQuery({
+            queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter],
+            queryFn: () => getDashboardSummaryApi(
+              currentType, 
+              currentStaffFilter === 'all' ? null : currentStaffFilter, 
+              currentShopFilter === 'all' ? null : currentShopFilter
+            ),
+            staleTime: 2 * 60 * 1000
+          });
+        }
+
+        data = await queryClient.fetchQuery({
+          queryKey: ['dashboardTasks', currentType, currentMainTab, currentShopFilter, currentStaffFilter, page],
+          queryFn: async () => {
+            if (currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance') {
+              const result = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
+              return result.data || [];
+            } else if (currentMainTab === 'repair' || currentShopFilter === 'Repair') {
+              const result = await fetchAllRepairTasks(page, batchSize);
+              return result.data || [];
+            } else {
+              return await fetchDashboardDataApi(currentType, currentStaffFilter, page, batchSize, 'all', currentShopFilter);
+            }
+          },
+          staleTime: 2 * 60 * 1000
+        });
+      }
+
+      // --- MOVED UP: Generate Staff List BEFORE Early Return ---
+      // This ensures the staff dropdown updates correctly even if a shop has 0 tasks.
+      const currentUsername = localStorage.getItem("user-name")
+      const currentUserRoleForStaff = (localStorage.getItem("role") || "").toLowerCase()
+      
+      let uniqueStaff;
+      if (currentUserRoleForStaff === "manager" && currentUsername) {
+        try {
+          const { data: mgrData } = await supabase
+            .from("users")
+            .select("shop_name")
+            .ilike("user_name", currentUsername)
+            .maybeSingle();
+          const managerShop = mgrData?.shop_name || "";
+          
+          const { data: shopUsers } = await supabase
+            .from("users")
+            .select("user_name")
+            .eq("shop_name", managerShop)
+            .eq("status", "active");
+          
+          uniqueStaff = (shopUsers || []).map(u => u.user_name).filter(Boolean);
+        } catch (error) {
+          console.error('Error fetching manager shop staff:', error);
+          uniqueStaff = [];
+        }
+      } else if (currentMainTab === 'maintenance' || currentMainTab === 'repair' ||
+        currentShopFilter === 'Maintenance' || currentShopFilter === 'Repair') {
+        uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
+      } else {
+        try {
+          // OLD:
+          // uniqueStaff = await getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null);
+          // NEW: React Query cached fetch
+          uniqueStaff = await queryClient.fetchQuery({
+            queryKey: ['staffList', currentShopFilter],
+            queryFn: () => getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null),
+            staleTime: 5 * 60 * 1000
+          });
+        } catch (error) {
+          console.error('Error fetching staff from users table:', error);
+          uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
+        }
+      }
+
+      if (currentUserRoleForStaff !== "admin" && currentUsername) {
+        if (!uniqueStaff.some(staff => staff.toLowerCase() === currentUsername.toLowerCase())) {
+          uniqueStaff.push(currentUsername)
+        }
+      }
+
+      // Guard against race conditions: only update state if filters haven't changed since request started
+      if (
+        currentShopFilter !== shopFilter ||
+        currentStaffFilter !== dashboardStaffFilter ||
+        currentType !== dashboardType ||
+        currentMainTab !== mainTab
+      ) {
+        setIsLoadingMore(false);
+        return;
+      }
+
+      setAvailableStaff(uniqueStaff);
+      // --------------------------------------------------------
+
+      if (!data || (data.length === 0 && page === 1)) {
+        if (page === 1) {
+          setShopData(prev => ({
+            ...prev,
+            allTasks: [],
+            totalTasks: summary ? summary.totalTasks : 0,
+            completedTasks: summary ? summary.completedTasks : 0,
+            pendingTasks: summary ? summary.pendingTasks : 0,
+            overdueTasks: summary ? summary.overdueTasks : 0,
+            completionRate: summary ? summary.completionRate : 0,
+          }));
+        }
+        setHasMoreData(false);
+        setIsLoadingMore(false);
+        return;
+      }
+
+      const username = localStorage.getItem("user-name")
+      const userRoleLower = (localStorage.getItem("role") || "").toLowerCase()
+      // Reference point for all date comparisons
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const today = todayEnd; // alias: every task with date <= today is counted
+
+      let totalTasks = 0
+      let completedTasks = 0
+      let pendingTasks = 0
+      let overdueTasks = 0
+      let completedRatingOne = 0
+      let completedRatingTwo = 0
+      let completedRatingThreePlus = 0
+
+      const monthlyData = {
+        Jan: { completed: 0, pending: 0 },
+        Feb: { completed: 0, pending: 0 },
+        Mar: { completed: 0, pending: 0 },
+        Apr: { completed: 0, pending: 0 },
+        May: { completed: 0, pending: 0 },
+        Jun: { completed: 0, pending: 0 },
+        Jul: { completed: 0, pending: 0 },
+        Aug: { completed: 0, pending: 0 },
+        Sep: { completed: 0, pending: 0 },
+        Oct: { completed: 0, pending: 0 },
+        Nov: { completed: 0, pending: 0 },
+        Dec: { completed: 0, pending: 0 },
+      }
+
+      // FIRST: Filter data by dashboard type - REMOVE this filter for checklist to include all tasks
+      let filteredData = data
+
+
+
+      // SECOND: Apply dashboard staff filter ONLY if not "all"
+      if (currentStaffFilter !== "all") {
+        filteredData = filteredData.filter(
+          (task) => task.name && task.name.toLowerCase() === currentStaffFilter.toLowerCase(),
+        )
+      }
+
+      // Fetch reporting users for HOD role check
+      let reportingUsers = [username?.toLowerCase()];
+      const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
+      if (currentUserRole === "hod") {
+          const { data: reports } = await supabase
+              .from("users")
+              .select("user_name")
+              .eq("reported_by", username);
+          if (reports) {
+              reportingUsers = [username.toLowerCase(), ...reports.map(r => (r.user_name || "").toLowerCase())];
+          }
+      } else if (currentUserRole === "manager") {
+          const { data: allDbUsers } = await supabase
+              .from("users")
+              .select("user_name, shop_name, user_access");
+          if (allDbUsers) {
+              const userAccess = localStorage.getItem("user_access") || "";
+              const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+              const matchedUsers = allDbUsers.filter(u => {
+                  const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+                  const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+                  return userShopsList.some(s => managerShopsList.includes(s));
+              }).map(u => (u.user_name || "").toLowerCase());
+              reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
+          }
+      }
+
+      // Process tasks with your field names
+      const processedTasks = filteredData
+        .map((task) => {
+          // Skip if not involved (assigned to OR created by) for non-admin
+          const currentUserName = (username || "").toLowerCase();
+          const roleNormalized = (userRole || "").toLowerCase();
+          const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
+          const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+
+          if (roleNormalized !== "admin") {
+            if (roleNormalized === 'hod' || roleNormalized === 'manager') {
+                if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
+                    return null;
+                }
+            } else {
+                if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+                    return null;
+                }
+            }
+          }
+
+          // OLD: // FIXED: Use correct field name from your Supabase data - prefer planned_date
+          // OLD: const taskStartDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.created_at);
+          // NEW: Use correct date column per dashboard type
+          const taskDateValue = currentType === 'work' ? task.current_date
+            : currentType === 'checklist' ? (task.task_start_date || task.planned_date || task.created_at)
+            : (task.planned_date || task.task_start_date || task.created_at);
+          const taskStartDate = parseTaskStartDate(taskDateValue);
+          const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
+
+          // Robust completion check across all categories
+          const statusLower = (task.status || "").toLowerCase();
+          const isCompleted = (task.submission_date !== null) || 
+                              (statusLower === 'yes') || 
+                              (statusLower.includes('done')) || 
+                              (statusLower.includes('completed')) || 
+                              (currentType === 'delegation' && task.admin_done === true);
+
+          // Determine task status accurately
+          let status;
+          if (isCompleted) {
+            status = "completed";
+          } else if (taskStartDate && taskStartDate < todayStart) {
+            // Past date, no submission = overdue
+            status = "overdue";
+          } else if (taskStartDate && taskStartDate >= todayStart && taskStartDate <= todayEnd) {
+            // Today's date, no submission = pending (Due Today)
+            status = "pending";
+          } else {
+            // Future date = upcoming
+            status = "upcoming";
+          }
+
+          // ── STATS COUNTING ──────────────────────────────────────────
+          // We fetched all tasks up to today. Now classify each one:
+          //   Completed  → has submission_date (regardless of planned_date)
+          //   Due Today  → planned_date == today, no submission_date
+          //   Overdue    → planned_date < today, no submission_date
+          // Future tasks (planned_date > today) are NOT counted in stats.
+          if (taskStartDate && taskStartDate <= today) {
+            totalTasks++; // Analyzed = everything up to today
+            if (status === "completed") {
+              completedTasks++;
+              if (currentType === "delegation" && task.submission_date) {
+                if (task.color_code_for === 1) completedRatingOne++;
+                else if (task.color_code_for === 2) completedRatingTwo++;
+                else if (task.color_code_for >= 3) completedRatingThreePlus++;
+              }
+            } else if (status === "overdue") {
+              overdueTasks++;  // past date, not submitted
+            } else if (status === "pending") {
+              pendingTasks++;  // today's date, not submitted
+            }
+            // "upcoming" not counted — future tasks
+          }
+
+          // Update monthly data for all tasks
+          if (taskStartDate) {
+            const monthName = taskStartDate.toLocaleString("default", { month: "short" });
+            if (monthlyData[monthName]) {
+              if (status === "completed") {
+                monthlyData[monthName].completed++;
+              } else {
+                monthlyData[monthName].pending++;
+              }
+            }
+          }
+
+          // Determine status based on task type or dates
+          if (currentMainTab === 'repair' || currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance' || currentShopFilter === 'Repair') {
+            // For repair/maintenance, use the explicit status if available, fallback to calculated
+            if (task.status) {
+              const taskStatus = task.status.toLowerCase();
+              if (taskStatus.includes('done') || taskStatus.includes('yes') || taskStatus.includes('completed') || taskStatus.includes('approved')) {
+                // If it's finalized (Approved) or completed by user but we want to show it as completed in dashboard
+                status = 'completed';
+              } else if (taskStatus.includes('pending') && !taskStatus.includes('approval')) {
+                status = 'pending';
+              } else if (taskStatus.includes('overdue')) {
+                status = 'overdue';
+              } else {
+                status = taskStatus; // e.g. 'pending approval', 'observation', etc.
+              }
+            }
+          }
+
+          const mappedTask = {
+            id: task.id,
+            title: task.task_description || task.issue_description || "No Description",
+            task_description: task.task_description || task.issue_description,
+            assignedTo: task.name || task.assigned_person || "Unassigned",
+            // OLD: taskStartDate: formatDateToDDMMYYYY(taskStartDate || (task.planned_date ? new Date(task.planned_date) : (task.task_start_date ? new Date(task.task_start_date) : (task.created_at ? new Date(task.created_at) : null)))),
+            // OLD: originalTaskStartDate: task.planned_date || task.task_start_date || task.created_at,
+            // NEW: Use the already-resolved taskDateValue
+            taskStartDate: formatDateToDDMMYYYY(taskStartDate || (taskDateValue ? new Date(taskDateValue) : null)),
+            originalTaskStartDate: taskDateValue || task.created_at,
+            submission_date: task.submission_date,
+            status,
+            frequency: task.frequency || task.freq || "one-time",
+            rating: task.color_code_for || 0,
+            machine_name: task.machine_name || "-",
+            part_name: task.part_name || "-",
+            part_area: task.part_area || "-",
+            shop: ((task.shop || task.shop_name) || (task.shop || task.shop_name)) || "-",
+            given_by: task.given_by || task.filled_by || "-",
+            enable_reminders: task.enable_reminders || task.enable_reminder || false,
+            require_attachment: task.require_attachment || false,
+            remarks: task.remarks || task.remark || "-",
+            uploaded_image_url: task.uploaded_image_url || null,
+            bill_amount: task.bill_amount,
+            vendor_name: task.vendor_name,
+            part_replaced: task.part_replaced,
+            image_url: task.image_url || task.uploaded_image_url,
+            admin_done: task.admin_done || false // Add admin_done field for approval status
+          };
+
+          return mappedTask;
+        })
+        .filter(Boolean);
+
+      const completionRate = totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) : 0
+
+      const barChartData = Object.entries(monthlyData).map(([name, data]) => ({
+        name,
+        completed: data.completed,
+        pending: data.pending,
+      }))
+
+      const pieChartData = [
+        { name: "Completed", value: completedTasks, color: "#22c55e" },
+        { name: "Pending", value: pendingTasks, color: "#facc15" },
+        { name: "Overdue", value: overdueTasks, color: "#ef4444" },
+      ]
+
+      const staffMap = new Map()
+
+      if (processedTasks.length > 0) {
+        processedTasks.forEach((task) => {
+          const taskDate = parseTaskStartDate(task.originalTaskStartDate)
+          // Only include tasks up to today for staff calculations
+          if (taskDate && taskDate <= today) {
+            const assignedTo = task.assignedTo || "Unassigned"
+            if (!staffMap.has(assignedTo)) {
+              staffMap.set(assignedTo, {
+                name: assignedTo,
+                totalTasks: 0,
+                completedTasks: 0,
+                pendingTasks: 0,
+              })
+            }
+            const staff = staffMap.get(assignedTo)
+            staff.totalTasks++
+            if (task.status === "completed") {
+              staff.completedTasks++
+            } else {
+              staff.pendingTasks++
+            }
+          }
+        })
+      }
+
+      const staffMembers = Array.from(staffMap.values()).map((staff) => ({
+        ...staff,
+        id: (staff.name || "unassigned").replace(/\s+/g, "-").toLowerCase(),
+        email: `${(staff.name || "unassigned").toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        progress: staff.totalTasks > 0 ? Math.round((staff.completedTasks / staff.totalTasks) * 100) : 0,
+      }))
+
+      setShopData(prev => {
+        const updatedTasks = append
+          ? [...prev.allTasks, ...processedTasks]
+          : processedTasks
+
+        const finalTotalTasks = summary ? summary.totalTasks : prev.totalTasks;
+        const finalCompletedTasks = summary ? summary.completedTasks : prev.completedTasks;
+        const finalPendingTasks = summary ? summary.pendingTasks : prev.pendingTasks;
+        const finalOverdueTasks = summary ? summary.overdueTasks : prev.overdueTasks;
+        const finalCompletionRate = summary ? summary.completionRate : prev.completionRate;
+
+        const newShopData = {
+          allTasks: updatedTasks,
+          staffMembers,
+          totalTasks: finalTotalTasks,
+          completedTasks: finalCompletedTasks,
+          pendingTasks: finalPendingTasks,
+          overdueTasks: finalOverdueTasks,
+          completionRate: finalCompletionRate,
+          barChartData,
+          pieChartData: [
+            { name: "Completed", value: finalCompletedTasks, color: "#22c55e" },
+            { name: "Pending", value: finalPendingTasks, color: "#facc15" },
+            { name: "Overdue", value: finalOverdueTasks, color: "#ef4444" },
+          ],
+          completedRatingOne: append ? prev.completedRatingOne + completedRatingOne : completedRatingOne,
+          completedRatingTwo: append ? prev.completedRatingTwo + completedRatingTwo : completedRatingTwo,
+          completedRatingThreePlus: append ? prev.completedRatingThreePlus + completedRatingThreePlus : completedRatingThreePlus,
+        }
+
+        // Save fresh data to cache
+        // OLD:
+        // if (!append) {
+        //   const cacheKey = `${currentType}-${currentMainTab}-${currentShopFilter}-${currentStaffFilter}-${page}`;
+        //   shopDataCache.current[cacheKey] = {
+        //     timestamp: Date.now(),
+        //     shopData: newShopData,
+        //     availableStaff: uniqueStaff,
+        //     summary: summary || null
+        //   };
+        // }
+        // NEW: Save fresh data to React Query cache
+        if (!append) {
+          const queryKey = ['dashboardProcessedData', currentType, currentMainTab, currentShopFilter, currentStaffFilter, page, start, end];
+          queryClient.setQueryData(queryKey, {
+            shopData: newShopData,
+            availableStaff: uniqueStaff,
+            summary: summary || null
+          });
+        }
+
+        return newShopData;
+      })
+
+      console.group(`🔍 Dashboard Filter Execution Flow debug [Type: ${currentType}]`);
+      console.log("📍 Active Selection State:", {
+        mainTab: currentMainTab,
+        dashboardType: currentType,
+        shopFilter: currentShopFilter,
+        dashboardStaffFilter: currentStaffFilter,
+        currentPage,
+        dateRangeFiltered: dateRange.filtered,
+        dateRangeSpan: `${dateRange.startDate} to ${dateRange.endDate}`
+      });
+      console.log("📥 API Summary Counts Received:", {
+        apiTotal: summary?.totalTasks ?? "N/A",
+        apiCompleted: summary?.completedTasks ?? "N/A",
+        apiPending: summary?.pendingTasks ?? "N/A",
+        apiOverdue: summary?.overdueTasks ?? "N/A",
+        apiCompletionRate: summary?.completionRate ?? "N/A"
+      });
+      console.log("👥 Staff Dropdown Updated:", {
+        count: uniqueStaff?.length || 0,
+        names: uniqueStaff
+      });
+      console.log("📋 Processed Tasks for Table View:", {
+        fetchedCount: data?.length || 0,
+        afterFilteringCount: processedTasks?.length || 0
+      });
+      console.log("👥 Staff Grouped Performance Scores:", staffMembers.map(s => ({
+        name: s.name,
+        tasksCount: s.totalTasks,
+        completed: s.completedTasks,
+        score: s.ontime_score
+      })));
+      console.groupEnd();
+
+      // Check if we have more data to load
+      if (data.length < batchSize) {
+        setHasMoreData(false)
+      }
+
+      setIsLoadingMore(false)
+    } catch (error) {
+      console.error(`Error fetching ${dashboardType} data:`, error)
+      setIsLoadingMore(false)
+    }
+  }
+
+  const fetchShops = async () => {
+    if (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'work') {
+      try {
+        // Fetch all shops from the shops table — admins see all
+        // OLD:
+        // const shops = await getUniqueShopsApi();
+        // NEW: React Query cached fetch
+        const shops = await queryClient.fetchQuery({
+          queryKey: ['uniqueShops', dashboardType],
+          queryFn: () => getUniqueShopsApi(),
+          staleTime: 10 * 60 * 1000 // 10 minutes
+        });
+        const currentUserRole = (userRole || "").toLowerCase();
+        if (currentUserRole === "manager") {
+          const userAccess = localStorage.getItem("user_access") || "";
+          const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          setAvailableShops(shops.filter(s => managerShopsList.includes(s.toLowerCase())));
+        } else {
+          setAvailableShops(shops);
+        }
+      } catch (error) {
+        console.error('Error fetching shops:', error);
+        setAvailableShops([]);
+      }
+    } else {
+      setAvailableShops([]);
+    }
+  }
+
+  useEffect(() => {
+    fetchShops();
+  }, [dashboardType, userRole]);
+
+  // Reset staff filter when shop filter changes
+  useEffect(() => {
+    if (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'work') {
+      setDashboardStaffFilter("all");
+    }
+  }, [shopFilter, dashboardType]);
+
+  // Add scroll event listener for infinite scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      const tableContainer = document.querySelector('.task-table-container')
+      if (!tableContainer) return
+
+      const { scrollTop, scrollHeight, clientHeight } = tableContainer
+      const isNearBottom = scrollHeight - scrollTop <= clientHeight * 1.2
+
+      if (isNearBottom && !isLoadingMore && hasMoreData) {
+        loadMoreData()
+      }
+    }
+
+    const tableContainer = document.querySelector('.task-table-container')
+    if (tableContainer) {
+      tableContainer.addEventListener('scroll', handleScroll)
+      return () => tableContainer.removeEventListener('scroll', handleScroll)
+    }
+  }, [isLoadingMore, hasMoreData])
+
+  useEffect(() => {
+    // Fetch summary stats quickly
+    fetchSummaryStats(shopFilter, dashboardStaffFilter, dashboardType)
+    
+    // Fetch detailed data for charts and tables (first page)
+    fetchShopData(1, false, shopFilter, dashboardStaffFilter, dashboardType, mainTab)
+
+    // Update Redux state counts with staff and shop filters
+    dispatch(
+      totalTaskInTable({
+        dashboardType,
+        staffFilter: dashboardStaffFilter,
+        shopFilter,
+      }),
+    )
+    dispatch(
+      completeTaskInTable({
+        dashboardType,
+        staffFilter: dashboardStaffFilter,
+        shopFilter,
+      }),
+    )
+    dispatch(
+      pendingTaskInTable({
+        dashboardType,
+        staffFilter: dashboardStaffFilter,
+        shopFilter,
+      }),
+    )
+    dispatch(
+      overdueTaskInTable({
+        dashboardType,
+        staffFilter: dashboardStaffFilter,
+        shopFilter,
+      }),
+    )
+  }, [dashboardType, dashboardStaffFilter, shopFilter, mainTab, dispatch])
+
+  // Sync mainTab when shopFilter changes from other sources (like DashboardHeader)
+  useEffect(() => {
+    if (shopFilter === "Maintenance") {
+      setMainTab("maintenance")
+    } else if (shopFilter === "Repair") {
+      setMainTab("repair")
+    } else if (shopFilter === "all") {
+      // Only reset to default if we are not on a special tab
+      if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair" && mainTab !== "work") {
+        setMainTab("default")
+      }
+    }
+  }, [shopFilter])
+
+  // Filter tasks based on criteria
+  const filteredTasks = shopData.allTasks.filter((task) => {
+    if (filterStatus !== "all" && task.status !== filterStatus) return false
+    if (filterStaff !== "all" && task.assignedTo.toLowerCase() !== filterStaff.toLowerCase()) {
+      return false
+    }
+    if (searchQuery && searchQuery.trim() !== "") {
+      const query = searchQuery.toLowerCase().trim()
+      return (
+        (task.title && task.title.toLowerCase().includes(query)) ||
+        (task.id && task.id.toString().includes(query)) ||
+        (task.assignedTo && task.assignedTo.toLowerCase().includes(query))
+      )
+    }
+    return true
+  })
+
+  // Reset dashboard staff filter when dashboard type changes
+  useEffect(() => {
+    setDashboardStaffFilter("all")
+    setShopFilter("all")
+    // Only reset mainTab to default if we are not on EA/Maintenance/Repair
+    if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair" && mainTab !== "work") {
+      setMainTab("default")
+    }
+    setCurrentPage(1)
+    setHasMoreData(true)
+    // Clear date range when dashboard type changes
+    setDateRange({
+      startDate: "",
+      endDate: "",
+      filtered: false
+    });
+  }, [dashboardType])
+
+  const getTasksByView = (view) => {
+    return filteredTasks.filter((task) => {
+      const taskDate = parseTaskStartDate(task.originalTaskStartDate);
+      if (!taskDate) return false;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const taskDateOnly = new Date(taskDate);
+      taskDateOnly.setHours(0, 0, 0, 0);
+
+      switch (view) {
+        case "recent":
+          // For delegation, show today's tasks regardless of completion status
+          if (dashboardType === "delegation") {
+            return isDateToday(taskDate);
+          }
+          // For checklist, show today's tasks but exclude completed ones
+          return isDateToday(taskDate) && task.status !== "completed";
+
+        case "upcoming":
+          // For delegation, show tomorrow's tasks regardless of completion status
+          if (dashboardType === "delegation") {
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            return taskDateOnly.getTime() === tomorrow.getTime();
+          }
+          // For checklist, show only tomorrow's tasks
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          return taskDateOnly.getTime() === tomorrow.getTime();
+
+        case "overdue":
+          // For delegation, show tasks that are past due and have null submission_date
+          if (dashboardType === "delegation") {
+            return taskDateOnly < today && !task.submission_date;
+          }
+          // For checklist, show tasks that are past due and not completed
+          return taskDateOnly < today && task.status !== "completed";
+
+        default:
+          return true;
+      }
+    });
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "completed":
+        return "bg-green-500 hover:bg-green-600 text-white"
+      case "pending":
+        return "bg-amber-500 hover:bg-amber-600 text-white"
+      case "overdue":
+        return "bg-red-500 hover:bg-red-600 text-white"
+      default:
+        return "bg-gray-500 hover:bg-gray-600 text-white"
+
+    }
+  }
+
+  const getFrequencyColor = (frequency) => {
+    switch (frequency) {
+      case "one-time":
+        return "bg-gray-500 hover:bg-gray-600 text-white"
+      case "daily":
+        return "bg-blue-500 hover:bg-blue-600 text-white"
+      case "weekly":
+        return "bg-purple-500 hover:bg-purple-600 text-white"
+      case "fortnightly":
+        return "bg-indigo-500 hover:bg-indigo-600 text-white"
+      case "monthly":
+        return "bg-orange-500 hover:bg-orange-600 text-white"
+      case "quarterly":
+        return "bg-amber-500 hover:bg-amber-600 text-white"
+      case "yearly":
+        return "bg-emerald-500 hover:bg-emerald-600 text-white"
+      default:
+        return "bg-gray-500 hover:bg-gray-600 text-white"
+    }
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Calculate filtered stats for cards - same logic as table
+  const cardStats = (() => {
+    // Filter tasks that are not upcoming (due today or before)
+    const filteredTasks = shopData.allTasks.filter((task) => {
+      const taskDate = parseTaskStartDate(task.originalTaskStartDate)
+      return taskDate && taskDate <= today
+    })
+
+    const totalTasks = filteredTasks.length
+    const completedTasks = filteredTasks.filter((task) => task.status === "completed").length
+    const overdueTasks = filteredTasks.filter((task) => task.status === "overdue").length
+    const pendingTasks = totalTasks - completedTasks - overdueTasks
+
+    return {
+      totalTasks,
+      completedTasks,
+      pendingTasks,
+      overdueTasks,
+    }
+  })()
+
+  // Function to load more data when scrolling
+  const loadMoreData = () => {
+    if (!isLoadingMore && hasMoreData) {
+      const nextPage = currentPage + 1
+      setCurrentPage(nextPage)
+      fetchShopData(nextPage, true)
+    }
+  }
+
+  // Determine which statistics to show based on date range filter
+  const displayStats = dateRange.filtered ? {
+    totalTasks: filteredDateStats.totalTasks || 0,
+    completedTasks: filteredDateStats.completedTasks || 0,
+    pendingTasks: filteredDateStats.pendingTasks || 0,
+    overdueTasks: filteredDateStats.overdueTasks || 0,
+  } : {
+    // Use shopData which is computed from the FULL paginated fetch (all tasks up to today)
+    // This matches the actual row count in the table/sheet rather than the Redux month-restricted count
+    totalTasks: shopData.totalTasks || 0,
+    completedTasks: shopData.completedTasks || 0,
+    pendingTasks: shopData.pendingTasks || 0,
+    overdueTasks: shopData.overdueTasks || 0,
+  };
+
+  const notDoneTask = (displayStats.totalTasks || 0) - (displayStats.completedTasks || 0);
+
+  return (
+    <AdminLayout>
+      <div className="space-y-4">
+        {/* Sticky Only Task Management Tabs */}
+        <div className="sticky top-0 z-30 py-2 border-b border-gray-100/50  transition-all duration-300">
+          <div className="max-w-7xl mx-auto">
+            <TaskManagementTabs
+              activeTab={mainTab === 'default' ? 'checklist' : mainTab}
+              setActiveTab={(tabId) => {
+                // Clear current tasks immediately to prevent showing old data on new tab
+                setShopData(prev => ({ ...prev, allTasks: [] }));
+                setDashboardStaffFilter("all");
+                
+                if (tabId === 'checklist') {
+                  setMainTab("default")
+                  setShopFilter("all")
+                  setDashboardType("checklist")
+                } else if (tabId === 'work') {
+                  setMainTab("work")
+                  setShopFilter("all")
+                  setDashboardType("work")
+                } else if (tabId === 'maintenance') {
+                  setMainTab("maintenance")
+                  setShopFilter("Maintenance")
+                } else if (tabId === 'repair') {
+                  setMainTab("repair")
+                  setShopFilter("Repair")
+                } else if (tabId === 'ea') {
+                  setMainTab("ea")
+                  setShopFilter("all")
+                  setDashboardType("ea")
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Dashboard Header stays in flow (scrolls away) */}
+        <DashboardHeader
+          mainTab={mainTab}
+          dashboardType={dashboardType}
+          setDashboardType={handleDashboardTypeChange}
+          dashboardStaffFilter={dashboardStaffFilter}
+          setDashboardStaffFilter={setDashboardStaffFilter}
+          availableStaff={availableStaff}
+          userRole={userRole}
+          username={username}
+          shopFilter={shopFilter}
+          setShopFilter={handleShopFilterChange}
+          availableShops={availableShops}
+          isLoadingMore={isLoadingMore}
+          onDateRangeChange={handleDateRangeChange}
+        />
+
+        {(mainTab === "default" || mainTab === "work") && (
+          <DefaultView
+            dashboardType={dashboardType}
+            taskView={taskView}
+            setTaskView={setTaskView}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            filterStaff={filterStaff}
+            setFilterStaff={setFilterStaff}
+            shopData={shopData}
+            getTasksByView={getTasksByView}
+            getFrequencyColor={getFrequencyColor}
+            isLoadingMore={isLoadingMore}
+            hasMoreData={hasMoreData}
+            displayStats={displayStats}
+            notDoneTask={notDoneTask}
+            dateRange={dateRange}
+            activeTab={activeTab}
+            dashboardStaffFilter={dashboardStaffFilter}
+            shopFilter={shopFilter}
+            parseTaskStartDate={parseTaskStartDate}
+            userRole={userRole}
+          />
+        )}
+
+        {mainTab === "maintenance" && (
+          <MaintenanceView stats={displayStats} tasks={shopData.allTasks} />
+        )}
+
+        {mainTab === "repair" && (
+          <RepairView stats={displayStats} tasks={shopData.allTasks} />
+        )}
+
+        {mainTab === "ea" && (
+          <EAView />
+        )}
+      </div>
+    </AdminLayout>
+  )
+}
