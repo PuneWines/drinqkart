@@ -83,15 +83,30 @@ export default function CashTally({
 
   const fetchEmployees = async () => {
     try {
+      let names: string[] = [];
       const { data, error } = await supabase
-        .from('petty_cash_user')
-        .select('name');
-      
-      if (error) throw error;
-      if (data) {
-        const names = data.map((row: any) => row.name).filter(Boolean);
-        setEmployees(names);
+        .from('users')
+        .select('user_name, name, username')
+        .order('user_name', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        names = data.map((row: any) => row.user_name || row.name || row.username).filter(Boolean);
+      } else {
+        const { data: pcData, error: pcError } = await supabase
+          .from('petty_cash_user')
+          .select('name');
+        
+        if (!pcError && pcData) {
+          names = pcData.map((row: any) => row.name).filter(Boolean);
+        }
       }
+
+      const loggedInName = user?.name || user?.username;
+      if (loggedInName && !names.includes(loggedInName)) {
+        names.unshift(loggedInName);
+      }
+
+      setEmployees(Array.from(new Set(names)));
     } catch (error) {
       console.error("[CashTally] Error fetching employees:", error);
     }
@@ -174,11 +189,22 @@ export default function CashTally({
 
   useEffect(() => {
     if (isOpen) {
-      setFormData(initialData || emptyForm);
+      const defaultUser = user?.name || user?.username || "";
+      if (initialData) {
+        setFormData({
+          ...initialData,
+          name: initialData.name || defaultUser,
+        });
+      } else {
+        setFormData({
+          ...emptyForm,
+          name: defaultUser,
+        });
+      }
       fetchEmployees();
       fetchShopNames();
     }
-  }, [isOpen, initialData]);
+  }, [isOpen, initialData, user]);
 
   const [retailActualSale, setRetailActualSale] = useState(0);
   const [retailDiff, setRetailDiff] = useState(0);
@@ -420,25 +446,20 @@ export default function CashTally({
 
         <form
           onSubmit={handleSubmit}
-          className="p-6"
+          className="p-5 space-y-4"
           onKeyDown={(e) => {
             if (e.key === "Enter") e.preventDefault();
           }}
         >
-          <div className="space-y-8">
+          <div className="space-y-4">
             {/* Basic Information */}
-            <div className="bg-[#f5f7fa] rounded-lg p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-[#2a5298] p-2 rounded-lg">
-                  <FaUser className="text-white text-lg" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800">
-                  Basic Information
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
+                Basic Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                     Date <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -446,13 +467,13 @@ export default function CashTally({
                     name="date"
                     value={formData.date}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a5298] focus:border-transparent transition-all bg-white"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                     Employee Name <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -461,7 +482,7 @@ export default function CashTally({
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a5298] focus:border-transparent transition-all bg-white"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
                     required
                   >
                     <option value="">Select employee</option>
@@ -474,14 +495,14 @@ export default function CashTally({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                     Shop Name
                   </label>
                   <select
                     name="shopName"
                     value={formData.shopName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a5298] focus:border-transparent transition-all bg-white"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
                   >
                     <option value="">Select Shop Name</option>
                     {fetchedShopNames.map((shop, index) => (
@@ -495,18 +516,13 @@ export default function CashTally({
             </div>
 
             {/* Retail Transactions */}
-            <div className="bg-[#f5f7fa] rounded-lg p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-blue-600 p-2 rounded-lg">
-                  <FaShoppingCart className="text-white text-lg" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800">
-                  Retail Transactions
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
+                Retail Transactions
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Scan Amount
                   </label>
                   <input
@@ -516,40 +532,40 @@ export default function CashTally({
                     onChange={handleChange}
                     placeholder="0"
                     step="1"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Actual Sale
                   </label>
                   <input
                     type="text"
                     value={retailActualSale}
                     readOnly
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-blue-600 font-bold"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-blue-600 font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Diff.
                   </label>
                   <input
                     type="text"
                     value={retailDiff}
                     readOnly
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-red-600 font-bold"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
                   />
                 </div>
 
                 <div className="md:col-span-2 lg:col-span-3">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">
                     Cash Denominations
                   </label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                     {["500", "200", "100", "50", "20", "10", "1"].map((denom) => (
                       <div key={denom}>
-                        <label className="block text-xs text-gray-600 mb-1">
+                        <label className="block text-[10px] text-gray-500 font-bold mb-0.5 text-center">
                           ₹{denom}
                         </label>
                         <input
@@ -559,7 +575,7 @@ export default function CashTally({
                           onChange={handleChange}
                           placeholder="0"
                           step="1"
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center bg-white"
+                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 text-center bg-white"
                         />
                       </div>
                     ))}
@@ -574,7 +590,7 @@ export default function CashTally({
                   { name: "expense", label: "General Expense" },
                 ].map((field) => (
                   <div key={field.name}>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
                       {field.label}
                     </label>
                     <input
@@ -584,7 +600,7 @@ export default function CashTally({
                       onChange={handleChange}
                       placeholder="0"
                       step="1"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 bg-white"
                     />
                   </div>
                 ))}
@@ -592,23 +608,18 @@ export default function CashTally({
             </div>
 
             {/* Wholesale Transactions */}
-            <div className="bg-[#f5f7fa] rounded-lg p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-green-600 p-2 rounded-lg">
-                  <FaTruck className="text-white text-lg" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800">
-                  Wholesale Transactions
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
+                Wholesale Transactions
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
                 {[
                   { name: "wsCashBillingAmount", label: "Cash Billing" },
                   { name: "wsCreditBillingAmount", label: "Credit Billing" },
                   { name: "wsCreditReceipt", label: "Credit Receipt" },
                 ].map((field) => (
                   <div key={field.name}>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
                       {field.label}
                     </label>
                     <input
@@ -618,41 +629,41 @@ export default function CashTally({
                       onChange={handleChange}
                       placeholder="0"
                       step="1"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 bg-white"
                     />
                   </div>
                 ))}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Total Who. Sale
                   </label>
                   <input
                     type="text"
                     value={wholesaleTotalSale}
                     readOnly
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-green-600 font-bold"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-green-600 font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Diff.
                   </label>
                   <input
                     type="text"
                     value={wholesaleDiff}
                     readOnly
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-red-600 font-bold"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
                   />
                 </div>
 
                 <div className="md:col-span-2 lg:col-span-3">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">
                     Cash Denominations
                   </label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                     {["500", "200", "100", "50", "20", "10", "1"].map((denom) => (
                       <div key={denom}>
-                        <label className="block text-xs text-gray-600 mb-1">
+                        <label className="block text-[10px] text-gray-500 font-bold mb-0.5 text-center">
                           ₹{denom}
                         </label>
                         <input
@@ -662,7 +673,7 @@ export default function CashTally({
                           onChange={handleChange}
                           placeholder="0"
                           step="1"
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent text-center bg-white"
+                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 text-center bg-white"
                         />
                       </div>
                     ))}
@@ -676,7 +687,7 @@ export default function CashTally({
                   { name: "wsCard", label: "Card Payments" },
                 ].map((field) => (
                   <div key={field.name}>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
                       {field.label}
                     </label>
                     <input
@@ -686,7 +697,7 @@ export default function CashTally({
                       onChange={handleChange}
                       placeholder="0"
                       step="1"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 bg-white"
                     />
                   </div>
                 ))}
@@ -694,18 +705,13 @@ export default function CashTally({
             </div>
 
             {/* Home Delivery & Expenses */}
-            <div className="bg-[#f5f7fa] rounded-lg p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-purple-600 p-2 rounded-lg">
-                  <FaPlus className="text-white text-lg" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800">
-                  Expenses & Other Transactions
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
+                Expenses & Other Transactions
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Home Delivery
                   </label>
                   <input
@@ -715,28 +721,28 @@ export default function CashTally({
                     onChange={handleChange}
                     placeholder="0"
                     step="1"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-white"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Diff.
                   </label>
                   <input
                     type="text"
                     value={homeDeliveryDiff}
                     readOnly
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-red-600 font-bold"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
                   />
                 </div>
 
                 {formData.homeDelivery &&
                   parseFloat(formData.homeDelivery) > 0 && (
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">
                         Home Delivery Cash Denominations
                       </label>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                         {[
                           ["1500", "500"],
                           ["2200", "200"],
@@ -747,7 +753,7 @@ export default function CashTally({
                           ["71", "1"],
                         ].map(([fieldKey, displayDenom]) => (
                           <div key={fieldKey}>
-                            <label className="block text-xs text-gray-600 mb-1">
+                            <label className="block text-[10px] text-gray-500 font-bold mb-0.5 text-center">
                               ₹{displayDenom}
                             </label>
                             <input
@@ -757,7 +763,7 @@ export default function CashTally({
                               onChange={handleChange}
                               placeholder="0"
                               step="1"
-                              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent text-center bg-white"
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 text-center bg-white"
                             />
                           </div>
                         ))}
@@ -766,7 +772,7 @@ export default function CashTally({
                   )}
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
                     Void Sale
                   </label>
                   <input
@@ -776,67 +782,40 @@ export default function CashTally({
                     onChange={handleChange}
                     placeholder="0"
                     step="1"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-white"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 bg-white"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Total Amount */}
-          <div className="mt-6 p-4 bg-[#f5f7fa] rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-semibold text-gray-700">
+          {/* Total Amount & Actions */}
+          <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-xs text-gray-500 font-medium">
                 Total Amount:
               </span>
-              <span className="text-2xl font-bold text-[#2a5298]">
+              <span className="text-xl font-bold text-[#2a5298]">
                 ₹{Math.round(totalAmount)}
               </span>
             </div>
-          </div>
 
-          {/* Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-6 mt-6 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 px-6 py-3 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <svg
-                    className="animate-spin h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Saving...
-                </>
-              ) : (
-                "Save Entry"
-              )}
-            </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2 text-xs font-semibold text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-6 py-2 bg-[#2a5298] text-white rounded-lg text-xs font-semibold hover:bg-[#1e3d70] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              >
+                {isLoading ? "Saving..." : "Save Entry"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

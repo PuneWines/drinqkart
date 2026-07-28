@@ -4,19 +4,20 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Toast from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import PettyCash from "./pages/PettyCash";
-import CashTally from "./pages/CashTally";
+import Counter1 from "./pages/Counter1";
+import Counter2 from "./pages/Counter2";
+import Counter3 from "./pages/Counter3";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
-// import TransactionHistory from "./pages/TransactionHistory";
 import Footer from "./components/Footer";
 
 // Global navigation config for routing logic
 const ALL_NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", pageName: "Dashboard" },
-  { id: "petty-cash", label: "Petty Cash Form", pageName: "Petty Cash Form" },
   { id: "cash-tally-1", label: "Counter 1", pageName: "Cash Tally - Counter 1" },
   { id: "cash-tally-2", label: "Counter 2", pageName: "Cash Tally - Counter 2" },
   { id: "cash-tally-3", label: "Counter 3", pageName: "Cash Tally - Counter 3" },
+  { id: "petty-cash", label: "Petty Cash Form", pageName: "Petty Cash Form" },
+  { id: "dashboard", label: "Dashboard", pageName: "Dashboard" },
   { id: "reports", label: "Reports", pageName: "Reports" },
 ];
 
@@ -25,9 +26,9 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.get('page') || "dashboard";
+      return params.get('page') || "cash-tally-1";
     } catch {
-      return "dashboard";
+      return "cash-tally-1";
     }
   });
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -42,24 +43,25 @@ function MainApp() {
   }, [window.location.search]);
 
   const PAGE_NAMES: Record<string, string> = {
-    "dashboard": "Dashboard",
-    "petty-cash": "Petty Cash Form",
     "cash-tally-1": "Cash Tally - Counter 1",
     "cash-tally-2": "Cash Tally - Counter 2",
     "cash-tally-3": "Cash Tally - Counter 3",
+    "petty-cash": "Petty Cash Form",
+    "dashboard": "Dashboard",
     "reports": "Reports",
   };
 
   // ── Landing Page Logic ──
-  // If "dashboard" is not allowed, pick the first allowed page.
+  // If default "cash-tally-1" is not allowed, pick the first allowed page.
   useEffect(() => {
     if (isAuthenticated && user) {
-      if (!hasPageAccess("Dashboard")) {
+      const currentReqPage = PAGE_NAMES[activeTab];
+      if (currentReqPage && !hasPageAccess(currentReqPage)) {
         const firstAllowed = ALL_NAV_ITEMS.find(item => 
           hasPageAccess(item.pageName)
         );
-        if (firstAllowed && activeTab === "dashboard") {
-          console.log(`[App] Dashboard not allowed. Switching to landing page: ${firstAllowed.id}`);
+        if (firstAllowed) {
+          console.log(`[App] Current tab ${activeTab} not allowed. Switching to landing page: ${firstAllowed.id}`);
           setActiveTab(firstAllowed.id);
         }
       }
@@ -70,18 +72,14 @@ function MainApp() {
   useEffect(() => {
     if (!isAuthenticated) return;
     
-    // Skip guard for transaction-history as it's always allowed
     if (activeTab === "transaction-history") return;
 
     const requiredPage = PAGE_NAMES[activeTab];
     if (requiredPage && !hasPageAccess(requiredPage)) {
       console.warn(`[App] Access denied for page: ${requiredPage}. Falling back.`);
-      // Fallback to first allowed or dashboard if allowed
-      if (hasPageAccess("Dashboard")) {
-        setActiveTab("dashboard");
-      } else {
-        const firstAllowed = ALL_NAV_ITEMS.find(item => hasPageAccess(item.pageName));
-        if (firstAllowed) setActiveTab(firstAllowed.id);
+      const firstAllowed = ALL_NAV_ITEMS.find(item => hasPageAccess(item.pageName));
+      if (firstAllowed) {
+        setActiveTab(firstAllowed.id);
       }
       setToast({ message: "Access Denied", type: "error" });
     }
@@ -93,41 +91,43 @@ function MainApp() {
 
   const getPageTitle = () => {
     switch (activeTab) {
-      case "dashboard":
-        return "Dashboard Overview";
+      case "cash-tally-1":
+        return "Cash Tally — Counter 1";
+      case "cash-tally-2":
+        return "Cash Tally — Counter 2";
+      case "cash-tally-3":
+        return "Cash Tally — Counter 3";
       case "petty-cash":
         return "Petty Cash Form";
-      case "cash-tally-1":
-      case "cash-tally-2":
-      case "cash-tally-3":
-        return `Cash Tally - ${activeTab.split('-').pop()?.toUpperCase()}`;
+      case "dashboard":
+        return "Dashboard Overview";
       case "reports":
         return "Financial Reports";
       case "settings":
         return "Settings — User Management";
       default:
-        return "Petty Cash System";
+        return "Cash Tally — Counter 1";
     }
   };
 
   const renderPage = () => {
     switch (activeTab) {
+      case "cash-tally-1":
+        return <Counter1 onClose={() => setActiveTab("cash-tally-1")} />;
+      case "cash-tally-2":
+        return <Counter2 onClose={() => setActiveTab("cash-tally-2")} />;
+      case "cash-tally-3":
+        return <Counter3 onClose={() => setActiveTab("cash-tally-3")} />;
+      case "petty-cash":
+        return <PettyCash onClose={() => setActiveTab("cash-tally-1")} />;
       case "dashboard":
         return <Dashboard />;
-      case "petty-cash":
-        return <PettyCash onClose={() => setActiveTab('dashboard')} />;
-      case "cash-tally-1":
-        return <CashTally onClose={() => setActiveTab("dashboard")} counter={1} />;
-      case "cash-tally-2":
-        return <CashTally onClose={() => setActiveTab("dashboard")} counter={2} />;
-      case "cash-tally-3":
-        return <CashTally onClose={() => setActiveTab("dashboard")} counter={3} />;
       case "reports":
         return <Reports />;
       case "settings":
         return <Settings />;
       default:
-        return <Dashboard />;
+        return <Counter1 onClose={() => setActiveTab("cash-tally-1")} />;
     }
   };
 

@@ -62,7 +62,7 @@ export const systems = [
       { label: 'Form Entry', to: '/systems/inventory?page=form_entry' },
       { label: 'Stock Ledger', to: '/systems/inventory?page=ledger' },
       { label: 'Master Items', to: '/systems/inventory?page=master' },
-      { label: 'Users Management', to: '/systems/inventory?page=users' },
+      // { label: 'Users Management', to: '/systems/inventory?page=users' },
     ]
   },
   {
