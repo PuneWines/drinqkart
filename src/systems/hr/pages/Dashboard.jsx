@@ -53,29 +53,71 @@ export default function Dashboard() {
     const fetchEmployees = async () => {
         try {
             setLoading(true)
-            const { data, error } = await supabase
+            const mappedList = []
+            const seenIds = new Set()
+
+            // 1. Fetch from users table (HR_SYSTEM_employee_details jsonb column)
+            const { data: usersData } = await supabase
+                .from('users')
+                .select('*')
+                .order('created_at', { ascending: false })
+
+            if (usersData && usersData.length > 0) {
+                usersData.forEach(row => {
+                    const details = row.HR_SYSTEM_employee_details || {}
+                    const empId = row.employee_id || details.employee_id
+                    const name = details.name_as_per_aadhar || row.user_name
+
+                    if (empId || name || row.HR_SYSTEM_employee_details) {
+                        const status = details.status || (typeof row.status === 'string' ? row.status : 'Active')
+                        const mapped = {
+                            id: row.id,
+                            employee_id: empId || '',
+                            name_as_per_aadhar: name || '',
+                            designation: details.designation || row.Designation || '',
+                            joining_company_name: details.joining_company_name || row.shop_name || '',
+                            joining_place: details.joining_company_name || row.shop_name || '',
+                            status,
+                            created_at: details.created_at || row.created_at,
+                            updated_at: details.updated_at || row.created_at
+                        }
+                        if (mapped.employee_id) seenIds.add(mapped.employee_id.toString().trim())
+                        mappedList.push(mapped)
+                    }
+                })
+            }
+
+            // 2. Fetch from hr_management_employees table
+            const { data: hrData } = await supabase
                 .from('hr_management_employees')
                 .select('*')
                 .order('created_at', { ascending: false })
 
-            if (error) throw error
+            if (hrData && hrData.length > 0) {
+                hrData.forEach(emp => {
+                    if (!emp.employee_id || !seenIds.has(emp.employee_id.toString().trim())) {
+                        mappedList.push(emp)
+                        if (emp.employee_id) seenIds.add(emp.employee_id.toString().trim())
+                    }
+                })
+            }
 
             // Calculate statistics
-            const total = data?.length || 0
-            const active = data?.filter(emp => emp.status === 'Active').length || 0
-            const inactive = data?.filter(emp => emp.status === 'Inactive').length || 0
-            const left = data?.filter(emp => emp.status === 'Left').length || 0
+            const total = mappedList.length
+            const active = mappedList.filter(emp => emp.status === 'Active').length
+            const inactive = mappedList.filter(emp => emp.status === 'Inactive').length
+            const left = mappedList.filter(emp => emp.status === 'Left').length
 
             // Calculate left this month
             const currentDate = new Date()
             const currentMonth = currentDate.getMonth()
             const currentYear = currentDate.getFullYear()
 
-            const leftThisMonth = data?.filter(emp => {
+            const leftThisMonth = mappedList.filter(emp => {
                 if (emp.status !== 'Left') return false
                 const leftDate = new Date(emp.updated_at || emp.created_at)
                 return leftDate.getMonth() === currentMonth && leftDate.getFullYear() === currentYear
-            }).length || 0
+            }).length
 
             setTotalEmployee(total)
             setActiveEmployee(active)
@@ -84,7 +126,7 @@ export default function Dashboard() {
             setLeaveThisMonth(leftThisMonth)
 
             // Get recent employees (last 5)
-            const recent = data?.slice(0, 5) || []
+            const recent = mappedList.slice(0, 5)
             setRecentEmployees(recent)
 
             // Calculate status distribution for pie chart
@@ -126,7 +168,7 @@ export default function Dashboard() {
         }
     }
 
-    // Fetch today's attendance statistics and categorize employees
+    // Fetch today's attendance statistics from hr_management_attendance_logs and categorize employees
     const fetchTodayAttendance = async () => {
         try {
             const today = new Date()
@@ -135,61 +177,136 @@ export default function Dashboard() {
             const dd = String(today.getDate()).padStart(2, '0')
             const todayStr = `${yyyy}-${mm}-${dd}`
 
-            // Fetch all active employees
-            const { data: activeEmployees, error: empError } = await supabase
+            // 1. Fetch active employees list from both sources
+            const activeEmployeesMap = new Map()
+
+            const { data: usersData } = await supabase.from('users').select('*')
+            if (usersData) {
+                usersData.forEach(row => {
+                    const details = row.HR_SYSTEM_employee_details || {}
+                    const empId = row.employee_id || details.employee_id
+                    const name = details.name_as_per_aadhar || row.user_name
+                    const status = details.status || (typeof row.status === 'string' ? row.status : 'Active')
+                    if (empId && status === 'Active') {
+                        const cleanId = empId.toString().trim()
+                        if (!activeEmployeesMap.has(cleanId)) {
+                            activeEmployeesMap.set(cleanId, {
+                                employee_id: cleanId,
+                                name_as_per_aadhar: name || 'Employee',
+                                designation: details.designation || row.Designation || '',
+                                joining_place: details.joining_company_name || row.shop_name || ''
+                            })
+                        }
+                    }
+                })
+            }
+
+            const { data: hrData } = await supabase
                 .from('hr_management_employees')
-                .select('employee_id, name_as_per_aadhar, designation, joining_place')
+                .select('employee_id, name_as_per_aadhar, designation, joining_place, status')
                 .eq('status', 'Active')
 
-            if (empError) throw empError
+            if (hrData) {
+                hrData.forEach(emp => {
+                    if (emp.employee_id) {
+                        const cleanId = emp.employee_id.toString().trim()
+                        if (!activeEmployeesMap.has(cleanId)) {
+                            activeEmployeesMap.set(cleanId, {
+                                employee_id: cleanId,
+                                name_as_per_aadhar: emp.name_as_per_aadhar || 'Employee',
+                                designation: emp.designation || '',
+                                joining_place: emp.joining_place || ''
+                            })
+                        }
+                    }
+                })
+            }
 
-            // Fetch today's attendance logs
+            // 2. Fetch today's attendance logs from hr_management_attendance_logs
             const { data: attendanceLogs, error: attError } = await supabase
                 .from('hr_management_attendance_logs')
-                .select('status, employee_id, store_name, in_time, late_minute')
+                .select('*')
                 .eq('attendance_date', todayStr)
 
             if (attError) throw attError
 
             const logsMap = new Map()
             attendanceLogs?.forEach(log => {
-                logsMap.set(log.employee_id, log)
+                if (log.employee_id) {
+                    logsMap.set(log.employee_id.toString().trim(), log)
+                }
             })
 
             const presentList = []
             const lateList = []
             const absentList = []
             const halfDayList = []
+            const processedEmpIds = new Set()
 
-            activeEmployees?.forEach(emp => {
-                const log = logsMap.get(emp.employee_id)
+            // Process all active employees
+            activeEmployeesMap.forEach((emp, empId) => {
+                processedEmpIds.add(empId)
+                const log = logsMap.get(empId)
                 if (log) {
-                    const empWithStore = {
+                    const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
+                    const empWithLog = {
                         ...emp,
+                        name_as_per_aadhar: log.employee_name || emp.name_as_per_aadhar,
+                        designation: log.designation || emp.designation,
                         joining_place: log.store_name || emp.joining_place,
                         in_time: log.in_time,
-                        late_minute: log.late_minute,
-                        status: log.status
+                        out_time: log.out_time,
+                        late_minute: log.late_minute || 0,
+                        status
                     }
-                    if (log.status === 'Present') {
-                        presentList.push(empWithStore)
-                    } else if (log.status === 'Late') {
-                        lateList.push(empWithStore)
-                    } else if (log.status === 'Half Day') {
-                        halfDayList.push(empWithStore)
-                    } else if (log.status === 'Absent') {
-                        absentList.push(empWithStore)
+
+                    if (status === 'Late' || log.is_late) {
+                        lateList.push(empWithLog)
+                    } else if (status === 'Half Day' || log.half_day) {
+                        halfDayList.push(empWithLog)
+                    } else if (status === 'Absent') {
+                        absentList.push(empWithLog)
                     } else {
-                        presentList.push(empWithStore)
+                        presentList.push(empWithLog)
                     }
                 } else {
                     const empAbsent = {
                         ...emp,
                         status: 'Absent',
                         in_time: null,
+                        out_time: null,
                         late_minute: null
                     }
                     absentList.push(empAbsent)
+                }
+            })
+
+            // Process any additional logs from hr_management_attendance_logs not in active employees list
+            attendanceLogs?.forEach(log => {
+                const logEmpId = log.employee_id ? log.employee_id.toString().trim() : null
+                if (logEmpId && !processedEmpIds.has(logEmpId)) {
+                    processedEmpIds.add(logEmpId)
+                    const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
+                    const empFromLog = {
+                        employee_id: logEmpId,
+                        name_as_per_aadhar: log.employee_name || `Employee ${logEmpId}`,
+                        designation: log.designation || '',
+                        joining_place: log.store_name || '',
+                        in_time: log.in_time,
+                        out_time: log.out_time,
+                        late_minute: log.late_minute || 0,
+                        status
+                    }
+
+                    if (status === 'Late' || log.is_late) {
+                        lateList.push(empFromLog)
+                    } else if (status === 'Half Day' || log.half_day) {
+                        halfDayList.push(empFromLog)
+                    } else if (status === 'Absent') {
+                        absentList.push(empFromLog)
+                    } else {
+                        presentList.push(empFromLog)
+                    }
                 }
             })
 
