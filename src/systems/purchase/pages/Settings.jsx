@@ -20,7 +20,7 @@ const Settings = () => {
     deleteCompany 
   } = useCompanyStore();
   
-  const [activeTab, setActiveTab] = useState("users");
+  const [activeTab, setActiveTab] = useState("vendors");
   const [searchQuery, setSearchQuery] = useState("");
   const [availableParties, setAvailableParties] = useState([]);
   
@@ -467,7 +467,6 @@ const Settings = () => {
         {/* Tab Navigation pills */}
         <div className="flex flex-wrap gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
           {[
-            { id: "users", label: "User Management" },
             { id: "vendors", label: "Vendor Management" },
             { id: "company", label: "Company Profile" },
             { id: "transporters", label: "Transporters" },
@@ -493,187 +492,6 @@ const Settings = () => {
 
         {/* Settings Content Area */}
         <div className="space-y-6">
-          
-          {/* USERS MANAGEMENT TAB */}
-          {activeTab === 'users' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-950">System Users</h2>
-                  <p className="text-slate-500 text-xs mt-0.5">Manage operator roles, credentials, and page authorizations.</p>
-                </div>
-                <button 
-                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-                  onClick={handleAddNew}
-                >
-                  <Plus size={15} /> Add New User
-                </button>
-              </div>
-
-              {showForm && (
-                <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto pt-16">
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xl space-y-6 w-full max-w-2xl relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowForm(false)}
-                      className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
-                    >
-                      <X size={20} />
-                    </button>
-                    <h3 className="text-base font-bold text-slate-950 border-b border-slate-100 pb-3">
-                      {editingUser ? "📝 Edit User Profile" : "✨ Create New User Account"}
-                    </h3>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-700">Username *</label>
-                        <input
-                          type="text"
-                          value={formData.username}
-                          onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                          required
-                          disabled={isSubmitting}
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-700">Email Address *</label>
-                        <input
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          required
-                          disabled={isSubmitting}
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-700">Password {editingUser && "(Leave empty to keep current)"}</label>
-                        <input
-                          type="password"
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          required={!editingUser}
-                          disabled={isSubmitting}
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-700">System Role *</label>
-                        <select
-                          value={formData.role}
-                          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                          disabled={isSubmitting}
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                        >
-                          <option value="user">Operator (User)</option>
-                          <option value="approver">Approver</option>
-                          <option value="admin">Administrator</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 pt-2">
-                      <label className="text-xs font-bold text-slate-700 block">Page Authorizations / Permissions</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        {allPermissions.map((perm) => (
-                          <label key={perm.key} className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={formData.permissions.includes(perm.key)}
-                              onChange={() => handlePermissionChange(perm.key)}
-                              disabled={isSubmitting}
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                            />
-                            <span className="text-xs font-semibold text-slate-700">{perm.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3 pt-3 border-t border-slate-100">
-                      <button 
-                        type="submit" 
-                        disabled={isSubmitting}
-                        className="px-5 py-2.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all cursor-pointer"
-                      >
-                        {isSubmitting ? "Saving..." : "Save User Details"}
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => setShowForm(false)}
-                        className="px-5 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-200 transition-all cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                  </div>
-                </div>
-              )}
-
-              {/* Users Ledger Table */}
-              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm text-left">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Username</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email Address</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Security Role</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Auth Count</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-100">
-                      {users.map((user) => (
-                        <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-900 font-bold">{user.username}</strong></td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{user.email}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                              user.role === 'admin' 
-                                ? 'bg-red-50 text-red-700 border border-red-200' 
-                                : user.role === 'approver' 
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                            }`}>
-                              {user.role}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold">{user.permissions?.length || 0}</td>
-                          <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleEdit(user)}
-                              disabled={user.id === currentUser?.id}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleDelete(user.id)}
-                              disabled={user.id === currentUser?.id}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {users.length === 0 && (
-                        <tr>
-                          <td colSpan="5" className="px-6 py-8 text-center text-slate-500 font-medium">No system users configured.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* VENDORS TAB */}
           {activeTab === 'vendors' && (

@@ -11,7 +11,10 @@ import {
   RefreshCw,
   Code,
   Key,
-  UserCheck
+  UserCheck,
+  Plus,
+  Trash2,
+  UserPlus
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -126,9 +129,94 @@ export default function MasterSetting() {
   const [jsonError, setJsonError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Add User State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    username: '',
+    password: '',
+    role: 'user',
+    email: '',
+    systemPreset: 'purchase' // 'all', 'purchase', 'checklist', 'hr', 'inventory', 'petty-cash'
+  });
+
   const showToast = (msg, type = 'info') => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleCreateUser = async (e) => {
+    if (e) e.preventDefault();
+    if (!newUserForm.username.trim() || !newUserForm.password.trim()) {
+      showToast('Username and password are required', 'error');
+      return;
+    }
+    setSaving(true);
+
+    let initialPerms = [];
+    if (newUserForm.systemPreset === 'all') {
+      AVAILABLE_SYSTEMS.forEach(sys => {
+        const pages = sys.sections ? sys.sections.flatMap(s => s.pages) : (sys.pages || []);
+        pages.forEach(p => initialPerms.push(`${sys.id}.${p}.modify`));
+      });
+    } else if (newUserForm.systemPreset) {
+      const sys = AVAILABLE_SYSTEMS.find(s => s.id === newUserForm.systemPreset);
+      if (sys) {
+        const pages = sys.sections ? sys.sections.flatMap(s => s.pages) : (sys.pages || []);
+        pages.forEach(p => initialPerms.push(`${sys.id}.${p}.modify`));
+      }
+    }
+
+    try {
+      const payload = {
+        user_name: newUserForm.username.trim(),
+        username: newUserForm.username.trim(),
+        password: newUserForm.password.trim(),
+        role: newUserForm.role || 'user',
+        email_id: newUserForm.email.trim() || null,
+        status: 'active',
+        master_user_system_page_access: initialPerms
+      };
+
+      const { data, error } = await supabase
+        .from('users')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) {
+        showToast(`Failed to create user: ${error.message}`, 'error');
+      } else {
+        showToast(`User ${newUserForm.username} created successfully!`, 'success');
+        setShowAddModal(false);
+        setNewUserForm({ username: '', password: '', role: 'user', email: '', systemPreset: 'purchase' });
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error('Create user error:', err);
+      showToast('Unexpected error during user creation', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId, username) => {
+    if (!window.confirm(`Are you sure you want to delete user "${username}"?`)) return;
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      if (error) {
+        showToast(`Failed to delete user: ${error.message}`, 'error');
+      } else {
+        showToast(`User ${username} deleted successfully`, 'success');
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      showToast('Unexpected error during deletion', 'error');
+    }
   };
 
   // Fetch users on load
@@ -328,10 +416,11 @@ export default function MasterSetting() {
         </div>
 
         <div className="flex items-center gap-3">
+         
           <button
             onClick={fetchUsers}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#C9A84C] rounded-none text-xs font-bold uppercase tracking-widest transition-colors border border-[#C9A84C]/30 shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#C9A84C] rounded-none text-xs font-bold uppercase tracking-widest transition-colors border border-[#C9A84C]/30 shadow-sm cursor-pointer"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span>Refresh</span>
@@ -401,13 +490,16 @@ export default function MasterSetting() {
                     <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
                       {/* Column 1: Actions */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenEdit(u)}
-                          className="px-3.5 py-1.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Edit3 size={13} />
-                          <span>Edit</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenEdit(u)}
+                            className="px-3 py-1 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1 shadow-xs cursor-pointer"
+                          >
+                            <Edit3 size={12} />
+                            <span>Edit</span>
+                          </button>
+                        
+                        </div>
                       </td>
 
                       {/* Column 2: User Name */}
@@ -685,6 +777,135 @@ export default function MasterSetting() {
                 <span>{saving ? 'Saving...' : 'Save User Access'}</span>
               </button>
             </div>
+          </motion.div>
+        </div>
+      )}
+      {/* --- Add New User Modal --- */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-[#1A1A1A]/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-none border border-[#1A1A1A]/20 shadow-2xl max-w-lg w-full overflow-hidden"
+          >
+            {/* Modal Header */}
+            <div className="p-5 pt-4 pb-3 border-b border-[#1A1A1A]/10 flex items-center justify-between bg-[#FAFAFA]">
+              <div>
+                <span className="text-[#C9A84C] uppercase tracking-[0.25em] text-[9.5px] font-bold block mb-1">
+                  Master User Directory
+                </span>
+                <h3 className="text-lg font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
+                  <UserPlus size={18} className="text-[#C9A84C]" />
+                  Create New User
+                </h3>
+              </div>
+
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-[#1A1A1A]/40 hover:text-[#1A1A1A] p-2 rounded hover:bg-[#1A1A1A]/5 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                  User Name / Login ID *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newUserForm.username}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                  placeholder="e.g. john_doe"
+                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                  Password *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newUserForm.password}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                  placeholder="Enter login password"
+                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-semibold focus:outline-none focus:border-[#C9A84C]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                    User Role
+                  </label>
+                  <select
+                    value={newUserForm.role}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                  >
+                    <option value="user">User / Operator</option>
+                    <option value="manager">Manager</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                    Initial System Access
+                  </label>
+                  <select
+                    value={newUserForm.systemPreset}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, systemPreset: e.target.value })}
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                  >
+                    <option value="purchase">Purchase System Only</option>
+                    <option value="checklist">Checklist System Only</option>
+                    <option value="hr">HR System Only</option>
+                    <option value="inventory">Inventory System Only</option>
+                    <option value="petty-cash">Petty Cash Only</option>
+                    <option value="all">Full Access (All Systems)</option>
+                    <option value="">Custom Access (Configure Later)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                  Email Address (Optional)
+                </label>
+                <input
+                  type="email"
+                  value={newUserForm.email}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                  placeholder="user@drinqkart.com"
+                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2 text-xs focus:outline-none focus:border-[#C9A84C]"
+                />
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="pt-4 border-t border-[#1A1A1A]/10 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 bg-white hover:bg-gray-100 text-[#1A1A1A] border border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-5 py-2 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>{saving ? 'Creating...' : 'Create User'}</span>
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}
