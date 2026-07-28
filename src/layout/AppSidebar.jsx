@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getVisibleSystems, getActiveSystem } from './systemsConfig';
+import ShopFilter from './ShopFilter';
 import { motion } from 'framer-motion';
 import {
   ChevronLeft,
@@ -141,6 +142,12 @@ const AppSidebar = () => {
             {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
         </div>
+
+        {/* Purchase System Shop Filter in Sidebar */}
+        {activeSystem?.id === 'purchase' && (
+          <ShopFilter isCollapsed={isCollapsed} />
+        )}
+
         {/* Subtabs Menu */}
         <div className="flex-1 p-3 space-y-1.5 overflow-y-auto overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {activeSystem.subtabs.map((sub, index) => {
