@@ -28,7 +28,7 @@ const Navbar = ({ toggleCart }) => {
       if (systemsDropdownRef.current && !systemsDropdownRef.current.contains(e.target)) {
         setIsSystemsDropdownOpen(false);
       }
-    };  
+    };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -162,7 +162,7 @@ const Navbar = ({ toggleCart }) => {
                 <span className="absolute bottom-0 left-0 w-0 h-[0.5px] bg-[#C9A84C] transition-all duration-300 group-hover:w-full"></span>
               </button>
 
-            
+
 
 
             </div>

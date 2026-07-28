@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   FaPlus, FaEdit, FaTrash, FaSync, FaSearch,
-  FaCalculator, FaCalendarAlt, FaStore, FaUser
+  FaCalculator, FaCalendarAlt, FaStore, FaUser,
+  FaCoins, FaWallet, FaFileAlt, FaUndo
 } from "react-icons/fa";
 import CashTally from "./CashTally";
 import { useAuth } from "../contexts/AuthContext";
@@ -31,6 +32,10 @@ export default function CounterPage({ counter }: CounterPageProps) {
   const [rows, setRows] = useState<TallyRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [shopFilter, setShopFilter] = useState("");
+  const [shops, setShops] = useState<{ id: number; name: string }[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -66,9 +71,24 @@ export default function CounterPage({ counter }: CounterPageProps) {
     }
   }, [counter]);
 
+  const fetchShops = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("petty_cash_shops")
+        .select("*")
+        .order("id", { ascending: true });
+      if (!error && data) {
+        setShops(data.map((r: any) => ({ id: r.id, name: r.name || "" })));
+      }
+    } catch (err) {
+      console.error(`[CounterPage ${counter}] Error fetching shops:`, err);
+    }
+  }, [counter]);
+
   useEffect(() => {
     fetchRows();
-  }, [fetchRows]);
+    fetchShops();
+  }, [fetchRows, fetchShops]);
 
   const handleOpenAddModal = () => {
     setEditData(null);
@@ -145,13 +165,27 @@ export default function CounterPage({ counter }: CounterPageProps) {
 
   const filtered = rows.filter((r) => {
     const q = search.toLowerCase();
-    return (
+    const matchesSearch =
+      !search.trim() ||
       r.shopName.toLowerCase().includes(q) ||
       r.name.toLowerCase().includes(q) ||
       r.date.includes(q) ||
-      r.tally_id.toLowerCase().includes(q)
-    );
+      r.tally_id.toLowerCase().includes(q);
+
+    const matchesFromDate = !fromDate || r.date >= fromDate;
+    const matchesToDate = !toDate || r.date <= toDate;
+    const matchesShop = !shopFilter || r.shopName.toLowerCase() === shopFilter.toLowerCase();
+
+    return matchesSearch && matchesFromDate && matchesToDate && matchesShop;
   });
+
+  const hasActiveFilters = Boolean(search || fromDate || toDate || shopFilter);
+  const clearFilters = () => {
+    setSearch("");
+    setFromDate("");
+    setToDate("");
+    setShopFilter("");
+  };
 
   if (!hasCounterAccess(counter)) {
     return (
@@ -162,50 +196,139 @@ export default function CounterPage({ counter }: CounterPageProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* ── Top Header Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <FaCalculator className="text-[#2a5298]" />
-            Counter {counter} Cash Tally Records
-          </h2>
-          <p className="text-[11px] text-gray-500 mt-0.5">
-            View daily tally records and submit new entries for Counter {counter}.
-          </p>
+    <div className="space-y-5">
+
+      {/* ── Summary Cards (Over table) ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
+        {/* Total Retail Scan Card */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-normal text-gray-500 font-sans">Total Retail Scan</p>
+            <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+              {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
+            </h3>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
+            <FaCoins className="text-lg" />
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          {/* Search Input */}
-          <div className="relative">
-            <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search tally records..."
-              className="pl-7 pr-2.5 py-1.5 border border-gray-300 rounded-md text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] w-48 sm:w-56"
-            />
+        {/* Total Expenses Card */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-normal text-gray-500">Total Expenses</p>
+            <h3 className="text-lg font-medium font-normal text-rose-600 mt-1">
+              {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
+            </h3>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+            <FaWallet className="text-lg" />
+          </div>
+        </div>
+
+        {/* Net Total Card */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-normal text-gray-500 font-sans">Net Total</p>
+            <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
+              {fmt(filtered.reduce((s, r) => s + (r.retailScanAmount - r.totalExpense), 0))}
+            </h3>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
+            <FaFileAlt className="text-lg" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filter Bar (Below cards) ── */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-3">
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+
+          {/* Filters: From Date, To Date, Shop Select, Search */}
+          <div className="flex flex-wrap items-center gap-3 flex-1">
+            {/* From Date */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-600 whitespace-nowrap">From:</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white"
+              />
+            </div>
+
+            {/* To Date */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-600 whitespace-nowrap">To:</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white"
+              />
+            </div>
+
+            {/* Shop Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-600 whitespace-nowrap">Shop:</label>
+              <select
+                value={shopFilter}
+                onChange={(e) => setShopFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white max-w-[160px]"
+              >
+                <option value="">All Shops</option>
+                {shops.map((s) => (
+                  <option key={s.id} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+              <input
+                type="text"
+                placeholder="Search tally records…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all"
+              />
+            </div>
+
+            {/* Reset Filters */}
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-all font-medium border border-red-200 cursor-pointer"
+              >
+                <FaUndo className="text-[10px]" /> Clear
+              </button>
+            )}
           </div>
 
-          {/* Refresh */}
-          <button
-            onClick={fetchRows}
-            title="Refresh"
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
-          >
-            <FaSync className={loading ? "animate-spin text-[11px]" : "text-[11px]"} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Refresh */}
+            <button
+              onClick={fetchRows}
+              title="Refresh"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
+            >
+              <FaSync className={loading ? "animate-spin text-[11px]" : "text-[11px]"} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
 
-          {/* Add Tally Entry / Fill Form */}
-          <button
-            onClick={handleOpenAddModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2a5298] text-white rounded-md font-semibold hover:bg-[#1e3d70] transition-all shadow-xs text-xs cursor-pointer"
-          >
-            <FaPlus className="text-[10px]" />
-            <span>Fill Tally Form</span>
-          </button>
+            {/* Fill Tally Form */}
+            <button
+              onClick={handleOpenAddModal}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all shadow-xs text-xs cursor-pointer"
+            >
+              <FaPlus className="text-[10px]" />
+              <span>Fill Tally Form</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -258,10 +381,10 @@ export default function CounterPage({ counter }: CounterPageProps) {
                         {row.name}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap font-bold text-slate-800">
+                    <td className="px-4 py-2.5 whitespace-nowrap font-normal text-slate-800">
                       {fmt(row.retailScanAmount)}
                     </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap font-bold text-rose-600">
+                    <td className="px-4 py-2.5 whitespace-nowrap font-normal text-rose-600">
                       {fmt(row.totalExpense)}
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap text-right space-x-1.5">
@@ -286,20 +409,6 @@ export default function CounterPage({ counter }: CounterPageProps) {
             </tbody>
           </table>
         </div>
-
-        {/* Summary Footer */}
-        {!loading && filtered.length > 0 && (
-          <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap gap-6 text-xs font-semibold">
-            <div>
-              <span className="text-gray-500">Total Scan Amount: </span>
-              <span className="font-bold text-slate-900">{fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Total Expenses: </span>
-              <span className="font-bold text-rose-600">{fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Cash Tally Form Modal ── */}
