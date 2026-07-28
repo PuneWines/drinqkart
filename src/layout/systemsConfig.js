@@ -72,10 +72,10 @@ export const systems = [
     icon: Coins,
     subtabs: [
       { label: 'Dashboard', to: '/systems/petty-cash?page=dashboard' },
-      { label: 'Form Entry', to: '/systems/petty-cash?page=petty-cash' },
-      { label: 'Counter 1', to: '/systems/petty-cash?page=cash-tally-1' },
-      { label: 'Counter 2', to: '/systems/petty-cash?page=cash-tally-2' },
-      { label: 'Counter 3', to: '/systems/petty-cash?page=cash-tally-3' },
+      { label: 'Petty Cash Form Entry', to: '/systems/petty-cash?page=petty-cash' },
+      { label: 'Cash Tally Counter 1', to: '/systems/petty-cash?page=cash-tally-1' },
+      { label: 'Cash Tally Counter 2', to: '/systems/petty-cash?page=cash-tally-2' },
+      { label: 'Cash Tally Counter 3', to: '/systems/petty-cash?page=cash-tally-3' },
       { label: 'Financial Reports', to: '/systems/petty-cash?page=reports' },
     ]
   },

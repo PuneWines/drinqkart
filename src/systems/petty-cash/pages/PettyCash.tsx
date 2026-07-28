@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   FaPlus, FaEdit, FaTrash, FaSync, FaSearch,
-  FaFileAlt, FaStore, FaTimes, FaSave,
+  FaFileAlt, FaStore, FaTimes, FaSave, FaCoins, FaWallet, FaUndo,
 } from 'react-icons/fa';
 import PettyCashModal, { CategoryAmounts } from '../components/PettyCashModal';
 import { supabase } from '../supabase';
@@ -81,6 +81,9 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   const [rows, setRows] = useState<PettyCashRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [shopFilter, setShopFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState<CategoryAmounts | undefined>(undefined);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -126,7 +129,23 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchRows(); }, [fetchRows]);
+  const fetchShops = useCallback(async () => {
+    setShopsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('petty_cash_shops')
+        .select('*')
+        .order('id', { ascending: true });
+      if (error) throw error;
+      setShops((data || []).map((r: any) => ({ id: r.id, name: r.name || '' })));
+    } catch (err) { console.error('Error fetching shops:', err); }
+    finally { setShopsLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    fetchRows();
+    fetchShops();
+  }, [fetchRows, fetchShops]);
 
   const openAddModal = () => { setEditData(undefined); setIsModalOpen(true); };
   const openEditModal = (row: PettyCashRow) => { setEditData(mapToFormData(row.raw)); setIsModalOpen(true); };
@@ -143,29 +162,32 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     finally { setDeleting(false); setDeleteId(null); }
   };
 
-  const filtered = rows.filter(r =>
-    !search.trim() ||
-    r.id.toLowerCase().includes(search.toLowerCase()) ||
-    r.shopName.toLowerCase().includes(search.toLowerCase()) ||
-    r.username.toLowerCase().includes(search.toLowerCase()) ||
-    r.date.includes(search)
-  );
+  const filtered = rows.filter(r => {
+    const matchesSearch =
+      !search.trim() ||
+      r.id.toLowerCase().includes(search.toLowerCase()) ||
+      r.shopName.toLowerCase().includes(search.toLowerCase()) ||
+      r.username.toLowerCase().includes(search.toLowerCase()) ||
+      r.date.includes(search);
+
+    const matchesFromDate = !fromDate || r.date >= fromDate;
+    const matchesToDate = !toDate || r.date <= toDate;
+    const matchesShop = !shopFilter || r.shopName.toLowerCase() === shopFilter.toLowerCase();
+
+    return matchesSearch && matchesFromDate && matchesToDate && matchesShop;
+  });
+
+  const hasActiveFilters = Boolean(search || fromDate || toDate || shopFilter);
+  const clearFilters = () => {
+    setSearch('');
+    setFromDate('');
+    setToDate('');
+    setShopFilter('');
+  };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Shops — fetch / CRUD
   // ─────────────────────────────────────────────────────────────────────────────
-  const fetchShops = useCallback(async () => {
-    setShopsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('petty_cash_shops')
-        .select('*')
-        .order('id', { ascending: true });
-      if (error) throw error;
-      setShops((data || []).map((r: any) => ({ id: r.id, name: r.name || '' })));
-    } catch (err) { console.error('Error fetching shops:', err); }
-    finally { setShopsLoading(false); }
-  }, []);
 
   const openShopsPanel = () => { setShopsPanelOpen(true); fetchShops(); };
 
@@ -223,52 +245,146 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   return (
     <div className="space-y-5">
 
-      {/* ── Header bar ── */}
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-
-        {/* Search */}
-        <div className="relative flex-1 max-w-sm">
-          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-          <input
-            type="text"
-            placeholder="Search by ID, shop, user, date…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all"
-          />
+      {/* ── Summary Cards (Over table) ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
+        {/* Total Opening Card */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-normal text-gray-500 font-sans">Total Opening</p>
+            <h3 className="text-lg font-medium font-sans text-gray-800 mt-1">
+              {fmt(filtered.reduce((s, r) => s + r.openingQty, 0))}
+            </h3>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
+            <FaCoins className="text-lg" />
+          </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2">
-          {/* Refresh */}
-          <button
-            onClick={fetchRows}
-            title="Refresh"
-            className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-sm font-medium"
-          >
-            <FaSync className={loading ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
+        {/* Total Expense Card */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-normal text-gray-500 font-sans">Total Expense</p>
+            <h3 className="text-lg font-medium font-sans text-rose-600 mt-1">
+              {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
+            </h3>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+            <FaWallet className="text-lg" />
+          </div>
+        </div>
 
-          {/* Shops */}
-          <button
-            onClick={openShopsPanel}
-            title="Manage Shops"
-            className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-sm font-medium"
-          >
-            <FaStore />
-            <span className="hidden sm:inline">Shops</span>
-          </button>
+        {/* Total Closing Card */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-normal text-gray-500 font-sans">Total Closing</p>
+            <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
+              {fmt(filtered.reduce((s, r) => s + r.closing, 0))}
+            </h3>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
+            <FaFileAlt className="text-lg" />
+          </div>
+        </div>
+      </div>
 
-          {/* Add New Expense */}
-          <button
-            onClick={openAddModal}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all shadow-md hover:shadow-lg transform hover:scale-105 text-sm"
-          >
-            <FaPlus />
-            <span className="hidden sm:inline">Add New Expense</span>
-            <span className="sm:hidden">Add</span>
-          </button>
+      {/* ── Filter Bar (Below cards) ── */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-3">
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+
+          {/* Filters: From Date, To Date, Shop Select, Search */}
+          <div className="flex flex-wrap items-center gap-3 flex-1">
+            {/* From Date */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-600 whitespace-nowrap">From:</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white"
+              />
+            </div>
+
+            {/* To Date */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-600 whitespace-nowrap">To:</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white"
+              />
+            </div>
+
+            {/* Shop Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-600 whitespace-nowrap">Shop:</label>
+              <select
+                value={shopFilter}
+                onChange={e => setShopFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white max-w-[160px]"
+              >
+                <option value="">All Shops</option>
+                {shops.map(s => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+              <input
+                type="text"
+                placeholder="Search by ID, shop, user…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all"
+              />
+            </div>
+
+            {/* Reset Filters */}
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-all font-medium border border-red-200 cursor-pointer"
+              >
+                <FaUndo className="text-[10px]" /> Clear
+              </button>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Refresh */}
+            <button
+              onClick={fetchRows}
+              title="Refresh"
+              className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
+            >
+              <FaSync className={loading ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+
+            {/* Shops */}
+            <button
+              onClick={openShopsPanel}
+              title="Manage Shops"
+              className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
+            >
+              <FaStore />
+              <span className="hidden sm:inline">Shops</span>
+            </button>
+
+            {/* Add New Expense */}
+            <button
+              onClick={openAddModal}
+              className="flex items-center gap-2 px-4 py-1.5 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all shadow-md text-xs cursor-pointer"
+            >
+              <FaPlus />
+              <span className="hidden sm:inline">Add New Expense</span>
+              <span className="sm:hidden">Add</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -303,7 +419,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
                   <div className="flex flex-col items-center gap-2">
                     <FaFileAlt className="text-4xl text-gray-300" />
                     <p className="font-medium">No records found</p>
-                    {search && <p className="text-xs">Try adjusting your search</p>}
+                    {hasActiveFilters && <p className="text-xs">Try adjusting your filters</p>}
                   </div>
                 </td></tr>
               )}
@@ -335,14 +451,6 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
             </tbody>
           </table>
         </div>
-
-        {!loading && filtered.length > 0 && (
-          <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap gap-6 text-sm">
-            <div><span className="text-gray-500">Total Expense: </span><span className="font-bold text-rose-600">{fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}</span></div>
-            <div><span className="text-gray-500">Total Opening: </span><span className="font-bold text-gray-700">{fmt(filtered.reduce((s, r) => s + r.openingQty, 0))}</span></div>
-            <div><span className="text-gray-500">Total Closing: </span><span className="font-bold text-emerald-700">{fmt(filtered.reduce((s, r) => s + r.closing, 0))}</span></div>
-          </div>
-        )}
       </div>
 
       {/* ── PettyCash Modal ── */}

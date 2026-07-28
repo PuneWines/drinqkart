@@ -95,7 +95,7 @@ export default function CashTally({
         const { data: pcData, error: pcError } = await supabase
           .from('petty_cash_user')
           .select('name');
-        
+
         if (!pcError && pcData) {
           names = pcData.map((row: any) => row.name).filter(Boolean);
         }

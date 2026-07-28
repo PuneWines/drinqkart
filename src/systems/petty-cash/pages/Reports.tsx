@@ -18,6 +18,7 @@ import {
   FaUndo,
   FaDownload,
   FaFileCsv,
+  FaTable,
 } from "react-icons/fa";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from '../supabase';
@@ -31,18 +32,18 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend
-);const convertPettyExpensesToSheetRows = (records: any[]): any[][] => {
+); const convertPettyExpensesToSheetRows = (records: any[]): any[][] => {
   const rows: any[][] = [];
   const headers = [
-    "Timestamp", "Patty Id", "Date", "Opening Qty", "Closing Balance", "Shop Name", 
-    "Tea & Snacks", "Water Jar", "Electricity Bill", "Recharge", "Post Office", 
-    "Customer Discount", "Repair & Maintenance", "Stationary", "Petrol", "Patil Petrol", 
-    "Incentive Amount", "Incentive Name", "Advance Amount", "Advance Name", 
-    "Breakage Amount", "Breakage Name", "Shop Name One", "Shop Amount One", 
-    "Medical Person", "Medical Amount", "Extra Expense Name", "Extra Expense Amount", 
-    "Excise/Police", "Desi Bhada", "Room Expense", "Office Expense", "Personal Expense", 
-    "Misc Expense", "Misc Remarks", "Purchase Voucher No.", "Vendor Payment", 
-    "Difference Amount", "Credit Card Charges", "Username", "Total Exp. (Spent)", 
+    "Timestamp", "Patty Id", "Date", "Opening Qty", "Closing Balance", "Shop Name",
+    "Tea & Snacks", "Water Jar", "Electricity Bill", "Recharge", "Post Office",
+    "Customer Discount", "Repair & Maintenance", "Stationary", "Petrol", "Patil Petrol",
+    "Incentive Amount", "Incentive Name", "Advance Amount", "Advance Name",
+    "Breakage Amount", "Breakage Name", "Shop Name One", "Shop Amount One",
+    "Medical Person", "Medical Amount", "Extra Expense Name", "Extra Expense Amount",
+    "Excise/Police", "Desi Bhada", "Room Expense", "Office Expense", "Personal Expense",
+    "Misc Expense", "Misc Remarks", "Purchase Voucher No.", "Vendor Payment",
+    "Difference Amount", "Credit Card Charges", "Username", "Total Exp. (Spent)",
     "Transaction Status", "Total Amount"
   ];
   rows.push(headers);
@@ -243,8 +244,42 @@ export default function Reports() {
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+
+  // Table view state
+  const [activeTableTab, setActiveTableTab] = useState<'petty' | 'tally' | null>(null);
+  const [tablePettyRows, setTablePettyRows] = useState<any[]>([]);
+  const [tableTallyRows, setTableTallyRows] = useState<any[]>([]);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [tableSearch, setTableSearch] = useState('');
+
+  const fetchTableData = async (type: 'petty' | 'tally') => {
+    setActiveTableTab(type);
+    setTableLoading(true);
+    try {
+      if (type === 'petty') {
+        let query = supabase.from('petty_cash_expense').select('*').order('date', { ascending: false });
+        if (dateFrom) query = query.gte('date', dateFrom);
+        if (dateTo) query = query.lte('date', dateTo);
+        const { data, error } = await query;
+        if (!error && data) {
+          setTablePettyRows(data);
+        }
+      } else {
+        let query = supabase.from('petty_cash_tallies').select('*').order('date', { ascending: false });
+        if (dateFrom) query = query.gte('date', dateFrom);
+        if (dateTo) query = query.lte('date', dateTo);
+        const { data, error } = await query;
+        if (!error && data) {
+          setTableTallyRows(data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching table data:', err);
+    } finally {
+      setTableLoading(false);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -786,8 +821,8 @@ export default function Reports() {
     const dateLabel = dateFrom && dateTo
       ? `${dateFrom}_to_${dateTo}`
       : dateFrom ? `from_${dateFrom}`
-      : dateTo   ? `to_${dateTo}`
-      : new Date().toISOString().slice(0, 7);
+        : dateTo ? `to_${dateTo}`
+          : new Date().toISOString().slice(0, 7);
 
     const headers = ["Date", "Category", "Amount (₹)", "Type", "Description"];
     const dataRows = filteredData.map(e => [
@@ -811,7 +846,7 @@ export default function Reports() {
       if (cashType === "petty") {
         let query = supabase.from('petty_cash_expense').select('*').order('date', { ascending: false });
         if (dateFrom) query = query.gte('date', dateFrom);
-        if (dateTo)   query = query.lte('date', dateTo);
+        if (dateTo) query = query.lte('date', dateTo);
         const { data, error } = await query;
         if (error) throw error;
         const rows = convertPettyExpensesToSheetRows(data || []);
@@ -827,7 +862,7 @@ export default function Reports() {
           const counterNum = parseInt(sheet.split(" ").pop() || "1");
           let query = supabase.from('petty_cash_tallies').select('*').eq('counter', counterNum).order('date', { ascending: false });
           if (dateFrom) query = query.gte('date', dateFrom);
-          if (dateTo)   query = query.lte('date', dateTo);
+          if (dateTo) query = query.lte('date', dateTo);
           const { data, error } = await query;
           if (error) throw error;
           const rows = convertTallyToRows(data || []);
@@ -1089,15 +1124,62 @@ export default function Reports() {
 
   return (
     <div className="space-y-6 relative pb-32">
+
+      {/* 2. Summary Statistics Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">
+          Summary Statistics - {cashType === "petty" ? "Petty Cash" : "Tally Cash"}
+          {cashType === "tally" && selectedTallySheet !== "All" && ` - ${selectedTallySheet}`}
+        </h3>
+
+        {filteredData.length === 0 && viewType !== "default" ? (
+          <div className="text-center py-8 text-gray-500">
+            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 9.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="mt-2 text-lg font-medium">No data found for the selected filters</p>
+            <p className="text-sm">Try adjusting your date range or categories.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-gray-600 mb-1">Total Expenses</p>
+              <p className="text-2xl font-bold text-blue-700">
+                ₹{Math.round(summaryData.total).toLocaleString("en-IN")}
+              </p>
+            </div>
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-sm text-gray-600 mb-1">Avg. Transaction</p>
+              <p className="text-2xl font-bold text-green-700">
+                ₹{Math.round(summaryData.avgPeriod).toLocaleString("en-IN")}
+              </p>
+            </div>
+            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <p className="text-sm text-gray-600 mb-1">Highest Record</p>
+              <p className="text-2xl font-bold text-yellow-700">
+                ₹{Math.round(summaryData.highest).toLocaleString("en-IN")}
+              </p>
+            </div>
+
+
+            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <p className="text-sm text-gray-600 mb-1">Categories</p>
+              <p className="text-2xl font-bold text-purple-700">
+                {summaryData.categories}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
       {/* 1. Reports & Analytics Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Reports & Analytics</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {viewType !== "default" && (
               <button
                 onClick={handleResetFilters}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-all border border-red-200 shadow-sm hover:shadow-md active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-all border border-red-200 shadow-sm hover:shadow-md active:scale-95"
               >
                 <FaUndo className="w-3 h-3" /> Clear Filters
               </button>
@@ -1107,7 +1189,7 @@ export default function Reports() {
             <div className="relative" ref={exportMenuRef}>
               <button
                 onClick={() => setShowExportMenu(prev => !prev)}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-[#2a5298] bg-blue-50 hover:bg-blue-100 rounded-lg transition-all border border-blue-200 shadow-sm hover:shadow-md active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-[#2a5298] bg-blue-50 hover:bg-blue-100 rounded-lg transition-all border border-blue-200 shadow-sm hover:shadow-md active:scale-95"
               >
                 <FaDownload className="w-3 h-3" />
                 Export CSV
@@ -1279,52 +1361,7 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* 2. Summary Statistics Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">
-          Summary Statistics - {cashType === "petty" ? "Petty Cash" : "Tally Cash"}
-          {cashType === "tally" && selectedTallySheet !== "All" && ` - ${selectedTallySheet}`}
-        </h3>
 
-        {filteredData.length === 0 && viewType !== "default" ? (
-          <div className="text-center py-8 text-gray-500">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 9.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="mt-2 text-lg font-medium">No data found for the selected filters</p>
-            <p className="text-sm">Try adjusting your date range or categories.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-gray-600 mb-1">Total Expenses</p>
-              <p className="text-2xl font-bold text-blue-700">
-                ₹{Math.round(summaryData.total).toLocaleString("en-IN")}
-              </p>
-            </div>
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <p className="text-sm text-gray-600 mb-1">Avg. Transaction</p>
-              <p className="text-2xl font-bold text-green-700">
-                ₹{Math.round(summaryData.avgPeriod).toLocaleString("en-IN")}
-              </p>
-            </div>
-            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <p className="text-sm text-gray-600 mb-1">Highest Record</p>
-              <p className="text-2xl font-bold text-yellow-700">
-                ₹{Math.round(summaryData.highest).toLocaleString("en-IN")}
-              </p>
-            </div>
-
-
-            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <p className="text-sm text-gray-600 mb-1">Categories</p>
-              <p className="text-2xl font-bold text-purple-700">
-                {summaryData.categories}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* 3. Charts Section */}
       <div className="relative">
@@ -1399,6 +1436,174 @@ export default function Reports() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 4. Data Tables Control & View Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-4">
+          <div>
+            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <FaTable className="text-[#2a5298]" />
+              Database Records Tables
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Select a table below to view detailed database records.
+            </p>
+          </div>
+
+          {/* Table Action Buttons */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => fetchTableData('petty')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer border ${
+                activeTableTab === 'petty'
+                  ? 'bg-[#2a5298] text-white border-[#2a5298] shadow-md'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'
+              }`}
+            >
+              <FaTable className="text-xs" />
+              <span>Petty Cash Table</span>
+            </button>
+
+            <button
+              onClick={() => fetchTableData('tally')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer border ${
+                activeTableTab === 'tally'
+                  ? 'bg-[#2a5298] text-white border-[#2a5298] shadow-md'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'
+              }`}
+            >
+              <FaTable className="text-xs" />
+              <span>Cash Tally Table</span>
+            </button>
+
+            {activeTableTab && (
+              <button
+                onClick={() => setActiveTableTab(null)}
+                className="px-3.5 py-2.5 text-xs text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-all font-semibold cursor-pointer"
+              >
+                Hide Table
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Table Content when activeTableTab is set */}
+        {activeTableTab && (
+          <div className="space-y-4">
+            {/* Search Bar for Table */}
+            <div className="flex justify-between items-center gap-4">
+              <div className="relative flex-1 max-w-xs">
+                <input
+                  type="text"
+                  placeholder={`Search ${activeTableTab === 'petty' ? 'Petty Cash' : 'Cash Tally'} records...`}
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                  className="w-full pl-3 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298]"
+                />
+              </div>
+              <div className="text-xs text-gray-500 font-medium">
+                {tableLoading ? 'Loading records...' : `Showing ${
+                  activeTableTab === 'petty'
+                    ? tablePettyRows.filter(r => !tableSearch || JSON.stringify(r).toLowerCase().includes(tableSearch.toLowerCase())).length
+                    : tableTallyRows.filter(r => !tableSearch || JSON.stringify(r).toLowerCase().includes(tableSearch.toLowerCase())).length
+                } records`}
+              </div>
+            </div>
+
+            {/* Table Container */}
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              {tableLoading ? (
+                <div className="py-12 text-center text-gray-400">
+                  <div className="w-6 h-6 border-2 border-[#2a5298] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <span>Loading table records...</span>
+                </div>
+              ) : activeTableTab === 'petty' ? (
+                /* Petty Cash Expenses Table */
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-[#2a5298] text-white uppercase font-bold">
+                    <tr>
+                      <th className="px-4 py-2.5">ID</th>
+                      <th className="px-4 py-2.5">Date</th>
+                      <th className="px-4 py-2.5">Shop Name</th>
+                      <th className="px-4 py-2.5">User</th>
+                      <th className="px-4 py-2.5">Opening (₹)</th>
+                      <th className="px-4 py-2.5">Total Expense (₹)</th>
+                      <th className="px-4 py-2.5">Closing (₹)</th>
+                      <th className="px-4 py-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white font-medium text-gray-800">
+                    {tablePettyRows.filter(r => !tableSearch || JSON.stringify(r).toLowerCase().includes(tableSearch.toLowerCase())).length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-8 text-gray-400">
+                          No records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      tablePettyRows
+                        .filter(r => !tableSearch || JSON.stringify(r).toLowerCase().includes(tableSearch.toLowerCase()))
+                        .map((row) => (
+                          <tr key={row.patty_id || row.id} className="hover:bg-blue-50/40">
+                            <td className="px-4 py-2 font-mono font-semibold text-[#2a5298]">{row.patty_id || row.id}</td>
+                            <td className="px-4 py-2">{row.date}</td>
+                            <td className="px-4 py-2">{row.shop_name || '—'}</td>
+                            <td className="px-4 py-2">{row.username || '—'}</td>
+                            <td className="px-4 py-2 font-normal">₹{Number(row.opening_qty || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-2 text-rose-600 font-normal">₹{Number(row.total_expense || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-2 text-emerald-700 font-normal">₹{Number(row.closing || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-2">
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-[#2a5298] border border-blue-200">
+                                {row.transaction_status || 'Pending'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                /* Cash Tallies Table */
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-[#2a5298] text-white uppercase font-bold">
+                    <tr>
+                      <th className="px-4 py-2.5">Tally ID</th>
+                      <th className="px-4 py-2.5">Counter</th>
+                      <th className="px-4 py-2.5">Date</th>
+                      <th className="px-4 py-2.5">Shop Name</th>
+                      <th className="px-4 py-2.5">Staff Name</th>
+                      <th className="px-4 py-2.5">Retail Scan (₹)</th>
+                      <th className="px-4 py-2.5">Expense (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white font-medium text-gray-800">
+                    {tableTallyRows.filter(r => !tableSearch || JSON.stringify(r).toLowerCase().includes(tableSearch.toLowerCase())).length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="text-center py-8 text-gray-400">
+                          No records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      tableTallyRows
+                        .filter(r => !tableSearch || JSON.stringify(r).toLowerCase().includes(tableSearch.toLowerCase()))
+                        .map((row) => (
+                          <tr key={row.tally_id || row.id} className="hover:bg-blue-50/40">
+                            <td className="px-4 py-2 font-mono font-semibold text-[#2a5298]">{row.tally_id || row.id}</td>
+                            <td className="px-4 py-2 font-semibold text-gray-700">Counter {row.counter || 1}</td>
+                            <td className="px-4 py-2">{row.date}</td>
+                            <td className="px-4 py-2">{row.shop_name || '—'}</td>
+                            <td className="px-4 py-2">{row.name || '—'}</td>
+                            <td className="px-4 py-2 font-normal text-slate-800">₹{Number(row.retail_scan_amount || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-2 text-rose-600 font-normal">₹{Number(row.expense || 0).toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
