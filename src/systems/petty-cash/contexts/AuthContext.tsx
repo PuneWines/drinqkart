@@ -136,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   /** 
-   * Fetches latest user data from the petty_cash_user table to sync permissions.
+   * Fetches latest user data from the users table (or petty_cash_user fallback) to sync permissions.
    */
   const refreshUserData = async () => {
     if (!user) return;
@@ -144,19 +144,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log(`[AuthContext] Refreshing data for: ${user.username} via Supabase...`);
 
     try {
-      const { data, error } = await supabase
-        .from('petty_cash_user')
+      let data: any = null;
+      let { data: usersData } = await supabase
+        .from('users')
         .select('*')
-        .eq('username', user.username)
-        .single();
+        .or(`user_name.ilike.${user.username},username.ilike.${user.username}`)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (usersData) {
+        data = usersData;
+      } else {
+        const { data: pcData } = await supabase
+          .from('petty_cash_user')
+          .select('*')
+          .eq('username', user.username)
+          .maybeSingle();
+        data = pcData;
+      }
 
       if (data) {
-        const name = data.name || "";
+        const name = data.user_name || data.name || data.username || "";
         const role = data.role || "User";
-        const pages = parsePages(data.pages);
-        const shops = parseShops(data.shops);
+        const pages = parsePages(data.pages || data.master_user_system_page_access);
+        const shops = parseShops(data.shops || data.shop_name || data.user_access);
 
         const initials = name
           .split(' ')
@@ -201,13 +211,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log(`[AuthContext] Supabase login attempt for: "${inputUser}"`);
 
     try {
-      const { data, error } = await supabase
-        .from('petty_cash_user')
+      let data: any = null;
+      let { data: usersData, error } = await supabase
+        .from('users')
         .select('*')
-        .eq('username', inputUser)
+        .or(`user_name.ilike.${inputUser},username.ilike.${inputUser}`)
         .maybeSingle();
 
-      if (error) {
+      if (!usersData) {
+        const pcRes = await supabase
+          .from('petty_cash_user')
+          .select('*')
+          .eq('username', inputUser)
+          .maybeSingle();
+        data = pcRes.data;
+        if (pcRes.error) error = pcRes.error;
+      } else {
+        data = usersData;
+      }
+
+      if (error && !data) {
         console.error("[AuthContext] Supabase login query error:", error);
         return { success: false, error: "Authentication service unavailable." };
       }
@@ -218,10 +241,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (data.password === inputPass) {
-        const name = data.name || "";
+        const name = data.user_name || data.name || data.username || "";
         const role = data.role || "User";
-        const pages = parsePages(data.pages);
-        const shops = parseShops(data.shops);
+        const pages = parsePages(data.pages || data.master_user_system_page_access);
+        const shops = parseShops(data.shops || data.shop_name || data.user_access);
 
         const initials = name
           .split(' ')
