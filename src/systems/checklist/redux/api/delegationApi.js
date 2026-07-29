@@ -138,9 +138,9 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
 
 export const fetchDelegationDataSortByDate = async () => {
   try {
-    const role = (localStorage.getItem('role') || '').toLowerCase();
+    const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
     const username = localStorage.getItem('user-name');
-    const userAccess = localStorage.getItem('user_access');
+    const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
 
     let query = supabase
       .from('delegation')
@@ -148,17 +148,17 @@ export const fetchDelegationDataSortByDate = async () => {
       .or('submission_date.is.null,status.neq.done') // Fetch pending tasks (never submitted) OR tasks that are not 'done' (extended)
       .order('planned_date', { ascending: true });
 
-    if (role === 'user' && username) {
+    if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (role === 'hod' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
-      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d.toLowerCase() !== 'all');
+    } else if (roleUpper === 'HOD' || roleUpper === 'MANAGER') {
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all');
+      const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
+    } else if (roleUpper === 'ADMIN' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
+      const rawShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d.toLowerCase() !== 'all');
+      const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
       if (allowedShops.length > 0) {
         query = query.in('shop_name', allowedShops);
       }

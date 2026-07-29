@@ -56,8 +56,10 @@ export const LoginCredentialsApi = async (formData) => {
     }
 
     // Store user access in localStorage
-    if (userData.user_access) {
-      localStorage.setItem("user_access", userData.user_access);
+    const accessVal = userData.user_access || userData.shop_name || userData.shop || "";
+    if (accessVal) {
+      localStorage.setItem("user_access", accessVal);
+      localStorage.setItem("shop_name", userData.shop_name || userData.shop || "");
     }
 
     return { data: userData };

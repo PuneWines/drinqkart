@@ -956,11 +956,11 @@ const Setting = () => {
   // User form handlers
   const handleUserInputChange = (e) => {
     const { name, value } = e.target;
-    
+
     if (name === 'role') {
       let defaultAccess = [];
       const roleLower = value.toLowerCase();
-      
+
       if (roleLower === 'admin') {
         defaultAccess = ALL_PAGES.map(p => p.label);
       } else if (roleLower === 'hod') {
@@ -970,10 +970,10 @@ const Setting = () => {
       } else { // user
         defaultAccess = ['Dashboard', 'Announcements', 'Delegation', 'Task', 'Calendar'];
       }
-      
-      setUserForm(prev => ({ 
-        ...prev, 
-        [name]: value, 
+
+      setUserForm(prev => ({
+        ...prev,
+        [name]: value,
         page_access: defaultAccess,
         user_access: roleLower === 'admin' ? 'admin' : (prev.shop || prev.user_access)
       }));
@@ -981,7 +981,7 @@ const Setting = () => {
       setUserForm(prev => {
         const oldShop = prev.shop;
         const oldAccess = prev.user_access || '';
-        
+
         let newAccess = value;
         if (oldAccess && oldShop && oldAccess !== oldShop) {
           const shopsList = oldAccess.split(',').map(s => s.trim());
@@ -993,7 +993,7 @@ const Setting = () => {
             newAccess = oldAccess;
           }
         }
-        
+
         return {
           ...prev,
           shop: value,
@@ -1126,6 +1126,25 @@ const Setting = () => {
     setProfilePreview(null);
     setIsEditing(false);
     setCurrentUserId(null);
+  };
+
+  // HOD multi-shop toggle — writes directly to user_access as comma-separated string
+  // e.g. user_access = "FRIENDS, VISHAL" → HOD sees all tasks from those shops
+  const handleHodShopToggle = (shopName) => {
+    setUserForm(prev => {
+      const current = (prev.user_access || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+      const updated = current.includes(shopName)
+        ? current.filter(s => s !== shopName)
+        : [...current, shopName];
+      return {
+        ...prev,
+        user_access: updated.join(', '),
+        shop: updated.length > 0 ? updated[0] : ''
+      };
+    });
   };
 
   // Shop form handlers
@@ -1275,7 +1294,7 @@ const Setting = () => {
                       activeTab === 'shops' ?
                         (activeShopSubTab === 'shops' ? 'New Shop' : 'New Assign From') :
                         activeTab === 'categories' ? 'New Machine' :
-                        (activeAutomateSubTab === 'masterTasks' ? 'New Master Task' : 'New Level')}
+                          (activeAutomateSubTab === 'masterTasks' ? 'New Master Task' : 'New Level')}
                   </span>
                   <span className="sm:hidden">Add</span>
                 </button>
@@ -2133,15 +2152,15 @@ const Setting = () => {
                                                 <div className="flex gap-1.5 ml-1 opacity-100 lg:opacity-0 group-hover/part:opacity-100 transition-opacity">
                                                   <label className="text-blue-400 hover:text-blue-600 cursor-pointer flex items-center justify-center p-0.5" title="Edit part image">
                                                     <Edit size={12} />
-                                                    <input 
-                                                      type="file" 
-                                                      accept="image/*" 
-                                                      className="hidden" 
+                                                    <input
+                                                      type="file"
+                                                      accept="image/*"
+                                                      className="hidden"
                                                       onChange={(e) => {
                                                         const file = e.target.files[0];
-                                                        if(file) handleUpdatePartImage(file, part);
+                                                        if (file) handleUpdatePartImage(file, part);
                                                         e.target.value = null;
-                                                      }} 
+                                                      }}
                                                     />
                                                   </label>
                                                   <button
@@ -2231,15 +2250,15 @@ const Setting = () => {
                                           <div className="flex gap-1.5 ml-1">
                                             <label className="text-blue-400 hover:text-blue-600 cursor-pointer p-0.5 flex items-center justify-center">
                                               <Edit size={12} />
-                                              <input 
-                                                type="file" 
-                                                accept="image/*" 
-                                                className="hidden" 
+                                              <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
                                                 onChange={(e) => {
                                                   const file = e.target.files[0];
-                                                  if(file) handleUpdatePartImage(file, part);
+                                                  if (file) handleUpdatePartImage(file, part);
                                                   e.target.value = null;
-                                                }} 
+                                                }}
                                               />
                                             </label>
                                             <button
@@ -2572,24 +2591,127 @@ const Setting = () => {
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
-                      <label htmlFor="shop" className="block text-sm font-bold text-gray-700 ml-1">Shop Assigned</label>
-                      <select
-                        id="shop"
-                        name="shop"
-                        value={userForm.shop}
-                        onChange={handleUserInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
-                      >
-                        <option value="">Choose a shop...</option>
-                        {(shops?.length > 0 ? shops : (shopsOnly || []))
-                          .length > 0 ? (
-                            [...new Set((shops?.length > 0 ? shops : shopsOnly).map(s => s.shop || s.shop_name))]
-                              .filter(Boolean)
-                              .map((shopName, index) => (
-                                <option key={index} value={shopName}>{shopName}</option>
-                              ))
-                          ) : null}
-                      </select>
+                      <label className="block text-sm font-bold text-gray-700 ml-1">
+                        Shop Assigned
+                        {userForm.role === 'HOD' && (
+                          <span className="ml-2 text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                            Multi-select • data visible in Checklist
+                          </span>
+                        )}
+                      </label>
+
+                      {userForm.role === 'HOD' ? (
+                        /* ── HOD: checkboxes → stored as user_access = "SHOP1, SHOP2" ── */
+                        <div className="w-full bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+                          {/* Header */}
+                          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
+                            <span className="text-xs text-gray-500 font-medium">
+                              {(() => {
+                                const cnt = (userForm.user_access || '').split(',').map(s => s.trim()).filter(Boolean).length;
+                                return cnt === 0 ? 'No shops selected' : `${cnt} shop${cnt > 1 ? 's' : ''} selected`;
+                              })()}
+                            </span>
+                            {(userForm.user_access || '').trim() && (
+                              <button
+                                type="button"
+                                onClick={() => setUserForm(prev => ({ ...prev, user_access: '', shop: '' }))}
+                                className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                              >
+                                Clear all
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Checkbox list */}
+                          <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                            {[
+                              ...new Set(
+                                (shops?.length > 0 ? shops : (shopsOnly || []))
+                                  .map(s => s.shop || s.shop_name)
+                                  .filter(Boolean)
+                              )
+                            ].map((shopName, index) => {
+                              const selectedShops = (userForm.user_access || '')
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(Boolean);
+                              const isChecked = selectedShops.includes(shopName);
+                              const isPrimary = selectedShops[0] === shopName && isChecked;
+                              return (
+                                <label
+                                  key={index}
+                                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                                    isChecked ? 'bg-purple-50 hover:bg-purple-100' : 'hover:bg-gray-100'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleHodShopToggle(shopName)}
+                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                  />
+                                  <span className={`text-sm font-medium flex-1 ${
+                                    isChecked ? 'text-purple-700' : 'text-gray-700'
+                                  }`}>
+                                    {shopName}
+                                  </span>
+                                  {isPrimary && (
+                                    <span className="text-[10px] text-purple-400 font-semibold">Primary</span>
+                                  )}
+                                </label>
+                              );
+                            })}
+                            {(shops?.length === 0 && (shopsOnly || []).length === 0) && (
+                              <p className="px-4 py-3 text-sm text-gray-400 italic">No shops available</p>
+                            )}
+                          </div>
+
+                          {/* Selected tag strip */}
+                          {(userForm.user_access || '').trim() && (
+                            <div className="flex flex-wrap gap-1.5 px-4 py-2.5 border-t border-gray-200 bg-white">
+                              {(userForm.user_access || '')
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(Boolean)
+                                .map((s, i) => (
+                                  <span
+                                    key={i}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold"
+                                  >
+                                    {s}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleHodShopToggle(s)}
+                                      className="hover:text-purple-900 leading-none"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* ── Non-HOD: original single-select dropdown ── */
+                        <select
+                          id="shop"
+                          name="shop"
+                          value={userForm.shop}
+                          onChange={handleUserInputChange}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                        >
+                          <option value="">Choose a shop...</option>
+                          {[
+                            ...new Set(
+                              (shops?.length > 0 ? shops : (shopsOnly || []))
+                                .map(s => s.shop || s.shop_name)
+                                .filter(Boolean)
+                            )
+                          ].map((shopName, index) => (
+                            <option key={index} value={shopName}>{shopName}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     {/* Designation Field — shown for both new and edit */}
@@ -2622,7 +2744,7 @@ const Setting = () => {
                                 className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
                               />
                             </div>
-                            <span className={`text-xs font-bold transition-colors ${ (userForm.page_access || []).includes(page.label) ? 'text-purple-700' : 'text-gray-500 group-hover:text-gray-700' }`}>
+                            <span className={`text-xs font-bold transition-colors ${(userForm.page_access || []).includes(page.label) ? 'text-purple-700' : 'text-gray-500 group-hover:text-gray-700'}`}>
                               {page.label}
                             </span>
                           </label>
@@ -2692,7 +2814,7 @@ const Setting = () => {
                     )}
 
                   </div>
-                  
+
                   <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 p-6 rounded-[2rem] border border-purple-100/50 flex items-center justify-between group transition-all hover:shadow-xl hover:shadow-purple-100/30">
                     <div className="flex items-center gap-4">
                       <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center text-purple-600 shadow-sm border border-purple-100 group-hover:scale-110 transition-transform">
@@ -2704,8 +2826,8 @@ const Setting = () => {
                       </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer scale-110">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         name="can_self_assign"
                         checked={userForm.can_self_assign}
                         onChange={(e) => {
@@ -2720,7 +2842,7 @@ const Setting = () => {
                             return { ...prev, can_self_assign: checked, page_access: newPageAccess };
                           });
                         }}
-                        className="sr-only peer" 
+                        className="sr-only peer"
                       />
                       <div className="w-12 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
                     </label>

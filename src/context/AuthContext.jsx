@@ -12,12 +12,13 @@ const STORAGE_KEY = 'drinqkart_user';
 
 const syncSubsystemSessions = (userObj) => {
   if (!userObj) return;
-  // 1. Checklist Delegation Keys
+  const accessValue = userObj.user_access || userObj.shop_name || userObj.shop || "";
   localStorage.setItem('user-name', userObj.user_name || userObj.username || "");
   localStorage.setItem('user-id', userObj.id || "");
   localStorage.setItem('role', userObj.role || "");
   localStorage.setItem('email_id', userObj.email_id || userObj.email || "");
-  localStorage.setItem('user_access', userObj.user_access || "");
+  localStorage.setItem('user_access', accessValue);
+  localStorage.setItem('shop_name', userObj.shop_name || userObj.shop || "");
   localStorage.setItem('profile_image', userObj.profile_image || "");
   localStorage.setItem('can_self_assign', userObj.can_self_assign === true ? "true" : "false");
   localStorage.setItem('designation', userObj.designation || userObj.Designation || "");
@@ -154,10 +155,12 @@ export const AuthProvider = ({ children }) => {
       let isRoleValid = false;
       if (selectedRole === 'admin') {
         isRoleValid = isMaster || userRole === 'admin';
+      } else if (selectedRole === 'HOD') {
+        isRoleValid = userRole === 'hod';
       } else if (selectedRole === 'manager') {
         isRoleValid = userRole === 'manager';
       } else if (selectedRole === 'user') {
-        isRoleValid = !isMaster && userRole !== 'admin' && userRole !== 'manager';
+        isRoleValid = !isMaster && userRole !== 'admin' && userRole !== 'manager' && userRole !== 'hod';
       }
 
       if (!isRoleValid) {
@@ -185,10 +188,12 @@ export const AuthProvider = ({ children }) => {
         let isRoleValid = false;
         if (selectedRole === 'admin') {
           isRoleValid = isMaster || userRole === 'admin';
+        } else if (selectedRole === 'HOD') {
+          isRoleValid = userRole === 'hod';
         } else if (selectedRole === 'manager') {
           isRoleValid = userRole === 'manager';
         } else if (selectedRole === 'user') {
-          isRoleValid = !isMaster && userRole !== 'admin' && userRole !== 'manager';
+          isRoleValid = !isMaster && userRole !== 'admin' && userRole !== 'manager' && userRole !== 'hod';
         }
 
         if (!isRoleValid) {

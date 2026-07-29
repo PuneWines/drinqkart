@@ -152,7 +152,8 @@ export default function WorkDetails() {
         .map(s => s.trim())
         .filter(Boolean);
 
-      if (role === "manager" && !userShopsList.some(s => managerShops.includes(s))) {
+      const isManagerOrHOD = (role || "").toLowerCase() === "manager" || (role || "").toLowerCase() === "hod";
+      if (isManagerOrHOD && managerShops.length > 0 && !userShopsList.some(s => managerShops.includes(s))) {
         return false;
       }
 
