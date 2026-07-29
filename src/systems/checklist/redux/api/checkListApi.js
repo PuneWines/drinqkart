@@ -4,9 +4,9 @@ import supabase from "../../SupabaseClient";
 // 1. COMPLETE API FUNCTIONS - checkListApi.js
 
 export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchTerm = '') => {
-  const role = localStorage.getItem('role');
+  const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
   const username = localStorage.getItem('user-name');
-  const userAccess = localStorage.getItem('user_access');
+  const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
 
   try {
     const today = new Date();
@@ -21,9 +21,6 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
     let query = supabase
       .from('checklist')
       .select('*', { count: 'exact' })
-      // KEY FIX: Order by planned_date ascending (oldest/overdue first)
-      // and remove hard lte filter so upcoming tasks can also be seen.
-      // UI deduplication will handle not showing 300+ future rows.
       .order('planned_date', { ascending: true })
       .is("submission_date", null)
       .is("status", null)
@@ -36,19 +33,36 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
     }
 
     // Apply role filter
-    if (role === 'user' && username) {
+    if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
-      // Filter by reports for HOD
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
-      // Filter by shops in user_access for admin
-      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s.toLowerCase() !== 'all');
+    } else if (roleUpper === 'HOD' || roleUpper === 'MANAGER') {
+      const rawShops = userAccess
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s && s.toLowerCase() !== 'all');
+
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
+    } else if (roleUpper === 'ADMIN' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
+      const rawShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s.toLowerCase() !== 'all');
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
       if (allowedShops.length > 0) {
         query = query.in('shop_name', allowedShops);
       }
@@ -75,9 +89,9 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
   const itemsPerPage = 50;
   const start = (page - 1) * itemsPerPage;
 
-  const role = localStorage.getItem('role');
+  const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
   const username = localStorage.getItem('user-name');
-  const userAccess = localStorage.getItem('user_access');
+  const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
 
   try {
     let query = supabase
@@ -94,19 +108,36 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
       query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,shop_name.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
     }
 
-    if (role === 'user' && username) {
+    if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
-      // Filter by reports for HOD
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
-      // Filter by shops in user_access for admin
-      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s.toLowerCase() !== 'all');
+    } else if (roleUpper === 'HOD' || roleUpper === 'MANAGER') {
+      const rawShops = userAccess
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s && s.toLowerCase() !== 'all');
+
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
+    } else if (roleUpper === 'ADMIN' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
+      const rawShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s.toLowerCase() !== 'all');
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
       if (allowedShops.length > 0) {
         query = query.in('shop_name', allowedShops);
       }

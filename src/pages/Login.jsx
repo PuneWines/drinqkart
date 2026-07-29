@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
-import { ShieldCheck, User, Briefcase } from 'lucide-react';
+import { ShieldCheck, User, Briefcase, Crown } from 'lucide-react';
 
 const Login = () => {
   const [roleType, setRoleType] = useState('user'); // 'admin' | 'user' | 'manager'
@@ -36,8 +36,9 @@ const Login = () => {
 
   const roleOptions = [
     { id: 'admin', label: 'Admin', icon: ShieldCheck },
-    { id: 'user', label: 'User', icon: User },
+    { id: 'HOD', label: 'HOD', icon: Crown },
     { id: 'manager', label: 'Manager', icon: Briefcase },
+    { id: 'user', label: 'User', icon: User },
   ];
 
   return (
@@ -104,7 +105,7 @@ const Login = () => {
               <label className="block text-[10px] uppercase tracking-widest text-[#1A1A1A]/60 mb-2 font-bold">
                 Select Login Role / Portal
               </label>
-              <div className="grid grid-cols-3 gap-2 bg-[#FAFAFA] p-1.5 ">
+              <div className="grid grid-cols-4 gap-2 bg-[#FAFAFA] p-1.5 ">
                 {roleOptions.map((opt) => {
                   const Icon = opt.icon;
                   const isSelected = roleType === opt.id;

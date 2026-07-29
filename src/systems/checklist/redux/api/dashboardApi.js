@@ -61,13 +61,20 @@ export const fetchDashboardDataApi = async (
     // Apply role-based filtering first
     if (role === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (role === 'HOD' || role === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     }
 
     // Apply shop filter if provided (for checklist and delegation)
@@ -215,13 +222,20 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     // Apply role-based filtering
     if (role === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (role === 'HOD' || role === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     }
 
     // Apply staff filter
@@ -371,13 +385,20 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     // Apply filters
     if (upperRole === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }
@@ -530,13 +551,20 @@ export const fetchStaffTasksDataApi = async (
     // Apply role-based filtering
     if (role === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (role === 'HOD' || role === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     }
 
     // Apply staff filter if provided
@@ -907,13 +935,20 @@ export const getStaffTasksCountApi = async (
     // Apply role-based filtering
     if (role === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (role === 'HOD' || role === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     }
 
     // Apply staff filter
@@ -1701,13 +1736,20 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
     const upperRole = (role || "").toUpperCase();
     if (upperRole === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }
@@ -1821,13 +1863,20 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     // Apply filters
     if (upperRole === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }
@@ -1935,13 +1984,20 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     // Apply filters
     if (upperRole === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in(nameField, reportingUsers);
+    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const allowedShops = [...new Set(
+        rawShops.flatMap(s => [
+          s,
+          s.toUpperCase(),
+          s.toLowerCase(),
+          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+        ])
+      )];
+      if (allowedShops.length > 0) {
+        query = query.in('shop_name', allowedShops);
+      }
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }

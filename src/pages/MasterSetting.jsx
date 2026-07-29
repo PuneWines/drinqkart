@@ -416,7 +416,17 @@ export default function MasterSetting() {
         </div>
 
         <div className="flex items-center gap-3">
-         
+          <button
+            onClick={() => {
+              setNewUserForm({ username: '', password: '', role: 'user', email: '', systemPreset: 'purchase' });
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] rounded-none text-xs font-bold uppercase tracking-widest transition-colors shadow-sm cursor-pointer"
+          >
+            <UserPlus size={14} />
+            <span>Add User</span>
+          </button>
+
           <button
             onClick={fetchUsers}
             disabled={loading}
@@ -849,8 +859,9 @@ export default function MasterSetting() {
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                   >
                     <option value="user">User / Operator</option>
-                    <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
+                    <option value="HOD">HOD</option>
+                    <option value="manager">Manager</option>
                   </select>
                 </div>
 
