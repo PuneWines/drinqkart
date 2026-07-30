@@ -1,368 +1,3 @@
-// import { useState, useEffect } from "react";
-
-// import {
-//   FaWallet,
-//   FaMoneyBillWave,
-//   FaChartLine,
-//   FaCalendar,
-// } from "react-icons/fa";
-// import TransactionTable from "../components/TransactionTable";
-// import { Transaction } from "../types";
-
-// export default function Dashboard() {
-//   const [transactions, setTransactions] = useState<Transaction[]>([]);
-//   const [isLoading, setIsLoading] = useState(true);
-//   const [openingBalance, setOpeningBalance] = useState(50000);
-//   const [monthlyBudget, setMonthlyBudget] = useState(() => {
-//     const savedBudget = localStorage.getItem('monthlyBudget');
-//     return savedBudget !== null ? parseFloat(savedBudget) : 75000;
-//   });
-//   const [isEditingBudget, setIsEditingBudget] = useState(false);
-
-//   const scriptUrl = "https://script.google.com/macros/s/AKfycbx5dryxS1R5zp6myFfUlP1QPimufTqh5hcPcFMNcAJ-FiC-hyQL9mCkgHSbLkOiWTibeg/exec";
-
-//   // Fetch transactions from Google Sheets
-//   useEffect(() => {
-//     fetchTransactions();
-//   }, []);
-
-//   const fetchTransactions = async () => {
-//     try {
-//       setIsLoading(true);
-
-//       const response = await fetch(`${scriptUrl}?sheet=Patty Expence&action=fetch`);
-//       const result = await response.json();
-
-//       if (result.success && result.data) {
-//         const data = result.data.slice(1); // Skip header row
-
-//         // Map sheet data to Transaction format
-//         const formattedTransactions: Transaction[] = data.map((row: any[], index: number) => ({
-//           id: (index + 1).toString(),
-//           rowIndex: index + 2, // Store actual sheet row index (header is row 1, data starts at row 2)
-//           date: row[1] || "", // Column B - Date
-//           category: getCategoryFromRow(row),
-//           description: generateDescription(row),
-//           amount: calculateRowTotal(row),
-//           status: "Approved",
-//           remarks: "",
-//         })).filter((t: Transaction) => t.amount > 0); // Only show rows with expenses
-
-//         setTransactions(formattedTransactions);
-//       }
-//     } catch (error) {
-//       console.error('Error fetching transactions:', error);
-//     } finally {
-//       setIsLoading(false);
-//     }
-//   };
-
-//   // Helper function to determine category based on which field has value
-//   const getCategoryFromRow = (row: any[]) => {
-//     if (parseFloat(row[4]) > 0) return "Tea & Snacks";
-//     if (parseFloat(row[5]) > 0) return "Water Jar";
-//     if (parseFloat(row[6]) > 0) return "Electricity Bill";
-//     if (parseFloat(row[7]) > 0) return "Recharge";
-//     if (parseFloat(row[8]) > 0) return "Post Office";
-//     if (parseFloat(row[9]) > 0) return "Customer Discount";
-//     if (parseFloat(row[10]) > 0) return "Repair & Maintenance";
-//     if (parseFloat(row[11]) > 0) return "Stationary";
-//     if (parseFloat(row[12]) > 0) return "Petrol";
-//     if (parseFloat(row[13]) > 0) return "Patil Petrol";
-//     if (parseFloat(row[14]) > 0) return "Incentive";
-//     if (parseFloat(row[15]) > 0) return "Advance";
-//     if (parseFloat(row[17]) > 0) return "Breakage";
-//     if (parseFloat(row[19]) > 0) return "Excise/Police";
-//     if (parseFloat(row[20]) > 0) return "Desi Bhada";
-//     if (parseFloat(row[21]) > 0) return "Room Expense";
-//     if (parseFloat(row[22]) > 0) return "Office Expense";
-//     if (parseFloat(row[23]) > 0) return "Personal Expense";
-//     if (parseFloat(row[24]) > 0) return "Miscellaneous";
-//     if (parseFloat(row[25]) > 0) return "Credit Card Charges";
-//     return "Other";
-//   };
-
-//   // Helper function to generate description
-//   const generateDescription = (row: any[]) => {
-//     const category = getCategoryFromRow(row);
-//     const date = row[1] || "";
-//     return `${category} expense for ${date}`;
-//   };
-
-//   // Helper function to calculate total expenses from a row
-//   const calculateRowTotal = (row: any[]) => {
-//     return [
-//       parseFloat(row[4]) || 0,   // Tea & Snacks
-//       parseFloat(row[5]) || 0,   // Water Jar
-//       parseFloat(row[6]) || 0,   // Electricity Bill
-//       parseFloat(row[7]) || 0,   // Recharge
-//       parseFloat(row[8]) || 0,   // Post Office
-//       parseFloat(row[9]) || 0,   // Customer Discount
-//       parseFloat(row[10]) || 0,  // Repair & Maintenance
-//       parseFloat(row[11]) || 0,  // Stationary
-//       parseFloat(row[12]) || 0,  // Petrol
-//       parseFloat(row[13]) || 0,  // Patil Petrol
-//       parseFloat(row[14]) || 0,  // Incentive
-//       parseFloat(row[15]) || 0,  // Advance
-//       parseFloat(row[17]) || 0,  // Breakage
-//       parseFloat(row[19]) || 0,  // Excise/Police
-//       parseFloat(row[20]) || 0,  // Desi Bhada
-//       parseFloat(row[21]) || 0,  // Room Expense
-//       parseFloat(row[22]) || 0,  // Office Expense
-//       parseFloat(row[23]) || 0,  // Personal Expense
-//       parseFloat(row[24]) || 0,  // Miscellaneous
-//       parseFloat(row[25]) || 0,  // Credit Card Charges
-//     ].reduce((sum, val) => sum + val, 0);
-//   };
-
-//   const handleDeleteTransaction = async (id: string) => {
-//     if (!confirm("Are you sure you want to delete this transaction?")) {
-//       return;
-//     }
-
-//     try {
-//       // Find the transaction to get the actual row index
-//       const transaction = transactions.find(t => t.id === id);
-//       if (!transaction || !transaction.rowIndex) {
-//         alert("Transaction not found");
-//         return;
-//       }
-
-//       // Send delete request to Google Sheets
-//       const formData = new URLSearchParams();
-//       formData.append('sheetName', 'Patty Expence');
-//       formData.append('action', 'delete');
-//       formData.append('rowIndex', transaction.rowIndex.toString());
-
-//       const response = await fetch(scriptUrl, {
-//         method: 'POST',
-//         body: formData
-//       });
-
-//       const result = await response.json();
-
-//       if (result.success) {
-//         // Remove from local state
-//         setTransactions(transactions.filter((t) => t.id !== id));
-//         alert("Transaction deleted successfully!");
-
-//         // Refresh data to get updated row indices
-//         fetchTransactions();
-//       } else {
-//         alert("Failed to delete transaction: " + result.error);
-//       }
-//     } catch (error) {
-//       console.error('Error deleting transaction:', error);
-//       alert("Error deleting transaction. Please try again.");
-//     }
-//   };
-
-//   // Handler for budget editing
-//   const handleBudgetSave = () => {
-//     setIsEditingBudget(false);
-//     localStorage.setItem('monthlyBudget', monthlyBudget.toString());
-//   };
-
-//   const handleBudgetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-//     const value = parseFloat(e.target.value) || 0;
-//     setMonthlyBudget(value);
-//   };
-
-//   const totalExpenses = transactions.reduce((sum, t) => sum + t.amount, 0);
-//   const closingBalance = openingBalance - totalExpenses;
-//   const totalTransactions = transactions.length;
-// const approvedTransactions = transactions.filter(
-//   (t) => t.status === "Approved"
-// ).length;
-// const pendingTransactions = transactions.filter(
-//   (t) => t.status === "Pending"
-// ).length;
-// const averageExpense =
-//   totalTransactions > 0 ? totalExpenses / totalTransactions : 0;
-
-//   const stats = [
-//     {
-//       title: "Opening Balance",
-//       value: openingBalance,
-//       icon: FaWallet,
-//       color: "bg-blue-500",
-//       textColor: "text-blue-600",
-//       bgLight: "bg-blue-50",
-//     },
-//     {
-//       title: "Total Expenses",
-//       value: totalExpenses,
-//       icon: FaMoneyBillWave,
-//       color: "bg-red-500",
-//       textColor: "text-red-600",
-//       bgLight: "bg-red-50",
-//     },
-//     {
-//       title: "Closing Balance",
-//       value: closingBalance,
-//       icon: FaChartLine,
-//       color: "bg-green-500",
-//       textColor: "text-green-600",
-//       bgLight: "bg-green-50",
-//     },
-//     {
-//       title: "Monthly Budget",
-//       value: monthlyBudget,
-//       icon: FaCalendar,
-//       color: "bg-purple-500",
-//       textColor: "text-purple-600",
-//       bgLight: "bg-purple-50",
-//     },
-//     {
-//       title: "Total Transactions",
-//       value: totalTransactions,
-//       icon: FaMoneyBillWave,
-//       color: "bg-indigo-500",
-//       textColor: "text-indigo-600",
-//       bgLight: "bg-indigo-50",
-//     },
-//     {
-//       title: "Approved Transactions",
-//       value: approvedTransactions,
-//       icon: FaChartLine,
-//       color: "bg-green-500",
-//       textColor: "text-green-600",
-//       bgLight: "bg-green-50",
-//     },
-//     {
-//       title: "Pending Transactions",
-//       value: pendingTransactions,
-//       icon: FaWallet,
-//       color: "bg-yellow-500",
-//       textColor: "text-yellow-600",
-//       bgLight: "bg-yellow-50",
-//     },
-//     {
-//       title: "Avg Expense",
-//       value: Math.round(averageExpense),
-//       icon: FaCalendar,
-//       color: "bg-pink-500",
-//       textColor: "text-pink-600",
-//       bgLight: "bg-pink-50",
-//     },
-//   ];
-
-//   const formatCurrency = (amount: number) => {
-//     return new Intl.NumberFormat("en-IN", {
-//       style: "currency",
-//       currency: "INR",
-//       minimumFractionDigits: 0,
-//       maximumFractionDigits: 0,
-//     }).format(amount);
-//   };
-
-//   if (isLoading) {
-//     return (
-//       <div className="flex items-center justify-center h-64">
-//         <div className="text-center">
-//           <svg className="animate-spin h-10 w-10 text-[#2a5298] mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-//             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-//             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-//           </svg>
-//           <p className="text-gray-600">Loading transactions...</p>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div className="space-y-6">
-//       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-//         {stats.map((stat, index) => {
-//           const Icon = stat.icon;
-
-//           // Special handling for Monthly Budget card (index 3)
-//           if (index === 3) {
-//             return (
-//               <div
-//                 key={index}
-//                 className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all duration-200"
-//               >
-//                 <div className="flex items-center justify-between mb-2">
-//                   <div className={`${stat.bgLight} p-2 rounded-lg`}>
-//                     <Icon className={`${stat.textColor} text-xl`} />
-//                   </div>
-//                 </div>
-//                 <p className="text-xs font-medium text-gray-600 mb-1">{stat.title}</p>
-
-//                 {isEditingBudget ? (
-//                   <div className="flex items-center gap-2">
-//                     <input
-//                       type="number"
-//                       value={monthlyBudget}
-//                       onChange={handleBudgetChange}
-//                       className="text-lg md:text-xl font-bold text-gray-800 border border-blue-500 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-//                       autoFocus
-//                       onKeyDown={(e) => {
-//                         if (e.key === 'Enter') handleBudgetSave();
-//                         if (e.key === 'Escape') setIsEditingBudget(false);
-//                       }}
-//                     />
-//                     <button
-//                       onClick={handleBudgetSave}
-//                       className="text-green-600 hover:text-green-700"
-//                       title="Save"
-//                     >
-//                       ✓
-//                     </button>
-//                     <button
-//                       onClick={() => setIsEditingBudget(false)}
-//                       className="text-red-600 hover:text-red-700"
-//                       title="Cancel"
-//                     >
-//                       ✗
-//                     </button>
-//                   </div>
-//                 ) : (
-//                   <div 
-//                     className="flex items-center justify-between cursor-pointer group"
-//                     onClick={() => setIsEditingBudget(true)}
-//                   >
-//                     <p className="text-lg md:text-xl font-bold text-gray-800">
-//                       {formatCurrency(stat.value)}
-//                     </p>
-//                     <span className="text-gray-400 text-sm opacity-0 group-hover:opacity-100 transition-opacity">
-//                       ✏️
-//                     </span>
-//                   </div>
-//                 )}
-//               </div>
-//             );
-//           }
-
-//           // Original card rendering for other stats
-//           return (
-//             <div
-//               key={index}
-//               className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all duration-200"
-//             >
-//               <div className="flex items-center justify-between mb-2">
-//                 <div className={`${stat.bgLight} p-2 rounded-lg`}>
-//                   <Icon className={`${stat.textColor} text-xl`} />
-//                 </div>
-//               </div>
-//               <p className="text-xs font-medium text-gray-600 mb-1">{stat.title}</p>
-//               <p className="text-lg md:text-xl font-bold text-gray-800">
-//                 {formatCurrency(stat.value)}
-//               </p>
-//             </div>
-//           );
-//         })}
-//       </div>
-
-//       <TransactionTable
-//         transactions={transactions}
-//         onDelete={handleDeleteTransaction}
-//       />
-//     </div>
-//   );
-// }
-
 import { useState, useEffect } from "react";
 import {
   FaWallet,
@@ -371,6 +6,7 @@ import {
   FaCalendar,
   FaFilePdf,
   FaFileExcel,
+  FaStore,
 } from "react-icons/fa";
 import TransactionTable from "../components/TransactionTable";
 import { Transaction } from "../types";
@@ -391,15 +27,15 @@ const formatCurrency = (amount: number) => {
 const convertPettyExpensesToSheetRows = (records: any[]): any[][] => {
   const rows: any[][] = [];
   const headers = [
-    "Timestamp", "Patty Id", "Date", "Opening Qty", "Closing Balance", "Shop Name", 
-    "Tea & Snacks", "Water Jar", "Electricity Bill", "Recharge", "Post Office", 
-    "Customer Discount", "Repair & Maintenance", "Stationary", "Petrol", "Patil Petrol", 
-    "Incentive Amount", "Incentive Name", "Advance Amount", "Advance Name", 
-    "Breakage Amount", "Breakage Name", "Shop Name One", "Shop Amount One", 
-    "Medical Person", "Medical Amount", "Extra Expense Name", "Extra Expense Amount", 
-    "Excise/Police", "Desi Bhada", "Room Expense", "Office Expense", "Personal Expense", 
-    "Misc Expense", "Misc Remarks", "Purchase Voucher No.", "Vendor Payment", 
-    "Difference Amount", "Credit Card Charges", "Username", "Total Exp. (Spent)", 
+    "Timestamp", "Patty Id", "Date", "Opening Qty", "Closing Balance", "Shop Name",
+    "Tea & Snacks", "Water Jar", "Electricity Bill", "Recharge", "Post Office",
+    "Customer Discount", "Repair & Maintenance", "Stationary", "Petrol", "Patil Petrol",
+    "Incentive Amount", "Incentive Name", "Advance Amount", "Advance Name",
+    "Breakage Amount", "Breakage Name", "Shop Name One", "Shop Amount One",
+    "Medical Person", "Medical Amount", "Extra Expense Name", "Extra Expense Amount",
+    "Excise/Police", "Desi Bhada", "Room Expense", "Office Expense", "Personal Expense",
+    "Misc Expense", "Misc Remarks", "Purchase Voucher No.", "Vendor Payment",
+    "Difference Amount", "Credit Card Charges", "Username", "Total Exp. (Spent)",
     "Transaction Status", "Total Amount"
   ];
   rows.push(headers);
@@ -630,12 +266,53 @@ export default function Dashboard() {
 
   const [selectedTallySheet, setSelectedTallySheet] = useState<string>("All");
 
-  // const scriptUrl =
-  //   "https://script.google.com/macros/s/AKfycbx5dryxS1R5zp6myFfUlP1QPimufTqh5hcPcFMNcAJ-FiC-hyQL9mCkgHSbLkOiWTibeg/exec";
+  // --- SHOP FILTER STATE ---
+  const [selectedShop, setSelectedShop] = useState<string>("All");
+  const [dbShops, setDbShops] = useState<string[]>([]);
 
-  // --- Summary Data State & Effect (Moved up to avoid Hook errors) ---
+  useEffect(() => {
+    const fetchDbShops = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('shop')
+          .select('shop_name')
+          .order('shop_name', { ascending: true });
+        if (!error && data) {
+          const names = data.map((s: any) => s.shop_name).filter(Boolean);
+          setDbShops(names);
+        }
+      } catch (e) {
+        console.error("Error fetching shops from public.shop:", e);
+      }
+    };
+    fetchDbShops();
+  }, []);
 
+  // --- Get unique shops from public.shop and data ---
+  const getUniqueShops = () => {
+    const shopSet = new Set<string>(dbShops);
+    // From Petty Cash data
+    if (sheetCache["Patty Expence"]) {
+      sheetCache["Patty Expence"].forEach((row: any[]) => {
+        const shop = row[5]?.toString().trim() || "";
+        if (shop) shopSet.add(shop);
+      });
+    }
+    // From Tally data
+    tallySheets.forEach(sheet => {
+      if (sheet !== "All" && sheetCache[sheet]) {
+        sheetCache[sheet].forEach((row: any[]) => {
+          const shop = row[4]?.toString().trim() || "";
+          if (shop) shopSet.add(shop);
+        });
+      }
+    });
+    return Array.from(shopSet).sort();
+  };
 
+  const shopOptions = getUniqueShops();
+
+  // --- Summary Data State & Effect ---
   const [pettySummaryData, setPettySummaryData] = useState<SummaryRow[]>([]);
   const [tallySummaryData, setTallySummaryData] = useState<TallySummaryRow[]>([]);
   const [summaryStartDate, setSummaryStartDate] = useState(""); // YYYY-MM-DD
@@ -706,17 +383,36 @@ export default function Dashboard() {
     return isoDate >= start && isoDate <= end;
   };
 
-  const filterDataByUser = (data: any[], sheetName: string) => {
-    if (!currentUser || currentUser.role.toLowerCase() === 'admin') return data;
-    if (currentUser.shops === 'all') return data;
+  const filterDataByUserAndShop = (data: any[], sheetName: string) => {
+    if (!currentUser || currentUser.role.toLowerCase() === 'admin') {
+      // If shop filter is active, filter by shop
+      if (selectedShop !== "All") {
+        const shopColIdx = sheetName === 'Patty Expence' ? 5 : 4;
+        return data.filter((row: any[]) => {
+          const shopName = row[shopColIdx]?.toString().trim() || '';
+          return shopName === selectedShop;
+        });
+      }
+      return data;
+    }
 
-    // Correct column indices for Shop Name
-    // Petty Expence: index 5
-    // Cash Tally sheets: index 4
+    if (currentUser.shops === 'all') {
+      // If shop filter is active, filter by shop
+      if (selectedShop !== "All") {
+        const shopColIdx = sheetName === 'Patty Expence' ? 5 : 4;
+        return data.filter((row: any[]) => {
+          const shopName = row[shopColIdx]?.toString().trim() || '';
+          return shopName === selectedShop;
+        });
+      }
+      return data;
+    }
+
     const shopColIdx = sheetName === 'Patty Expence' ? 5 : 4;
-
     return data.filter((row: any[]) => {
       const shopName = row[shopColIdx]?.toString().trim() || '';
+      // If shop filter is active, also check against selectedShop
+      if (selectedShop !== "All" && shopName !== selectedShop) return false;
       return hasShopAccess(shopName);
     });
   };
@@ -784,19 +480,19 @@ export default function Dashboard() {
               payments: 0
             };
           }
-          
+
           const item = pettyGrouped[dateStr];
           item.dailyExpenses += (rec.tea_nasta || 0) + (rec.water_jar || 0) + (rec.light_bill || 0) + (rec.recharge || 0) + (rec.post_office || 0) + (rec.customer_discount || 0) + (rec.stationary || 0);
           item.maintenance += (rec.repair_maintenance || 0);
           item.fuel += (rec.petrol || 0) + (rec.patil_petrol || 0);
-          
+
           let otherSum = (rec.excise_police || 0) + (rec.desi_bhada || 0) + (rec.room_expense || 0) + (rec.office_expense || 0) + (rec.personal_expense || 0) + (rec.misc_expense || 0) + (rec.credit_card_charges || 0) + (rec.difference_amount || 0);
-          
+
           const otherArray = Array.isArray(rec.other_expenses) ? rec.other_expenses : [];
           otherArray.forEach((o: any) => {
             otherSum += (parseFloat(o.incentiveAmount) || 0) + (parseFloat(o.advance) || 0) + (parseFloat(o.breakage) || 0) + (parseFloat(o.shopAmountOne) || 0) + (parseFloat(o.medicalAmount) || 0) + (parseFloat(o.extraExpenseAmount) || 0);
           });
-          
+
           item.otherExpenses += otherSum;
           item.payments += (rec.other_vendor_payment || 0);
         });
@@ -924,15 +620,15 @@ export default function Dashboard() {
       ? (sourceData as SummaryRow[]).filter(row => isRowInRange(row.date))
       : (sourceData as TallySummaryRow[]).filter(row => {
         const rowCounter = (row.counterName || "").toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-        const matchesCounter = selectedTallySheet === "All" 
+        const matchesCounter = selectedTallySheet === "All"
           ? userTallyCounters.some(c => {
-              const tc = c.toLowerCase().replace(/[^a-z0-9]/g, '');
-              return tc.includes(rowCounter) || rowCounter.includes(tc);
-            })
+            const tc = c.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return tc.includes(rowCounter) || rowCounter.includes(tc);
+          })
           : (() => {
-              const sc = selectedTallySheet.toLowerCase().replace(/[^a-z0-9]/g, '');
-              return sc.includes(rowCounter) || rowCounter.includes(sc);
-            })();
+            const sc = selectedTallySheet.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return sc.includes(rowCounter) || rowCounter.includes(sc);
+          })();
         return matchesCounter && isRowInRange(row.date);
       });
 
@@ -988,6 +684,7 @@ export default function Dashboard() {
                   <p style="margin: 0; font-size: 15px; color: #2a5298;">
                     Report Period: <strong>${formattedPeriodStart}</strong> to <strong>${formattedPeriodEnd}</strong>
                   </p>
+                  ${selectedShop !== "All" ? `<p style="margin: 5px 0 0 0; font-size: 14px; color: #2a5298;">Shop: <strong>${selectedShop}</strong></p>` : ''}
                 </div>
 
                 <div style="background-color: #fcfcfc; padding: 15px; border-radius: 6px; margin-bottom: 30px; border-left: 5px solid #007bff;">
@@ -1133,15 +830,21 @@ export default function Dashboard() {
 
       const headers = rawRows[headerIdx];
       const dateColIdx = headers.findIndex((c: any) => c?.toString().trim() === "Date") ?? 2;
+      const shopColIdx = headers.findIndex((c: any) => c?.toString().trim() === "Shop Name") ?? 5;
 
       const filteredData = rawRows.slice(headerIdx + 1).filter(r => {
         if (!r[dateColIdx]) return false;
-        return isRowInRange(r[dateColIdx].toString());
+        if (!isRowInRange(r[dateColIdx].toString())) return false;
+        // Filter by selected shop
+        if (selectedShop !== "All") {
+          const shop = r[shopColIdx]?.toString().trim() || "";
+          return shop === selectedShop;
+        }
+        return true;
       });
 
       // Slice data to include only up to 'Credit Card Charges' (Index 36) for Petty Cash
-      // as per user requirement.
-      const END_COL_INDEX = 37; // Slice is exclusive, so 37 includes up to index 36
+      const END_COL_INDEX = 37;
       const slicedHeaders = headers.slice(0, END_COL_INDEX);
       const slicedFiltered = filteredData.map((r: any[]) => r.slice(0, END_COL_INDEX));
 
@@ -1167,10 +870,17 @@ export default function Dashboard() {
         }
 
         const dateColIdx = rawRows[headerIdx].findIndex((c: any) => c?.toString().trim() === "Date") ?? 2;
+        const shopColIdx = rawRows[headerIdx].findIndex((c: any) => c?.toString().trim() === "Shop Name") ?? 4;
 
         const filtered = rawRows.slice(headerIdx + 1).filter(r => {
           if (!r[dateColIdx]) return false;
-          return isRowInRange(r[dateColIdx].toString());
+          if (!isRowInRange(r[dateColIdx].toString())) return false;
+          // Filter by selected shop
+          if (selectedShop !== "All") {
+            const shop = r[shopColIdx]?.toString().trim() || "";
+            return shop === selectedShop;
+          }
+          return true;
         });
 
         // If All Counters selected, prepend Sheet Name
@@ -1195,40 +905,27 @@ export default function Dashboard() {
     }
 
     // Calculate column sums
-    // Petty: Start from Opening Balance (Index 3) up to Credit Card Charges (Index 36)
-    // Tally: 
-    //   If Single Sheet: G to AO (6 to 40) - Include Void Sale (AO is Index 40)
-    //   If All Sheets: Shifted by 1 -> H to AP (7 to 41)
     const dataRows = worksheetData.slice(1);
     const colSums: (number | string)[] = [];
 
-    // Determine start/end indices based on sheet type and "All" selection
     let startCol, endCol;
 
     if (isPetty) {
       startCol = 3;
       endCol = 36;
     } else {
-      // Tally
       if (selectedTallySheet === "All") {
-        // Columns shifted by 1 due to "Sheet Name"
-        // Original G (6) -> H (7)
-        // Original AO (40) -> AP (41)
         startCol = 7;
         endCol = 41;
       } else {
-        // Original G (6) -> AO (40)
         startCol = 6;
         endCol = 40;
       }
     }
 
     for (let col = startCol; col <= endCol; col++) {
-      // Exclusions for Petty Cash:
-      // Index 5: Shop Name (String)
-      // Index 33: Purchase Voucher No (ID, do not sum)
       if (isPetty && (col === 5 || col === 33)) {
-        colSums.push(""); // Placeholder to maintain index alignment
+        colSums.push("");
         continue;
       }
 
@@ -1240,94 +937,83 @@ export default function Dashboard() {
       colSums.push(sum);
     }
 
-    // Grand Total logic
-    // Sum all calculated numeric sums in colSums
     const grandTotal = colSums.reduce((a, b) => {
       const val = typeof b === 'number' ? b : 0;
       return (typeof a === 'number' ? a : 0) + val;
     }, 0);
 
-    // Create workbook with ExcelJS for styling
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(sheetName);
 
     const maxCols = Math.max(worksheetData[0]?.length || 0, endCol + 1);
 
-    // Row 1: Column-wise sums (Light Red background - only cells with data)
     const colSumsRowData: any[] = new Array(maxCols).fill("");
     for (let i = 0; i < colSums.length; i++) {
       colSumsRowData[startCol + i] = colSums[i];
     }
     const colSumsRow = worksheet.addRow(colSumsRowData);
 
-    // Style Row 1 - Light Red (only cells with data)
     colSumsRow.eachCell({ includeEmpty: false }, (cell, _colNumber) => {
       if (cell.value !== "" && cell.value !== null && cell.value !== undefined) {
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFF6B6B' } // Light red
+          fgColor: { argb: 'FFFF6B6B' }
         };
         cell.font = {
           bold: true,
-          color: { argb: 'FFFFFFFF' } // White text
+          color: { argb: 'FFFFFFFF' }
         };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
       }
     });
 
-    // Row 2: Grand Total row (Dark Red background - only cells with data)
     const grandTotalRowData: any[] = new Array(maxCols).fill("");
     grandTotalRowData[2] = "Grand Total";
     grandTotalRowData[4] = grandTotal;
     const grandTotalRow = worksheet.addRow(grandTotalRowData);
 
-    // Style Row 2 - Dark Red (only cells with data)
     grandTotalRow.eachCell({ includeEmpty: false }, (cell, _colNumber) => {
       if (cell.value !== "" && cell.value !== null && cell.value !== undefined) {
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFB71C1C' } // Dark red
+          fgColor: { argb: 'FFB71C1C' }
         };
         cell.font = {
           bold: true,
-          color: { argb: 'FFFFFFFF' } // White text
+          color: { argb: 'FFFFFFFF' }
         };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
       }
     });
 
-    // Merge cells C-D and E-F in row 2
     worksheet.mergeCells('C2:D2');
     worksheet.mergeCells('E2:F2');
 
-    // Row 3: Header row (Blue background - only cells with data)
     const headerRow = worksheet.addRow(worksheetData[0]);
 
-    // Style Row 3 - Blue (only cells with data)
     headerRow.eachCell({ includeEmpty: false }, (cell, _colNumber) => {
       if (cell.value !== "" && cell.value !== null && cell.value !== undefined) {
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FF4A90D9' } // Blue
+          fgColor: { argb: 'FF4A90D9' }
         };
         cell.font = {
           bold: true,
-          color: { argb: 'FFFFFFFF' } // White text
+          color: { argb: 'FFFFFFFF' }
         };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
       }
     });
 
-    // Add data rows
     for (let i = 1; i < worksheetData.length; i++) {
       const processedRow = worksheetData[i].map(cell => {
         if (cell && typeof cell === 'string' && (
-          /^\d{4}-\d{2}-\d{2}T/.test(cell) || // ISO strings
+          /^\d{4}-\d{2}-\d{2}T/.test(cell) ||
           cell.includes('Z') ||
-          /^\d{1,2}[\/\-\.\s]\d{1,2}[\/\-\.\s]\d{2,4}/.test(cell) // Date-like strings
+          /^\d{1,2}[\/\-\.\s]\d{1,2}[\/\-\.\s]\d{2,4}/.test(cell)
         )) {
           return normalizeToISO(cell);
         }
@@ -1336,12 +1022,10 @@ export default function Dashboard() {
       worksheet.addRow(processedRow);
     }
 
-    // Set column widths
     for (let i = 1; i <= maxCols; i++) {
       worksheet.getColumn(i).width = 15;
     }
 
-    // Generate and download file
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
@@ -1352,11 +1036,6 @@ export default function Dashboard() {
     window.URL.revokeObjectURL(url);
   };
 
-
-  // --- Data Processing Helpers ---
-
-
-  // Helper to convert sheet rows into Transaction objects
   const mapRowsToTransactions = (rows: any[], sheetName: string, currentTotalCount: number): Transaction[] => {
     return rows.map((row: any[], index: number) => ({
       id: row[1] ? row[1].toString() : (currentTotalCount + index + 1).toString(),
@@ -1389,7 +1068,7 @@ export default function Dashboard() {
       transactionStatus: row[28] || "Pending",
       category: getCategoryFromRow(row),
       description: generateDescription(row),
-      amount: parseFloat(row[38]) || 0, // Using Total Exp. from Column AM (Index 38) as requested
+      amount: parseFloat(row[38]) || 0,
       status: row[26] || "Pending",
       remarks: "",
       otherPurchaseVoucherNo: "",
@@ -1399,9 +1078,7 @@ export default function Dashboard() {
     }));
   };
 
-
-
-  // --- Effect 1: Fetch Data on Tab/User Change (ONLY) ---
+  // --- Effect 1: Fetch Data on Tab/User/Shop Change ---
   useEffect(() => {
     if (!currentUser) {
       setIsLoading(false);
@@ -1409,8 +1086,6 @@ export default function Dashboard() {
     }
 
     const fetchData = async () => {
-
-      // 1. Determine which sheets are needed
       let sheetsToFetch: string[] = [];
       if (activeTab === "patty") {
         sheetsToFetch = ["Patty Expence"];
@@ -1420,14 +1095,12 @@ export default function Dashboard() {
         sheetsToFetch = [selectedTallySheet];
       }
 
-      // 2. check cache
       const missingSheets = sheetsToFetch.filter(sheet => !sheetCache[sheet]);
 
-      // If we have everything, just update rawData and return (Instant!)
       if (missingSheets.length === 0) {
         const cachedResults = sheetsToFetch.map(sheet => ({
           sheet,
-          data: filterDataByUser(sheetCache[sheet], sheet)
+          data: filterDataByUserAndShop(sheetCache[sheet], sheet)
         }));
         setRawData(cachedResults);
         setIsLoading(false);
@@ -1436,14 +1109,12 @@ export default function Dashboard() {
 
       setIsLoading(true);
 
-      // Safety timeout
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Timeout")), 15000)
       );
 
       const fetchDataTask = async () => {
         try {
-          // Fetch ONLY missing sheets in parallel from Supabase
           const newSheetResults = await Promise.all(
             missingSheets.map(async (sheet) => {
               try {
@@ -1476,7 +1147,6 @@ export default function Dashboard() {
             })
           );
 
-          // 4. Update Cache
           setSheetCache(prev => {
             const newCache = { ...prev };
             newSheetResults.forEach(item => {
@@ -1485,14 +1155,12 @@ export default function Dashboard() {
             return newCache;
           });
 
-          // 5. Combine cached data + new data for current view
           const finalResults = sheetsToFetch.map(sheet => {
             const newRes = newSheetResults.find(r => r.sheet === sheet);
             const data = newRes ? newRes.data : (sheetCache[sheet] || []);
-
             return {
               sheet,
-              data: filterDataByUser(data, sheet)
+              data: filterDataByUserAndShop(data, sheet)
             };
           });
 
@@ -1513,13 +1181,11 @@ export default function Dashboard() {
     };
 
     fetchData();
-    // Intentionally excluding selectedMonth so we don't re-fetch on month change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, selectedTallySheet, currentUser]);
+    // Re-fetch when selectedShop changes
+  }, [activeTab, selectedTallySheet, currentUser, selectedShop]);
 
   // --- Effect 2: Process Data on RawData or Month Change ---
   useEffect(() => {
-    // If no data, do nothing yet. Wait for fetch.
     if (!rawData || rawData.length === 0) return;
 
     let accumulatedTransactions: Transaction[] = [];
@@ -1528,25 +1194,17 @@ export default function Dashboard() {
     let hasPettyData = false;
 
     for (const { sheet, data } of rawData) {
-
-      // Stats Calculation: ONLY for Patty Cash tab
-      // Removing strict 'Patty Expence' check to rely on activeTab
       if (activeTab === "patty") {
-        // 1. Calculate Stats
         let foundTotalRow = false;
         let openingSum = 0;
         let closingSum = 0;
         let manualOpeningSum = 0;
         let manualClosingSum = 0;
 
-        // Debug data presence
-        console.log(`Processing sheet: ${sheet}, Rows: ${data.length}`);
-
         for (let i = 0; i < data.length; i++) {
           const row = data[i];
           if (!row || row.length < 5) continue;
 
-          // Robust check for "Total" in first 3 columns
           const col0 = row[0] ? row[0].toString().trim().toLowerCase() : "";
           const col1 = row[1] ? row[1].toString().trim().toLowerCase() : "";
           const col2 = row[2] ? row[2].toString().trim().toLowerCase() : "";
@@ -1555,13 +1213,7 @@ export default function Dashboard() {
             openingSum = parseNumber(row[3]);
             closingSum = parseNumber(row[4]);
             foundTotalRow = true;
-            // console.log("Found Total Row at index", i);
           } else {
-            // Accumulate manual sum (skipping headers/Total if logically found, 
-            // but here we are in loop, so we sum everything else just in case Total is missing)
-            // If we eventually find Total, we override this manual sum.
-
-            // Simple heuristic to avoid headers: check if Col D is a valid number
             const opVal = parseNumber(row[3]);
             const clVal = parseNumber(row[4]);
             manualOpeningSum += opVal;
@@ -1572,18 +1224,14 @@ export default function Dashboard() {
         if (foundTotalRow) {
           totalOpening = openingSum;
           totalClosing = closingSum;
-          console.log("Using Total Row values");
         } else {
-          // For filtered views (non-admin) or if Total row missing
           totalOpening = manualOpeningSum;
           totalClosing = manualClosingSum;
-          console.log("Using Manual Sum values:", manualOpeningSum, manualClosingSum);
         }
 
         hasPettyData = true;
       }
 
-      // Transactions: Filter by month for the table
       const dataForTable = data.filter(row => {
         const rowDate = normalizeToISO(row[2] ? row[2].toString() : "");
         return rowDate.startsWith(selectedMonth);
@@ -1594,7 +1242,6 @@ export default function Dashboard() {
 
     setTransactions(accumulatedTransactions);
 
-    // Update stats based on what we processed
     if (activeTab === "patty" && hasPettyData) {
       setOpeningBalance(totalOpening);
       _setTotalExpenses(totalOpening + totalClosing);
@@ -1615,9 +1262,7 @@ export default function Dashboard() {
     return matchesSheet && matchesMonth;
   });
 
-
   const totalTransactions = filteredTransactions.length;
-  // Avg Expense = Total Expenses / Total Transactions
   const averageExpense =
     totalTransactions > 0
       ? _totalExpenses / totalTransactions
@@ -1674,11 +1319,6 @@ export default function Dashboard() {
     },
   ];
 
-
-
-
-
-  // Build dropdown options dynamically based on user's counter access
   const TALLY_SHEET_OPTIONS = [
     { label: "All Tally Counters", sheet: "All" },
     ...userTallyCounters.map(counter => ({ label: counter, sheet: counter })),
@@ -1691,7 +1331,6 @@ export default function Dashboard() {
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           if (index === 3) {
-            // Monthly Budget Card - Only Admin can edit
             return (
               <div
                 key={index}
@@ -1701,7 +1340,6 @@ export default function Dashboard() {
                   <div className={`${stat.bgLight} p-2 rounded-lg`}>
                     <Icon className={`${stat.textColor} text-xl`} />
                   </div>
-                  {/* Month Picker - Always visible */}
                   <input
                     type="month"
                     value={selectedMonth}
@@ -1713,9 +1351,7 @@ export default function Dashboard() {
                   {stat.title}
                 </p>
 
-                {/* Check if user is admin */}
                 {currentUser?.role?.toLowerCase() === 'admin' ? (
-                  // Admin - Can edit budget
                   isEditingBudget ? (
                     <div className="flex items-center gap-2">
                       <input
@@ -1769,7 +1405,6 @@ export default function Dashboard() {
                     </div>
                   )
                 ) : (
-                  // Regular User - Read-only, no edit
                   <div className="flex items-center justify-between">
                     <p className="text-lg md:text-xl font-bold text-gray-800">
                       {stat.title === "Total Transactions" ? stat.value : formatCurrency(stat.value)}
@@ -1780,7 +1415,6 @@ export default function Dashboard() {
             );
           }
 
-          // Other cards remain same
           return (
             <div
               key={index}
@@ -1800,10 +1434,10 @@ export default function Dashboard() {
             </div>
           );
         })}
-      </div>  
+      </div>
 
-      {/* TABS & DROPDOWN (Moved from TransactionTable) */}
-      <div className="flex items-center justify-between">
+      {/* TABS & SHOP FILTER & DROPDOWN */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="inline-flex rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm">
           <button
             className={`px-4 py-2 text-sm font-medium ${activeTab === "patty"
@@ -1825,15 +1459,41 @@ export default function Dashboard() {
           </button>
         </div>
 
-
+        {/* SHOP FILTER - Always visible */}
+        <div className="flex items-center gap-2">
+          <FaStore className="text-gray-500 text-sm" />
+          <select
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm min-w-[140px]"
+            value={selectedShop}
+            onChange={(e) => {
+              setSelectedShop(e.target.value);
+              // Reset rawData to trigger re-fetch with new shop filter
+              setRawData([]);
+            }}
+          >
+            <option value="All">All Shops</option>
+            {shopOptions.map((shop) => (
+              <option key={shop} value={shop}>
+                {shop}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* SUMMARY TABLE (Visible only activeTab is Patty) */}
       {activeTab === "patty" && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="text-lg font-bold text-gray-800">Day-wise Summary</h3>
-            <div className="flex items-center gap-3">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center flex-wrap gap-2">
+            <h3 className="text-lg font-bold text-gray-800">
+              Day-wise Summary
+              {selectedShop !== "All" && (
+                <span className="ml-2 text-sm font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                  Shop: {selectedShop}
+                </span>
+              )}
+            </h3>
+            <div className="flex items-center gap-3 flex-wrap">
               {/* Export Buttons */}
               <div className="flex items-center gap-2 mr-2">
                 <button
@@ -1932,9 +1592,16 @@ export default function Dashboard() {
       {/* TALLY SUMMARY TABLE (Visible only activeTab is Tally) */}
       {activeTab === "tally" && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="text-lg font-bold text-gray-800">Tally Summary</h3>
-            <div className="flex items-center gap-3">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center flex-wrap gap-2">
+            <h3 className="text-lg font-bold text-gray-800">
+              Tally Summary
+              {selectedShop !== "All" && (
+                <span className="ml-2 text-sm font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                  Shop: {selectedShop}
+                </span>
+              )}
+            </h3>
+            <div className="flex items-center gap-3 flex-wrap">
               {/* Export Buttons */}
               <div className="flex items-center gap-2 mr-2">
                 <button
@@ -1977,7 +1644,7 @@ export default function Dashboard() {
                   Clear
                 </button>
               )}
-              {/* Moved Dropdown here */}
+              {/* Dropdown */}
               <select
                 className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                 value={selectedTallySheet}
@@ -2041,16 +1708,16 @@ export default function Dashboard() {
                 ) : (
                   tallySummaryData
                     .filter(row => {
-                    const rowCounter = (row.counterName || "").toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-                    if (selectedTallySheet === "All") {
-                      return userTallyCounters.some(c => {
-                        const tc = c.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        return tc.includes(rowCounter) || rowCounter.includes(tc);
-                      });
-                    }
-                    const sc = selectedTallySheet.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    return sc.includes(rowCounter) || rowCounter.includes(sc);
-                  })
+                      const rowCounter = (row.counterName || "").toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+                      if (selectedTallySheet === "All") {
+                        return userTallyCounters.some(c => {
+                          const tc = c.toLowerCase().replace(/[^a-z0-9]/g, '');
+                          return tc.includes(rowCounter) || rowCounter.includes(tc);
+                        });
+                      }
+                      const sc = selectedTallySheet.toLowerCase().replace(/[^a-z0-9]/g, '');
+                      return sc.includes(rowCounter) || rowCounter.includes(sc);
+                    })
                     .filter(row => isRowInRange(row.date))
                     .map((row) => (
                       <tr key={row.id} className="hover:bg-gray-50 transition-colors duration-150">
