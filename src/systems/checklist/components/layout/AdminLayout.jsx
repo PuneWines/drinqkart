@@ -29,6 +29,87 @@ import {
   BarChart3,
 } from "lucide-react";
 
+const parseChecklistAllowedPages = (userData) => {
+  if (!userData) return [];
+  const pageSet = new Set();
+
+  const mapToRouteLabel = (rawName) => {
+    if (!rawName || typeof rawName !== 'string') return;
+    const name = rawName.trim();
+    if (!name) return;
+
+    const lower = name.toLowerCase();
+    if (lower.includes("dashboard")) pageSet.add("Dashboard");
+    if (lower.includes("announcement") || lower.includes("notification")) pageSet.add("Announcements");
+    if (lower.includes("quick_task") || lower.includes("quick task") || lower.includes("quicktask")) pageSet.add("Quick Task");
+    if (lower.includes("assign_task") || lower.includes("assign task") || lower.includes("assigntask")) pageSet.add("Assign Task");
+    if (lower.includes("work_records") || lower.includes("work records") || lower.includes("workrecords") || lower.includes("work_details") || lower.includes("work details") || lower.includes("workdetails") || lower.includes("work_tasks") || lower.includes("work tasks") || lower.includes("worktasks")) {
+      pageSet.add("Work Records");
+      pageSet.add("Work Details");
+    }
+    if (lower.includes("delegation")) pageSet.add("Delegation");
+    if (lower.includes("all_task") || lower.includes("all task") || lower.includes("alltasks") || lower === "task" || lower === "tasks") {
+      pageSet.add("Task");
+      pageSet.add("All Tasks");
+    }
+    if (lower.includes("calendar") && !lower.includes("working_day_calendar") && !lower.includes("working day calendar")) pageSet.add("Calendar");
+    if (lower.includes("holiday_list") || lower.includes("holiday list") || lower.includes("holidaylist") || lower === "holiday") {
+      pageSet.add("Holiday List");
+      pageSet.add("Holiday");
+      pageSet.add("Working Day Calendar");
+    }
+    if (lower.includes("working_day_calendar") || lower.includes("working day calendar") || lower.includes("workingdaycalendar")) {
+      pageSet.add("Working Day Calendar");
+      pageSet.add("Holiday List");
+      pageSet.add("Holiday");
+    }
+    if (lower.includes("admin_approval") || lower.includes("admin approval") || lower.includes("adminapproval") || lower.includes("manager approval")) pageSet.add("Admin Approval");
+    if (lower.includes("mis_report") || lower.includes("mis report") || lower.includes("misreport") || lower.includes("mis_reporting")) pageSet.add("MIS Report");
+    if (lower.includes("master_setting") || lower.includes("master setting") || lower.includes("setting")) pageSet.add("Settings");
+  };
+
+  const processEntry = (entry) => {
+    if (typeof entry !== 'string') return;
+    const trimmed = entry.trim();
+    mapToRouteLabel(trimmed);
+    if (trimmed.includes('.')) {
+      const parts = trimmed.split('.');
+      parts.forEach(part => mapToRouteLabel(part));
+    }
+  };
+
+  let rawMasterAccess = userData.master_user_system_page_access;
+  if (typeof rawMasterAccess === 'string') {
+    try {
+      let parsed = JSON.parse(rawMasterAccess);
+      while (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      rawMasterAccess = parsed;
+    } catch (e) { }
+  }
+
+  if (Array.isArray(rawMasterAccess) && rawMasterAccess.length > 0) {
+    rawMasterAccess.forEach(processEntry);
+  } else if (rawMasterAccess && typeof rawMasterAccess === 'object' && Object.keys(rawMasterAccess).length > 0) {
+    Object.keys(rawMasterAccess).forEach(processEntry);
+  }
+
+  if (pageSet.size === 0) {
+    let rawPageAccess = userData.page_access;
+    if (typeof rawPageAccess === 'string') {
+      try {
+        let parsed = JSON.parse(rawPageAccess);
+        while (typeof parsed === 'string') parsed = JSON.parse(parsed);
+        rawPageAccess = parsed;
+      } catch (e) { }
+    }
+    if (Array.isArray(rawPageAccess)) {
+      rawPageAccess.forEach(processEntry);
+    }
+  }
+
+  return Array.from(pageSet);
+};
+
 export default function AdminLayout({ children, darkMode, toggleDarkMode, showLayout = true }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,61 +126,31 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   const [profileImage, setProfileImage] = useState("");
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
-
-  const [hasDelegationTasks, setHasDelegationTasks] = useState(() => {
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-    const storedUsername = localStorage.getItem("user-name") || "";
-    if (role !== "user") return true;
-    try {
-      const cached = sessionStorage.getItem(`user_has_delegation_tasks_${storedUsername}`);
-      if (cached !== null) {
-        return cached === "true";
-      }
-    } catch (e) { }
-    return true;
-  });
+  const [hasDelegationTasks, setHasDelegationTasks] = useState(true);
 
   useEffect(() => {
-    const storedUsername = localStorage.getItem("user-name");
-    const storedRole = localStorage.getItem("role");
-    if (!storedUsername || (storedRole || "").toLowerCase() !== "user") return;
-
-    // Skip query if cache is present
-    try {
-      const cached = sessionStorage.getItem(`user_has_delegation_tasks_${storedUsername}`);
-      if (cached !== null) return;
-    } catch (e) { }
-
     const checkDelegation = async () => {
       try {
-        const { data, error } = await supabase
+        const { count, error } = await supabase
           .from('delegation')
-          .select('task_id')
-          .eq('name', storedUsername)
-          .limit(1);
-
-        if (!error) {
-          const hasTasks = data && data.length > 0;
-          setHasDelegationTasks(hasTasks);
-          try {
-            sessionStorage.setItem(`user_has_delegation_tasks_${storedUsername}`, String(hasTasks));
-          } catch (e) { }
+          .select('*', { count: 'exact', head: true });
+        if (!error && count === 0) {
+          setHasDelegationTasks(false);
         }
-      } catch (err) {
-        console.error("Error checking delegation tasks:", err);
+      } catch (e) {
+        console.error("Error checking delegation tasks:", e);
       }
     };
     checkDelegation();
   }, []);
 
-  // Update the routes array based on user role and super admin status
   const routes = [
     {
       href: "/dashboard/admin",
       label: "Dashboard",
       icon: Database,
       active: location.pathname === "/dashboard/admin",
-      showFor: ["admin", "user", "HOD", "manager"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/notifications",
@@ -114,48 +165,47 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Quick Task",
       icon: Zap,
       active: location.pathname === "/dashboard/quick-task",
-      // Show for super admin OR anyone with 'admin' role
-      showFor: (isSuperAdmin || userRole.toLowerCase() === "admin") ? ["admin"] : [],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/assign-task",
       label: "Assign Task",
       icon: CheckSquare,
       active: location.pathname === "/dashboard/assign-task",
-      showFor: ["admin", "HOD", "manager"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/work-details",
       label: "Work Records",
       icon: LayoutGrid,
       active: location.pathname === "/dashboard/work-details",
-      showFor: ["admin", "HOD", "manager"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/delegation",
       label: "Delegation",
       icon: ClipboardList,
       active: location.pathname === "/dashboard/delegation",
-      showFor: ["admin", "user", "HOD", "manager"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/task",
       label: "Task",
       icon: CalendarCheck,
       active: location.pathname === "/dashboard/task",
-      showFor: ["admin", "HOD", "user", "manager"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/calendar",
       label: "Calendar",
       icon: CalendarIcon,
       active: location.pathname === "/dashboard/calendar",
-      showFor: ["admin", "user", "HOD", "manager"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       label: "Holiday",
-      icon: CalendarIcon, // Or a specific holiday icon
-      showFor: (isSuperAdmin || userRole.toLowerCase() === "admin") ? ["admin"] : [],
+      icon: CalendarIcon,
+      showFor: ["admin", "user", "hod", "manager"],
       isSubmenu: true,
       isOpen: isHolidaySubmenuOpen,
       setIsOpen: setIsHolidaySubmenuOpen,
@@ -165,13 +215,13 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
           href: "/dashboard/holiday-list",
           label: "Holiday List",
           active: location.pathname === "/dashboard/holiday-list",
-          showFor: ["admin"],
+          showFor: ["admin", "user", "hod", "manager"],
         },
         {
           href: "/dashboard/working-day-calendar",
           label: "Working Day Calendar",
           active: location.pathname === "/dashboard/working-day-calendar",
-          showFor: ["admin"],
+          showFor: ["admin", "user", "hod", "manager"],
         }
       ]
     },
@@ -180,32 +230,30 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Admin Approval",
       icon: BookmarkCheck,
       active: location.pathname === "/dashboard/admin-approval",
-      showFor: ["admin", "HOD", "manager"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/mis-report",
       label: "MIS Report",
       icon: BarChart3,
       active: location.pathname === "/dashboard/mis-report",
-      showFor: ["admin"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
     {
       href: "/dashboard/setting",
       label: "Settings",
       icon: Settings,
       active: location.pathname.includes("/dashboard/setting"),
-      showFor: ["admin"],
+      showFor: ["admin", "user", "hod", "manager"],
     },
   ];
 
-  // Check authentication on component mount
   useEffect(() => {
     const storedUsername = localStorage.getItem("user-name");
     const storedRole = localStorage.getItem("role");
     const storedEmail = localStorage.getItem("email_id");
 
     if (!storedUsername) {
-      // Redirect to login if not authenticated
       navigate("/login");
       return;
     }
@@ -213,28 +261,10 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     setUsername(storedUsername);
     setUserRole(storedRole || "user");
     setUserEmail(storedEmail);
-    setIsSuperAdmin(storedUsername.toLowerCase() === "admin");
 
     const path = location.pathname;
-    const restrictedPages = [
-      "/dashboard/assign-task",
-      "/dashboard/admin-approval",
-      "/dashboard/checklist",
-      "/dashboard/maintenance",
-      "/dashboard/repair",
-      "/dashboard/ea-task",
-      "/dashboard/quick-task",
-      "/dashboard/holiday-list",
-      "/dashboard/working-day-calendar",
-      "/dashboard/setting"
-    ];
-    if (!hasDelegationTasks) {
-      restrictedPages.push("/dashboard/delegation");
-      restrictedPages.push("/dashboard/delegation-data");
-    }
 
     const storedRoleLower = (storedRole || "user").toLowerCase();
-    const isSuperAdminUser = storedUsername?.toLowerCase() === "admin" || storedRoleLower === "admin";
     const pageAccessRaw = localStorage.getItem("page_access");
     let pageAccess = [];
     try {
@@ -243,23 +273,26 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       pageAccess = [];
     }
 
-    // Dynamic Security Guard using page_access
-    if (!isSuperAdminUser && pageAccess.length > 0) {
-      // Find if current path is allowed
+    if (pageAccess.length > 0) {
       const isPathAllowed = (path) => {
-        // Dashboard and Notifications are generally allowed unless explicitly removed
         if (path === "/dashboard/admin" || path === "/dashboard/notifications") return true;
 
-        // Check main routes
         const matchedRoute = routes.find(r => r.href === path || (r.subItems && r.subItems.some(s => s.href === path)));
-        if (!matchedRoute) return true; // If route not in our list, allow (could be public or new)
+        if (!matchedRoute) return true; 
 
         if (matchedRoute.isSubmenu) {
           const matchedSub = matchedRoute.subItems.find(s => s.href === path);
-          return matchedSub ? pageAccess.includes(matchedSub.label) : false;
+          return matchedSub ? pageAccess.some(p => p.toLowerCase() === matchedSub.label.toLowerCase()) : false;
         }
 
-        return pageAccess.includes(matchedRoute.label);
+        const labelLower = matchedRoute.label.toLowerCase();
+        return pageAccess.some(p => {
+          const pLower = p.toLowerCase();
+          if (pLower === labelLower) return true;
+          if ((labelLower === "work records" || labelLower === "work details") && (pLower === "work records" || pLower === "work details")) return true;
+          if ((labelLower === "all tasks" || labelLower === "task") && (pLower === "all tasks" || pLower === "task")) return true;
+          return false;
+        });
       };
 
       if (!isPathAllowed(path)) {
@@ -267,20 +300,8 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
         navigate("/dashboard/admin");
         return;
       }
-    } else if (storedRoleLower === "user") {
-      // Fallback to hardcoded for legacy or if pageAccess is empty
-      const restrictedPages = ["/dashboard/assign-task", "/dashboard/admin-approval", "/dashboard/checklist", "/dashboard/maintenance", "/dashboard/repair", "/dashboard/ea-task", "/dashboard/quick-task", "/dashboard/holiday-list", "/dashboard/working-day-calendar", "/dashboard/setting"];
-      if (!hasDelegationTasks) {
-        restrictedPages.push("/dashboard/delegation");
-        restrictedPages.push("/dashboard/delegation-data");
-      }
-      if (restrictedPages.some(p => path.startsWith(p))) {
-        navigate("/dashboard/admin");
-        return;
-      }
     }
 
-    // Initial load from localStorage
     const cachedImage = localStorage.getItem("profile_image");
     setProfileImage(cachedImage || "");
 
@@ -302,32 +323,26 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
 
     // Sync with database to get the latest image and permissions
     const syncUserData = async () => {
+      if (!storedUsername) return;
       try {
         const { data } = await supabase
           .from("users")
-          .select("profile_image, page_access")
-          .eq("user_name", storedUsername)
-          .single();
+          .select("profile_image, page_access, master_user_system_page_access")
+          .or(`user_name.ilike."${storedUsername}",username.ilike."${storedUsername}"`)
+          .limit(1)
+          .maybeSingle();
 
         if (data) {
           if (data.profile_image) {
             setProfileImage(data.profile_image);
             localStorage.setItem("profile_image", data.profile_image);
           }
-          if (data.page_access) {
-            let finalAccess = data.page_access;
-            if (typeof finalAccess === 'string') {
-              try {
-                finalAccess = JSON.parse(finalAccess);
-              } catch (e) {
-                console.error("Error parsing page_access string:", e);
-                finalAccess = [];
-              }
-            }
-            localStorage.setItem("page_access", JSON.stringify(Array.isArray(finalAccess) ? finalAccess : []));
-            setPageAccess(Array.isArray(finalAccess) ? finalAccess : []);
+          const allowedPages = parseChecklistAllowedPages(data);
+          localStorage.setItem("page_access", JSON.stringify(allowedPages));
+          if (data.master_user_system_page_access) {
+            localStorage.setItem("master_user_system_page_access", typeof data.master_user_system_page_access === 'string' ? data.master_user_system_page_access : JSON.stringify(data.master_user_system_page_access));
           }
-          // console.log("✅ User data synced from DB");
+          setPageAccess(allowedPages);
         }
       } catch (err) {
         console.error("❌ Error syncing user data:", err);
@@ -337,14 +352,9 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     // Initial sync from localStorage to avoid flash of no content
     const initPageAccess = () => {
       const stored = localStorage.getItem("page_access");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          setPageAccess(Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? JSON.parse(parsed) : []));
-        } catch (e) {
-          setPageAccess([]);
-        }
-      }
+      const storedMaster = localStorage.getItem("master_user_system_page_access");
+      const allowedPages = parseChecklistAllowedPages({ page_access: stored, master_user_system_page_access: storedMaster });
+      setPageAccess(allowedPages);
     };
     initPageAccess();
 
@@ -408,57 +418,32 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     return route.label;
   };
 
-  // Filter routes based on user role and super admin status
+  // Filter routes strictly based on pageAccess for all users
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
-    const username = localStorage.getItem("user-name");
     const userRoleNormalized = (userRole || "user").toLowerCase();
-    const usernameNormalized = (username || "").toLowerCase();
-    // Admin role users bypass page_access filter (same as superAdmin)
-    const isAdminOrSuperAdmin = isSuperAdmin || userRoleNormalized === "admin";
 
     return routes
       .filter((route) => {
-        // If it's the Setting page, show if user is super admin, has admin role, or has explicit "Settings" page access permission
-        if (route.label === "Settings") {
-          return usernameNormalized === "admin" ||
-            userRoleNormalized === "admin" ||
-            pageAccess.includes("Settings");
-        }
-
-        // Holiday submenu logic handled by showFor in routes
-        if (route.label === "Holiday") {
-          // Show Holiday submenu if user has access to any of its subItems
-          if (isAdminOrSuperAdmin) return true;
-          return route.subItems.some(sub => pageAccess.includes(sub.label));
-        }
-
-        // Hardcoded role check first
-        const hasRoleAccess = route.showFor.some(role => role.toLowerCase() === userRoleNormalized);
-
-        // Hide delegation for users who do not have any tasks in the delegation table
-        if (route.href === "/dashboard/delegation" && userRoleNormalized === "user" && !hasDelegationTasks) {
-          return false;
-        }
-
-        // Admin role users always follow showFor — never filtered by pageAccess
-        if (isAdminOrSuperAdmin) {
-          return hasRoleAccess;
-        }
-
-        // For non-admin users: if dynamic page access is set, use it as the filter
-        if (pageAccess.length > 0) {
+        if (pageAccess && pageAccess.length > 0) {
+          if (route.label === "Settings") {
+            return pageAccess.includes("Settings");
+          }
+          if (route.label === "Holiday") {
+            return route.subItems && route.subItems.some(sub => pageAccess.includes(sub.label));
+          }
           return pageAccess.includes(route.label);
         }
 
-        return hasRoleAccess;
+        // If pageAccess is empty, default to showing only basic pages (Dashboard, Announcements)
+        return route.label === "Dashboard" || route.label === "Announcements";
       })
       .map(route => {
         if (route.subItems) {
           return {
             ...route,
             subItems: route.subItems.filter(sub => {
-              if (!isAdminOrSuperAdmin && pageAccess.length > 0) {
+              if (pageAccess && pageAccess.length > 0) {
                 return pageAccess.includes(sub.label);
               }
               return sub.showFor.some(role => role.toLowerCase() === userRoleNormalized);

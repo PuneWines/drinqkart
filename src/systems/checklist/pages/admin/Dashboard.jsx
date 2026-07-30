@@ -66,31 +66,38 @@ export default function AdminDashboard() {
   const handleDashboardTypeChange = (newType) => {
     setDashboardType(newType)
     setDashboardStaffFilter("all")
-    if ((userRole || "").toLowerCase() !== "manager") {
-      setShopFilter("all")
-    }
     setCurrentPage(1)
     setHasMoreData(true)
   }
 
   useEffect(() => {
-    const initializeManagerShop = async () => {
-      if ((userRole || "").toLowerCase() === "manager" && username) {
+    const initializeUserShop = async () => {
+      const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
+      let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+
+      if (currentUsername) {
         try {
-          const { data: mgrData } = await supabase
+          const { data: userDb } = await supabase
             .from("users")
-            .select("shop_name")
-            .ilike("user_name", username)
+            .select("shop_name, user_access")
+            .or(`user_name.ilike.${currentUsername},username.ilike.${currentUsername}`)
             .maybeSingle();
-          if (mgrData?.shop_name) {
-            setShopFilter(mgrData.shop_name);
+          if (userDb) {
+            rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
           }
         } catch (e) {
-          console.error("Error setting manager shop filter:", e);
+          console.error("Error setting user shop filter:", e);
+        }
+      }
+
+      if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+        const firstShop = rawShopStr.split(',').map(s => s.trim()).filter(Boolean)[0];
+        if (firstShop) {
+          setShopFilter(firstShop);
         }
       }
     };
-    initializeManagerShop();
+    initializeUserShop();
   }, [userRole, username]);
 
   // Caching mechanism
@@ -1058,11 +1065,38 @@ export default function AdminDashboard() {
           queryFn: () => getUniqueShopsApi(),
           staleTime: 10 * 60 * 1000 // 10 minutes
         });
-        const currentUserRole = (userRole || "").toLowerCase();
-        if (currentUserRole === "manager") {
-          const userAccess = localStorage.getItem("user_access") || "";
-          const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-          setAvailableShops(shops.filter(s => managerShopsList.includes(s.toLowerCase())));
+        const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
+        let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+
+        if (currentUsername) {
+          try {
+            const { data: userDb } = await supabase
+              .from("users")
+              .select("shop_name, user_access")
+              .or(`user_name.ilike.${currentUsername},username.ilike.${currentUsername}`)
+              .maybeSingle();
+            if (userDb) {
+              rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
+            }
+          } catch (err) {
+            console.error("Error fetching user shop access in Dashboard:", err);
+          }
+        }
+
+        let userShopsList = [];
+        if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+          userShopsList = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        }
+
+        if (userShopsList.length > 0) {
+          const matched = shops.filter(s => {
+            const sName = (typeof s === 'string' ? s : s.shop_name || '').toLowerCase();
+            return userShopsList.includes(sName);
+          });
+          setAvailableShops(matched);
+          if (matched.length > 0 && (shopFilter === "all" || !matched.map(m => (typeof m === 'string' ? m : m.shop_name || '').toLowerCase()).includes(shopFilter.toLowerCase()))) {
+            setShopFilter(typeof matched[0] === 'string' ? matched[0] : matched[0].shop_name);
+          }
         } else {
           setAvailableShops(shops);
         }

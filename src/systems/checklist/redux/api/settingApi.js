@@ -112,8 +112,8 @@ export const createUserApi = async (newUser) => {
       employee_id: newUser.employee_id,
       role: newUser.role,
       status: newUser.status || 'active',
-      user_access: newUser.user_access,
-      shop_name: newUser.shop,
+      user_access: newUser.shop_name || newUser.shop || newUser.user_access || null,
+      shop_name: newUser.shop_name || newUser.shop || newUser.user_access || null,
       profile_image: newUser.profile_image || null,
       leave_date: newUser.leave_date || null,
       leave_end_date: newUser.leave_end_date || null,
@@ -163,6 +163,8 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       ? parseInt(updatedUser.number.toString().replace(/\D/g, ''))
       : null;
 
+    const shopValue = updatedUser.shop_name || updatedUser.shop || updatedUser.user_access || null;
+
     const updateData = {
       user_name: updatedUser.user_name,
       email_id: updatedUser.email_id,
@@ -170,8 +172,8 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       employee_id: updatedUser.employee_id,
       role: updatedUser.role,
       status: updatedUser.status,
-      user_access: updatedUser.user_access,
-      shop_name: updatedUser.shop_name || updatedUser.shop || null,
+      user_access: shopValue,
+      shop_name: shopValue,
       profile_image: updatedUser.profile_image,
       reported_by: updatedUser.reported_by || null,
       can_self_assign: updatedUser.can_self_assign ?? false,
