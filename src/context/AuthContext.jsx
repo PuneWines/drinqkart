@@ -10,6 +10,96 @@ export const useAuth = () => useContext(AuthContext);
 // (hr_user, vishal_snacks_user, etc.) so legacy subsystem components continue to function.
 const STORAGE_KEY = 'drinqkart_user';
 
+export const parseChecklistAllowedPages = (userData) => {
+  if (!userData) return [];
+  const pageSet = new Set();
+
+  const mapToRouteLabel = (rawName) => {
+    if (!rawName || typeof rawName !== 'string') return;
+    const name = rawName.trim();
+    if (!name) return;
+
+    const lower = name.toLowerCase();
+    if (lower === "dashboard") pageSet.add("Dashboard");
+    else if (lower === "announcements" || lower === "announcement" || lower === "notifications") pageSet.add("Announcements");
+    else if (lower === "quick task" || lower === "quicktask" || lower === "quick_task") pageSet.add("Quick Task");
+    else if (lower === "assign task" || lower === "assigntask" || lower === "assign_task") pageSet.add("Assign Task");
+    else if (lower === "work records" || lower === "work details" || lower === "workdetails" || lower === "workrecords" || lower === "work_records" || lower === "work_tasks" || lower === "worktasks") {
+      pageSet.add("Work Records");
+      pageSet.add("Work Details");
+    }
+    else if (lower === "delegation") pageSet.add("Delegation");
+    else if (lower === "task" || lower === "all tasks" || lower === "alltasks" || lower === "tasks" || lower === "all_task") {
+      pageSet.add("Task");
+      pageSet.add("All Tasks");
+    }
+    else if (lower === "calendar") pageSet.add("Calendar");
+    else if (lower === "holiday list" || lower === "holidaylist" || lower === "holiday" || lower === "holiday_list") {
+      pageSet.add("Holiday List");
+      pageSet.add("Holiday");
+      pageSet.add("Working Day Calendar");
+    }
+    else if (lower === "working day calendar" || lower === "workingdaycalendar" || lower === "working_day_calendar") {
+      pageSet.add("Working Day Calendar");
+      pageSet.add("Holiday List");
+      pageSet.add("Holiday");
+    }
+    else if (lower === "admin approval" || lower === "adminapproval" || lower === "manager approval" || lower === "admin_approval") pageSet.add("Admin Approval");
+    else if (lower === "mis report" || lower === "misreport" || lower === "mis_report" || lower === "mis_reporting") pageSet.add("MIS Report");
+    else if (lower === "settings" || lower === "setting" || lower === "master setting" || lower === "master_setting" || lower === "mastersettings") pageSet.add("Settings");
+    else pageSet.add(name);
+  };
+
+  const processEntry = (entry) => {
+    if (typeof entry !== 'string') return;
+    const trimmed = entry.trim();
+    if (trimmed.startsWith('checklist_delegation.')) {
+      const parts = trimmed.split('.');
+      if (parts.length >= 2 && parts[1]) {
+        mapToRouteLabel(parts[1]);
+      }
+    } else if (trimmed.startsWith('checklist.')) {
+      const parts = trimmed.split('.');
+      if (parts.length >= 2 && parts[1]) {
+        mapToRouteLabel(parts[1]);
+      }
+    } else {
+      mapToRouteLabel(trimmed);
+    }
+  };
+
+  let rawMasterAccess = userData.master_user_system_page_access;
+  if (typeof rawMasterAccess === 'string') {
+    try {
+      let parsed = JSON.parse(rawMasterAccess);
+      while (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      rawMasterAccess = parsed;
+    } catch (e) { }
+  }
+
+  if (Array.isArray(rawMasterAccess) && rawMasterAccess.length > 0) {
+    rawMasterAccess.forEach(processEntry);
+  } else if (rawMasterAccess && typeof rawMasterAccess === 'object' && Object.keys(rawMasterAccess).length > 0) {
+    Object.keys(rawMasterAccess).forEach(processEntry);
+  }
+
+  if (pageSet.size === 0) {
+    let rawPageAccess = userData.page_access;
+    if (typeof rawPageAccess === 'string') {
+      try {
+        let parsed = JSON.parse(rawPageAccess);
+        while (typeof parsed === 'string') parsed = JSON.parse(parsed);
+        rawPageAccess = parsed;
+      } catch (e) { }
+    }
+    if (Array.isArray(rawPageAccess)) {
+      rawPageAccess.forEach(processEntry);
+    }
+  }
+
+  return Array.from(pageSet);
+};
+
 const syncSubsystemSessions = (userObj) => {
   if (!userObj) return;
   const accessValue = userObj.user_access || userObj.shop_name || userObj.shop || "";
@@ -22,7 +112,9 @@ const syncSubsystemSessions = (userObj) => {
   localStorage.setItem('profile_image', userObj.profile_image || "");
   localStorage.setItem('can_self_assign', userObj.can_self_assign === true ? "true" : "false");
   localStorage.setItem('designation', userObj.designation || userObj.Designation || "");
-  localStorage.setItem('page_access', typeof userObj.page_access === 'string' ? userObj.page_access : JSON.stringify(userObj.page_access || []));
+  
+  const allowedPages = parseChecklistAllowedPages(userObj);
+  localStorage.setItem('page_access', JSON.stringify(allowedPages));
   const masterAccessVal = userObj.master_user_system_page_access;
   localStorage.setItem('master_user_system_page_access', typeof masterAccessVal === 'string' ? masterAccessVal : JSON.stringify(masterAccessVal || []));
 

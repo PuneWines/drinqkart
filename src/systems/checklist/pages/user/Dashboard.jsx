@@ -29,24 +29,31 @@ const UserDashboard = () => {
     setLoading(true)
     try {
       const role = (localStorage.getItem("role") || "").toLowerCase()
-      const userAccess = localStorage.getItem("user_access") || ""
+      const userAccess = localStorage.getItem("shop_name") || localStorage.getItem("user_access") || ""
+      const isMasterAdmin = currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin"
+      const assignedShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
       
       let data = []
-      if (role === "manager") {
-        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean)
-        if (managerShops.length > 0) {
-          const { data: tasksData, error } = await supabase
-            .from('work_task')
-            .select('*')
-            .in('shop_name', managerShops)
-            .order('current_date', { ascending: true })
-          
-          if (error) throw error
-          data = tasksData || []
-        }
+      if (role === "manager" && assignedShops.length > 0) {
+        const { data: tasksData, error } = await supabase
+          .from('work_task')
+          .select('*')
+          .in('shop_name', assignedShops)
+          .order('current_date', { ascending: true })
+        
+        if (error) throw error
+        data = tasksData || []
       } else {
         data = await fetchWorkTasksForUserApi(currentUsername)
       }
+
+      if (!isMasterAdmin && assignedShops.length > 0 && assignedShops[0] !== 'all') {
+        data = (data || []).filter(task => {
+          const taskShop = (task.shop_name || task.shop || "").toLowerCase().trim()
+          return assignedShops.some(s => taskShop === s || taskShop.includes(s) || s.includes(taskShop))
+        })
+      }
+
       setTasks(data || [])
     } catch (error) {
       console.error("Error loading dashboard stats:", error)

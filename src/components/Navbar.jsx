@@ -36,7 +36,7 @@ const Navbar = ({ toggleCart }) => {
   const systemLinks = [
     { label: 'Checklist Delegation', url: '/dashboard/admin', enabled: true, isInternal: true },
     { label: 'HR System', url: '/systems/hr', enabled: true, isInternal: true },
-    { label: 'Inventory', url: '/systems/inventory', enabled: true, isInternal: true },
+    { label: 'SNACKS INVENTRY', url: '/systems/inventory', enabled: true, isInternal: true },
     { label: 'Petty Cash', url: '/systems/petty-cash', enabled: true, isInternal: true },
     { label: 'Purchase', url: import.meta.env.VITE_PURCHASE_SYSTEM_URL, enabled: false },
   ];

@@ -30,15 +30,16 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 
     const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
     const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
+    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin';
 
+    const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
+    const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
+
+    if (!isMasterAdmin && allowedShops.length > 0) {
+      query = query.in('shop_name', allowedShops);
+    }
     if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (roleUpper === 'HOD' || roleUpper === 'MANAGER') {
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all');
-      const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
-      if (allowedShops.length > 0) {
-        query = query.in('shop_name', allowedShops);
-      }
     }
 
     if (nameFilter) {
@@ -114,11 +115,12 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
 
     const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
     const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
+    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin';
 
     if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (roleUpper === 'HOD' || roleUpper === 'MANAGER') {
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all');
+    } else if (!isMasterAdmin && (roleUpper === 'ADMIN' || roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
       const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
       if (allowedShops.length > 0) {
         query = query.in('shop_name', allowedShops);

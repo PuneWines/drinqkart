@@ -34,24 +34,17 @@ import RealtimeLogoutListener from "./components/RealtimeLogoutListener"
 import { MagicToastProvider } from "./context/MagicToastContext"
 
 // --- Auth Wrapper ---
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+const ProtectedRoute = ({ children }) => {
     const username = (localStorage.getItem("user-name") || "").toLowerCase();
-    const role = (localStorage.getItem("role") || "").toLowerCase();
 
     if (!username) {
         return <Navigate to="/login" replace />
-    }
-
-    if (allowedRoles.length > 0 && !allowedRoles.map(r => r.toLowerCase()).includes(role)) {
-        return <Navigate to="/dashboard/admin" replace />
     }
 
     return children
 }
 
 const SuperAdminRoute = ({ children }) => {
-    const username = (localStorage.getItem("user-name") || "").toLowerCase();
-    const role = (localStorage.getItem("role") || "").toLowerCase();
     const pageAccessRaw = localStorage.getItem("page_access");
     let pageAccess = [];
     try {
@@ -60,18 +53,14 @@ const SuperAdminRoute = ({ children }) => {
         pageAccess = [];
     }
 
-    const isSuperAdmin = username === "admin";
-    const isAdminRole = role === "admin";
-
-    if (isSuperAdmin || isAdminRole) {
-        return children;
-    }
-
     const path = window.location.pathname;
-    if (path === "/dashboard/setting" && pageAccess.includes("Settings")) {
+    if (path.includes("setting") && pageAccess.includes("Settings")) {
         return children;
     }
-    if (path === "/dashboard/holiday-list" && pageAccess.includes("Holiday List")) {
+    if (path.includes("holiday-list") && (pageAccess.includes("Holiday List") || pageAccess.includes("Holiday"))) {
+        return children;
+    }
+    if (path.includes("working-day-calendar") && (pageAccess.includes("Working Day Calendar") || pageAccess.includes("Holiday"))) {
         return children;
     }
 
@@ -110,11 +99,11 @@ function ChecklistDashboard() {
                     }
                 />
 
-                {/* --- Task Management (Admin Only) --- */}
+                {/* --- Task Management --- */}
                 <Route
                     path="assign-task"
                     element={
-                        <ProtectedRoute allowedRoles={["admin", "HOD"]}>
+                        <ProtectedRoute>
                             <AdminAssignTask />
                         </ProtectedRoute>
                     }
@@ -197,11 +186,11 @@ function ChecklistDashboard() {
                     }
                 />
 
-                {/* --- Data & Reporting (Admin Only) --- */}
+                {/* --- Data & Reporting --- */}
                 <Route
                     path="data"
                     element={
-                        <ProtectedRoute allowedRoles={["admin", "HOD"]}>
+                        <ProtectedRoute>
                             <DataPage />
                         </ProtectedRoute>
                     }
@@ -217,7 +206,7 @@ function ChecklistDashboard() {
                 <Route
                     path="admin-data"
                     element={
-                        <ProtectedRoute allowedRoles={["admin", "HOD"]}>
+                        <ProtectedRoute>
                             <AdminDataPage />
                         </ProtectedRoute>
                     }
@@ -233,7 +222,7 @@ function ChecklistDashboard() {
                 <Route
                     path="delegation-data"
                     element={
-                        <ProtectedRoute allowedRoles={["admin", "HOD"]}>
+                        <ProtectedRoute>
                             <AdminDelegationTask />
                         </ProtectedRoute>
                     }
@@ -241,7 +230,7 @@ function ChecklistDashboard() {
                 <Route
                     path="admin-approval"
                     element={
-                        <ProtectedRoute allowedRoles={["admin", "HOD", "manager"]}>
+                        <ProtectedRoute>
                             <AdminApprovalPage />
                         </ProtectedRoute>
                     }
@@ -249,7 +238,7 @@ function ChecklistDashboard() {
                 <Route
                     path="mis-report"
                     element={
-                        <ProtectedRoute allowedRoles={["admin"]}>
+                        <ProtectedRoute>
                             <MisReport />
                         </ProtectedRoute>
                     }
@@ -265,7 +254,7 @@ function ChecklistDashboard() {
                 <Route
                     path="bulk-import"
                     element={
-                        <ProtectedRoute allowedRoles={["admin"]}>
+                        <ProtectedRoute>
                             <BulkImport />
                         </ProtectedRoute>
                     }
@@ -273,7 +262,7 @@ function ChecklistDashboard() {
                 <Route
                     path="work-details"
                     element={
-                        <ProtectedRoute allowedRoles={["admin", "HOD", "manager"]}>
+                        <ProtectedRoute>
                             <WorkDetails />
                         </ProtectedRoute>
                     }
@@ -281,7 +270,7 @@ function ChecklistDashboard() {
                 <Route
                     path="work-details/scheduled"
                     element={
-                        <ProtectedRoute allowedRoles={["admin", "HOD", "manager"]}>
+                        <ProtectedRoute>
                             <ScheduledWorkTasks />
                         </ProtectedRoute>
                     }
@@ -289,7 +278,7 @@ function ChecklistDashboard() {
                 <Route
                     path="work-records/bulk-import"
                     element={
-                        <ProtectedRoute allowedRoles={["admin"]}>
+                        <ProtectedRoute>
                             <MasterWorkBulkImport />
                         </ProtectedRoute>
                     }

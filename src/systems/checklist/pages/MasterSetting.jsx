@@ -11,7 +11,8 @@ import {
   RefreshCw,
   Code,
   Key,
-  UserCheck
+  UserCheck,
+  Building
 } from 'lucide-react';
 import supabase from '../SupabaseClient';
 
@@ -29,7 +30,7 @@ const AVAILABLE_SYSTEMS = [
   },
   {
     id: 'inventory',
-    name: 'Inventory System',
+    name: 'SNACKS INVENTRY',
     pages: ['Dashboard', 'Form Entry', 'Stock Ledger', 'Master Items', 'Users Management']
   },
   {
@@ -50,10 +51,12 @@ export default function MasterSetting() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showPassword, setShowPassword] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
+  const [availableShops, setAvailableShops] = useState([]);
 
   // Modal / Editing state
   const [editingUser, setEditingUser] = useState(null);
   const [passwordInput, setPasswordInput] = useState('');
+  const [shopNameInput, setShopNameInput] = useState('');
   const [accessPermissions, setAccessPermissions] = useState({});
   const [jsonMode, setJsonMode] = useState(false);
   const [rawJsonText, setRawJsonText] = useState('[]');
@@ -87,9 +90,48 @@ export default function MasterSetting() {
     }
   };
 
+  // Fetch shops from database table
+  const fetchShops = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shop')
+        .select('shop_name')
+        .order('shop_name', { ascending: true });
+      if (!error && data) {
+        const names = data.map(s => s.shop_name).filter(Boolean);
+        setAvailableShops(names);
+      }
+    } catch (err) {
+      console.error('Exception fetching shops:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchShops();
   }, []);
+
+  const selectedShopsList = shopNameInput
+    ? shopNameInput.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const handleToggleShop = (shopName) => {
+    let updated;
+    if (selectedShopsList.includes(shopName)) {
+      updated = selectedShopsList.filter(s => s !== shopName);
+    } else {
+      updated = [...selectedShopsList, shopName];
+    }
+    setShopNameInput(updated.join(', '));
+  };
+
+  const handleSelectAllShops = () => {
+    if (selectedShopsList.length === availableShops.length) {
+      setShopNameInput('');
+    } else {
+      setShopNameInput(availableShops.join(', '));
+    }
+  };
 
   const togglePasswordVisibility = (userId) => {
     setShowPassword((prev) => ({ ...prev, [userId]: !prev[userId] }));
@@ -99,6 +141,7 @@ export default function MasterSetting() {
   const handleOpenEdit = (user) => {
     setEditingUser(user);
     setPasswordInput(user.password || '');
+    setShopNameInput(user.shop_name || '');
 
     // Parse master_user_system_page_access
     let permObj = {};
@@ -184,11 +227,14 @@ export default function MasterSetting() {
 
     const finalAccess = Object.keys(accessPermissions);
 
+    const shopVal = shopNameInput.trim() || null;
     try {
       const { error } = await supabase
         .from('users')
         .update({
           password: passwordInput,
+          shop_name: shopVal,
+          user_access: shopVal,
           master_user_system_page_access: finalAccess
         })
         .eq('id', editingUser.id);
@@ -266,21 +312,22 @@ export default function MasterSetting() {
                 <th className="py-4 px-4 w-28">Actions</th>
                 <th className="py-4 px-4">User Name</th>
                 <th className="py-4 px-4">Role</th>
+                <th className="py-4 px-4">Shop Access (shop_name)</th>
                 <th className="py-4 px-4">Password</th>
-                <th className="py-4 p x-4">Master System Page Access</th>
+                <th className="py-4 px-4">Master System Page Access</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1A1A1A]/10">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-[#1A1A1A]/50">
+                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50">
                     <RefreshCw size={24} className="animate-spin mx-auto mb-3 text-[#C9A84C]" />
                     <span className="uppercase tracking-widest text-xs font-bold">Loading User Directory...</span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
+                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
                     No users found matching your search term.
                   </td>
                 </tr>
@@ -333,7 +380,18 @@ export default function MasterSetting() {
                         </span>
                       </td>
 
-                      {/* Column 4: Password */}
+                      {/* Column 4: Shop Access (shop_name) */}
+                      <td className="py-3.5 px-4 font-medium text-[#1A1A1A]">
+                        {u.shop_name ? (
+                          <span className="px-2.5 py-1 bg-[#C9A84C]/15 border border-[#C9A84C]/40 rounded text-[10.5px] font-semibold font-mono text-[#1A1A1A]">
+                            {u.shop_name}
+                          </span>
+                        ) : (
+                          <span className="text-[#1A1A1A]/40 italic text-[11px]">N/A</span>
+                        )}
+                      </td>
+
+                      {/* Column 5: Password */}
                       <td className="py-3.5 px-4 font-mono">
                         <div className="flex items-center gap-2">
                           <span className="text-[#1A1A1A] font-medium">
@@ -349,7 +407,7 @@ export default function MasterSetting() {
                         </div>
                       </td>
 
-                      {/* Column 5: Master System Page Access */}
+                      {/* Column 6: Master System Page Access */}
                       <td className="py-3.5 px-4 max-w-md">
                         {accessKeys.length > 0 ? (
                           <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto custom-scrollbar">
@@ -466,6 +524,75 @@ export default function MasterSetting() {
                           {sys.name} (<span className="font-mono text-[#C9A84C] font-bold">{sys.id}</span>)
                         </span>
                       </div>
+
+                      {/* Shop Access Section inside Checklist Delegation */}
+                      {sys.id === 'checklist' && (
+                        <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                              <Building size={16} className="text-[#C9A84C]" />
+                              Shop Access (<code className="font-mono text-[#8C6D23] lowercase">shop_name</code>)
+                            </label>
+                            {availableShops.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={handleSelectAllShops}
+                                className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                              >
+                                {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
+                              </button>
+                            )}
+                          </div>
+
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            Select assigned shop locations from the database <code className="font-mono font-bold text-[#1C120C]">shop</code> table:
+                          </p>
+
+                          {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
+                          {availableShops.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                              {availableShops.map((shop) => {
+                                const isSelected = selectedShopsList.includes(shop);
+                                return (
+                                  <button
+                                    key={shop}
+                                    type="button"
+                                    onClick={() => handleToggleShop(shop)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                                      isSelected
+                                        ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
+                                        : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
+                                      isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                                    }`}>
+                                      {isSelected && '✓'}
+                                    </span>
+                                    <span>{shop}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
+                          )}
+
+                          {/* Comma-Separated Text Input */}
+                          <div className="pt-1">
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                              Assigned Shop Locations (Comma-separated text)
+                            </label>
+                            <input
+                              type="text"
+                              value={shopNameInput}
+                              onChange={(e) => setShopNameInput(e.target.value)}
+                              placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                              className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
+                            />
+                          </div>
+                        </div>
+                      )}
 
                       {/* One Row Per Page List */}
                       <div className="space-y-2 pt-1">

@@ -1,0 +1,5 @@
+-> CHECKLIST 
+ 1> Page access to admin :- not all pages will be visible by default 
+ 2> system view according to the page_access, shop_name, -> only selected shop will be visible to the admin
+ 
+

@@ -25,8 +25,8 @@ export const systems = [
       { label: 'Holiday List', to: '/dashboard/holiday-list' },
       { label: 'Working Day Calendar', to: '/dashboard/working-day-calendar' },
       { label: 'MIS Report', to: '/dashboard/mis-report' },
-      { label: 'Admin Approval', to: '/dashboard/admin-approval' },
-      { label: 'Settings', to: '/dashboard/setting' },
+      { label: 'Admin Approval', to: '/dashboard/admin-approval' }
+      
     ]
   },
   {
@@ -54,7 +54,7 @@ export const systems = [
   },
   {
     id: 'inventory',
-    label: 'Inventory',
+    label: 'SNACKS INVENTRY',
     base: '/systems/inventory',
     icon: Store,
     subtabs: [
@@ -141,12 +141,21 @@ export const getVisibleSystems = (user) => {
 
   const isSubtabAllowed = (systemId, sub) => {
     if (sub.type === 'header') return true;
-    if (isMasterAdmin) return true;
+
+    // For non-checklist systems, masteradmin maintains full access by default
+    if (systemId !== 'checklist' && isMasterAdmin) return true;
 
     if (masterAccessList.length > 0) {
       const labelsToCheck = [sub.label];
       if (sub.label === 'All Tasks') labelsToCheck.push('Task');
+      if (sub.label === 'Work Records') labelsToCheck.push('Work Details');
+      if (sub.label === 'Work Details') labelsToCheck.push('Work Records');
       if (sub.label === 'User & System Access') labelsToCheck.push('Master Setting');
+      if (systemId === 'checklist') {
+        if (sub.label === 'Holiday List' || sub.label === 'Working Day Calendar') {
+          labelsToCheck.push('Holiday');
+        }
+      }
       if (systemId === 'inventory') {
         if (sub.label === 'Daily Entry Dashboard Logs' || sub.label === 'Dashboard') {
           labelsToCheck.push('Daily Entry Dashboard Logs', 'Dashboard');
@@ -160,14 +169,40 @@ export const getVisibleSystems = (user) => {
       }
 
       const hasMasterPerm = labelsToCheck.some((lbl) => {
-        const viewKey = `${systemId}.${lbl}.view`;
-        const modifyKey = `${systemId}.${lbl}.modify`;
-        return masterAccessList.includes(viewKey) || masterAccessList.includes(modifyKey);
+        const viewKey = `${systemId}.${lbl}.view`.toLowerCase();
+        const modifyKey = `${systemId}.${lbl}.modify`.toLowerCase();
+        const directKey = `${systemId}.${lbl}`.toLowerCase();
+        const delViewKey = `checklist_delegation.${lbl}.view`.toLowerCase();
+        const delModifyKey = `checklist_delegation.${lbl}.modify`.toLowerCase();
+        const delDirectKey = `checklist_delegation.${lbl}`.toLowerCase();
+        const lblLower = lbl.toLowerCase().trim();
+
+        return masterAccessList.some((item) => {
+          if (typeof item !== 'string') return false;
+          const itemLower = item.toLowerCase().trim();
+          if (
+            itemLower === viewKey || itemLower === modifyKey || itemLower === directKey ||
+            itemLower === delViewKey || itemLower === delModifyKey || itemLower === delDirectKey ||
+            itemLower === lblLower
+          ) {
+            return true;
+          }
+          if (itemLower.startsWith(`${systemId}.`) || (systemId === 'checklist' && itemLower.startsWith('checklist_delegation.'))) {
+            const parts = itemLower.split('.');
+            if (parts.length >= 2 && parts[1].trim() === lblLower) {
+              return true;
+            }
+          }
+          return false;
+        });
       });
-      if (hasMasterPerm) return true;
+
+      // For masterAccessList, return explicit boolean result (do NOT fallback to legacy if masterAccessList is set)
+      return hasMasterPerm;
     }
 
-    if (userRole === 'admin') return true;
+    // Admin role users must NOT bypass assigned pages for checklist system
+    if (systemId !== 'checklist' && userRole === 'admin') return true;
 
     const legacyPageAccess = parseMasterAccessList(userObj.page_access);
     if (legacyPageAccess.length > 0) {
@@ -188,7 +223,11 @@ export const getVisibleSystems = (user) => {
           return legacyPageAccess.includes('users_management') || legacyPageAccess.includes('Users Management');
         }
       }
-      return legacyPageAccess.includes(sub.label);
+      return legacyPageAccess.some((p) => {
+        if (typeof p !== 'string') return false;
+        const pLower = p.toLowerCase().trim();
+        return sub.label.toLowerCase() === pLower;
+      });
     }
 
     return false;

@@ -59,11 +59,12 @@ export const fetchDashboardDataApi = async (
       .range(from, to);
 
     // Apply role-based filtering first
+    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin';
     if (role === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' || role === 'MANAGER') {
+    } else if (!isMasterAdmin && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
       const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
       const allowedShops = [...new Set(
         rawShops.flatMap(s => [
           s,
@@ -220,11 +221,12 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       .not(nameField, 'is', null);
 
     // Apply role-based filtering
+    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin';
     if (role === 'USER' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' || role === 'MANAGER') {
+    } else if (!isMasterAdmin && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
       const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
       const allowedShops = [...new Set(
         rawShops.flatMap(s => [
           s,

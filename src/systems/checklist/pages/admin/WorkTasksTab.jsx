@@ -276,7 +276,39 @@ const WorkTasksTab = ({
           supabase.from('users').select('user_name, shop_name, user_access').eq('status', 'active').ilike('role', 'admin')
         ]);
         if (shopsRes.data) {
-          setAvailableShops(shopsRes.data.map(s => s.shop_name).filter(Boolean));
+          const allShops = shopsRes.data.map(s => s.shop_name).filter(Boolean);
+          const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
+          let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+
+          if (currentUsername) {
+            try {
+              const { data: userDb } = await supabase
+                .from("users")
+                .select("shop_name, user_access")
+                .or(`user_name.ilike.${currentUsername},username.ilike.${currentUsername}`)
+                .maybeSingle();
+              if (userDb) {
+                rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
+              }
+            } catch (e) {
+              console.error("Error fetching user shop access in WorkTasksTab:", e);
+            }
+          }
+
+          let userShopsList = [];
+          if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+            userShopsList = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          }
+
+          if (userShopsList.length > 0) {
+            const matched = allShops.filter(s => userShopsList.includes(s.toLowerCase()));
+            setAvailableShops(matched);
+            if (matched.length > 0) {
+              setHistoryShopFilter(matched[0]);
+            }
+          } else {
+            setAvailableShops(allShops);
+          }
         }
         if (managersRes.data) {
           const managerNames = managersRes.data.map(u => u.user_name).filter(Boolean);
@@ -420,24 +452,27 @@ const WorkTasksTab = ({
 
       const currentUsername = (username || "");
       const currentUserRole = (userRole || "").toLowerCase();
-      const isSuperAdmin = currentUsername.toLowerCase() === "admin";
+      const userShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+      const isSuperAdmin = currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
 
       let reportingUsers = [currentUsername];
       let applyNameFilter = true;
       let allowedShops = [];
       let filterByShop = false;
 
+      if (!isSuperAdmin && userShopStr && userShopStr.toLowerCase() !== "all" && userShopStr.toLowerCase() !== "admin") {
+        allowedShops = userShopStr.split(',').map(shop => shop.trim().toLowerCase()).filter(d => d && d !== 'all');
+        if (allowedShops.length > 0) {
+          filterByShop = true;
+        }
+      }
+
       if (isSuperAdmin) {
+        applyNameFilter = false;
+      } else if (filterByShop) {
         applyNameFilter = false;
       } else if (currentUserRole === "admin") {
         applyNameFilter = false;
-        const userAccess = localStorage.getItem("user_access") || "";
-        if (userAccess && userAccess.toLowerCase() !== "all" && userAccess.toLowerCase() !== "admin") {
-          allowedShops = userAccess.split(',').map(shop => shop.trim().toLowerCase()).filter(d => d && d !== 'all');
-          if (allowedShops.length > 0) {
-            filterByShop = true;
-          }
-        }
       } else if (currentUserRole === "hod") {
         const { data: reports } = await supabase
           .from("users")
@@ -451,8 +486,7 @@ const WorkTasksTab = ({
           .from("users")
           .select("user_name, shop_name, user_access");
         if (allDbUsers) {
-          const userAccess = localStorage.getItem("user_access") || "";
-          const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          const managerShops = userShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
           const matchedUsers = allDbUsers.filter(u => {
             const userShop = (u.shop_name || u.user_access || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
@@ -553,8 +587,8 @@ const WorkTasksTab = ({
       let filteredWorkTasks = mappedData;
       if (filterByShop) {
         filteredWorkTasks = mappedData.filter(item => {
-          const shopName = (item.shop_name || "").toLowerCase();
-          return allowedShops.includes(shopName);
+          const itemShop = (item.shop || item.shop_name || "").toLowerCase().trim();
+          return allowedShops.some(s => itemShop === s || itemShop.includes(s) || s.includes(itemShop));
         });
       }
 

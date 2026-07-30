@@ -14,7 +14,8 @@ import {
   UserCheck,
   Plus,
   Trash2,
-  UserPlus
+  UserPlus,
+  Building
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -26,7 +27,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'CHECKLIST DELEGATION MODULES',
-        pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'Admin Approval', 'Settings']
+        pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'Admin Approval']
       }
     ]
   },
@@ -42,7 +43,7 @@ const AVAILABLE_SYSTEMS = [
   },
   {
     id: 'inventory',
-    name: 'Inventory System',
+    name: 'SNACKS INVENTRY',
     sections: [
       {
         title: 'DAILY ENTRY DASHBOARD & FORMS',
@@ -119,10 +120,12 @@ export default function MasterSetting() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showPassword, setShowPassword] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
+  const [availableShops, setAvailableShops] = useState([]);
 
   // Modal / Editing state
   const [editingUser, setEditingUser] = useState(null);
   const [passwordInput, setPasswordInput] = useState('');
+  const [shopNameInput, setShopNameInput] = useState('');
   const [accessPermissions, setAccessPermissions] = useState({});
   const [jsonMode, setJsonMode] = useState(false);
   const [rawJsonText, setRawJsonText] = useState('[]');
@@ -136,6 +139,7 @@ export default function MasterSetting() {
     password: '',
     role: 'user',
     email: '',
+    shopName: '',
     systemPreset: 'purchase' // 'all', 'purchase', 'checklist', 'hr', 'inventory', 'petty-cash'
   });
 
@@ -167,12 +171,15 @@ export default function MasterSetting() {
     }
 
     try {
+      const shopVal = newUserForm.shopName.trim() || null;
       const payload = {
         user_name: newUserForm.username.trim(),
         username: newUserForm.username.trim(),
         password: newUserForm.password.trim(),
         role: newUserForm.role || 'user',
         email_id: newUserForm.email.trim() || null,
+        shop_name: shopVal,
+        user_access: shopVal,
         status: 'active',
         master_user_system_page_access: initialPerms
       };
@@ -188,7 +195,7 @@ export default function MasterSetting() {
       } else {
         showToast(`User ${newUserForm.username} created successfully!`, 'success');
         setShowAddModal(false);
-        setNewUserForm({ username: '', password: '', role: 'user', email: '', systemPreset: 'purchase' });
+        setNewUserForm({ username: '', password: '', role: 'user', email: '', shopName: '', systemPreset: 'purchase' });
         fetchUsers();
       }
     } catch (err) {
@@ -241,9 +248,62 @@ export default function MasterSetting() {
     }
   };
 
+  // Fetch shops from database table
+  const fetchShops = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shop')
+        .select('shop_name')
+        .order('shop_name', { ascending: true });
+      if (!error && data) {
+        const names = data.map(s => s.shop_name).filter(Boolean);
+        setAvailableShops(names);
+      }
+    } catch (err) {
+      console.error('Exception fetching shops:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchShops();
   }, []);
+
+  const selectedShopsList = shopNameInput
+    ? shopNameInput.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const handleToggleShop = (shopName) => {
+    let updated;
+    if (selectedShopsList.includes(shopName)) {
+      updated = selectedShopsList.filter(s => s !== shopName);
+    } else {
+      updated = [...selectedShopsList, shopName];
+    }
+    setShopNameInput(updated.join(', '));
+  };
+
+  const handleSelectAllShops = () => {
+    if (selectedShopsList.length === availableShops.length) {
+      setShopNameInput('');
+    } else {
+      setShopNameInput(availableShops.join(', '));
+    }
+  };
+
+  const selectedNewUserShopsList = newUserForm.shopName
+    ? newUserForm.shopName.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const handleToggleNewUserShop = (shopName) => {
+    let updated;
+    if (selectedNewUserShopsList.includes(shopName)) {
+      updated = selectedNewUserShopsList.filter(s => s !== shopName);
+    } else {
+      updated = [...selectedNewUserShopsList, shopName];
+    }
+    setNewUserForm({ ...newUserForm, shopName: updated.join(', ') });
+  };
 
   const togglePasswordVisibility = (userId) => {
     setShowPassword((prev) => ({ ...prev, [userId]: !prev[userId] }));
@@ -253,6 +313,7 @@ export default function MasterSetting() {
   const handleOpenEdit = (user) => {
     setEditingUser(user);
     setPasswordInput(user.password || '');
+    setShopNameInput(user.shop_name || '');
 
     // Parse master_user_system_page_access
     let permObj = {};
@@ -361,11 +422,14 @@ export default function MasterSetting() {
 
     const finalAccess = Object.keys(accessPermissions);
 
+    const shopVal = shopNameInput.trim() || null;
     try {
       const { error } = await supabase
         .from('users')
         .update({
           password: passwordInput,
+          shop_name: shopVal,
+          user_access: shopVal,
           master_user_system_page_access: finalAccess
         })
         .eq('id', editingUser.id);
@@ -459,6 +523,7 @@ export default function MasterSetting() {
                 <th className="py-4 px-4 w-28">Actions</th>
                 <th className="py-4 px-4">User Name</th>
                 <th className="py-4 px-4">Role</th>
+              
                 <th className="py-4 px-4">Password</th>
                 <th className="py-4 px-4">Master System Page Access</th>
               </tr>
@@ -466,14 +531,14 @@ export default function MasterSetting() {
             <tbody className="divide-y divide-[#1A1A1A]/10">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-[#1A1A1A]/50">
+                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50">
                     <RefreshCw size={24} className="animate-spin mx-auto mb-3 text-[#C9A84C]" />
                     <span className="uppercase tracking-widest text-xs font-bold">Loading User Directory...</span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
+                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
                     No users found matching your search term.
                   </td>
                 </tr>
@@ -529,7 +594,9 @@ export default function MasterSetting() {
                         </span>
                       </td>
 
-                      {/* Column 4: Password */}
+                   
+
+                      {/* Column 5: Password */}
                       <td className="py-3.5 px-4 font-mono">
                         <div className="flex items-center gap-2">
                           <span className="text-[#1A1A1A] font-medium">
@@ -545,7 +612,7 @@ export default function MasterSetting() {
                         </div>
                       </td>
 
-                      {/* Column 5: Master System Page Access */}
+                      {/* Column 6: Master System Page Access */}
                       <td className="py-3.5 px-4 max-w-md">
                         {accessKeys.length > 0 ? (
                           <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto custom-scrollbar">
@@ -682,6 +749,75 @@ export default function MasterSetting() {
 
                         {/* SYSTEM CONTENT (SECTIONS & PAGES) */}
                         <div className="p-5 space-y-6 bg-slate-50/40">
+                          {/* Shop Access Section inside Checklist Delegation */}
+                          {sys.id === 'checklist' && (
+                            <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
+                              <div className="flex items-center justify-between">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                                  <Building size={16} className="text-[#C9A84C]" />
+                                  Shop Access (<code className="font-mono text-[#8C6D23] lowercase">shop_name</code>)
+                                </label>
+                                {availableShops.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleSelectAllShops}
+                                    className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                                  >
+                                    {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
+                                  </button>
+                                )}
+                              </div>
+
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                Select assigned shop locations from the database <code className="font-mono font-bold text-[#1C120C]">shop</code> table:
+                              </p>
+
+                              {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
+                              {availableShops.length > 0 ? (
+                                <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                  {availableShops.map((shop) => {
+                                    const isSelected = selectedShopsList.includes(shop);
+                                    return (
+                                      <button
+                                        key={shop}
+                                        type="button"
+                                        onClick={() => handleToggleShop(shop)}
+                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                                          isSelected
+                                            ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
+                                            : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
+                                        }`}
+                                      >
+                                        <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
+                                          isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                                        }`}>
+                                          {isSelected && '✓'}
+                                        </span>
+                                        <span>{shop}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
+                              )}
+
+                              {/* Comma-Separated Text Input */}
+                              <div className="pt-1">
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                  Assigned Shop Locations (Comma-separated text)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={shopNameInput}
+                                  onChange={(e) => setShopNameInput(e.target.value)}
+                                  placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                                  className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
+                                />
+                              </div>
+                            </div>
+                          )}
+
                           {sectionsToRender.map((sec, secIdx) => (
                             <div key={secIdx} className="space-y-3">
                               {/* SECTION HEADER - Highlighted Category Banner */}
@@ -893,8 +1029,52 @@ export default function MasterSetting() {
                   type="email"
                   value={newUserForm.email}
                   onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                  placeholder="user@drinqkart.com"
-                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2 text-xs focus:outline-none focus:border-[#C9A84C]"
+                  placeholder="user@example.com"
+                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-[#C9A84C]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5 flex items-center justify-between">
+                  <span>Shop Access (shop_name)</span>
+                  {availableShops.length > 0 && (
+                    <span className="text-[9px] font-mono text-[#C9A84C] font-bold">
+                      {availableShops.length} Shops Loaded
+                    </span>
+                  )}
+                </label>
+                {availableShops.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto custom-scrollbar bg-slate-50 p-2.5 rounded border border-slate-200">
+                    {availableShops.map((shop) => {
+                      const isSelected = selectedNewUserShopsList.includes(shop);
+                      return (
+                        <button
+                          key={shop}
+                          type="button"
+                          onClick={() => handleToggleNewUserShop(shop)}
+                          className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]'
+                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
+                          }`}
+                        >
+                          <span className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${
+                            isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                          }`}>
+                            {isSelected && '✓'}
+                          </span>
+                          <span>{shop}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={newUserForm.shopName}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, shopName: e.target.value })}
+                  placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:border-[#C9A84C]"
                 />
               </div>
 

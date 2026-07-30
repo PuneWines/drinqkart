@@ -515,6 +515,18 @@ export const checkAndPromoteAssignmentsApi = async () => {
   }
 };
 
+const getUserAssignedShops = () => {
+  const username = (localStorage.getItem('user-name') || localStorage.getItem('username') || '').toLowerCase().trim();
+  const shopNameVal = (localStorage.getItem('shop_name') || localStorage.getItem('user_access') || '').trim();
+
+  if (username === 'admin' || username === 'masteradmin' || shopNameVal.toLowerCase() === 'all' || !shopNameVal) {
+    return null;
+  }
+
+  const shops = shopNameVal.split(',').map(s => s.trim()).filter(Boolean);
+  return shops.length > 0 ? shops : null;
+};
+
 /**
  * Fetches paginated work records with search and filter applied directly in the database.
  */
@@ -528,7 +540,10 @@ export const fetchPaginatedWorkRecordsApi = async ({ page, limit, searchTerm, se
       .select('*, shop!inner(id, shop_name), task_assignments(*)', { count: 'exact' })
       .eq('is_active', true);
 
-    if (role === 'manager' && managerShops && managerShops.length > 0) {
+    const userAssignedShops = getUserAssignedShops();
+    if (userAssignedShops) {
+      query = query.in('shop.shop_name', userAssignedShops);
+    } else if (role === 'manager' && managerShops && managerShops.length > 0) {
       query = query.in('shop.shop_name', managerShops);
     }
 
@@ -578,7 +593,9 @@ export const fetchPaginatedScheduledWorkTasksApi = async ({ page, limit, searchT
       .select('*, shop!inner(id, shop_name), task_assignments(*)', { count: 'exact' })
       .eq('is_active', true);
 
-    if (role === 'manager' && managerShops && managerShops.length > 0) {
+    if (userAssignedShops) {
+      query = query.in('shop.shop_name', userAssignedShops);
+    } else if (role === 'manager' && managerShops && managerShops.length > 0) {
       query = query.in('shop.shop_name', managerShops);
     }
 
