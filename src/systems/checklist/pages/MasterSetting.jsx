@@ -274,10 +274,17 @@ export default function MasterSetting() {
       )}
 
       {/* Header Banner - Drinqkart Home Styling */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-8 rounded-none border-[0.5px] border-[#1A1A1A]/10 shadow-sm relative overflow-hidden">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-6 rounded-none border-[0.5px] border-[#1A1A1A]/10 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#C9A84C]/5 rounded-full blur-3xl pointer-events-none" />
 
-
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl font-serif text-[#1A1A1A] font-bold tracking-wide">
+            Master Settings & System Access
+          </h1>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#1A1A1A] text-[#C9A84C] text-xs font-bold font-mono rounded-full border border-[#C9A84C]/30 shadow-sm">
+            Total Users: {users.length}
+          </span>
+        </div>
 
         <div className="flex items-center gap-3">
           <button
@@ -291,16 +298,21 @@ export default function MasterSetting() {
         </div>
       </div>
 
-      {/* Search Filter */}
-      <div className="mb-6 relative max-w-md">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search by username..."
-          className="w-full pl-10 pr-4 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs text-[#1A1A1A] placeholder-[#1A1A1A]/40 focus:outline-none focus:border-[#C9A84C] transition-colors shadow-inner font-medium"
-        />
+      {/* Search Filter & Count Summary */}
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="relative max-w-md flex-1 min-w-[240px]">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by username..."
+            className="w-full pl-10 pr-4 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs text-[#1A1A1A] placeholder-[#1A1A1A]/40 focus:outline-none focus:border-[#C9A84C] transition-colors shadow-inner font-medium"
+          />
+        </div>
+        <div className="text-xs font-bold text-[#1A1A1A]/70 px-1 font-mono">
+          Showing <span className="text-[#C9A84C] font-extrabold">{filteredUsers.length}</span> of <span className="text-[#1A1A1A] font-extrabold">{users.length}</span> users
+        </div>
       </div>
 
       {/* Users Table with Actions in Column 1 */}

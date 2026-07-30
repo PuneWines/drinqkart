@@ -273,20 +273,66 @@ export default function WorkDetails() {
     dispatch(userDetails());
   }, [dispatch]);
 
-  // Derived Shops List
-  const shops = useMemo(() => {
+  const [assignedShops, setAssignedShops] = useState([]);
+  const [hasAllShopsAccess, setHasAllShopsAccess] = useState(true);
+
+  // Fetch assigned shop access for logged in user directly from DB
+  useEffect(() => {
+    const fetchUserAssignedShops = async () => {
+      const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
+      let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+
+      if (currentUsername) {
+        try {
+          const { data: userDb } = await supabase
+            .from("users")
+            .select("shop_name, user_access")
+            .or(`user_name.ilike.${currentUsername},username.ilike.${currentUsername}`)
+            .maybeSingle();
+          if (userDb) {
+            rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
+          }
+        } catch (e) {
+          console.error("Error fetching user shop access in WorkDetails:", e);
+        }
+      }
+
+      if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+        const list = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        setAssignedShops(list);
+        setHasAllShopsAccess(false);
+      } else {
+        setAssignedShops([]);
+        setHasAllShopsAccess(true);
+      }
+    };
+    fetchUserAssignedShops();
+  }, [username]);
+
+  // Derived Available Shops List based on assigned shops
+  const availableShops = useMemo(() => {
     const filteredMasterTasks = role === "manager"
       ? masterTasks.filter(t => managerShops.includes(t.shop?.shop_name?.toLowerCase()))
       : masterTasks;
-    const s = new Set(filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean));
-    return ["All", ...Array.from(s)];
-  }, [masterTasks, role, managerShops]);
+    const allTaskShops = Array.from(new Set(filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean)));
+
+    if (!hasAllShopsAccess && assignedShops.length > 0) {
+      const matched = allTaskShops.filter(s => assignedShops.includes(s.toLowerCase()));
+      return matched.length > 0 ? matched : assignedShops;
+    }
+    return allTaskShops;
+  }, [masterTasks, role, managerShops, hasAllShopsAccess, assignedShops]);
+
+  useEffect(() => {
+    if (!hasAllShopsAccess && availableShops.length > 0) {
+      if (selectedShop === "All" || !availableShops.map(s => String(s).toLowerCase()).includes(String(selectedShop).toLowerCase())) {
+        setSelectedShop(availableShops[0]);
+      }
+    }
+  }, [hasAllShopsAccess, availableShops, selectedShop]);
 
   // Background Cleanup: Archive & Delete expired assignments from DB
   useEffect(() => {
-    // Auto-archive of expired assignments is temporarily disabled.
-    // Reason: remove the automatic expiry/penalty mechanism per product request.
-    // If/when needed again, restore the implementation below.
     return;
   }, [assignments, currentTime, dispatch]);
 
@@ -316,7 +362,11 @@ export default function WorkDetails() {
   // Filtering
   const filteredTasks = useMemo(() => {
     return mergedData.filter(item => {
-      if (role === "manager" && !managerShops.includes(item.shopName?.toLowerCase())) {
+      const itemShopLower = (item.shopName || "").toLowerCase();
+      if (!hasAllShopsAccess && assignedShops.length > 0 && !assignedShops.includes(itemShopLower)) {
+        return false;
+      }
+      if (role === "manager" && !managerShops.includes(itemShopLower)) {
         return false;
       }
       const matchesShop = selectedShop === "All" || item.shopName === selectedShop;
@@ -325,7 +375,7 @@ export default function WorkDetails() {
         item.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesShop && matchesSearch;
     });
-  }, [mergedData, selectedShop, searchTerm, role, managerShops]);
+  }, [mergedData, selectedShop, searchTerm, role, managerShops, hasAllShopsAccess, assignedShops]);
 
   // Handlers
   const handleSelectRow = (id) => {
@@ -820,7 +870,8 @@ export default function WorkDetails() {
                 value={selectedShop}
                 onChange={(e) => setSelectedShop(e.target.value)}
               >
-                {shops.map(shop => <option key={shop} value={shop}>{shop}</option>)}
+                {hasAllShopsAccess && <option value="All">All</option>}
+                {availableShops.map(shop => <option key={shop} value={shop}>{shop}</option>)}
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none group-hover:text-blue-600" />
             </div>

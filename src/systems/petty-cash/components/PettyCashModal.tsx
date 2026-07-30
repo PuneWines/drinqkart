@@ -217,12 +217,12 @@ export default function PettyCashModal({
     try {
       let uniqueShops: string[] = [];
       const { data, error } = await supabase
-        .from('petty_cash_shops')
-        .select('name')
+        .from('shop')
+        .select('*')
         .order('id', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        const shopNames = data.map((row: any) => row.name).filter(Boolean);
+        const shopNames = data.map((row: any) => row.shop_name || row.name).filter(Boolean);
         uniqueShops = Array.from(new Set(shopNames));
       } else {
         uniqueShops = [];
@@ -583,7 +583,7 @@ export default function PettyCashModal({
 
           {/* ── Expenses Inputs Grid (Compact 5-Column Layout) ── */}
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
-           
+
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 text-xs">
               <div>
                 <label className="block mb-1 text-[11px] font-medium text-gray-600">Tea & Snacks</label>
@@ -681,7 +681,7 @@ export default function PettyCashModal({
 
           {/* ── Payments & Voucher Info Grid ── */}
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
-          
+
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
               <div>
                 <label className="block mb-1 text-[11px] font-medium text-gray-600">Purchase Voucher No.</label>

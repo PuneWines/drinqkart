@@ -133,11 +133,11 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     setShopsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('petty_cash_shops')
+        .from('shop')
         .select('*')
         .order('id', { ascending: true });
       if (error) throw error;
-      setShops((data || []).map((r: any) => ({ id: r.id, name: r.name || '' })));
+      setShops((data || []).map((r: any) => ({ id: r.id, name: r.shop_name || r.name || '' })));
     } catch (err) { console.error('Error fetching shops:', err); }
     finally { setShopsLoading(false); }
   }, []);
@@ -211,10 +211,10 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     setShopSaving(true);
     try {
       if (shopEditTarget) {
-        const { error } = await supabase.from('petty_cash_shops').update({ name: shopNameInput.trim() }).eq('id', shopEditTarget.id);
+        const { error } = await supabase.from('shop').update({ shop_name: shopNameInput.trim() }).eq('id', shopEditTarget.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('petty_cash_shops').insert([{ name: shopNameInput.trim() }]);
+        const { error } = await supabase.from('shop').insert([{ shop_name: shopNameInput.trim() }]);
         if (error) throw error;
       }
       await fetchShops();
@@ -227,7 +227,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     if (!shopDeleteTarget) return;
     setShopDeleting(true);
     try {
-      const { error } = await supabase.from('petty_cash_shops').delete().eq('id', shopDeleteTarget.id);
+      const { error } = await supabase.from('shop').delete().eq('id', shopDeleteTarget.id);
       if (error) throw error;
       setShops(prev => prev.filter(s => s.id !== shopDeleteTarget.id));
       setShopDeleteTarget(null);
@@ -547,10 +547,6 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
                       #{shop.id}
                     </span>
                     <span className="text-sm font-medium text-gray-800 truncate">{shop.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEditShop(shop)} title="Edit" className="p-1.5 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit className="text-xs" /></button>
-                    <button onClick={() => setShopDeleteTarget(shop)} title="Delete" className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><FaTrash className="text-xs" /></button>
                   </div>
                 </div>
               ))}
