@@ -287,7 +287,7 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Fetch employees from users table (checklist system)
+  // Fetch employees from hr_management_employees table
   const fetchEmployeesTable = async () => {
     try {
       let allEmployeesData = [];
@@ -297,7 +297,7 @@ const AttendanceDaily = () => {
 
       while (hasMore) {
         const { data, error } = await supabase
-          .from('users')
+          .from('hr_management_employees')
           .select('*')
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -318,7 +318,7 @@ const AttendanceDaily = () => {
       setEmployeesData(allEmployeesData);
       return allEmployeesData;
     } catch (error) {
-      console.error('Error fetching users table:', error);
+      console.error('Error fetching hr_management_employees table:', error);
       return [];
     }
   };
@@ -705,7 +705,7 @@ const AttendanceDaily = () => {
 
   const fetchAllEmployees = async () => {
     try {
-      // 1. Fetch all employees from the 'users' table (matched employees)
+      // 1. Fetch all employees from the 'hr_management_employees' table (matched employees)
       let dbEmployees = [];
       let page = 0;
       const pageSize = 1000;
@@ -713,8 +713,8 @@ const AttendanceDaily = () => {
 
       while (hasMore) {
         const { data, error } = await supabase
-          .from('users')
-          .select('employee_id, user_name, Designation, designation, shop_name, joining_place, name_as_per_aadhar')
+          .from('hr_management_employees')
+          .select('employee_id, name_as_per_aadhar, designation, joining_company_name, joining_place')
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;

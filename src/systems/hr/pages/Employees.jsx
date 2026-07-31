@@ -217,77 +217,55 @@ export default function EmployeeManagement() {
     try {
       setLoading(true)
       const mappedList = []
-      const seenEmployeeIds = new Set()
 
-      // 1. Fetch from users table (HR_SYSTEM_employee_details jsonb column)
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (!usersError && usersData && usersData.length > 0) {
-        usersData.forEach(row => {
-          const details = row.HR_SYSTEM_employee_details || {}
-          const empId = row.employee_id || details.employee_id
-          const name = details.name_as_per_aadhar || row.user_name
-
-          if (empId || name || row.HR_SYSTEM_employee_details) {
-            const mapped = {
-              id: row.id,
-              employee_id: empId || '',
-              indent_no: details.indent_no || '',
-              name_as_per_aadhar: name || '',
-              father_name: details.father_name || '',
-              dob: details.dob || '',
-              gender: details.gender || '',
-              mobile_no: details.mobile_no || (row.number ? row.number.toString() : ''),
-              candidate_email: details.candidate_email || row.email_id || '',
-              family_mobile_no: details.family_mobile_no || '',
-              date_of_joining: details.date_of_joining || '',
-              joining_place: details.joining_place || '',
-              designation: details.designation || row.Designation || '',
-              salary: details.salary || '',
-              joining_company_name: details.joining_company_name || row.shop_name || '',
-              mode_of_attendance: details.mode_of_attendance || 'Biometric',
-              status: details.status || (typeof row.status === 'string' ? row.status : 'Active'),
-              aadhar_no: details.aadhar_no || '',
-              current_account_no: details.current_account_no || '',
-              ifsc_code: details.ifsc_code || '',
-              branch_name: details.branch_name || '',
-              payment_mode: details.payment_mode || 'Bank Transfer',
-              beneficiary_name: details.beneficiary_name || '',
-              aadhar_front_image: details.aadhar_front_image || null,
-              aadhar_back_image: details.aadhar_back_image || null,
-              candidate_photo: details.candidate_photo || row.profile_image || null,
-              pan_card_image: details.pan_card_image || null,
-              bank_passbook_image: details.bank_passbook_image || null,
-              resume_url: details.resume_url || null,
-              created_at: details.created_at || row.created_at,
-              updated_at: details.updated_at || null,
-              _isUsersTable: true,
-              _rawUser: row
-            }
-            if (mapped.employee_id) seenEmployeeIds.add(mapped.employee_id)
-            mappedList.push(mapped)
-          }
-        })
-      }
-
-      // 2. Fetch from hr_management_employees table as secondary source
+      // Fetch directly and exclusively from hr_management_employees table
       const { data: hrData, error: hrError } = await supabase
         .from('hr_management_employees')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (!hrError && hrData && hrData.length > 0) {
+      if (hrError) throw hrError
+
+      if (hrData && hrData.length > 0) {
         hrData.forEach(emp => {
-          if (!emp.employee_id || !seenEmployeeIds.has(emp.employee_id)) {
-            mappedList.push({
-              ...emp,
-              _isUsersTable: false
-            })
-            if (emp.employee_id) seenEmployeeIds.add(emp.employee_id)
-          }
+          const details = emp.HR_SYSTEM_employee_data || {}
+          const empId = emp.employee_id || details.employee_id
+          const name = emp.name_as_per_aadhar || details.name_as_per_aadhar
+
+          mappedList.push({
+            id: emp.id,
+            employee_id: empId || '',
+            indent_no: emp.indent_no || details.indent_no || '',
+            name_as_per_aadhar: name || '',
+            father_name: emp.father_name || details.father_name || '',
+            dob: emp.dob || details.dob || '',
+            gender: emp.gender || details.gender || '',
+            mobile_no: emp.mobile_no || details.mobile_no || '',
+            candidate_email: emp.candidate_email || details.candidate_email || '',
+            family_mobile_no: emp.family_mobile_no || details.family_mobile_no || '',
+            date_of_joining: emp.date_of_joining || details.date_of_joining || '',
+            joining_place: emp.joining_place || details.joining_place || '',
+            designation: emp.designation || details.designation || '',
+            salary: emp.salary ?? details.salary ?? '',
+            joining_company_name: emp.joining_company_name || details.joining_company_name || '',
+            mode_of_attendance: emp.mode_of_attendance || details.mode_of_attendance || 'Biometric',
+            status: emp.status || emp.employee_status || emp.Employee_status || details.status || 'Active',
+            aadhar_no: emp.aadhar_no || details.aadhar_no || '',
+            current_account_no: emp.current_account_no || details.current_account_no || '',
+            ifsc_code: emp.ifsc_code || details.ifsc_code || '',
+            branch_name: emp.branch_name || details.branch_name || '',
+            payment_mode: emp.payment_mode || details.payment_mode || 'Bank Transfer',
+            beneficiary_name: emp.beneficiary_name || details.beneficiary_name || '',
+            aadhar_front_image: emp.aadhar_front_image || details.aadhar_front_image || null,
+            aadhar_back_image: emp.aadhar_back_image || details.aadhar_back_image || null,
+            candidate_photo: emp.candidate_photo || details.candidate_photo || null,
+            pan_card_image: emp.pan_card_image || details.pan_card_image || null,
+            bank_passbook_image: emp.bank_passbook_image || details.bank_passbook_image || null,
+            resume_url: emp.resume_url || details.resume_url || null,
+            created_at: emp.created_at || details.created_at,
+            updated_at: emp.updated_at || details.updated_at || null,
+            _raw: emp
+          })
         })
       }
 
@@ -507,19 +485,13 @@ export default function EmployeeManagement() {
     setUploading(true)
 
     try {
-      const { data: existingUsers } = await supabase
-        .from('users')
-        .select('employee_id')
-        .eq('employee_id', formData.employee_id)
-        .maybeSingle()
-
       const { data: existingHr } = await supabase
         .from('hr_management_employees')
         .select('employee_id')
         .eq('employee_id', formData.employee_id)
         .maybeSingle()
 
-      if (existingUsers || existingHr) {
+      if (existingHr) {
         alert(`Employee ID ${formData.employee_id} already exists! Please use a different ID.`)
         setSaving(false)
         setUploading(false)
@@ -541,28 +513,28 @@ export default function EmployeeManagement() {
         employee_id: formData.employee_id,
         indent_no: formData.indent_no || null,
         name_as_per_aadhar: formData.name_as_per_aadhar,
-        father_name: formData.father_name || null,
-        dob: formData.dob,
-        gender: formData.gender,
-        mobile_no: formData.mobile_no,
+        father_name: formData.father_name || "",
+        dob: formData.dob || new Date().toISOString().split('T')[0],
+        gender: formData.gender || 'Male',
+        mobile_no: formData.mobile_no || "",
         candidate_email: formData.candidate_email || null,
         family_mobile_no: formData.family_mobile_no || null,
-        date_of_joining: formData.date_of_joining,
-        joining_place: formData.joining_place,
-        designation: formData.designation,
+        date_of_joining: formData.date_of_joining || new Date().toISOString().split('T')[0],
+        joining_place: formData.joining_place || "",
+        designation: formData.designation || "",
         salary: formData.salary ? parseFloat(formData.salary) : null,
         joining_company_name: formData.joining_company_name || null,
-        mode_of_attendance: formData.mode_of_attendance,
-        aadhar_no: formData.aadhar_no,
-        current_account_no: formData.current_account_no,
-        ifsc_code: formData.ifsc_code,
-        branch_name: formData.branch_name,
-        payment_mode: formData.payment_mode,
+        mode_of_attendance: formData.mode_of_attendance || 'Biometric',
+        aadhar_no: formData.aadhar_no || "",
+        current_account_no: formData.current_account_no || "",
+        ifsc_code: formData.ifsc_code || "",
+        branch_name: formData.branch_name || "",
+        payment_mode: formData.payment_mode || 'Bank Transfer',
         beneficiary_name: formData.beneficiary_name || null,
         status: formData.status || 'Active',
-        aadhar_front_image: uploadedUrls.aadharFront || null,
-        aadhar_back_image: uploadedUrls.aadharBack || null,
-        candidate_photo: uploadedUrls.candidatePhoto || null,
+        aadhar_front_image: uploadedUrls.aadharFront || "",
+        aadhar_back_image: uploadedUrls.aadharBack || "",
+        candidate_photo: uploadedUrls.candidatePhoto || "",
         pan_card_image: uploadedUrls.panCard || null,
         bank_passbook_image: uploadedUrls.bankPassbook || null,
         resume_url: uploadedUrls.resume || null,
@@ -570,28 +542,16 @@ export default function EmployeeManagement() {
         updated_at: new Date().toISOString()
       }
 
-      // Save to users table with HR_SYSTEM_employee_details
-      const userPayload = {
-        user_name: formData.name_as_per_aadhar,
-        employee_id: formData.employee_id,
-        email_id: formData.candidate_email || null,
-        number: formData.mobile_no ? parseInt(formData.mobile_no) : null,
-        shop_name: formData.joining_company_name || null,
-        Designation: formData.designation,
-        HR_SYSTEM_employee_details: employeeData
-      }
-
-      const { data: newUser, error: userError } = await supabase
-        .from('users')
-        .insert([userPayload])
+      // Save exclusively to hr_management_employees table
+      const { data: newHrEmp, error: hrError } = await supabase
+        .from('hr_management_employees')
+        .insert([employeeData])
         .select()
         .maybeSingle()
 
-      // Also save to hr_management_employees table for backup
-      try {
-        await supabase.from('hr_management_employees').insert([employeeData])
-      } catch (err) {
-        console.warn('Backup insert to hr_management_employees skipped:', err)
+      if (hrError) {
+        console.error('Error inserting to hr_management_employees:', hrError)
+        throw hrError
       }
 
       await fetchEmployees()
@@ -630,7 +590,7 @@ export default function EmployeeManagement() {
         name_as_per_aadhar: editFormData.name_as_per_aadhar,
         date_of_joining: editFormData.date_of_joining,
         mobile_no: editFormData.mobile_no,
-        father_name: editFormData.father_name || null,
+        father_name: editFormData.father_name || "",
         joining_place: editFormData.joining_place,
         designation: editFormData.designation,
         salary: editFormData.salary ? parseFloat(editFormData.salary) : null,
@@ -648,33 +608,20 @@ export default function EmployeeManagement() {
         joining_company_name: editFormData.joining_company_name || null,
         status: editFormData.status || 'Active',
         updated_at: new Date().toISOString(),
-        aadhar_front_image: uploadedUrls.aadharFront || currentEmployee.aadhar_front_image || null,
-        aadhar_back_image: uploadedUrls.aadharBack || currentEmployee.aadhar_back_image || null,
-        candidate_photo: uploadedUrls.candidatePhoto || currentEmployee.candidate_photo || null,
+        aadhar_front_image: uploadedUrls.aadharFront || currentEmployee.aadhar_front_image || "",
+        aadhar_back_image: uploadedUrls.aadharBack || currentEmployee.aadhar_back_image || "",
+        candidate_photo: uploadedUrls.candidatePhoto || currentEmployee.candidate_photo || "",
         pan_card_image: uploadedUrls.panCard || currentEmployee.pan_card_image || null,
         bank_passbook_image: uploadedUrls.bankPassbook || currentEmployee.bank_passbook_image || null,
         resume_url: uploadedUrls.resume || currentEmployee.resume_url || null
       }
 
-      if (editingEmployee._isUsersTable) {
-        await supabase
-          .from('users')
-          .update({
-            user_name: editFormData.name_as_per_aadhar,
-            employee_id: editFormData.employee_id,
-            email_id: editFormData.candidate_email || null,
-            number: editFormData.mobile_no ? parseInt(editFormData.mobile_no) : null,
-            shop_name: editFormData.joining_company_name || null,
-            Designation: editFormData.designation,
-            HR_SYSTEM_employee_details: updateData
-          })
-          .eq('id', editingEmployee.id)
-      } else {
-        await supabase
-          .from('hr_management_employees')
-          .update(updateData)
-          .eq('id', editingEmployee.id)
-      }
+      const { error: hrUpdateErr } = await supabase
+        .from('hr_management_employees')
+        .update(updateData)
+        .eq('id', editingEmployee.id)
+
+      if (hrUpdateErr) throw hrUpdateErr
 
       await fetchEmployees()
 
@@ -793,19 +740,12 @@ export default function EmployeeManagement() {
     if (!window.confirm(`Delete ${employee.name_as_per_aadhar}?`)) return
 
     try {
-      if (employee._isUsersTable) {
-        const { error } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', employee.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('hr_management_employees')
-          .delete()
-          .eq('id', employee.id)
-        if (error) throw error
-      }
+      const { error } = await supabase
+        .from('hr_management_employees')
+        .delete()
+        .eq('id', employee.id)
+
+      if (error) throw error
 
       setEmployees(employees.filter(emp => emp.id !== employee.id))
       alert('Employee deleted successfully!')
