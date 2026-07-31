@@ -96,12 +96,18 @@ const Approval = () => {
     try {
       setIsLoading(true);
       const ids = items.map(item => item.id);
-      const { error } = await supabase
-        .from("purchase_indent_items")
-        .delete()
-        .in("id", ids);
+      
+      // Delete in chunks of 50 to avoid URL length limit errors in REST API
+      const chunkSize = 50;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize);
+        const { error } = await supabase
+          .from("purchase_indent_items")
+          .delete()
+          .in("id", chunk);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       alert(`Batch ${displayLabel} successfully deleted!`);
       
@@ -425,12 +431,16 @@ const Approval = () => {
         }
       });
 
-      // 1. Insert approved items into approved_indent_items
+      // 1. Insert approved items into approved_indent_items in chunks of 100
       if (approvedItemsPayload.length > 0) {
-        const { error: insertErr } = await supabase
-          .from("purchase_approved_indent_items")
-          .insert(approvedItemsPayload);
-        if (insertErr) throw insertErr;
+        const chunkSize = 100;
+        for (let i = 0; i < approvedItemsPayload.length; i += chunkSize) {
+          const chunk = approvedItemsPayload.slice(i, i + chunkSize);
+          const { error: insertErr } = await supabase
+            .from("purchase_approved_indent_items")
+            .insert(chunk);
+          if (insertErr) throw insertErr;
+        }
       }
 
       // 2. Update parent indent status
@@ -442,12 +452,18 @@ const Approval = () => {
         if (indentErr) throw indentErr;
       }
 
-      // 3. Delete all items in this batch from indent_items
-      const { error: deleteErr } = await supabase
-        .from("purchase_indent_items")
-        .delete()
-        .in("id", idsToDelete);
-      if (deleteErr) throw deleteErr;
+      // 3. Delete all items in this batch from purchase_indent_items in chunks of 50 to prevent URL length limit errors
+      if (idsToDelete.length > 0) {
+        const chunkSize = 50;
+        for (let i = 0; i < idsToDelete.length; i += chunkSize) {
+          const chunk = idsToDelete.slice(i, i + chunkSize);
+          const { error: deleteErr } = await supabase
+            .from("purchase_indent_items")
+            .delete()
+            .in("id", chunk);
+          if (deleteErr) throw deleteErr;
+        }
+      }
 
       alert("Successfully submitted approvals and deleted batch from pending storage!");
       setOriginalIndentItems([]);

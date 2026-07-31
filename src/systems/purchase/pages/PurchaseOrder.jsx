@@ -447,7 +447,15 @@ const PurchaseOrder = () => {
 
   const activeVendorDetails = useMemo(() => {
     if (!activeParty || !vendorsList.length) return null;
-    return vendorsList.find(v => v.party_name === activeParty) || null;
+    const vendor = vendorsList.find(
+      v => v.party_name?.trim().toLowerCase() === activeParty?.trim().toLowerCase()
+    );
+    if (!vendor) return null;
+    return {
+      ...vendor,
+      contact: vendor.contact_number || vendor.contact || "",
+      contact_number: vendor.contact_number || vendor.contact || ""
+    };
   }, [activeParty, vendorsList]);
 
   const handleDownloadPDF = async () => {
@@ -537,8 +545,8 @@ const PurchaseOrder = () => {
       const traderStoragePath = `${baseFilename}_Trader_${timestamp}.pdf`;
       const receiverStoragePath = `${baseFilename}_Receiver_${timestamp}.pdf`;
 
-      const traderUrl = await uploadPdfBlob('PO', traderStoragePath, traderBlob);
-      const receiverUrl = await uploadPdfBlob('PO', receiverStoragePath, receiverBlob);
+      const traderUrl = await uploadPdfBlob('purchase_PO', traderStoragePath, traderBlob);
+      const receiverUrl = await uploadPdfBlob('purchase_PO', receiverStoragePath, receiverBlob);
 
       // --- Generate / Fetch Unique Vendor ID ---
       const currentVendorId = await generateVendorId(activeParty);
@@ -567,19 +575,15 @@ const PurchaseOrder = () => {
       const insertedData = await insertPurchaseOrder({
         po_number: nextPoNumber,
         vendor_name: activeParty,
-        vendor_id: currentVendorId,
         trader_pdf_url: traderUrl,
         receiver_pdf_url: receiverUrl,
-        transporter_pdf_url: traderUrl,
         indent_id: currentIndentId,
         first_brand_name: firstBrandName,
         shop_name: currentShopName,
         total_order_qty: totalOrderQty,
         total_order_box: totalOrderBox,
         transporter_number: selectedTransporter || null,
-        receiver_number: selectedReceiver || null,
-        po_items: itemsForActiveParty,
-        po_type: poMode === "manual" ? "manual_po" : "system_po"
+        receiver_number: selectedReceiver || null
       });
 
       const insertedPoId = insertedData[0]?.id;

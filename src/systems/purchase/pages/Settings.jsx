@@ -45,7 +45,7 @@ const Settings = () => {
     address: "",
     gstin: "",
     contact_name: "",
-    contact: "",
+    contact_number: "",
     email: "",
     terms: [],
   });
@@ -208,7 +208,7 @@ const Settings = () => {
       address: vendor.address || "",
       gstin: vendor.gstin || "",
       contact_name: vendor.contact_name || "",
-      contact: vendor.contact || "",
+      contact_number: vendor.contact_number || vendor.contact || "",
       email: vendor.email || "",
       terms: vendor.terms || [],
     });
@@ -222,7 +222,7 @@ const Settings = () => {
       address: "",
       gstin: "",
       contact_name: "",
-      contact: "",
+      contact_number: "",
       email: "",
       terms: [],
     });
@@ -431,7 +431,7 @@ const Settings = () => {
 
   const filteredVendors = vendors.filter(v => 
     v.party_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.contact && v.contact.includes(searchQuery))
+    ((v.contact_number || v.contact) && (v.contact_number || v.contact).includes(searchQuery))
   );
 
   const filteredTransporters = transporters.filter(t => 
@@ -556,8 +556,8 @@ const Settings = () => {
                         <label className="text-xs font-bold text-slate-700">Primary Contact Phone</label>
                         <input
                           type="text"
-                          value={vendorFormData.contact}
-                          onChange={(e) => setVendorFormData({ ...vendorFormData, contact: e.target.value })}
+                          value={vendorFormData.contact_number}
+                          onChange={(e) => setVendorFormData({ ...vendorFormData, contact_number: e.target.value })}
                           disabled={isVendorSubmitting}
                           className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                         />
@@ -676,7 +676,7 @@ const Settings = () => {
                       {vendors.map((vendor) => (
                         <tr key={vendor.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-900 font-bold">{vendor.party_name}</strong></td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{vendor.contact || '—'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{vendor.contact_number || vendor.contact || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{vendor.email || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase">{vendor.gstin || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap flex gap-2">

@@ -29,16 +29,17 @@ const TraderVerification = () => {
         let items = [];
         if (uniqueIndentIds.length > 0) {
           const [resItems, resApproved] = await Promise.all([
-            supabase.from("purchase_indent_items").select("indent_id, unique_indent_id").in("unique_indent_id", uniqueIndentIds),
+            supabase.from("purchase_indent_items").select("indent_id, party_indent_id").in("party_indent_id", uniqueIndentIds),
             supabase.from("purchase_approved_indent_items").select("indent_id, unique_indent_id").in("unique_indent_id", uniqueIndentIds)
           ]);
           items = [...(resItems.data || []), ...(resApproved.data || [])];
         }
 
-        // Build map: unique_indent_id (text) → indent_id (UUID)
+        // Build map: unique_indent_id/party_indent_id (text) → indent_id (UUID)
         const itemMap = (items || []).reduce((acc, item) => {
-          if (item.unique_indent_id && item.indent_id) {
-            acc[item.unique_indent_id] = item.indent_id;
+          const key = item.unique_indent_id || item.party_indent_id;
+          if (key && item.indent_id) {
+            acc[key] = item.indent_id;
           }
           return acc;
         }, {});

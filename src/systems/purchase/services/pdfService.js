@@ -5,7 +5,7 @@ export const generatePdfBlob = async (docInstance) => {
   return await pdf(docInstance).toBlob();
 };
 
-export const uploadPdfBlob = async (bucket, path, blob) => {
+export const uploadPdfBlob = async (bucket = "purchase_PO", path, blob) => {
   const { error } = await supabase.storage
     .from(bucket)
     .upload(path, blob, { contentType: "application/pdf", upsert: true });
