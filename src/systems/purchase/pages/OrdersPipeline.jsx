@@ -24,6 +24,7 @@ import {
   TrendingUp,
   Check,
   Eye,
+  Download,
 } from "lucide-react";
 
 const OrdersPipeline = () => {
@@ -123,10 +124,115 @@ const OrdersPipeline = () => {
     }
   }, [ordersError]);
 
+  const [isExporting, setIsExporting] = useState(false);
+
   // Manual refresh handler
   const handleRefresh = () => {
     refetchStats();
     refetchOrders();
+  };
+
+  // Bulk Export handler to export report to CSV
+  const handleBulkExport = async () => {
+    try {
+      setIsExporting(true);
+
+      // Fetch all matching orders (no pagination limit)
+      const allOrders = await fetchPipelineOrders({
+        limit: 10000,
+        offset: 0,
+        shop: selectedShop,
+        status: statusFilter,
+        search: debouncedSearch,
+        sortBy: sortBy,
+        startDate,
+        endDate,
+      });
+
+      if (!allOrders || allOrders.length === 0) {
+        setIsExporting(false);
+        return;
+      }
+
+      // Build CSV content
+      const headers = [
+        "Shop Name",
+        "PO No",
+        "Trader Name",
+        "Order Qty",
+        "Trader decision",
+        "Pickup qty",
+        "Transporter name",
+        "Received Qty",
+        "Receiver name"
+      ];
+
+      const csvRows = [];
+      csvRows.push(headers.join(","));
+
+      allOrders.forEach((po) => {
+        const items = getPOItemsData(po);
+
+        let totalOrderQty = po.total_order_qty || 0;
+        let totalPickupQty = 0;
+        let totalReceivedQty = 0;
+
+        if (items.length > 0) {
+          totalOrderQty = items.reduce((sum, item) => sum + (item.orderQty || 0), 0);
+          totalPickupQty = items.reduce((sum, item) => sum + (item.transporterQty || 0), 0);
+          totalReceivedQty = items.reduce((sum, item) => sum + (item.receiverQty || 0), 0);
+        } else {
+          totalPickupQty = po.transporter_status === "yes" ? totalOrderQty : 0;
+          totalReceivedQty = po.receiver_status === "yes" ? totalOrderQty : 0;
+        }
+
+        let traderDecision = "Pending";
+        if (po.trader_status === "yes") {
+          const hasRejectedItem = items.some((i) => i.traderDecision === "Rejected");
+          traderDecision = hasRejectedItem ? "Partially Accepted" : "Accepted";
+        } else if (po.trader_status === "no") {
+          traderDecision = "Rejected";
+        }
+
+        const shopName = `"${(po.shop_name || "Unknown").replace(/"/g, '""')}"`;
+        const poNo = `"${(po.po_number || "").replace(/"/g, '""')}"`;
+        const traderName = `"${(po.vendor_name || "—").replace(/"/g, '""')}"`;
+        const orderQty = totalOrderQty;
+        const decision = `"${traderDecision.replace(/"/g, '""')}"`;
+        const pickupQty = totalPickupQty;
+        const transporterName = `"${(po.transporter_name || "—").replace(/"/g, '""')}"`;
+        const receivedQty = totalReceivedQty;
+        const receiverName = `"${(po.receiver_name || "—").replace(/"/g, '""')}"`;
+
+        csvRows.push([
+          shopName,
+          poNo,
+          traderName,
+          orderQty,
+          decision,
+          pickupQty,
+          transporterName,
+          receivedQty,
+          receiverName
+        ].join(","));
+      });
+
+      const csvString = csvRows.join("\n");
+      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      const timestamp = new Date().toISOString().split("T")[0];
+      link.setAttribute("download", `Orders_Pipeline_Report_${timestamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error exporting report:", err);
+      addToast("Failed to generate export report: " + err.message, "error");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // On Scroll Listener for Infinite Scroll
@@ -379,16 +485,29 @@ const OrdersPipeline = () => {
             </p>
           </div>
 
-          <button
-            className={`flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-semibold text-slate-600 hover:text-indigo-600 shadow-sm hover:shadow transition-all ${
-              isRefreshing ? "opacity-75 cursor-not-allowed" : "cursor-pointer"
-            }`}
-            onClick={handleRefresh}
-            disabled={isRefreshing || isLoading}
-          >
-            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
-            {isRefreshing ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBulkExport}
+              disabled={isExporting || isLoading}
+              className={`flex items-center gap-2 px-4 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-sm font-bold shadow-sm transition-all cursor-pointer ${
+                isExporting ? "opacity-75 cursor-not-allowed" : ""
+              }`}
+            >
+              <Download size={15} className={isExporting ? "animate-bounce" : ""} />
+              {isExporting ? "Exporting..." : "Bulk Export"}
+            </button>
+
+            <button
+              className={`flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-semibold text-slate-600 hover:text-indigo-600 shadow-sm hover:shadow transition-all ${
+                isRefreshing ? "opacity-75 cursor-not-allowed" : "cursor-pointer"
+              }`}
+              onClick={handleRefresh}
+              disabled={isRefreshing || isLoading}
+            >
+              <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+              {isRefreshing ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </div>
       </header>
 
