@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -15,7 +15,10 @@ import {
   Plus,
   Trash2,
   UserPlus,
-  Building
+  Building,
+  AlertCircle,
+  CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -134,26 +137,148 @@ export default function MasterSetting() {
 
   // Add User State
   const [showAddModal, setShowAddModal] = useState(false);
+  const [employeesList, setEmployeesList] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [empSearchInput, setEmpSearchInput] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [empStatus, setEmpStatus] = useState(null); // null | 'already_user' | 'not_found' | 'ready'
+  const [existingUserInfo, setExistingUserInfo] = useState(null);
+
   const [newUserForm, setNewUserForm] = useState({
+    employee_id: '',
     username: '',
     password: '',
     role: 'user',
     email: '',
     shopName: '',
+    can_self_assign: false,
     systemPreset: 'purchase' // 'all', 'purchase', 'checklist', 'hr', 'inventory', 'petty-cash'
   });
+
+  // Filter employees from hr_management_employees who are NOT present in the users table
+  const unassignedEmployees = useMemo(() => {
+    const existingUserEmpIds = new Set(
+      users
+        .map((u) => u.employee_id?.toString().trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    return employeesList.filter((emp) => {
+      const empId = emp.employee_id?.toString().trim().toLowerCase();
+      return empId && !existingUserEmpIds.has(empId);
+    });
+  }, [employeesList, users]);
 
   const showToast = (msg, type = 'info') => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Fetch employees list from hr_management_employees table
+  const fetchEmployeesList = async () => {
+    setLoadingEmployees(true);
+    try {
+      const { data, error } = await supabase
+        .from('hr_management_employees')
+        .select('*')
+        .order('name_as_per_aadhar', { ascending: true });
+
+      if (!error && data) {
+        setEmployeesList(data);
+      }
+    } catch (err) {
+      console.error('Error fetching hr_management_employees:', err);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  // Open Add User Modal and load employee directory
+  const openAddUserModal = () => {
+    setEmpSearchInput('');
+    setSelectedEmployee(null);
+    setEmpStatus(null);
+    setExistingUserInfo(null);
+    setNewUserForm({
+      employee_id: '',
+      username: '',
+      password: '',
+      role: 'user',
+      email: '',
+      shopName: '',
+      can_self_assign: false,
+      systemPreset: 'purchase'
+    });
+    setShowAddModal(true);
+    fetchEmployeesList();
+  };
+
+  // Verify entered Employee ID against users table and hr_management_employees table
+  const handleVerifyEmployeeId = (targetEmpId) => {
+    const idToTest = (targetEmpId || empSearchInput).toString().trim();
+    if (!idToTest) {
+      setEmpStatus(null);
+      setSelectedEmployee(null);
+      setExistingUserInfo(null);
+      return;
+    }
+
+    const cleanId = idToTest.toLowerCase();
+
+    // 1. Check if employee_id already exists in users table
+    const existingUser = users.find(
+      (u) => u.employee_id && u.employee_id.toString().trim().toLowerCase() === cleanId
+    );
+
+    if (existingUser) {
+      setEmpStatus('already_user');
+      setExistingUserInfo(existingUser);
+      setSelectedEmployee(null);
+      return;
+    }
+
+    // 2. Check if employee_id exists in hr_management_employees table
+    const foundEmp = employeesList.find(
+      (e) => e.employee_id && e.employee_id.toString().trim().toLowerCase() === cleanId
+    );
+
+    if (foundEmp) {
+      setEmpStatus('ready');
+      setSelectedEmployee(foundEmp);
+      setExistingUserInfo(null);
+      setNewUserForm((prev) => ({
+        ...prev,
+        employee_id: foundEmp.employee_id,
+        username: foundEmp.name_as_per_aadhar || foundEmp.employee_id,
+        email: foundEmp.candidate_email || '',
+        shopName: foundEmp.joining_company_name || ''
+      }));
+    } else {
+      setEmpStatus('not_found');
+      setSelectedEmployee(null);
+      setExistingUserInfo(null);
+    }
+  };
+
   const handleCreateUser = async (e) => {
     if (e) e.preventDefault();
+
+    if (empStatus === 'already_user') {
+      showToast(`User already exists for Employee ID: ${newUserForm.employee_id || empSearchInput}`, 'error');
+      return;
+    }
+
+    const targetEmpId = newUserForm.employee_id || selectedEmployee?.employee_id;
+    if (!targetEmpId) {
+      showToast('Please search and verify a valid Employee ID first', 'error');
+      return;
+    }
+
     if (!newUserForm.username.trim() || !newUserForm.password.trim()) {
       showToast('Username and password are required', 'error');
       return;
     }
+
     setSaving(true);
 
     let initialPerms = [];
@@ -171,17 +296,22 @@ export default function MasterSetting() {
     }
 
     try {
-      const shopVal = newUserForm.shopName.trim() || null;
+      const targetShop = newUserForm.shopName.trim() || selectedEmployee?.joining_company_name || null;
       const payload = {
+        employee_id: targetEmpId,
         user_name: newUserForm.username.trim(),
         username: newUserForm.username.trim(),
         password: newUserForm.password.trim(),
         role: newUserForm.role || 'user',
-        email_id: newUserForm.email.trim() || null,
-        shop_name: shopVal,
-        user_access: shopVal,
+        email_id: newUserForm.email.trim() || selectedEmployee?.candidate_email || null,
+        number: selectedEmployee?.mobile_no ? parseInt(selectedEmployee.mobile_no) : null,
+        Designation: selectedEmployee?.designation || null,
+        shop_name: targetShop,
+        user_access: targetShop,
+        can_self_assign: Boolean(newUserForm.can_self_assign),
         status: 'active',
-        master_user_system_page_access: initialPerms
+        master_user_system_page_access: initialPerms,
+        HR_SYSTEM_employee_details: selectedEmployee || null
       };
 
       const { data, error } = await supabase
@@ -195,7 +325,6 @@ export default function MasterSetting() {
       } else {
         showToast(`User ${newUserForm.username} created successfully!`, 'success');
         setShowAddModal(false);
-        setNewUserForm({ username: '', password: '', role: 'user', email: '', shopName: '', systemPreset: 'purchase' });
         fetchUsers();
       }
     } catch (err) {
@@ -311,7 +440,10 @@ export default function MasterSetting() {
 
   // Open Edit User Modal
   const handleOpenEdit = (user) => {
-    setEditingUser(user);
+    setEditingUser({
+      ...user,
+      can_self_assign: Boolean(user.can_self_assign)
+    });
     setPasswordInput(user.password || '');
     setShopNameInput(user.shop_name || '');
 
@@ -430,6 +562,7 @@ export default function MasterSetting() {
           password: passwordInput,
           shop_name: shopVal,
           user_access: shopVal,
+          can_self_assign: Boolean(editingUser.can_self_assign),
           master_user_system_page_access: finalAccess
         })
         .eq('id', editingUser.id);
@@ -483,10 +616,7 @@ export default function MasterSetting() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              setNewUserForm({ username: '', password: '', role: 'user', email: '', systemPreset: 'purchase' });
-              setShowAddModal(true);
-            }}
+            onClick={openAddUserModal}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] rounded-none text-xs font-bold uppercase tracking-widest transition-colors shadow-sm cursor-pointer"
           >
             <UserPlus size={14} />
@@ -594,11 +724,22 @@ export default function MasterSetting() {
                         </div>
                       </td>
 
-                      {/* Column 3: Role */}
+                      {/* Column 3: Role & Self-Assign Status */}
                       <td className="py-3.5 px-4 capitalize font-medium text-[#1A1A1A]/70">
-                        <span className="px-2.5 py-1 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[10px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                          {u.role || 'user'}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="px-2.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[10px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                            {u.role || 'user'}
+                          </span>
+                          {u.can_self_assign ? (
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[9px] font-bold uppercase tracking-wider">
+                              Self Assign: Enabled
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-slate-50 text-slate-400 border border-slate-200 rounded text-[9px] font-bold uppercase tracking-wider">
+                              Self Assign: Disabled
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                    
@@ -711,6 +852,22 @@ export default function MasterSetting() {
                     />
                     <Key size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
                   </div>
+                </div>
+
+                <div className="sm:col-span-2 pt-2 border-t border-[#1A1A1A]/10 flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="editUserCanSelfAssign"
+                    checked={Boolean(editingUser.can_self_assign)}
+                    onChange={(e) => setEditingUser({ ...editingUser, can_self_assign: e.target.checked })}
+                    className="w-4 h-4 text-[#C9A84C] accent-[#C9A84C] rounded cursor-pointer"
+                  />
+                  <label htmlFor="editUserCanSelfAssign" className="text-xs font-bold text-[#1A1A1A] cursor-pointer flex flex-col">
+                    <span>Allow Self Assignment (can_self_assign)</span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      Enables user to self-assign tasks and checklist items in the application.
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -939,17 +1096,17 @@ export default function MasterSetting() {
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-none border border-[#1A1A1A]/20 shadow-2xl max-w-lg w-full overflow-hidden"
+            className="bg-white rounded-none border border-[#1A1A1A]/20 shadow-2xl max-w-xl w-full overflow-hidden max-h-[90vh] flex flex-col"
           >
             {/* Modal Header */}
-            <div className="p-5 pt-4 pb-3 border-b border-[#1A1A1A]/10 flex items-center justify-between bg-[#FAFAFA]">
+            <div className="p-5 pt-4 pb-3 border-b border-[#1A1A1A]/10 flex items-center justify-between bg-[#FAFAFA] shrink-0">
               <div>
                 <span className="text-[#C9A84C] uppercase tracking-[0.25em] text-[9.5px] font-bold block mb-1">
-                  Master User Directory
+                  Master User Management
                 </span>
                 <h3 className="text-lg font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
                   <UserPlus size={18} className="text-[#C9A84C]" />
-                  Create New User
+                  Add User from Employee Directory
                 </h3>
               </div>
 
@@ -962,131 +1119,317 @@ export default function MasterSetting() {
             </div>
 
             {/* Modal Form Body */}
-            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
-                  User Name / Login ID *
+            <form onSubmit={handleCreateUser} className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+              {/* Step 1: Employee ID Search & Selection */}
+              <div className="bg-slate-50 p-4 border border-slate-200 space-y-3">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                  1. Select or Enter Employee ID *
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={newUserForm.username}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
-                  placeholder="e.g. john_doe"
-                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
-                />
-              </div>
 
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
-                  Password *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newUserForm.password}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                  placeholder="Enter login password"
-                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-semibold focus:outline-none focus:border-[#C9A84C]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
-                    User Role
-                  </label>
+                {/* Dropdown Select from Employee Table (Unassigned Employees Only) */}
+                <div className="flex gap-2">
                   <select
-                    value={newUserForm.role}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
-                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                    value={empSearchInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEmpSearchInput(val);
+                      handleVerifyEmployeeId(val);
+                    }}
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                   >
-                    <option value="user">User / Operator</option>
-                    <option value="admin">Admin</option>
-                    <option value="HOD">HOD</option>
-                    <option value="manager">Manager</option>
+                    <option value="">
+                      {loadingEmployees
+                        ? '-- Loading Employees... --'
+                        : unassignedEmployees.length > 0
+                        ? `-- Choose Employee Not Yet Created as User (${unassignedEmployees.length} Available) --`
+                        : '-- All Employees Already Have User Accounts --'}
+                    </option>
+                    {unassignedEmployees.map((emp) => (
+                      <option key={emp.id} value={emp.employee_id}>
+                        {emp.employee_id} - {emp.name_as_per_aadhar} ({emp.designation || 'No Designation'}) - {emp.joining_company_name || 'No Shop'}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
-                    Initial System Access
-                  </label>
-                  <select
-                    value={newUserForm.systemPreset}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, systemPreset: e.target.value })}
-                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">- OR TYPE EMPLOYEE ID MANUALLY -</div>
+
+                {/* Manual Input Search */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={empSearchInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEmpSearchInput(val);
+                      handleVerifyEmployeeId(val);
+                    }}
+                    placeholder="Enter Employee ID (e.g. EMP-001)"
+                    className="flex-1 bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2 text-xs font-mono font-semibold focus:outline-none focus:border-[#C9A84C]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyEmployeeId(empSearchInput)}
+                    className="px-3.5 py-2 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#C9A84C] text-xs font-bold uppercase tracking-wider transition-colors shrink-0 cursor-pointer"
                   >
-                    <option value="purchase">Purchase System Only</option>
-                    <option value="checklist">Checklist System Only</option>
-                    <option value="hr">HR System Only</option>
-                    <option value="inventory">Inventory System Only</option>
-                    <option value="petty-cash">Petty Cash Only</option>
-                    <option value="all">Full Access (All Systems)</option>
-                    <option value="">Custom Access (Configure Later)</option>
-                  </select>
+                    Verify ID
+                  </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
-                  Email Address (Optional)
-                </label>
-                <input
-                  type="email"
-                  value={newUserForm.email}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                  placeholder="user@example.com"
-                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-[#C9A84C]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5 flex items-center justify-between">
-                  <span>Shop Access (shop_name)</span>
-                  {availableShops.length > 0 && (
-                    <span className="text-[9px] font-mono text-[#C9A84C] font-bold">
-                      {availableShops.length} Shops Loaded
-                    </span>
-                  )}
-                </label>
-                {availableShops.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto custom-scrollbar bg-slate-50 p-2.5 rounded border border-slate-200">
-                    {availableShops.map((shop) => {
-                      const isSelected = selectedNewUserShopsList.includes(shop);
-                      return (
-                        <button
-                          key={shop}
-                          type="button"
-                          onClick={() => handleToggleNewUserShop(shop)}
-                          className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${
-                            isSelected
-                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]'
-                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
-                          }`}
-                        >
-                          <span className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${
-                            isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                          }`}>
-                            {isSelected && '✓'}
-                          </span>
-                          <span>{shop}</span>
-                        </button>
-                      );
-                    })}
+              {/* Status Verification Feedback */}
+              {empStatus === 'already_user' && existingUserInfo && (
+                <div className="bg-amber-50 border border-amber-300 p-4 flex items-start gap-3 rounded-none">
+                  <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Already Registered as User!</h4>
+                    <p className="text-xs text-amber-800 mt-1">
+                      Employee ID <span className="font-bold">{empSearchInput}</span> is already assigned to active user account{' '}
+                      <span className="font-bold text-amber-950">{existingUserInfo.user_name || existingUserInfo.username}</span> (Role:{' '}
+                      <span className="font-bold">{existingUserInfo.role || 'user'}</span>).
+                    </p>
                   </div>
-                )}
-                <input
-                  type="text"
-                  value={newUserForm.shopName}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, shopName: e.target.value })}
-                  placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
-                  className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:border-[#C9A84C]"
-                />
+                </div>
+              )}
+
+              {empStatus === 'not_found' && (
+                <div className="bg-red-50 border border-red-300 p-4 flex items-start gap-3 rounded-none">
+                  <X size={20} className="text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-xs font-bold text-red-900 uppercase tracking-wider">Employee Not Found</h4>
+                    <p className="text-xs text-red-800 mt-1">
+                      No matching employee found with Employee ID <span className="font-bold">{empSearchInput}</span> in employee records. Please verify the ID or register the employee first.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Employee Summary Card */}
+              {empStatus === 'ready' && selectedEmployee && (
+                <div className="bg-emerald-50/80 border border-emerald-300 p-4 rounded-none space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 size={15} className="text-emerald-600" />
+                      Employee Verified Details
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-emerald-200 text-emerald-900 px-2.5 py-0.5 rounded border border-emerald-300">
+                      Employee Log IN: {selectedEmployee.employee_id}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    {/* Photo */}
+                    <div className="shrink-0">
+                      {selectedEmployee.candidate_photo ? (
+                        <img
+                          src={selectedEmployee.candidate_photo}
+                          alt={selectedEmployee.name_as_per_aadhar}
+                          className="w-16 h-16 object-cover rounded-full border-2 border-emerald-400 shadow-sm"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 bg-emerald-200 text-emerald-800 rounded-full flex items-center justify-center font-bold text-xl border-2 border-emerald-400 shadow-sm">
+                          {selectedEmployee.name_as_per_aadhar?.charAt(0) || 'E'}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Grid of Details */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs flex-1 w-full">
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Employee Name</span>
+                        <span className="font-bold text-slate-900">{selectedEmployee.name_as_per_aadhar}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Joining Shop Name</span>
+                        <span className="font-bold text-slate-900">{selectedEmployee.joining_company_name || '—'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Mobile No</span>
+                        <span className="font-semibold text-slate-800">{selectedEmployee.mobile_no || '—'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Email Address</span>
+                        <span className="font-semibold text-slate-800">{selectedEmployee.candidate_email || '—'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Designation</span>
+                        <span className="font-semibold text-slate-800">{selectedEmployee.designation || '—'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Attendance Mode & Status</span>
+                        <span className="font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[11px]">
+                          {selectedEmployee.mode_of_attendance || 'Biometric'} ({selectedEmployee.status || 'Active'})
+                        </span>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Checklist Task Details</span>
+                        <span className="font-medium text-slate-700 text-[11px] block bg-white/80 p-1.5 rounded border border-emerald-200 mt-0.5">
+                          {selectedEmployee.HR_SYSTEM_employee_data?.checklist_details || 
+                           selectedEmployee.HR_SYSTEM_employee_data?.task_details || 
+                           `Active Employee Profile (${selectedEmployee.joining_company_name || 'All Shops Access'})`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Set User Password & Credentials */}
+              <div className={`space-y-4 ${empStatus === 'ready' ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                <div className="border-t border-[#1A1A1A]/10 pt-4">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A] block mb-3">
+                    2. User Account & Password Credentials
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                    User Name / Login ID *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newUserForm.username}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                    placeholder="e.g. John Doe"
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5 flex items-center justify-between">
+                    <span>Set Login Password *</span>
+                    <Lock size={12} className="text-[#C9A84C]" />
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newUserForm.password}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    placeholder="Enter password for user login"
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-semibold focus:outline-none focus:border-[#C9A84C]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                      User Role
+                    </label>
+                    <select
+                      value={newUserForm.role}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                      className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                    >
+                      <option value="user">User / Operator</option>
+                      <option value="admin">Admin</option>
+                      <option value="HOD">HOD</option>
+                      <option value="manager">Manager</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                      Initial System Access
+                    </label>
+                    <select
+                      value={newUserForm.systemPreset}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, systemPreset: e.target.value })}
+                      className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                    >
+                      <option value="purchase">Purchase System Only</option>
+                      <option value="checklist">Checklist System Only</option>
+                      <option value="hr">HR System Only</option>
+                      <option value="inventory">Inventory System Only</option>
+                      <option value="petty-cash">Petty Cash Only</option>
+                      <option value="all">Full Access (All Systems)</option>
+                      <option value="">Custom Access (Configure Later)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 bg-slate-50 p-3 border border-slate-200">
+                  <input
+                    type="checkbox"
+                    id="newUserCanSelfAssign"
+                    checked={Boolean(newUserForm.can_self_assign)}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, can_self_assign: e.target.checked })}
+                    className="w-4 h-4 text-[#C9A84C] accent-[#C9A84C] rounded cursor-pointer"
+                  />
+                  <label htmlFor="newUserCanSelfAssign" className="text-xs font-bold text-[#1A1A1A] cursor-pointer flex flex-col">
+                    <span>Allow Self Assignment (can_self_assign)</span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      Enables user to self-assign tasks and checklist items in the application.
+                    </span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5">
+                    Email Address (Optional)
+                  </label>
+                  <input
+                    type="email"
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                    placeholder="user@example.com"
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-[#C9A84C]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5 flex items-center justify-between">
+                    <span>Shop Access (shop_name)</span>
+                    {availableShops.length > 0 && (
+                      <span className="text-[9px] font-mono text-[#C9A84C] font-bold">
+                        {availableShops.length} Shops Loaded
+                      </span>
+                    )}
+                  </label>
+                  {availableShops.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto custom-scrollbar bg-slate-50 p-2.5 rounded border border-slate-200">
+                      {availableShops.map((shop) => {
+                        const isSelected = selectedNewUserShopsList.includes(shop);
+                        return (
+                          <button
+                            key={shop}
+                            type="button"
+                            onClick={() => handleToggleNewUserShop(shop)}
+                            className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${
+                              isSelected
+                                ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]'
+                                : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
+                            }`}
+                          >
+                            <span className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${
+                              isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                            }`}>
+                              {isSelected && '✓'}
+                            </span>
+                            <span>{shop}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={newUserForm.shopName}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, shopName: e.target.value })}
+                    placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:border-[#C9A84C]"
+                  />
+                </div>
               </div>
 
               {/* Modal Footer Actions */}
-              <div className="pt-4 border-t border-[#1A1A1A]/10 flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-[#1A1A1A]/10 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
@@ -1096,11 +1439,15 @@ export default function MasterSetting() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="px-5 py-2 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+                  disabled={saving || empStatus !== 'ready'}
+                  className={`px-5 py-2 text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm ${
+                    empStatus === 'ready'
+                      ? 'bg-[#C9A84C] hover:bg-[#b8973b] cursor-pointer'
+                      : 'bg-slate-300 opacity-60 cursor-not-allowed text-slate-600'
+                  }`}
                 >
                   <Plus size={14} />
-                  <span>{saving ? 'Creating...' : 'Create User'}</span>
+                  <span>{saving ? 'Creating...' : 'Create User Account'}</span>
                 </button>
               </div>
             </form>
