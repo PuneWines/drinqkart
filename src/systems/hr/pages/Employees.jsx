@@ -1093,6 +1093,16 @@ export default function EmployeeManagement() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              resetForm()
+              setShowForm(true)
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors text-xs font-semibold rounded shadow-sm cursor-pointer"
+          >
+            <UserPlus size={14} />
+            Add New Employee
+          </button>
           <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer text-xs font-semibold rounded shadow-sm">
             <Upload size={14} />
             Import CSV
@@ -1110,7 +1120,6 @@ export default function EmployeeManagement() {
             <ExternalLink size={14} />
             Export CSV
           </button>
-         
         </div>
       </div>
 
