@@ -705,49 +705,63 @@ const Indent = () => {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
     setIsProcessing(true);
     try {
-      let allItems = [];
-      let page = 0;
-      const pageSize = 1000;
-      let hasMore = true;
+      let poIndentIds = [];
 
-      while (hasMore) {
-        const { data: items, error: itemsError } = await supabase
-          .from('purchase_indent_items')
-          .select('unique_indent_id')
-          .eq('indent_id', indentId)
-          .order('id', { ascending: true })
-          .range(page * pageSize, (page + 1) * pageSize - 1);
+      // 1. Fetch unique_indent_id & party_indent_id from purchase_approved_indent_items
+      const { data: approvedItems, error: appErr } = await supabase
+        .from('purchase_approved_indent_items')
+        .select('unique_indent_id, party_indent_id')
+        .eq('indent_id', indentId);
 
-        if (itemsError) throw itemsError;
-        if (items && items.length > 0) {
-          allItems = [...allItems, ...items];
-          page++;
-          if (items.length < pageSize) {
-            hasMore = false;
-          }
-        } else {
-          hasMore = false;
-        }
+      if (appErr) throw appErr;
+      if (approvedItems && approvedItems.length > 0) {
+        approvedItems.forEach(item => {
+          if (item.unique_indent_id) poIndentIds.push(item.unique_indent_id);
+          if (item.party_indent_id) poIndentIds.push(item.party_indent_id);
+        });
       }
 
-      const uniqueIndentIds = [...new Set((allItems || []).map(i => i.unique_indent_id).filter(Boolean))];
+      // 2. Fetch party_indent_id from purchase_indent_items
+      const { data: pendingItems, error: pendErr } = await supabase
+        .from('purchase_indent_items')
+        .select('party_indent_id')
+        .eq('indent_id', indentId);
 
-      if (uniqueIndentIds.length > 0) {
+      if (pendErr) throw pendErr;
+      if (pendingItems && pendingItems.length > 0) {
+        pendingItems.forEach(item => {
+          if (item.party_indent_id) poIndentIds.push(item.party_indent_id);
+        });
+      }
+
+      const uniquePoIndentIds = [...new Set(poIndentIds.filter(Boolean))];
+
+      // 3. Delete matching purchase orders if any exist
+      if (uniquePoIndentIds.length > 0) {
         const { error: poError } = await supabase
-          .from('purchase_orders')
+          .from('purchase_purchase_orders')
           .delete()
-          .in('indent_id', uniqueIndentIds);
+          .in('indent_id', uniquePoIndentIds);
         if (poError) throw poError;
       }
 
+      // 4. Delete approved indent items
+      const { error: delApprovedError } = await supabase
+        .from('purchase_approved_indent_items')
+        .delete()
+        .eq('indent_id', indentId);
+      if (delApprovedError) throw delApprovedError;
+
+      // 5. Delete pending indent items
       const { error: delItemsError } = await supabase
-        .from('indent_items')
+        .from('purchase_indent_items')
         .delete()
         .eq('indent_id', indentId);
       if (delItemsError) throw delItemsError;
 
+      // 6. Delete parent indent record
       const { error: delIndentError } = await supabase
-        .from('indents')
+        .from('purchase_indents')
         .delete()
         .eq('id', indentId);
       if (delIndentError) throw delIndentError;

@@ -1016,9 +1016,9 @@ const Dashboard = () => {
                         </strong>
                       </p>
                     )}
-                    {selectedPO.remarks && (
+                    {(selectedPO.trader_remarks || selectedPO.remarks) && (
                       <p className="timeline-remarks-block">
-                        Remarks: <em>"{selectedPO.remarks}"</em>
+                        Remarks: <em>"{selectedPO.trader_remarks || selectedPO.remarks}"</em>
                       </p>
                     )}
                   </div>

@@ -924,9 +924,9 @@ const OrdersPipeline = () => {
                     </span>
                     <p className="text-[11px] text-slate-500 mt-1">
                       {selectedPO.trader_status === "yes"
-                        ? `Trader confirmed dispatch and entered expected delivery schedule. Remarks: "${selectedPO.remarks || "None"}"`
+                        ? `Trader confirmed dispatch and entered expected delivery schedule. Remarks: "${selectedPO.trader_remarks || selectedPO.remarks || "None"}"`
                         : selectedPO.trader_status === "no"
-                        ? `Trader rejected PO request. Remarks: "${selectedPO.remarks || "None"}"`
+                        ? `Trader rejected PO request. Remarks: "${selectedPO.trader_remarks || selectedPO.remarks || "None"}"`
                         : `Awaiting Supplier (${selectedPO.vendor_name}) action on the verification portal.`}
                     </p>
                   </div>

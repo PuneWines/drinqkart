@@ -314,7 +314,7 @@ const VendorPortal = () => {
         trader_status: allRejected ? "no" : "yes",
         trader_item_statuses: decisions,
         dispatch_date: finalDispatchDate,
-        remarks: rem
+        trader_remarks: rem
       };
 
       if (isKunalShop && !allRejected) {
@@ -391,13 +391,13 @@ const VendorPortal = () => {
           const storageFilename = getFilenameFromUrl(po.trader_pdf_url);
           if (storageFilename) {
             const { error: uploadErr } = await supabase.storage
-              .from("PO")
+              .from("purchase_PO")
               .upload(storageFilename, pdfBlob, { contentType: "image/png", upsert: true });
 
             if (uploadErr) throw uploadErr;
 
             // Get new public URL just in case
-            const newUrl = supabase.storage.from("PO").getPublicUrl(storageFilename).data.publicUrl;
+            const newUrl = supabase.storage.from("purchase_PO").getPublicUrl(storageFilename).data.publicUrl;
             if (newUrl) {
               finalTraderPdfUrl = newUrl;
               // Update po trader_pdf_url in DB

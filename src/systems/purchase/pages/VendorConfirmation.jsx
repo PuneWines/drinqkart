@@ -102,7 +102,7 @@ const VendorConfirmation = () => {
       const updatePayload = {
         trader_status: status,
         dispatch_date: status === "no" ? new Date().toISOString() : (dispatchDate || null),
-        remarks: remarks || null
+        trader_remarks: remarks || null
       };
 
       if (status === "yes" && isKunalShop) {
@@ -182,9 +182,9 @@ const VendorConfirmation = () => {
                   <strong>Expected Dispatch Date:</strong> {new Date(poData.dispatch_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
               )}
-              {poData.remarks && (
+              {(poData.trader_remarks || poData.remarks) && (
                 <p style={{ margin: 0, fontSize: "15px", color: "#334155" }}>
-                  <strong>Remarks:</strong> {poData.remarks}
+                  <strong>Remarks:</strong> {poData.trader_remarks || poData.remarks}
                 </p>
               )}
             </div>
