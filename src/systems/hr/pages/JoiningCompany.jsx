@@ -147,7 +147,7 @@ export default function JoiningCompany() {
             Shops Management (Global Table: `shop`)
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Configure global shop names, given_by metadata, and settings
+            Configure global shop names
           </p>
         </div>
       </div>
@@ -169,19 +169,6 @@ export default function JoiningCompany() {
                   placeholder="e.g. Balaji Wines"
                   className="w-full px-3 py-2 text-sm border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded"
                   required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
-                  Given By / Managed By (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={givenByInput}
-                  onChange={(e) => setGivenByInput(e.target.value)}
-                  placeholder="e.g. Admin / Supervisor Name"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded"
                 />
               </div>
 
@@ -211,7 +198,7 @@ export default function JoiningCompany() {
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Search Shop or Given By..."
+                  placeholder="Search Shop..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white rounded"
@@ -236,14 +223,11 @@ export default function JoiningCompany() {
                     <tr className="border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase bg-slate-50/50">
                       <th className="py-3 px-4"># ID</th>
                       <th className="py-3 px-4">Shop Name</th>
-                      <th className="py-3 px-4">Given By</th>
                       <th className="py-3 px-4">Created At</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
                     {filteredCompanies.map((company, index) => {
-                      const isEditing = editingCompanyId === company.id;
                       const currentShopName = company.shop_name || company.company_name;
                       const formattedDate = company.created_at
                         ? new Date(company.created_at).toLocaleDateString('en-GB', {
@@ -257,85 +241,13 @@ export default function JoiningCompany() {
                         <tr key={company.id || index} className="hover:bg-slate-50/30 transition-colors">
                           <td className="py-3.5 px-4 text-xs font-mono text-slate-400 font-bold">{company.id || index + 1}</td>
                           <td className="py-3.5 px-4 font-medium text-slate-800">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editingShopName}
-                                onChange={(e) => setEditingShopName(e.target.value)}
-                                className="px-2.5 py-1 text-xs border border-indigo-500 rounded bg-white text-slate-900 w-full max-w-xs focus:outline-none shadow-xs font-semibold"
-                                autoFocus
-                              />
-                            ) : (
-                              <span className="font-bold text-slate-900">{currentShopName}</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 text-xs text-slate-600">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editingGivenBy}
-                                onChange={(e) => setEditingGivenBy(e.target.value)}
-                                placeholder="Given By"
-                                className="px-2 py-1 text-xs border border-indigo-500 rounded bg-white text-slate-900 w-full max-w-[120px] focus:outline-none"
-                              />
-                            ) : (
-                              company.given_by ? (
-                                <span className="inline-flex items-center gap-1 text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px] font-medium">
-                                  <User size={10} className="text-slate-400" />
-                                  {company.given_by}
-                                </span>
-                              ) : (
-                                <span className="text-slate-300 italic">—</span>
-                              )
-                            )}
+                            <span className="font-bold text-slate-900">{currentShopName}</span>
                           </td>
                           <td className="py-3.5 px-4 text-xs text-slate-500 font-mono">
                             <span className="inline-flex items-center gap-1">
                               <Calendar size={12} className="text-slate-400" />
                               {formattedDate}
                             </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right">
-                            {isEditing ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => handleUpdateCompany(company.id)}
-                                  disabled={updating || !editingShopName.trim()}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-xs"
-                                >
-                                  <Save size={12} />
-                                  <span>{updating ? 'Saving...' : 'Save'}</span>
-                                </button>
-                                <button
-                                  onClick={() => setEditingCompanyId(null)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-bold transition-colors cursor-pointer"
-                                >
-                                  <X size={12} />
-                                  <span>Cancel</span>
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  onClick={() => {
-                                    setEditingCompanyId(company.id);
-                                    setEditingShopName(currentShopName || '');
-                                    setEditingGivenBy(company.given_by || '');
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200 transition-colors cursor-pointer"
-                                >
-                                  <Edit3 size={13} />
-                                  <span>Edit</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteCompany(company.id, currentShopName)}
-                                  className="inline-flex items-center p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                                  title="Delete Shop"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            )}
                           </td>
                         </tr>
                       );

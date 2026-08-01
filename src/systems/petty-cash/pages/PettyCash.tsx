@@ -400,14 +400,14 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
           <table className="w-full text-sm">
             <thead className="bg-[#2a5298] text-white">
               <tr>
-                {['#', 'ID', 'Date', 'Shop', 'User', 'Opening', 'Expense', 'Closing', 'Status', 'Actions'].map(h => (
+                {['#', 'ID', 'Date', 'Shop', 'User', 'Opening', 'Expense', 'Closing', 'Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && (
-                <tr><td colSpan={10} className="text-center py-16 text-gray-400">
+                <tr><td colSpan={9} className="text-center py-16 text-gray-400">
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-8 h-8 border-4 border-[#2a5298] border-t-transparent rounded-full animate-spin" />
                     <span>Loading records…</span>
@@ -415,7 +415,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
                 </td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={10} className="text-center py-16 text-gray-400">
+                <tr><td colSpan={9} className="text-center py-16 text-gray-400">
                   <div className="flex flex-col items-center gap-2">
                     <FaFileAlt className="text-4xl text-gray-300" />
                     <p className="font-medium">No records found</p>
@@ -435,11 +435,6 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmt(row.openingQty)}</td>
                   <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
                   <td className="px-4 py-3 text-emerald-700 font-semibold whitespace-nowrap">{fmt(row.closing)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[row.transactionStatus] ?? 'bg-gray-100 text-gray-600 border border-gray-300'}`}>
-                      {row.transactionStatus}
-                    </span>
-                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <button onClick={() => openEditModal(row)} title="Edit" className="p-2 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit /></button>
