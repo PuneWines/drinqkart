@@ -609,7 +609,7 @@ const Settings = () => {
                         </button>
                       </div>
 
-                      {(!vendorFormData.terms || vendorFormData.terms.length === 0) ? (
+                      {(!Array.isArray(vendorFormData.terms) || vendorFormData.terms.length === 0) ? (
                         <p className="text-slate-500 text-xs font-medium italic">No terms defined for this profile.</p>
                       ) : (
                         <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -812,7 +812,7 @@ const Settings = () => {
                         </button>
                       </div>
 
-                      {companyFormData.terms.length === 0 ? (
+                      {(!Array.isArray(companyFormData.terms) || companyFormData.terms.length === 0) ? (
                         <p className="text-slate-500 text-xs font-medium italic">No terms defined for this profile.</p>
                       ) : (
                         <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
