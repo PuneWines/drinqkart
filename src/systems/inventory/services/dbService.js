@@ -681,7 +681,7 @@ export async function getPurchasedItems({ fromDate, toDate, itemId, vendorId, sh
         discount_type,
         total_amount,
         created_at,
-        inventory_transactions:Inventory_inventory_transactions!inner(
+        inventory_transactions:Inventory_inventory_transactions!Inventory_purchase_items_transaction_id_fkey!inner(
           transaction_date,
           shop:Inventory_shop(id, shop_name)
         ),
