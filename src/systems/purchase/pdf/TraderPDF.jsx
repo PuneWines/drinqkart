@@ -244,7 +244,12 @@ const TraderPDF = ({
   const displayTotalBoxes = totalBoxes % 1 === 0 ? totalBoxes.toString() : totalBoxes.toFixed(2);
   const displayTotalBottles = Math.ceil(totalBottles).toLocaleString("en-IN");
 
-  const termsToDisplay = vendorDetails?.terms || [];
+  const rawTerms = vendorDetails?.terms;
+  const termsToDisplay = Array.isArray(rawTerms)
+    ? rawTerms
+    : typeof rawTerms === "string" && rawTerms.trim() !== ""
+    ? rawTerms.split("\n").map((t) => t.trim()).filter(Boolean)
+    : [];
 
   return (
     <Document>
