@@ -25,8 +25,9 @@ export const systems = [
       { label: 'Holiday List', to: '/dashboard/holiday-list' },
       { label: 'Working Day Calendar', to: '/dashboard/working-day-calendar' },
       { label: 'MIS Report', to: '/dashboard/mis-report' },
-      { label: 'Admin Approval', to: '/dashboard/admin-approval' }
-      
+      { label: 'Admin Approval', to: '/dashboard/admin-approval' },
+  
+      { label: 'Settings', to: '/dashboard/setting' }
     ]
   },
   {

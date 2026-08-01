@@ -123,7 +123,7 @@ export default function PettyCashModal({
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
   const shopDropdownRef = useRef<HTMLDivElement>(null);
   // [RBAC] Access control helpers
-  const { user, hasShopAccess } = useAuth();
+  const { user, hasShopAccess, isAdmin } = useAuth();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -219,24 +219,36 @@ export default function PettyCashModal({
       const { data, error } = await supabase
         .from('shop')
         .select('*')
-        .order('id', { ascending: true });
+        .order('shop_name', { ascending: true });
 
       if (!error && data && data.length > 0) {
         const shopNames = data.map((row: any) => row.shop_name || row.name).filter(Boolean);
         uniqueShops = Array.from(new Set(shopNames));
       } else {
-        uniqueShops = [];
+        const { data: pcData, error: pcError } = await supabase
+          .from('petty_cash_shops')
+          .select('name')
+          .order('id', { ascending: true });
+
+        if (!pcError && pcData) {
+          const shopNames = pcData.map((row: any) => row.name).filter(Boolean);
+          uniqueShops = Array.from(new Set(shopNames));
+        } else {
+          uniqueShops = [];
+        }
       }
 
-      // [RBAC] Filter by user's allowed shops for non-admin users
-      if (user && user.role?.toLowerCase() !== 'admin' && user.shops !== 'all') {
-        uniqueShops = uniqueShops.filter((shop) => hasShopAccess(shop));
-        console.log('[PettyCashModal] Shops after RBAC filter:', uniqueShops);
+      const isMasterOrAdmin = isAdmin() || (user?.username || user?.name || '').toLowerCase() === 'masteradmin' || (user?.role || '').toLowerCase() === 'admin' || (user?.role || '').toLowerCase() === 'masteradmin';
+
+      if (!isMasterOrAdmin && user?.shops && user.shops !== 'all') {
+        const filtered = uniqueShops.filter((shop) => hasShopAccess(shop));
+        if (filtered.length > 0) {
+          uniqueShops = filtered;
+        }
       }
 
       setFetchedShopNames(uniqueShops);
 
-      // [RBAC] Auto-select if user has exactly one allowed shop
       if (uniqueShops.length === 1) {
         setFormData((prev) => ({ ...prev, shopName: uniqueShops[0] }));
       }

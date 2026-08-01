@@ -236,6 +236,14 @@ function ChecklistDashboard() {
                     }
                 />
                 <Route
+                    path="users-management"
+                    element={
+                        <ProtectedRoute>
+                            <Setting />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
                     path="mis-report"
                     element={
                         <ProtectedRoute>
@@ -287,9 +295,9 @@ function ChecklistDashboard() {
                 <Route
                     path="setting"
                     element={
-                        <SuperAdminRoute>
+                        <ProtectedRoute>
                             <Setting />
-                        </SuperAdminRoute>
+                        </ProtectedRoute>
                     }
                 />
             </Routes>

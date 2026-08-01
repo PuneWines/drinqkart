@@ -39,7 +39,7 @@ const ADMIN_APPROVAL_PAGE_LABEL = 'Admin Approval';
 
 const Setting = () => {
   const { showToast } = useMagicToast();
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('shops');
   const [showUserModal, setShowUserModal] = useState(false);
   const [showShopModal, setShowShopModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -100,7 +100,6 @@ const Setting = () => {
 
   const { userData, shops, shopsOnly, givenBy, customDropdowns, masterTasks, levels, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
-
 
   const fetchDeviceLogsAndUpdateStatus = useCallback(async () => {
     // Set to true to enable background sync when the hardware API is online
@@ -255,10 +254,7 @@ const Setting = () => {
   };
 
   const handleAddButtonClick = () => {
-    if (activeTab === 'users') {
-      resetUserForm();
-      setShowUserModal(true);
-    } else if (activeTab === 'shops' || activeTab === 'categories') {
+    if (activeTab === 'shops' || activeTab === 'categories') {
       resetShopForm();
       setShowShopModal(true);
     } else if (activeTab === 'automate') {
@@ -1233,12 +1229,11 @@ const Setting = () => {
     <AdminLayout>
       <div className="space-y-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-6">
-          <h1 className="text-2xl font-bold text-purple-600">User Management System</h1>
+          <h1 className="text-2xl font-bold text-purple-600">System Settings</h1>
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max xscrol">
               {[
-                { id: 'users', label: 'Users', icon: User },
                 { id: 'shops', label: 'Shops', icon: Building, action: () => { dispatch(shopDetails()); dispatch(givenByDetails()); } },
                 { id: 'leave', label: 'Leave', icon: Calendar },
                 { id: 'categories', label: 'Machines', icon: Settings },
@@ -1249,7 +1244,6 @@ const Setting = () => {
                   className={`relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10 ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-purple-600'}`}
                   onClick={() => {
                     handleTabChange(tab.id);
-                    if (tab.id === 'users') dispatch(userDetails());
                     if (tab.action) tab.action();
                   }}
                 >
@@ -1276,7 +1270,7 @@ const Setting = () => {
                 <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
 
-              {(activeTab === 'users' || activeTab === 'shops' || activeTab === 'categories' || activeTab === 'automate') && (
+              {(activeTab === 'shops' || activeTab === 'categories' || activeTab === 'automate') && (
                 <button
                   onClick={() => {
                     if (activeTab === 'categories') {
@@ -1290,11 +1284,10 @@ const Setting = () => {
                 >
                   <Plus size={18} />
                   <span className="hidden sm:inline">
-                    {activeTab === 'users' ? 'New User' :
-                      activeTab === 'shops' ?
-                        (activeShopSubTab === 'shops' ? 'New Shop' : 'New Assign From') :
-                        activeTab === 'categories' ? 'New Machine' :
-                          (activeAutomateSubTab === 'masterTasks' ? 'New Master Task' : 'New Level')}
+                    {activeTab === 'shops' ?
+                      (activeShopSubTab === 'shops' ? 'New Shop' : 'New Assign From') :
+                      activeTab === 'categories' ? 'New Machine' :
+                        (activeAutomateSubTab === 'masterTasks' ? 'New Master Task' : 'New Level')}
                   </span>
                   <span className="sm:hidden">Add</span>
                 </button>

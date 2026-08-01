@@ -116,26 +116,38 @@ export default function CashTally({
     try {
       let uniqueShops: string[] = [];
       const { data, error } = await supabase
-        .from('petty_cash_shops')
-        .select('name')
-        .order('id', { ascending: true });
+        .from('shop')
+        .select('*')
+        .order('shop_name', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        const shopNames = data.map((row: any) => row.name).filter(Boolean);
+        const shopNames = data.map((row: any) => row.shop_name || row.name || row.shop).filter(Boolean);
         uniqueShops = Array.from(new Set(shopNames));
       } else {
-        uniqueShops = [];
+        const { data: pcData, error: pcError } = await supabase
+          .from('petty_cash_shops')
+          .select('*')
+          .order('id', { ascending: true });
+
+        if (!pcError && pcData) {
+          const shopNames = pcData.map((row: any) => row.name || row.shop_name).filter(Boolean);
+          uniqueShops = Array.from(new Set(shopNames));
+        } else {
+          uniqueShops = [];
+        }
       }
 
-      // [RBAC] Admin ko sab shops milenge, baaki ko sirf allowed
-      if (!isAdmin() && user?.shops !== "all") {
-        uniqueShops = uniqueShops.filter((shop) => hasShopAccess(shop));
-        console.log("[CashTally] Shops after RBAC filter:", uniqueShops);
+      const isMasterOrAdmin = isAdmin() || (user?.username || user?.name || '').toLowerCase() === 'masteradmin' || (user?.role || '').toLowerCase() === 'admin' || (user?.role || '').toLowerCase() === 'masteradmin';
+
+      if (!isMasterOrAdmin && user?.shops && user.shops !== "all") {
+        const filtered = uniqueShops.filter((shop) => hasShopAccess(shop));
+        if (filtered.length > 0) {
+          uniqueShops = filtered;
+        }
       }
 
       setFetchedShopNames(uniqueShops);
 
-      // [RBAC] Ek hi shop hai to auto-select karo
       if (uniqueShops.length === 1) {
         setFormData((prev) => ({ ...prev, shopName: uniqueShops[0] }));
       }

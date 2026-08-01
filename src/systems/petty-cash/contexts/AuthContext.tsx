@@ -132,7 +132,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isAdmin = (): boolean => {
-    return user?.role?.toLowerCase() === 'admin';
+    const roleLower = (user?.role || '').toLowerCase();
+    const nameLower = (user?.username || user?.name || '').toLowerCase();
+    return roleLower === 'admin' || roleLower === 'masteradmin' || nameLower === 'masteradmin';
   };
 
   /** 
