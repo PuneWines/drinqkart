@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -21,6 +22,8 @@ import {
   Lock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import JoiningCompany from '../systems/hr/pages/JoiningCompany';
+import PurchaseSettings from '../systems/purchase/pages/Settings';
 
 // Systems and standard page modules in Drinqkart Master App
 const AVAILABLE_SYSTEMS = [
@@ -586,6 +589,22 @@ export default function MasterSetting() {
     const name = (u.user_name || u.username || '').toLowerCase();
     return name.includes(searchTerm.toLowerCase());
   });
+
+  const location = useLocation();
+
+  // Sub-route: Purchase Settings
+  if (
+    location.pathname.includes('/purchase-settings') ||
+    location.pathname.includes('/purchase-setting') ||
+    location.pathname.endsWith('/settings')
+  ) {
+    return <PurchaseSettings />;
+  }
+
+  // Sub-route: Shop (Joining Company)
+  if (location.pathname.includes('/Shop') || location.pathname.toLowerCase().includes('/shop')) {
+    return <JoiningCompany />;
+  }
 
   return (
     <div className="p-3 bg-[#FAFAFA] min-h-screen text-[#1A1A1A] font-sans">

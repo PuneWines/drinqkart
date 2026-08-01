@@ -360,19 +360,29 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
     // ==========================================================
 
     // Get shop name
-    const { data: shopData, error: shopErr } = await supabase
-      .from('Inventory_shop')
-      .select('shop_name')
+    let shopNameStr = '';
+    const { data: shopData } = await supabase
+      .from('shop')
+      .select('shop_name, name')
       .eq('id', parseInt(shopId, 10))
-      .single();
+      .maybeSingle();
 
-    if (shopErr) throw shopErr;
+    if (shopData) {
+      shopNameStr = shopData.shop_name || shopData.name || '';
+    } else {
+      const { data: invShopData } = await supabase
+        .from('Inventory_shop')
+        .select('shop_name')
+        .eq('id', parseInt(shopId, 10))
+        .maybeSingle();
+      shopNameStr = invShopData?.shop_name || '';
+    }
 
     // Get previous balance for this shop
     const { data: prevReport, error: prevErr } = await supabase
       .from('Inventory_manager_report')
       .select('balance')
-      .eq('shop_name', shopData.shop_name)
+      .eq('shop_name', shopNameStr)
       .order('report_date', { ascending: false })
       .order('id', { ascending: false })
       .limit(1)
@@ -468,12 +478,12 @@ export async function updateStockLedgerRow(rowId, fields) {
     const { data, error } = await supabase
       .from('Inventory_stock_ledger')
       .update({
-        opening_qty:   op,
-        purchase_qty:  pu,
+        opening_qty: op,
+        purchase_qty: pu,
         current_stock: op + pu,
-        closing_qty:   cl,
-        sale_qty:      cl != null ? Math.max(0, op + pu - cl) : 0,
-        updated_at:    new Date().toISOString()
+        closing_qty: cl,
+        sale_qty: cl != null ? Math.max(0, op + pu - cl) : 0,
+        updated_at: new Date().toISOString()
       })
       .eq('id', rowId)
       .select()
@@ -649,10 +659,10 @@ export async function getStockLedgerSnapshot(date) {
     for (const row of (data || [])) {
       if (!snapshot[row.item_id]) {
         snapshot[row.item_id] = {
-          opening_qty:   parseFloat(row.opening_qty)   || 0,
-          purchase_qty:  parseFloat(row.purchase_qty)  || 0,
+          opening_qty: parseFloat(row.opening_qty) || 0,
+          purchase_qty: parseFloat(row.purchase_qty) || 0,
           current_stock: parseFloat(row.current_stock) || 0,
-          closing_qty:   row.closing_qty != null ? parseFloat(row.closing_qty) : null,
+          closing_qty: row.closing_qty != null ? parseFloat(row.closing_qty) : null,
         };
       }
     }
@@ -789,11 +799,11 @@ export async function updatePurchaseItemRow(rowId, fields) {
       .from('Inventory_purchase_items')
       .update({
         purchase_rate: parseFloat(fields.purchase_rate) || 0,
-        quantity:      parseFloat(fields.quantity)      || 0,
-        gst_percent:   parseFloat(fields.gst_percent)   || 0,
-        discount:      parseFloat(fields.discount)      || 0,
-        discount_type: fields.discount_type             || '%',
-        total_amount:  parseFloat(fields.total_amount)  || 0,
+        quantity: parseFloat(fields.quantity) || 0,
+        gst_percent: parseFloat(fields.gst_percent) || 0,
+        discount: parseFloat(fields.discount) || 0,
+        discount_type: fields.discount_type || '%',
+        total_amount: parseFloat(fields.total_amount) || 0,
       })
       .eq('id', rowId)
       .select()
@@ -867,9 +877,9 @@ export async function updateClosingStockItemRow(rowId, fields) {
     const { data, error } = await supabase
       .from('Inventory_closing_stock_items')
       .update({
-        godown_qty:  parseFloat(fields.godown_qty)  || 0,
+        godown_qty: parseFloat(fields.godown_qty) || 0,
         counter_qty: parseFloat(fields.counter_qty) || 0,
-        total_qty:   newTotal
+        total_qty: newTotal
       })
       .eq('id', rowId)
       .select()
@@ -1386,7 +1396,7 @@ export async function deleteDailySalesSummaryRow(rowId) {
         console.error('Failed to delete from manager_report:', managerDeleteErr.message);
         throw managerDeleteErr;
       }
-      
+
       // Recalculate subsequent running balances after deletion
       await recalculateManagerReportBalances(shopName, reportDate);
     }

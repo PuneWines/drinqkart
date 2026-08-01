@@ -26,7 +26,7 @@ export const systems = [
       { label: 'Working Day Calendar', to: '/dashboard/working-day-calendar' },
       { label: 'MIS Report', to: '/dashboard/mis-report' },
       { label: 'Admin Approval', to: '/dashboard/admin-approval' },
-  
+
       { label: 'Settings', to: '/dashboard/setting' }
     ]
   },
@@ -38,7 +38,7 @@ export const systems = [
     subtabs: [
       { label: 'Dashboard', to: '/systems/hr' },
       { label: 'Employees', to: '/systems/hr/employees' },
-      { label: 'Joining shop', to: '/systems/hr/joining-shop' },
+      // { label: 'Joining shop', to: '/systems/hr/joining-shop' },
       { label: 'Leave Management', to: '/systems/hr/leave' },
       {
         label: 'Attendance',
@@ -109,6 +109,8 @@ export const systems = [
     icon: ShieldCheck,
     subtabs: [
       { label: 'User & System Access', to: '/systems/master-setting' },
+      { label: 'Shop', to: '/systems/master-setting/Shop' },
+      { label: 'Purchase Settings', to: '/systems/master-setting/purchase-settings' },
     ]
   }
 ];

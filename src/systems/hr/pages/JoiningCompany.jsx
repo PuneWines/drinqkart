@@ -87,10 +87,10 @@ export default function JoiningCompany() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <Building2 className="text-indigo-600 animate-pulse" />
-            Joining Shops
+            Shops
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Configure shop names for employee profiles and registrations.
+            Configure shop names
           </p>
         </div>
       </div>
@@ -117,10 +117,10 @@ export default function JoiningCompany() {
               <button
                 type="submit"
                 disabled={saving || !newCompanyName.trim()}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white  text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#d4b457]  text-sm font-semibold transition-colors disabled:cursor-not-allowed shadow-md"
               >
                 {saving ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent  animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent text-red-900 animate-spin"></div>
                 ) : (
                   <Plus size={16} />
                 )}

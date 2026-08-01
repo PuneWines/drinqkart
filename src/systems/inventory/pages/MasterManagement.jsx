@@ -381,17 +381,6 @@ export default function MasterManagement({ currentUser }) {
                 Vendors Directory
               </button>
             )}
-            {(isAdmin || isMasterAdmin || isMasterItemsAllowed || isVendorsAllowed) && (
-              <button
-                onClick={() => { setActiveTab('shops'); setSearchQuery(''); }}
-                className={`px-4.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'shops'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-                  }`}
-              >
-                Shop
-              </button>
-            )}
           </div>
 
           {/* Search and Add button */}
@@ -577,35 +566,6 @@ export default function MasterManagement({ currentUser }) {
                             </svg>
                           </button>
                         </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          ) : activeTab === 'shops' && (currentUser?.role === 'admin' || currentUser?.page_access?.includes('master_items') || currentUser?.page_access?.includes('master_vendors')) ? (
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-4 w-28">ID</th>
-                  <th className="px-6 py-4">Shop Name</th>
-
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {filteredShops.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-6 py-12 text-center text-slate-400 italic">
-                      No shops matching search query found.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredShops.map((shop) => {
-                    return (
-                      <tr key={shop.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 font-mono text-xs text-slate-400 font-semibold">#{shop.id}</td>
-                        <td className="px-6 py-4 font-bold text-slate-800">{shop.shop_name}</td>
-
                       </tr>
                     );
                   })
