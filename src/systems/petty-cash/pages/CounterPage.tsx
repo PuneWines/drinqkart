@@ -74,11 +74,20 @@ export default function CounterPage({ counter }: CounterPageProps) {
   const fetchShops = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from("petty_cash_shops")
+        .from("shop")
         .select("*")
-        .order("id", { ascending: true });
-      if (!error && data) {
-        setShops(data.map((r: any) => ({ id: r.id, name: r.name || "" })));
+        .order("shop_name", { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        setShops(data.map((r: any, idx: number) => ({ id: r.id || idx + 1, name: r.shop_name || r.name || "" })));
+      } else {
+        const { data: pcData, error: pcError } = await supabase
+          .from("petty_cash_shops")
+          .select("*")
+          .order("id", { ascending: true });
+        if (!pcError && pcData) {
+          setShops(pcData.map((r: any) => ({ id: r.id, name: r.name || "" })));
+        }
       }
     } catch (err) {
       console.error(`[CounterPage ${counter}] Error fetching shops:`, err);

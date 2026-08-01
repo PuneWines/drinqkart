@@ -570,15 +570,13 @@ export default function MasterSetting() {
                                     key={shop}
                                     type="button"
                                     onClick={() => handleToggleShop(shop)}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                                      isSelected
+                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
                                         ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
                                         : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
-                                    }`}
+                                      }`}
                                   >
-                                    <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
-                                      isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                                    }`}>
+                                    <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                                      }`}>
                                       {isSelected && '✓'}
                                     </span>
                                     <span>{shop}</span>

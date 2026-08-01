@@ -1971,7 +1971,7 @@ const AttendanceDaily = () => {
               value={matchFilter}
               onChange={(e) => setMatchFilter(e.target.value)}
               className={`flex h-10 appearance-none items-center gap-1.5 pl-3 pr-8 py-1.5 font-semibold text-xs border rounded-md cursor-pointer transition-all focus:outline-none ${matchFilter === 'ALL'
-                ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                ? 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
                 : matchFilter === 'MATCHED'
                   ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
                   : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
@@ -1984,7 +1984,7 @@ const AttendanceDaily = () => {
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
               <ChevronDown size={12} className={
                 matchFilter === 'ALL'
-                  ? 'text-blue-700'
+                  ? 'text-gray-700'
                   : matchFilter === 'MATCHED'
                     ? 'text-emerald-700'
                     : 'text-amber-700'
@@ -2128,9 +2128,9 @@ const AttendanceDaily = () => {
                     return (
                       <tr
                         key={employee.id}
-                        className={`transition-colors ${employee.isRemaining ? 'bg-blue-100 hover:bg-blue-200' : isInEmployeesTable ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50 bg-white'}`}
+                        className="transition-colors hover:bg-gray-50 bg-white"
                       >
-                        <td className={`sticky left-0 px-2 py-1.5 border-r z-10 ${employee.isRemaining ? 'bg-blue-100' : isInEmployeesTable ? 'bg-blue-50' : 'bg-white'}`}>
+                        <td className="sticky left-0 px-2 py-1.5 border-r z-10 bg-white">
                           <div className="flex items-center gap-1.5">
                             <div className="relative flex-shrink-0">
                               {candidatePhoto ? (
@@ -2140,7 +2140,7 @@ const AttendanceDaily = () => {
                                   className="w-6 h-6 rounded-full object-cover border border-gray-200 flex-shrink-0"
                                 />
                               ) : (
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${employee.isRemaining ? 'bg-blue-200 text-blue-800' : isInEmployeesTable ? 'bg-blue-100 text-blue-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600">
                                   {employee.name ? employee.name.charAt(0).toUpperCase() : '?'}
                                 </div>
                               )}
@@ -2406,7 +2406,7 @@ const AttendanceDaily = () => {
                       return (
                         <tr
                           key={employee.id}
-                          className={`transition-colors ${employee.isRemaining ? 'bg-blue-100 hover:bg-blue-200' : isInEmployeesTable ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50 bg-white'}`}
+                          className="transition-colors hover:bg-gray-50 bg-white"
                         >
                           <td className="px-2 py-1.5 text-[10px] text-gray-500 font-medium">{(activePage - 1) * pageSize + idx + 1}</td>
                           <td className="px-2 py-1.5 pl-0">
@@ -2420,7 +2420,7 @@ const AttendanceDaily = () => {
                                       className="w-7 h-7 rounded-full object-cover border border-gray-200 flex-shrink-0"
                                     />
                                   ) : (
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${employee.isRemaining ? 'bg-blue-200 text-blue-800' : isInEmployeesTable ? 'bg-blue-100 text-blue-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600">
                                       {employee.name ? employee.name.charAt(0).toUpperCase() : '?'}
                                     </div>
                                   )}
@@ -2447,7 +2447,7 @@ const AttendanceDaily = () => {
                                     )}
                                   </div>
                                   {isInEmployeesTable ? (
-                                    <span className="text-[8px] text-blue-600 font-medium block">✓ Matched</span>
+                                    <span className="text-[8px] text-emerald-600 font-medium block">✓ Matched</span>
                                   ) : (
                                     <span className="text-[8px] text-amber-600 font-medium block">⚠️ Unmatched</span>
                                   )}

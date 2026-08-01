@@ -95,9 +95,14 @@ export default function Settings() {
 
   const fetchShops = useCallback(async () => {
     try {
-      const { data } = await supabase.from('petty_cash_shops').select('name');
+      const { data } = await supabase.from('shop').select('*').order('shop_name', { ascending: true });
       if (data && data.length > 0) {
-        setAvailableShops(data.map((r: any) => r.name).filter(Boolean));
+        setAvailableShops(data.map((r: any) => r.shop_name || r.name || r.shop).filter(Boolean));
+      } else {
+        const { data: pcData } = await supabase.from('petty_cash_shops').select('*');
+        if (pcData && pcData.length > 0) {
+          setAvailableShops(pcData.map((r: any) => r.name || r.shop_name).filter(Boolean));
+        }
       }
     } catch {}
   }, []);
