@@ -570,7 +570,7 @@ export async function getStockLedgerView({ fromDate, toDate, itemName } = {}) {
 export async function getShops() {
   try {
     const { data, error } = await supabase
-      .from('Inventory_shop')
+      .from('shop')
       .select('*')
       .order('shop_name', { ascending: true });
 
@@ -588,7 +588,7 @@ export async function addShop(shopName) {
   }
   try {
     const { data, error } = await supabase
-      .from('Inventory_shop')
+      .from('shop')
       .insert([{ shop_name: shopName.trim() }])
       .select()
       .single();
@@ -607,7 +607,7 @@ export async function updateShop(shopId, shopName) {
   }
   try {
     const { data, error } = await supabase
-      .from('Inventory_shop')
+      .from('shop')
       .update({ shop_name: shopName.trim() })
       .eq('id', shopId)
       .select()
@@ -627,8 +627,7 @@ export async function deleteShop(shopId) {
   }
   try {
     const { error } = await supabase
-      .from('Inventory_shop')
-      .delete()
+      .from('shop')
       .delete()
       .eq('id', shopId);
 
