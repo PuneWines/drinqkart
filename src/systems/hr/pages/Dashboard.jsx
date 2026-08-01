@@ -53,60 +53,21 @@ export default function Dashboard() {
     const fetchEmployees = async () => {
         try {
             setLoading(true)
-            const mappedList = []
-            const seenIds = new Set()
 
-            // 1. Fetch from users table (HR_SYSTEM_employee_details jsonb column)
-            const { data: usersData } = await supabase
-                .from('users')
-                .select('*')
-                .order('created_at', { ascending: false })
-
-            if (usersData && usersData.length > 0) {
-                usersData.forEach(row => {
-                    const details = row.HR_SYSTEM_employee_details || {}
-                    const empId = row.employee_id || details.employee_id
-                    const name = details.name_as_per_aadhar || row.user_name
-
-                    if (empId || name || row.HR_SYSTEM_employee_details) {
-                        const status = details.status || (typeof row.status === 'string' ? row.status : 'Active')
-                        const mapped = {
-                            id: row.id,
-                            employee_id: empId || '',
-                            name_as_per_aadhar: name || '',
-                            designation: details.designation || row.Designation || '',
-                            joining_company_name: details.joining_company_name || row.shop_name || '',
-                            joining_place: details.joining_company_name || row.shop_name || '',
-                            status,
-                            created_at: details.created_at || row.created_at,
-                            updated_at: details.updated_at || row.created_at
-                        }
-                        if (mapped.employee_id) seenIds.add(mapped.employee_id.toString().trim())
-                        mappedList.push(mapped)
-                    }
-                })
-            }
-
-            // 2. Fetch from hr_management_employees table
-            const { data: hrData } = await supabase
+            // Fetch directly from hr_management_employees table
+            const { data: hrData, error } = await supabase
                 .from('hr_management_employees')
                 .select('*')
                 .order('created_at', { ascending: false })
 
-            if (hrData && hrData.length > 0) {
-                hrData.forEach(emp => {
-                    if (!emp.employee_id || !seenIds.has(emp.employee_id.toString().trim())) {
-                        mappedList.push(emp)
-                        if (emp.employee_id) seenIds.add(emp.employee_id.toString().trim())
-                    }
-                })
-            }
+            if (error) throw error
+            const mappedList = hrData || []
 
             // Calculate statistics
             const total = mappedList.length
-            const active = mappedList.filter(emp => emp.status === 'Active').length
-            const inactive = mappedList.filter(emp => emp.status === 'Inactive').length
-            const left = mappedList.filter(emp => emp.status === 'Left').length
+            const active = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'active').length
+            const inactive = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'inactive').length
+            const left = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'left').length
 
             // Calculate left this month
             const currentDate = new Date()
@@ -114,7 +75,7 @@ export default function Dashboard() {
             const currentYear = currentDate.getFullYear()
 
             const leftThisMonth = mappedList.filter(emp => {
-                if (emp.status !== 'Left') return false
+                if ((emp.status || '').toLowerCase() !== 'left') return false
                 const leftDate = new Date(emp.updated_at || emp.created_at)
                 return leftDate.getMonth() === currentMonth && leftDate.getFullYear() === currentYear
             }).length
@@ -177,38 +138,17 @@ export default function Dashboard() {
             const dd = String(today.getDate()).padStart(2, '0')
             const todayStr = `${yyyy}-${mm}-${dd}`
 
-            // 1. Fetch active employees list from both sources
+            // 1. Fetch active employees list from hr_management_employees table
             const activeEmployeesMap = new Map()
-
-            const { data: usersData } = await supabase.from('users').select('*')
-            if (usersData) {
-                usersData.forEach(row => {
-                    const details = row.HR_SYSTEM_employee_details || {}
-                    const empId = row.employee_id || details.employee_id
-                    const name = details.name_as_per_aadhar || row.user_name
-                    const status = details.status || (typeof row.status === 'string' ? row.status : 'Active')
-                    if (empId && status === 'Active') {
-                        const cleanId = empId.toString().trim()
-                        if (!activeEmployeesMap.has(cleanId)) {
-                            activeEmployeesMap.set(cleanId, {
-                                employee_id: cleanId,
-                                name_as_per_aadhar: name || 'Employee',
-                                designation: details.designation || row.Designation || '',
-                                joining_place: details.joining_company_name || row.shop_name || ''
-                            })
-                        }
-                    }
-                })
-            }
 
             const { data: hrData } = await supabase
                 .from('hr_management_employees')
                 .select('employee_id, name_as_per_aadhar, designation, joining_place, status')
-                .eq('status', 'Active')
 
             if (hrData) {
                 hrData.forEach(emp => {
-                    if (emp.employee_id) {
+                    const statusLower = (emp.status || '').toLowerCase()
+                    if (emp.employee_id && (statusLower === 'active' || statusLower === '')) {
                         const cleanId = emp.employee_id.toString().trim()
                         if (!activeEmployeesMap.has(cleanId)) {
                             activeEmployeesMap.set(cleanId, {
@@ -699,7 +639,7 @@ export default function Dashboard() {
                 </>
             )}
 
-            {/* Detailed Employees Modal */}
+            {/* Detailed Employees Modal - REMOVED SCROLLBAR */}
             {detailModal.isOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDetailModal({ ...detailModal, isOpen: false })}>
                     <div className="bg-white max-w-4xl w-full max-h-[80vh] shadow-2xl overflow-hidden border border-slate-100 flex flex-col" onClick={e => e.stopPropagation()}>
@@ -735,8 +675,8 @@ export default function Dashboard() {
                             </button>
                         </div>
 
-                        {/* Modal Body */}
-                        <div className="p-5 overflow-y-auto max-h-[60vh] flex-1">
+                        {/* Modal Body - REMOVED overflow-y-auto */}
+                        <div className="p-5 flex-1">
                             {detailModal.employees.length === 0 ? (
                                 <div className="text-center py-12">
                                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">

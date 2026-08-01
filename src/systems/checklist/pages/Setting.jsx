@@ -39,7 +39,7 @@ const ADMIN_APPROVAL_PAGE_LABEL = 'Admin Approval';
 
 const Setting = () => {
   const { showToast } = useMagicToast();
-  const [activeTab, setActiveTab] = useState('shops');
+  const [activeTab, setActiveTab] = useState('leave');
   const [showUserModal, setShowUserModal] = useState(false);
   const [showShopModal, setShowShopModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -50,7 +50,7 @@ const Setting = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const lastSyncError = useRef({ status: null, timestamp: 0 });
 
-  const [activeShopSubTab, setActiveShopSubTab] = useState('shops');
+  const [activeShopSubTab, setActiveShopSubTab] = useState('leave');
   // Leave Management State
   const [leavePersonId, setLeavePersonId] = useState('');
   const [leavePersonName, setLeavePersonName] = useState('');
@@ -254,7 +254,7 @@ const Setting = () => {
   };
 
   const handleAddButtonClick = () => {
-    if (activeTab === 'shops' || activeTab === 'categories') {
+    if (activeTab === 'categories') {
       resetShopForm();
       setShowShopModal(true);
     } else if (activeTab === 'automate') {
@@ -456,13 +456,6 @@ const Setting = () => {
     if (tab === 'users') {
       dispatch(userDetails());
       dispatch(shopOnlyDetails());
-    } else if (tab === 'shops') {
-      // Fetch data based on activeShopSubTab
-      if (activeShopSubTab === 'shops') {
-        dispatch(shopDetails());
-      } else if (activeShopSubTab === 'givenBy') {
-        dispatch(givenByDetails());
-      }
     } else if (tab === 'categories') {
       dispatch(customDropdownDetails());
     } else if (tab === 'automate') {
@@ -710,42 +703,6 @@ const Setting = () => {
       }
       return;
     }
-
-    if (activeTab === 'shops') {
-      if (activeShopSubTab === 'shops') {
-        const updatedShop = {
-          shop: shopForm.name,
-          given_by: shopForm.givenBy
-        };
-        try {
-          await dispatch(updateShop({ id: currentShopId, updatedShop })).unwrap();
-
-          // Also ensure it exists in assign_from table
-          if (shopForm.givenBy) {
-            try {
-              await dispatch(createAssignFrom({ given_by: shopForm.givenBy })).unwrap();
-            } catch (e) { }
-          }
-          resetShopForm();
-          setShowShopModal(false);
-          dispatch(shopDetails()); // Explicitly refresh shop details
-        } catch (error) {
-          console.error('Error updating shop:', error);
-        }
-      } else if (activeShopSubTab === 'givenBy') {
-        try {
-          await dispatch(updateAssignFrom({
-            id: currentShopId,
-            given_by: shopForm.name
-          })).unwrap();
-          resetShopForm();
-          setShowShopModal(false);
-          dispatch(givenByDetails()); // Explicitly refresh givenBy details
-        } catch (error) {
-          console.error('Error updating assign_from:', error);
-        }
-      }
-    }
   };
 
   const handleAddShop = async (e) => {
@@ -802,39 +759,6 @@ const Setting = () => {
         showToast("Failed to save machine.", "error");
       }
       return;
-    }
-
-    if (activeTab === 'shops') {
-      if (activeShopSubTab === 'givenBy') {
-        try {
-          await dispatch(createAssignFrom({ given_by: shopForm.name })).unwrap();
-          resetShopForm();
-          setShowShopModal(false);
-          dispatch(givenByDetails()); // Explicitly refresh givenBy details
-        } catch (error) {
-          console.error('Error adding assign_from:', error);
-        }
-      } else { // activeShopSubTab === 'shops'
-        try {
-          await dispatch(createShop({
-            shop: shopForm.name,
-            given_by: shopForm.givenBy
-          })).unwrap();
-
-          // Also ensure it exists in assign_from table
-          if (shopForm.givenBy) {
-            try {
-              await dispatch(createAssignFrom({ given_by: shopForm.givenBy })).unwrap();
-            } catch (e) { }
-          }
-
-          resetShopForm();
-          setShowShopModal(false);
-          dispatch(shopDetails()); // Explicitly refresh shop details
-        } catch (error) {
-          console.error('Error adding shop:', error);
-        }
-      }
     }
   };
 
@@ -1056,25 +980,7 @@ const Setting = () => {
   };
 
   const handleEditShop = (shopId) => {
-    if (activeTab === 'shops' && activeShopSubTab === 'shops') {
-      const shopItem = shops.find(s => s.id === shopId);
-      setShopForm({
-        name: shopItem.shop,
-        givenBy: shopItem.given_by || ''
-      });
-      setCurrentShopId(shopId);
-      setIsEditing(true); // Set editing mode
-      setShowShopModal(true);
-    } else if (activeTab === 'shops' && activeShopSubTab === 'givenBy') {
-      const item = givenBy.find(g => g.id === shopId); // Assuming givenBy items also have an 'id'
-      setShopForm({
-        name: item.given_by,
-        givenBy: '' // givenBy table only has 'given_by' field, no secondary field
-      });
-      setCurrentShopId(shopId);
-      setIsEditing(true);
-      setShowShopModal(true);
-    } else if (activeTab === 'categories') {
+    if (activeTab === 'categories') {
       const item = customDropdowns.find(c => c.id === shopId);
       setShopForm({
         name: item.category,
@@ -1234,7 +1140,7 @@ const Setting = () => {
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max xscrol">
               {[
-                { id: 'shops', label: 'Shops', icon: Building, action: () => { dispatch(shopDetails()); dispatch(givenByDetails()); } },
+
                 { id: 'leave', label: 'Leave', icon: Calendar },
                 { id: 'categories', label: 'Machines', icon: Settings },
                 { id: 'automate', label: 'Automate', icon: ClipboardList },
@@ -1270,7 +1176,7 @@ const Setting = () => {
                 <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
 
-              {(activeTab === 'shops' || activeTab === 'categories' || activeTab === 'automate') && (
+              {(activeTab === 'categories' || activeTab === 'automate') && (
                 <button
                   onClick={() => {
                     if (activeTab === 'categories') {
@@ -1284,10 +1190,8 @@ const Setting = () => {
                 >
                   <Plus size={18} />
                   <span className="hidden sm:inline">
-                    {activeTab === 'shops' ?
-                      (activeShopSubTab === 'shops' ? 'New Shop' : 'New Assign From') :
-                      activeTab === 'categories' ? 'New Machine' :
-                        (activeAutomateSubTab === 'masterTasks' ? 'New Master Task' : 'New Level')}
+                    {activeTab === 'categories' ? 'New Machine' :
+                      (activeAutomateSubTab === 'masterTasks' ? 'New Master Task' : 'New Level')}
                   </span>
                   <span className="sm:hidden">Add</span>
                 </button>
@@ -1878,153 +1782,6 @@ const Setting = () => {
               </div>
             </div>
 
-          </div>
-        )}
-
-        {/* Shops Tab */}
-        {activeTab === 'shops' && (
-          <div className="bg-white shadow rounded-lg overflow-hidden border border-purple-200">
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple px-4 py-4 md:px-6">
-              <div className="flex flex-col sm:flex-row gap-4 justify-between items-center text-center sm:text-left">
-                <h2 className="text-lg font-bold text-purple-700">Shop Management</h2>
-
-                <div className="flex border border-purple-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                  <button
-                    className={`px-4 py-2 text-xs font-bold transition-all ${activeShopSubTab === 'shops' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-                    onClick={() => {
-                      setActiveShopSubTab('shops');
-                      dispatch(shopDetails());
-                    }}
-                  >
-                    Main Shops
-                  </button>
-                  <button
-                    className={`px-4 py-2 text-xs font-bold border-l border-purple-100 transition-all ${activeShopSubTab === 'givenBy' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-                    onClick={() => {
-                      setActiveShopSubTab('givenBy');
-                      dispatch(givenByDetails());
-                    }}
-                  >
-                    Assign From
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Loading State */}
-            {loading && (
-              <div className="p-8 text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-                <p className="mt-2 text-gray-600">Loading...</p>
-              </div>
-            )}
-
-            {/* Error State */}
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-md m-4">
-                <p className="text-red-600">Error: {error}</p>
-              </div>
-            )}
-
-            {/* Shops Sub-tab - Show only shop names */}
-            {activeShopSubTab === 'shops' && !loading && (
-              <div className="max-h-[calc(100vh-250px)] overflow-auto scrollbar-thin">
-                <div className="inline-block min-w-full align-middle">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
-                      <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ID
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Shop Name
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {shops && shops.length > 0 ? (
-                        shops.map((shopItem, index) => (
-                          <tr key={`shop-${shopItem.id || index}`} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{shopItem.shop}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <div className="flex space-x-2 justify-end">
-                                <button
-                                  onClick={() => handleEditShop(shopItem.id)}
-                                  className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"
-                                >
-                                  <Edit size={16} />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (window.confirm('Delete this shop?')) {
-                                      dispatch(deleteShop(shopItem.id));
-                                    }
-                                  }}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded-md"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
-                            No shops found
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* Given By Sub-tab - Show only given_by values */}
-            {activeShopSubTab === 'givenBy' && !loading && (
-              <div className="h-[calc(100vh-275px)] overflow-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assign From</th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {givenBy && givenBy.length > 0 ? (
-                      givenBy.map((item, index) => (
-                        <tr key={`given-${item.id || index}`} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.given_by}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex space-x-2 justify-end">
-                              <button onClick={() => handleEditShop(item.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md">
-                                <Edit size={16} />
-                              </button>
-                              <button onClick={() => {
-                                if (window.confirm('Delete this entry?')) {
-                                  dispatch(deleteAssignFrom(item.id));
-                                }
-                              }} className="p-1 text-red-600 hover:bg-red-50 rounded-md">
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr><td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">No data found</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         )}
 
@@ -2633,9 +2390,8 @@ const Setting = () => {
                               return (
                                 <label
                                   key={index}
-                                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
-                                    isChecked ? 'bg-purple-50 hover:bg-purple-100' : 'hover:bg-gray-100'
-                                  }`}
+                                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${isChecked ? 'bg-purple-50 hover:bg-purple-100' : 'hover:bg-gray-100'
+                                    }`}
                                 >
                                   <input
                                     type="checkbox"
@@ -2643,9 +2399,8 @@ const Setting = () => {
                                     onChange={() => handleHodShopToggle(shopName)}
                                     className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
                                   />
-                                  <span className={`text-sm font-medium flex-1 ${
-                                    isChecked ? 'text-purple-700' : 'text-gray-700'
-                                  }`}>
+                                  <span className={`text-sm font-medium flex-1 ${isChecked ? 'text-purple-700' : 'text-gray-700'
+                                    }`}>
                                     {shopName}
                                   </span>
                                   {isPrimary && (
@@ -2880,9 +2635,7 @@ const Setting = () => {
                     <h3 className="text-2xl font-black text-white tracking-tight">
                       {activeTab === 'categories'
                         ? (isEditing ? 'Refine Asset' : 'New Infrastructure')
-                        : (activeShopSubTab === 'givenBy'
-                          ? (isEditing ? 'Update Designation' : 'Create Designation')
-                          : (isEditing ? 'Update Shop' : 'Create Shop'))}
+                        : (isEditing ? 'Update Shop' : 'Create Shop')}
                     </h3>
                     <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
                       {activeTab === 'categories' ? 'Configure machine architecture' : 'Organize your workforce structure'}
@@ -2901,8 +2654,7 @@ const Setting = () => {
                 <form onSubmit={isEditing ? handleUpdateShop : handleAddShop} className="space-y-6">
                   <div className="space-y-2">
                     <label htmlFor="givenBy" className="block text-sm font-bold text-gray-700 ml-1">
-                      {activeTab === 'categories' ? 'Machine Name' :
-                        activeShopSubTab === 'givenBy' ? 'Assign From Name' : 'Shop Name'}
+                      {activeTab === 'categories' ? 'Machine Name' : 'Shop Name'}
                     </label>
                     {activeTab === 'categories' ? (
                       <input
@@ -2922,7 +2674,7 @@ const Setting = () => {
                         value={shopForm.name}
                         onChange={handleShopInputChange}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                        placeholder={activeShopSubTab === 'givenBy' ? 'e.g. CEO' : 'e.g. Shop A'}
+                        placeholder="e.g. Shop A"
                       />
                     )}
                   </div>
