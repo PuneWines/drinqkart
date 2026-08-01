@@ -202,14 +202,20 @@ export default function EmployeeManagement() {
   const fetchJoiningCompanies = async () => {
     try {
       const { data, error } = await supabase
-        .from('hr_management_joining_company_names')
+        .from('shop')
         .select('*')
-        .order('company_name', { ascending: true })
+        .order('shop_name', { ascending: true })
 
       if (error) throw error
-      setJoiningCompanies(data || [])
+      // Format object to have company_name for backwards compatibility alongside shop_name
+      const formatted = (data || []).map(d => ({
+        id: d.id,
+        company_name: d.shop_name,
+        shop_name: d.shop_name
+      }))
+      setJoiningCompanies(formatted)
     } catch (error) {
-      console.error('Error fetching joining companies:', error)
+      console.error('Error fetching joining companies from shop table:', error)
     }
   }
 

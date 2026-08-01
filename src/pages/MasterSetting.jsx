@@ -138,6 +138,44 @@ export default function MasterSetting() {
   const [jsonError, setJsonError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Quick Shop Edit State
+  const [editingShopUser, setEditingShopUser] = useState(null);
+  const [quickShopInput, setQuickShopInput] = useState('');
+  const [savingShop, setSavingShop] = useState(false);
+
+  const handleOpenQuickShopEdit = (user) => {
+    setEditingShopUser(user);
+    setQuickShopInput(user.shop_name || '');
+  };
+
+  const handleSaveQuickShop = async () => {
+    if (!editingShopUser) return;
+    setSavingShop(true);
+    const shopVal = quickShopInput.trim() || null;
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          shop_name: shopVal,
+          user_access: shopVal
+        })
+        .eq('id', editingShopUser.id);
+
+      if (error) {
+        showToast(`Failed to update shop name: ${error.message}`, 'error');
+      } else {
+        showToast(`Shop name updated for ${editingShopUser.user_name || editingShopUser.username}!`, 'success');
+        setEditingShopUser(null);
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error('Shop update error:', err);
+      showToast('Unexpected error updating shop name', 'error');
+    } finally {
+      setSavingShop(false);
+    }
+  };
+
   // Add User State
   const [showAddModal, setShowAddModal] = useState(false);
   const [employeesList, setEmployeesList] = useState([]);
@@ -679,7 +717,7 @@ export default function MasterSetting() {
                 <th className="py-4 px-4 w-28">Actions</th>
                 <th className="py-4 px-4">User Name</th>
                 <th className="py-4 px-4">Role</th>
-
+                <th className="py-4 px-4">Shop Name</th>
                 <th className="py-4 px-4">Password</th>
                 <th className="py-4 px-4">Master System Page Access</th>
               </tr>
@@ -758,6 +796,35 @@ export default function MasterSetting() {
                               Self Assign: Disabled
                             </span>
                           )}
+                        </div>
+                      </td>
+
+                      {/* Column 4: Shop Name with Edit Button */}
+                      <td className="py-3.5 px-4 font-sans text-xs">
+                        <div className="flex items-center justify-between gap-2 min-w-[180px] max-w-[240px]">
+                          <div className="flex flex-wrap gap-1 max-w-[170px]">
+                            {u.shop_name ? (
+                              u.shop_name.split(',').map((s, i) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 bg-[#1A1A1A]/5 text-[#1A1A1A] border border-[#1A1A1A]/10 rounded text-[10px] font-medium font-mono truncate max-w-[150px]"
+                                  title={s.trim()}
+                                >
+                                  {s.trim()}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[#1A1A1A]/40 italic text-[11px]">No Shop</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleOpenQuickShopEdit(u)}
+                            className="px-2.5 py-1 bg-[#C9A84C]/15 hover:bg-[#C9A84C] text-[#1A1A1A] border border-[#C9A84C]/40 hover:border-[#C9A84C] font-bold text-[10px] uppercase tracking-wider transition-all inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                            title="Edit Shop Name for user"
+                          >
+                            <Edit3 size={11} />
+                            <span>Edit</span>
+                          </button>
                         </div>
                       </td>
 
@@ -1465,6 +1532,132 @@ export default function MasterSetting() {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* --- Quick Edit Shop Name Modal --- */}
+      {editingShopUser && (
+        <div className="fixed inset-0 z-50 bg-[#1A1A1A]/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-none border border-[#1A1A1A]/20 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="p-4 bg-[#FAFAFA] border-b border-[#1A1A1A]/10 flex items-center justify-between">
+              <div>
+                <span className="text-[#C9A84C] uppercase tracking-[0.2em] text-[9.5px] font-bold block mb-0.5">
+                  Shop Name Assignment
+                </span>
+                <h3 className="text-base font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
+                  <Building size={16} className="text-[#C9A84C]" />
+                  Edit Shop Name: {editingShopUser.user_name || editingShopUser.username}
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingShopUser(null)}
+                className="text-[#1A1A1A]/40 hover:text-[#1A1A1A] p-1.5 rounded hover:bg-[#1A1A1A]/5 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
+                    Select Available Shop Locations
+                  </label>
+                  {availableShops.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentList = quickShopInput ? quickShopInput.split(',').map(s => s.trim()).filter(Boolean) : [];
+                        if (currentList.length === availableShops.length) {
+                          setQuickShopInput('');
+                        } else {
+                          setQuickShopInput(availableShops.join(', '));
+                        }
+                      }}
+                      className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                    >
+                      {quickShopInput.split(',').map(s => s.trim()).filter(Boolean).length === availableShops.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  )}
+                </div>
+
+                {availableShops.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 py-2 max-h-44 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded border border-slate-200">
+                    {availableShops.map((shop) => {
+                      const selectedList = quickShopInput ? quickShopInput.split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const isSelected = selectedList.includes(shop);
+                      return (
+                        <button
+                          key={shop}
+                          type="button"
+                          onClick={() => {
+                            let updated;
+                            if (isSelected) {
+                              updated = selectedList.filter(s => s !== shop);
+                            } else {
+                              updated = [...selectedList, shop];
+                            }
+                            setQuickShopInput(updated.join(', '));
+                          }}
+                          className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
+                          }`}
+                        >
+                          <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'}`}>
+                            {isSelected && '✓'}
+                          </span>
+                          <span>{shop}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400 italic">No shops found in database `shop` table.</div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Shop Name (Comma-separated text)
+                </label>
+                <input
+                  type="text"
+                  value={quickShopInput}
+                  onChange={(e) => setQuickShopInput(e.target.value)}
+                  placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                  className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] rounded shadow-inner"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-[#FAFAFA] border-t border-[#1A1A1A]/10 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingShopUser(null)}
+                className="px-4 py-2 bg-white hover:bg-gray-100 text-[#1A1A1A] border border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveQuickShop}
+                disabled={savingShop}
+                className="px-5 py-2 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Save size={14} />
+                <span>{savingShop ? 'Saving...' : 'Save Shop Name'}</span>
+              </button>
+            </div>
           </motion.div>
         </div>
       )}

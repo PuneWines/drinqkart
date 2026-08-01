@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react'
-import { Building2, Plus, ShieldAlert, CheckCircle, Search } from 'lucide-react'
+import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Trash2, Calendar, User } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function JoiningCompany() {
   const [companies, setCompanies] = useState([])
   const [newCompanyName, setNewCompanyName] = useState('')
+  const [givenByInput, setGivenByInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [alert, setAlert] = useState(null)
+
+  // Editing state
+  const [editingCompanyId, setEditingCompanyId] = useState(null)
+  const [editingShopName, setEditingShopName] = useState('')
+  const [editingGivenBy, setEditingGivenBy] = useState('')
+  const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
     fetchCompanies()
@@ -43,13 +50,18 @@ export default function JoiningCompany() {
 
     setSaving(true)
     try {
+      const payload = {
+        shop_name: trimmedName,
+        given_by: givenByInput.trim() || null
+      }
+
       const { data, error } = await supabase
         .from('shop')
-        .insert([{ shop_name: trimmedName }])
+        .insert([payload])
         .select()
 
       if (error) {
-        if (error.code === '23505') { // Unique constraint violation
+        if (error.code === '23505') { // Unique constraint violation on departments_name_key (shop_name)
           throw new Error('This shop name already exists.')
         }
         throw error
@@ -57,6 +69,7 @@ export default function JoiningCompany() {
 
       setCompanies(prev => [...prev, ...data].sort((a, b) => (a.shop_name || '').localeCompare(b.shop_name || '')))
       setNewCompanyName('')
+      setGivenByInput('')
       showAlert('success', 'Shop added successfully!')
     } catch (err) {
       showAlert('error', err.message)
@@ -65,15 +78,59 @@ export default function JoiningCompany() {
     }
   }
 
-  const filteredCompanies = companies.filter(c =>
-    (c.shop_name || c.company_name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const handleUpdateCompany = async (id) => {
+    const trimmed = editingShopName.trim()
+    if (!trimmed) return
+    setUpdating(true)
+    try {
+      const { error } = await supabase
+        .from('shop')
+        .update({
+          shop_name: trimmed,
+          given_by: editingGivenBy.trim() || null
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      showAlert('success', 'Shop updated successfully!')
+      setEditingCompanyId(null)
+      fetchCompanies()
+    } catch (err) {
+      showAlert('error', 'Failed to update shop: ' + err.message)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  const handleDeleteCompany = async (id, shopName) => {
+    if (!window.confirm(`Are you sure you want to delete shop "${shopName}"?`)) return
+    try {
+      const { error } = await supabase
+        .from('shop')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      showAlert('success', `Shop "${shopName}" deleted successfully!`)
+      fetchCompanies()
+    } catch (err) {
+      showAlert('error', 'Failed to delete shop: ' + err.message)
+    }
+  }
+
+  const filteredCompanies = companies.filter(c => {
+    const nameMatch = (c.shop_name || c.company_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const givenMatch = (c.given_by || '').toLowerCase().includes(searchTerm.toLowerCase())
+    return nameMatch || givenMatch
+  })
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Alert banner */}
       {alert && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3  shadow-lg border text-sm animate-fade-in ${alert.type === 'success'
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 shadow-lg border text-sm animate-fade-in ${alert.type === 'success'
           ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
           : 'bg-rose-50 border-rose-200 text-rose-800'
           }`}>
@@ -87,10 +144,10 @@ export default function JoiningCompany() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <Building2 className="text-indigo-600 animate-pulse" />
-            Shops
+            Shops Management (Global Table: `shop`)
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Configure shop names
+            Configure global shop names, given_by metadata, and settings
           </p>
         </div>
       </div>
@@ -98,29 +155,43 @@ export default function JoiningCompany() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Form Card */}
         <div className="lg:col-span-1">
-          <div className="bg-white  shadow-md border border-slate-100 p-5 space-y-4">
-            <h3 className="text-base font-bold text-slate-800">Add New Shops</h3>
+          <div className="bg-white shadow-md border border-slate-100 p-5 space-y-4">
+            <h3 className="text-base font-bold text-slate-800">Add New Shop</h3>
             <form onSubmit={handleAddCompany} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
-                  Shops Name
+                  Shop Name *
                 </label>
                 <input
                   type="text"
                   value={newCompanyName}
                   onChange={(e) => setNewCompanyName(e.target.value)}
                   placeholder="e.g. Balaji Wines"
-                  className="w-full px-3 py-2 text-sm border border-slate-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded"
                   required
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                  Given By / Managed By (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={givenByInput}
+                  onChange={(e) => setGivenByInput(e.target.value)}
+                  placeholder="e.g. Admin / Supervisor Name"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={saving || !newCompanyName.trim()}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#d4b457]  text-sm font-semibold transition-colors disabled:cursor-not-allowed shadow-md"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#d4b457] hover:bg-[#c3a346] text-slate-900 text-sm font-semibold transition-colors disabled:cursor-not-allowed shadow-md cursor-pointer rounded"
               >
                 {saving ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent text-red-900 animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent animate-spin"></div>
                 ) : (
                   <Plus size={16} />
                 )}
@@ -132,27 +203,27 @@ export default function JoiningCompany() {
 
         {/* Right Column: List Card */}
         <div className="lg:col-span-2">
-          <div className="bg-white  shadow-md border border-slate-100 overflow-hidden flex flex-col h-[500px]">
+          <div className="bg-white shadow-md border border-slate-100 overflow-hidden flex flex-col h-[520px]">
             {/* Search Header */}
             <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
-              <span className="text-sm font-bold text-slate-700">Shop List ({filteredCompanies.length})</span>
+              <span className="text-sm font-bold text-slate-700">Global Shop Directory ({filteredCompanies.length})</span>
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Search Shop..."
+                  placeholder="Search Shop or Given By..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white rounded"
                 />
               </div>
             </div>
 
             {/* List Body */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
               {loading ? (
                 <div className="h-full flex items-center justify-center">
-                  <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full  animate-spin"></div>
+                  <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : filteredCompanies.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
@@ -163,17 +234,112 @@ export default function JoiningCompany() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase bg-slate-50/50">
-                      <th className="py-3 px-4">#</th>
+                      <th className="py-3 px-4"># ID</th>
                       <th className="py-3 px-4">Shop Name</th>
+                      <th className="py-3 px-4">Given By</th>
+                      <th className="py-3 px-4">Created At</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-                    {filteredCompanies.map((company, index) => (
-                      <tr key={company.id || index} className="hover:bg-slate-50/30 transition-colors">
-                        <td className="py-3.5 px-4 text-xs font-mono text-slate-400">{index + 1}</td>
-                        <td className="py-3.5 px-4 font-medium text-slate-800">{company.shop_name || company.company_name}</td>
-                      </tr>
-                    ))}
+                    {filteredCompanies.map((company, index) => {
+                      const isEditing = editingCompanyId === company.id;
+                      const currentShopName = company.shop_name || company.company_name;
+                      const formattedDate = company.created_at
+                        ? new Date(company.created_at).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })
+                        : '—';
+
+                      return (
+                        <tr key={company.id || index} className="hover:bg-slate-50/30 transition-colors">
+                          <td className="py-3.5 px-4 text-xs font-mono text-slate-400 font-bold">{company.id || index + 1}</td>
+                          <td className="py-3.5 px-4 font-medium text-slate-800">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editingShopName}
+                                onChange={(e) => setEditingShopName(e.target.value)}
+                                className="px-2.5 py-1 text-xs border border-indigo-500 rounded bg-white text-slate-900 w-full max-w-xs focus:outline-none shadow-xs font-semibold"
+                                autoFocus
+                              />
+                            ) : (
+                              <span className="font-bold text-slate-900">{currentShopName}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-xs text-slate-600">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editingGivenBy}
+                                onChange={(e) => setEditingGivenBy(e.target.value)}
+                                placeholder="Given By"
+                                className="px-2 py-1 text-xs border border-indigo-500 rounded bg-white text-slate-900 w-full max-w-[120px] focus:outline-none"
+                              />
+                            ) : (
+                              company.given_by ? (
+                                <span className="inline-flex items-center gap-1 text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px] font-medium">
+                                  <User size={10} className="text-slate-400" />
+                                  {company.given_by}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 italic">—</span>
+                              )
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-xs text-slate-500 font-mono">
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar size={12} className="text-slate-400" />
+                              {formattedDate}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            {isEditing ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleUpdateCompany(company.id)}
+                                  disabled={updating || !editingShopName.trim()}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                                >
+                                  <Save size={12} />
+                                  <span>{updating ? 'Saving...' : 'Save'}</span>
+                                </button>
+                                <button
+                                  onClick={() => setEditingCompanyId(null)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  <X size={12} />
+                                  <span>Cancel</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingCompanyId(company.id);
+                                    setEditingShopName(currentShopName || '');
+                                    setEditingGivenBy(company.given_by || '');
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200 transition-colors cursor-pointer"
+                                >
+                                  <Edit3 size={13} />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCompany(company.id, currentShopName)}
+                                  className="inline-flex items-center p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                  title="Delete Shop"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
