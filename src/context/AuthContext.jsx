@@ -187,14 +187,21 @@ export const AuthProvider = ({ children }) => {
     if (user?.id) {
       supabase
         .from('users')
-        .select('master_user_system_page_access')
+        .select('master_user_system_page_access, shop_name, user_access, counter_access')
         .eq('id', user.id)
         .single()
         .then(({ data }) => {
-          if (data?.master_user_system_page_access) {
-            const updatedUser = { ...user, master_user_system_page_access: data.master_user_system_page_access };
+          if (data) {
+            const updatedUser = { 
+              ...user, 
+              master_user_system_page_access: data.master_user_system_page_access,
+              shop_name: data.shop_name,
+              user_access: data.user_access,
+              counter_access: data.counter_access
+            };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
             localStorage.setItem('master_user_system_page_access', typeof data.master_user_system_page_access === 'string' ? data.master_user_system_page_access : JSON.stringify(data.master_user_system_page_access));
+            syncSubsystemSessions(updatedUser);
             setUser(updatedUser);
           }
         })

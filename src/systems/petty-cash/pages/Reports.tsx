@@ -35,24 +35,22 @@ ChartJS.register(
 ); const convertPettyExpensesToSheetRows = (records: any[]): any[][] => {
   const rows: any[][] = [];
   const headers = [
-    "Timestamp", "Patty Id", "Date", "Opening Qty", "Closing Balance", "Shop Name",
+    "Timestamp", "Patty ID", "Date", "Opening Balance", "Closing Balance", "Shop Name",
     "Tea & Snacks", "Water Jar", "Electricity Bill", "Recharge", "Post Office",
     "Customer Discount", "Repair & Maintenance", "Stationary", "Petrol", "Patil Petrol",
-    "Incentive Amount", "Incentive Name", "Advance Amount", "Advance Name",
-    "Breakage Amount", "Breakage Name", "Shop Name One", "Shop Amount One",
-    "Medical Person", "Medical Amount", "Extra Expense Name", "Extra Expense Amount",
     "Excise/Police", "Desi Bhada", "Room Expense", "Office Expense", "Personal Expense",
     "Misc Expense", "Misc Remarks", "Purchase Voucher No.", "Vendor Payment",
     "Difference Amount", "Credit Card Charges", "Username", "Total Exp. (Spent)",
-    "Transaction Status", "Total Amount"
+    "Transaction Status", "Total Amount", "Expense Name", "Employee Name", "From Shop",
+    "To Shop", "Description", "Amount"
   ];
   rows.push(headers);
 
   records.forEach(rec => {
-    const baseData = [
+    const row = [
       rec.created_at || new Date().toISOString(),
-      rec.patty_id,
-      rec.date,
+      rec.patty_id || "",
+      rec.date || "",
       rec.opening_qty?.toString() || "",
       rec.closing?.toString() || "",
       rec.shop_name || "",
@@ -66,68 +64,29 @@ ChartJS.register(
       rec.stationary?.toString() || "",
       rec.petrol?.toString() || "",
       rec.patil_petrol?.toString() || "",
+      rec.excise_police?.toString() || "",
+      rec.desi_bhada?.toString() || "",
+      rec.room_expense?.toString() || "",
+      rec.office_expense?.toString() || "",
+      rec.personal_expense?.toString() || "",
+      rec.misc_expense?.toString() || "",
+      rec.misc_remarks || "",
+      rec.other_purchase_voucher_no || "",
+      rec.other_vendor_payment?.toString() || "",
+      rec.difference_amount?.toString() || "",
+      rec.credit_card_charges?.toString() || "",
+      rec.username || "",
+      rec.total_expense?.toString() || "",
+      rec.transaction_status || "",
+      rec.total_amount?.toString() || "",
+      rec.expense_name || "",
+      rec.employee_name || "",
+      rec.from_shop || "",
+      rec.to_shop || "",
+      rec.description || "",
+      rec.amount?.toString() || ""
     ];
-
-    const otherExpenses = Array.isArray(rec.other_expenses) ? rec.other_expenses : [];
-
-    if (otherExpenses.length > 0) {
-      otherExpenses.forEach((entry: any, idx: number) => {
-        const isFirst = idx === 0;
-        const emptyBase = new Array(baseData.length).fill("");
-        const row = [
-          ...(isFirst ? baseData : emptyBase),
-          entry.incentiveAmount || "",
-          entry.incentiveName || "",
-          entry.advance || "",
-          entry.advanceName || "",
-          entry.breakage || "",
-          entry.breakageName || "",
-          entry.shopNameOne || "",
-          entry.shopAmountOne || "",
-          entry.medicalPersonName || "",
-          entry.medicalAmount || "",
-          entry.extraExpenseName || "",
-          entry.extraExpenseAmount || "",
-          isFirst ? (rec.excise_police?.toString() || "") : "",
-          isFirst ? (rec.desi_bhada?.toString() || "") : "",
-          isFirst ? (rec.room_expense?.toString() || "") : "",
-          isFirst ? (rec.office_expense?.toString() || "") : "",
-          isFirst ? (rec.personal_expense?.toString() || "") : "",
-          isFirst ? (rec.misc_expense?.toString() || "") : "",
-          isFirst ? (rec.misc_remarks || "") : "",
-          isFirst ? (rec.other_purchase_voucher_no || "") : "",
-          isFirst ? (rec.other_vendor_payment?.toString() || "") : "",
-          isFirst ? (rec.difference_amount?.toString() || "") : "",
-          isFirst ? (rec.credit_card_charges?.toString() || "") : "",
-          isFirst ? (rec.username || "") : "",
-          isFirst ? (rec.total_expense?.toString() || "") : "",
-          isFirst ? (rec.transaction_status || "") : "",
-          isFirst ? (rec.total_amount?.toString() || "") : "",
-        ];
-        rows.push(row);
-      });
-    } else {
-      const row = [
-        ...baseData,
-        "", "", "", "", "", "", "", "", "", "", "", "",
-        rec.excise_police?.toString() || "",
-        rec.desi_bhada?.toString() || "",
-        rec.room_expense?.toString() || "",
-        rec.office_expense?.toString() || "",
-        rec.personal_expense?.toString() || "",
-        rec.misc_expense?.toString() || "",
-        rec.misc_remarks || "",
-        rec.other_purchase_voucher_no || "",
-        rec.other_vendor_payment?.toString() || "",
-        rec.difference_amount?.toString() || "",
-        rec.credit_card_charges?.toString() || "",
-        rec.username || "",
-        rec.total_expense?.toString() || "",
-        rec.transaction_status || "",
-        rec.total_amount?.toString() || "",
-      ];
-      rows.push(row);
-    }
+    rows.push(row);
   });
 
   return rows;

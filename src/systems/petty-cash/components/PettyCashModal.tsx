@@ -18,18 +18,12 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 
 interface OtherExpenseEntry {
-  advance: string;
-  advanceName: string;
-  breakage: string;
-  breakageName: string;
-  shopNameOne: string;
-  shopAmountOne: string;
-  medicalPersonName: string;
-  medicalAmount: string;
-  incentiveAmount: string;
-  incentiveName: string;
-  extraExpenseName: string;
-  extraExpenseAmount: string;
+  expenseName: string;
+  employeeName: string;
+  fromShop: string;
+  toShop: string;
+  description: string;
+  amount: string;
 }
 
 export interface CategoryAmounts {
@@ -116,9 +110,11 @@ export default function PettyCashModal({
   const [totalExpense, setTotalExpense] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchedUsers, setFetchedUsers] = useState<string[]>([]);
+  const [fetchedUserDetails, setFetchedUserDetails] = useState<{ userName: string; shopName: any; userAccess: any }[]>([]);
   const [fetchedShopNames, setFetchedShopNames] = useState<string[]>([]);
   const [showMiscRemarks, setShowMiscRemarks] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [availableExpenses, setAvailableExpenses] = useState<string[]>([]);
 
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
   const shopDropdownRef = useRef<HTMLDivElement>(null);
@@ -142,13 +138,8 @@ export default function PettyCashModal({
 
   useEffect(() => {
     const otherExpensesTotal = formData.otherExpenses.reduce((sum, entry) => {
-      const advance = Math.round(parseFloat(entry.advance?.toString() || "0")) || 0;
-      const breakage = Math.round(parseFloat(entry.breakage?.toString() || "0")) || 0;
-      const shopAmount = Math.round(parseFloat(entry.shopAmountOne?.toString() || "0")) || 0;
-      const medical = Math.round(parseFloat(entry.medicalAmount?.toString() || "0")) || 0;
-      const incentive = Math.round(parseFloat(entry.incentiveAmount?.toString() || "0")) || 0;
-      const extraExpense = Math.round(parseFloat(entry.extraExpenseAmount?.toString() || "0")) || 0;
-      return sum + advance + breakage + shopAmount + medical + incentive + extraExpense;
+      const amount = Math.round(parseFloat(entry.amount?.toString() || "0")) || 0;
+      return sum + amount;
     }, 0);
 
     const expenseSum = [
@@ -185,13 +176,20 @@ export default function PettyCashModal({
   const fetchUsernames = async () => {
     try {
       let usernames: string[] = [];
+      let details: { userName: string; shopName: any; userAccess: any }[] = [];
+
       const { data, error } = await supabase
         .from('users')
-        .select('user_name, name, username')
+        .select('user_name, shop_name, user_access')
         .order('user_name', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        usernames = data.map((row: any) => row.user_name || row.name || row.username).filter(Boolean);
+        usernames = data.map((row: any) => row.user_name).filter(Boolean);
+        details = data.map((row: any) => ({
+          userName: row.user_name || "",
+          shopName: row.shop_name,
+          userAccess: row.user_access
+        })).filter(u => u.userName);
       } else {
         const { data: pcData, error: pcError } = await supabase
           .from('petty_cash_user')
@@ -199,18 +197,64 @@ export default function PettyCashModal({
 
         if (!pcError && pcData) {
           usernames = pcData.map((row: any) => row.name).filter(Boolean);
+          details = pcData.map((row: any) => ({
+            userName: row.name || "",
+            shopName: "All",
+            userAccess: "All"
+          })).filter(u => u.userName);
         }
       }
 
-      const loggedInName = user?.name || user?.username;
-      if (loggedInName && !usernames.includes(loggedInName)) {
-        usernames.unshift(loggedInName);
+      const loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName');
+      if (loggedInName) {
+        if (!usernames.includes(loggedInName)) {
+          usernames.unshift(loggedInName);
+        }
+        if (!details.some(d => d.userName.toLowerCase() === loggedInName.toLowerCase())) {
+          details.unshift({
+            userName: loggedInName,
+            shopName: "All",
+            userAccess: "All"
+          });
+        }
       }
 
       setFetchedUsers(Array.from(new Set(usernames)));
+      setFetchedUserDetails(details);
     } catch (error) {
       console.error("Error fetching usernames:", error);
     }
+  };
+
+  const getFilteredEmployees = () => {
+    const targetShop = formData.shopName;
+    if (!targetShop) return fetchedUserDetails;
+
+    const userHasShopAccess = (userShopsRaw: any, target: string): boolean => {
+      if (!userShopsRaw) return false;
+      const targetLower = target.trim().toLowerCase();
+      
+      if (Array.isArray(userShopsRaw)) {
+        return userShopsRaw.some(s => {
+          const sLower = String(s).trim().toLowerCase();
+          return sLower === 'all' || sLower === targetLower;
+        });
+      }
+      
+      const str = String(userShopsRaw).trim().toLowerCase();
+      if (str === 'all') return true;
+      
+      return str.split(',').map(s => s.trim().toLowerCase()).includes(targetLower);
+    };
+
+    return fetchedUserDetails.filter(u => {
+      const loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName');
+      return (
+        (loggedInName && u.userName.toLowerCase() === loggedInName.toLowerCase()) ||
+        userHasShopAccess(u.shopName, targetShop) ||
+        userHasShopAccess(u.userAccess, targetShop)
+      );
+    });
   };
 
   const fetchShopNames = async () => {
@@ -238,13 +282,45 @@ export default function PettyCashModal({
         }
       }
 
-      const isMasterOrAdmin = isAdmin() || (user?.username || user?.name || '').toLowerCase() === 'masteradmin' || (user?.role || '').toLowerCase() === 'admin' || (user?.role || '').toLowerCase() === 'masteradmin';
+      // Restrict shop names based on the logged-in user's allowed shops, regardless of admin status.
+      // (Unless they are allowed "all" shops)
+      let rawShops = user?.shops;
+      if (!rawShops) {
+        try {
+          const savedUserStr = localStorage.getItem('currentUser');
+          if (savedUserStr) {
+            const parsed = JSON.parse(savedUserStr);
+            rawShops = parsed.shops;
+          }
+        } catch (e) {}
+      }
 
-      if (!isMasterOrAdmin && user?.shops && user.shops !== 'all') {
-        const filtered = uniqueShops.filter((shop) => hasShopAccess(shop));
-        if (filtered.length > 0) {
-          uniqueShops = filtered;
+      let userShops: string[] | 'all' = 'all';
+      if (rawShops) {
+        if (rawShops === 'all') {
+          userShops = 'all';
+        } else if (Array.isArray(rawShops)) {
+          const flattened: string[] = [];
+          rawShops.forEach((item: any) => {
+            if (item) {
+              item.toString().split(',').forEach((subItem: string) => {
+                const trimmed = subItem.trim();
+                if (trimmed) flattened.push(trimmed);
+              });
+            }
+          });
+          userShops = flattened;
+        } else {
+          userShops = rawShops.toString().split(',').map((s: string) => s.trim()).filter(Boolean);
         }
+      }
+
+      if (userShops && userShops !== 'all') {
+        const allowedShops = Array.isArray(userShops) ? userShops : [];
+        const filtered = uniqueShops.filter((shop) =>
+          allowedShops.some(allowed => allowed.trim().toLowerCase() === shop.trim().toLowerCase())
+        );
+        uniqueShops = filtered.length > 0 ? filtered : allowedShops;
       }
 
       setFetchedShopNames(uniqueShops);
@@ -259,14 +335,54 @@ export default function PettyCashModal({
 
 
 
+  const fetchExpenseOptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('master_expenses')
+        .select('name')
+        .order('name', { ascending: true });
+      if (!error && data) {
+        setAvailableExpenses(data.map(item => item.name));
+      }
+    } catch (error) {
+      console.error("Error fetching expense options:", error);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
-      const defaultUser = user?.name || user?.username || "";
+      const defaultUser = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
       if (initialData) {
         setFormData({
           ...initialData,
           username: initialData.username || defaultUser,
         });
+
+        if (initialData.id) {
+          supabase
+            .from('petty_cash_expense')
+            .select('expense_name, employee_name, from_shop, to_shop, description, amount')
+            .like('patty_id', `${initialData.id}%`)
+            .then(({ data: rowsData, error }) => {
+              if (!error && rowsData) {
+                const mappedExpenses = rowsData
+                  .filter(row => row.expense_name)
+                  .map(row => ({
+                    expenseName: row.expense_name,
+                    employeeName: row.employee_name || "",
+                    fromShop: row.from_shop || "",
+                    toShop: row.to_shop || "",
+                    description: row.description || "",
+                    amount: String(row.amount)
+                  }));
+                
+                setFormData(prev => ({
+                  ...prev,
+                  otherExpenses: mappedExpenses
+                }));
+              }
+            });
+        }
       } else {
         setFormData({
           id: "",
@@ -303,6 +419,7 @@ export default function PettyCashModal({
       }
       fetchUsernames();
       fetchShopNames();
+      fetchExpenseOptions();
     }
   }, [isOpen, initialData, user]);
 
@@ -321,18 +438,12 @@ export default function PettyCashModal({
     setFormData({
       ...formData,
       otherExpenses: [...formData.otherExpenses, {
-        advance: "",
-        advanceName: "",
-        breakage: "",
-        breakageName: "",
-        shopNameOne: "",
-        shopAmountOne: "",
-        medicalPersonName: "",
-        medicalAmount: "",
-        incentiveAmount: "",
-        incentiveName: "",
-        extraExpenseName: "",
-        extraExpenseAmount: ""
+        expenseName: "",
+        employeeName: "",
+        fromShop: "",
+        toShop: "",
+        description: "",
+        amount: ""
       }]
     });
   };
@@ -385,53 +496,100 @@ export default function PettyCashModal({
         }
       }
 
-      const recordToSubmit = {
-        patty_id: generatedId,
-        date: formData.date,
-        opening_qty: parseFloat(formData.openingQty) || 0,
-        closing: parseFloat(formData.closing) || 0,
-        shop_name: formData.shopName,
-        tea_nasta: parseFloat(formData.teaNasta) || 0,
-        water_jar: parseFloat(formData.waterJar) || 0,
-        light_bill: parseFloat(formData.lightBill) || 0,
-        recharge: parseFloat(formData.recharge) || 0,
-        post_office: parseFloat(formData.postOffice) || 0,
-        customer_discount: parseFloat(formData.customerDiscount) || 0,
-        repair_maintenance: parseFloat(formData.repairMaintenance) || 0,
-        stationary: parseFloat(formData.stationary) || 0,
-        petrol: parseFloat(formData.petrol) || 0,
-        patil_petrol: parseFloat(formData.patilPetrol) || 0,
-        excise_police: parseFloat(formData.excisePolice) || 0,
-        desi_bhada: parseFloat(formData.desiBhada) || 0,
-        room_expense: parseFloat(formData.roomExpense) || 0,
-        office_expense: parseFloat(formData.officeExpense) || 0,
-        personal_expense: parseFloat(formData.personalExpense) || 0,
-        misc_expense: parseFloat(formData.miscExpense) || 0,
-        misc_remarks: formData.miscRemarks || "",
-        other_purchase_voucher_no: formData.otherPurchaseVoucherNo || "",
-        other_vendor_payment: parseFloat(formData.otherVendorPayment) || 0,
-        difference_amount: parseFloat(formData.differenceAmount) || 0,
-        credit_card_charges: parseFloat(formData.creditCardCharges) || 0,
-        username: formData.username || user?.name || "",
-        total_expense: totalExpense,
-        transaction_status: formData.transactionStatus || 'Pending',
-        total_amount: totalAmount,
-        other_expenses: formData.otherExpenses || []
-      };
-
-      let response;
-      if (initialData?.id) {
-        response = await supabase
-          .from('petty_cash_expense')
-          .update(recordToSubmit)
-          .eq('patty_id', initialData.id);
+      let recordsToSubmit = [];
+      if (!formData.otherExpenses || formData.otherExpenses.length === 0) {
+        recordsToSubmit.push({
+          patty_id: `${generatedId}-01`,
+          date: formData.date,
+          opening_qty: parseFloat(formData.openingQty) || 0,
+          closing: parseFloat(formData.closing) || 0,
+          shop_name: formData.shopName,
+          tea_nasta: parseFloat(formData.teaNasta) || 0,
+          water_jar: parseFloat(formData.waterJar) || 0,
+          light_bill: parseFloat(formData.lightBill) || 0,
+          recharge: parseFloat(formData.recharge) || 0,
+          post_office: parseFloat(formData.postOffice) || 0,
+          customer_discount: parseFloat(formData.customerDiscount) || 0,
+          repair_maintenance: parseFloat(formData.repairMaintenance) || 0,
+          stationary: parseFloat(formData.stationary) || 0,
+          petrol: parseFloat(formData.petrol) || 0,
+          patil_petrol: parseFloat(formData.patilPetrol) || 0,
+          excise_police: parseFloat(formData.excisePolice) || 0,
+          desi_bhada: parseFloat(formData.desiBhada) || 0,
+          room_expense: parseFloat(formData.roomExpense) || 0,
+          office_expense: parseFloat(formData.officeExpense) || 0,
+          personal_expense: parseFloat(formData.personalExpense) || 0,
+          misc_expense: parseFloat(formData.miscExpense) || 0,
+          misc_remarks: formData.miscRemarks || "",
+          other_purchase_voucher_no: formData.otherPurchaseVoucherNo || "",
+          other_vendor_payment: parseFloat(formData.otherVendorPayment) || 0,
+          difference_amount: parseFloat(formData.differenceAmount) || 0,
+          credit_card_charges: parseFloat(formData.creditCardCharges) || 0,
+          username: formData.username || user?.name || "",
+          total_expense: totalExpense,
+          transaction_status: formData.transactionStatus || 'Pending',
+          total_amount: totalAmount,
+          expense_name: null,
+          employee_name: null,
+          from_shop: null,
+          to_shop: null,
+          description: null,
+          amount: 0
+        });
       } else {
-        response = await supabase
-          .from('petty_cash_expense')
-          .insert([recordToSubmit]);
+        recordsToSubmit = formData.otherExpenses.map((entry, index) => ({
+          patty_id: `${generatedId}-${String(index + 1).padStart(2, '0')}`,
+          date: formData.date,
+          opening_qty: parseFloat(formData.openingQty) || 0,
+          closing: parseFloat(formData.closing) || 0,
+          shop_name: formData.shopName,
+          tea_nasta: parseFloat(formData.teaNasta) || 0,
+          water_jar: parseFloat(formData.waterJar) || 0,
+          light_bill: parseFloat(formData.lightBill) || 0,
+          recharge: parseFloat(formData.recharge) || 0,
+          post_office: parseFloat(formData.postOffice) || 0,
+          customer_discount: parseFloat(formData.customerDiscount) || 0,
+          repair_maintenance: parseFloat(formData.repairMaintenance) || 0,
+          stationary: parseFloat(formData.stationary) || 0,
+          petrol: parseFloat(formData.petrol) || 0,
+          patil_petrol: parseFloat(formData.patilPetrol) || 0,
+          excise_police: parseFloat(formData.excisePolice) || 0,
+          desi_bhada: parseFloat(formData.desiBhada) || 0,
+          room_expense: parseFloat(formData.roomExpense) || 0,
+          office_expense: parseFloat(formData.officeExpense) || 0,
+          personal_expense: parseFloat(formData.personalExpense) || 0,
+          misc_expense: parseFloat(formData.miscExpense) || 0,
+          misc_remarks: formData.miscRemarks || "",
+          other_purchase_voucher_no: formData.otherPurchaseVoucherNo || "",
+          other_vendor_payment: parseFloat(formData.otherVendorPayment) || 0,
+          difference_amount: parseFloat(formData.differenceAmount) || 0,
+          credit_card_charges: parseFloat(formData.creditCardCharges) || 0,
+          username: formData.username || user?.name || "",
+          total_expense: totalExpense,
+          transaction_status: formData.transactionStatus || 'Pending',
+          total_amount: totalAmount,
+          expense_name: entry.expenseName || null,
+          employee_name: entry.expenseName !== 'Shop Name' ? (entry.employeeName || null) : null,
+          from_shop: entry.expenseName === 'Shop Name' ? (entry.fromShop || null) : null,
+          to_shop: entry.expenseName === 'Shop Name' ? (entry.toShop || null) : null,
+          description: entry.description || null,
+          amount: parseFloat(entry.amount) || 0
+        }));
       }
 
-      if (response.error) throw response.error;
+      if (initialData?.id) {
+        const { error: delError } = await supabase
+          .from('petty_cash_expense')
+          .delete()
+          .like('patty_id', `${initialData.id}%`);
+        if (delError) throw delError;
+      }
+
+      const { error: insertError } = await supabase
+        .from('petty_cash_expense')
+        .insert(recordsToSubmit);
+
+      if (insertError) throw insertError;
 
       setToast({ message: "Data saved successfully!", type: "success" });
       setTimeout(() => {
@@ -733,70 +891,120 @@ export default function PettyCashModal({
               </button>
             </div>
 
-            {formData.otherExpenses.map((entry, index) => (
-              <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2 text-xs">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Advance</label>
-                    <input type="number" value={entry.advance} onChange={(e) => updateOtherExpenseEntry(index, "advance", e.target.value)} placeholder="0" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
+            {formData.otherExpenses.map((entry, index) => {
+              const isShopName = entry.expenseName === "Shop Name";
+              return (
+                <div key={index} className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {/* Expense Name */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Expense Name *</label>
+                      <select
+                        value={entry.expenseName}
+                        onChange={(e) => updateOtherExpenseEntry(index, "expenseName", e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                        required
+                      >
+                        <option value="">Select Expense</option>
+                        {availableExpenses.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Standard Fields (When not "Shop Name") */}
+                    {!isShopName ? (
+                      <>
+                        {/* Employee Name */}
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Employee Name</label>
+                          <select
+                            value={entry.employeeName}
+                            onChange={(e) => updateOtherExpenseEntry(index, "employeeName", e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                          >
+                            <option value="">Select Employee</option>
+                            {getFilteredEmployees().map(u => (
+                              <option key={u.userName} value={u.userName}>{u.userName}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* From Shop */}
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">From Shop</label>
+                          <select
+                            value={entry.fromShop}
+                            onChange={(e) => updateOtherExpenseEntry(index, "fromShop", e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                          >
+                            <option value="">Select From</option>
+                            {fetchedShopNames.map(s => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* To Shop */}
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">To Shop</label>
+                          <select
+                            value={entry.toShop}
+                            onChange={(e) => updateOtherExpenseEntry(index, "toShop", e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                          >
+                            <option value="">Select To</option>
+                            {fetchedShopNames.map(s => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Description */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Description/Brand Name</label>
+                      <input
+                        type="text"
+                        value={entry.description}
+                        onChange={(e) => updateOtherExpenseEntry(index, "description", e.target.value)}
+                        placeholder="Remarks / details..."
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white"
+                      />
+                    </div>
+
+                    {/* Amount */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Amount *</label>
+                      <input
+                        type="number"
+                        value={entry.amount}
+                        onChange={(e) => updateOtherExpenseEntry(index, "amount", e.target.value)}
+                        placeholder="0"
+                        min="0"
+                        step="1"
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-semibold text-gray-800"
+                        required
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Adv. Name</label>
-                    <input type="text" value={entry.advanceName} onChange={(e) => updateOtherExpenseEntry(index, "advanceName", e.target.value)} placeholder="Name" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Breakage</label>
-                    <input type="number" value={entry.breakage} onChange={(e) => updateOtherExpenseEntry(index, "breakage", e.target.value)} placeholder="0" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Brk. Name</label>
-                    <input type="text" value={entry.breakageName} onChange={(e) => updateOtherExpenseEntry(index, "breakageName", e.target.value)} placeholder="Name" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Shop Name</label>
-                    <input type="text" value={entry.shopNameOne} onChange={(e) => updateOtherExpenseEntry(index, "shopNameOne", e.target.value)} placeholder="Shop" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Shop Amount</label>
-                    <input type="number" value={entry.shopAmountOne} onChange={(e) => updateOtherExpenseEntry(index, "shopAmountOne", e.target.value)} placeholder="0" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Medical Name</label>
-                    <input type="text" value={entry.medicalPersonName} onChange={(e) => updateOtherExpenseEntry(index, "medicalPersonName", e.target.value)} placeholder="Person" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Medical Amt</label>
-                    <input type="number" value={entry.medicalAmount} onChange={(e) => updateOtherExpenseEntry(index, "medicalAmount", e.target.value)} placeholder="0" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Incentive Amt</label>
-                    <input type="number" value={entry.incentiveAmount} onChange={(e) => updateOtherExpenseEntry(index, "incentiveAmount", e.target.value)} placeholder="0" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Incentive Name</label>
-                    <input type="text" value={entry.incentiveName} onChange={(e) => updateOtherExpenseEntry(index, "incentiveName", e.target.value)} placeholder="Reason" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Extra Exp Name</label>
-                    <input type="text" value={entry.extraExpenseName} onChange={(e) => updateOtherExpenseEntry(index, "extraExpenseName", e.target.value)} placeholder="Name" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500">Extra Exp Amt</label>
-                    <input type="number" value={entry.extraExpenseAmount} onChange={(e) => updateOtherExpenseEntry(index, "extraExpenseAmount", e.target.value)} placeholder="0" className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white" />
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => removeOtherExpenseEntry(index)}
+                      className="text-xs text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <FaTrash className="text-[10px]" />
+                      <span>Remove Entry</span>
+                    </button>
                   </div>
                 </div>
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    onClick={() => removeOtherExpenseEntry(index)}
-                    className="text-xs text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 cursor-pointer"
-                  >
-                    <FaTrash className="text-[10px]" />
-                    <span>Remove Entry</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* ── Summary & Actions Bar ── */}
