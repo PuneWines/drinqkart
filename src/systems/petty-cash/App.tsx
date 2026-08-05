@@ -4,20 +4,15 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Toast from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import PettyCash from "./pages/PettyCash";
-import Counter1 from "./pages/Counter1";
-import Counter2 from "./pages/Counter2";
-import Counter3 from "./pages/Counter3";
+import CounterInformation from "./pages/CounterInformation";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Footer from "./components/Footer";
 
 // Global navigation config for routing logic
 const ALL_NAV_ITEMS = [
-  { id: "cash-tally-1", label: "Counter 1", pageName: "Cash Tally - Counter 1" },
-  { id: "cash-tally-2", label: "Counter 2", pageName: "Cash Tally - Counter 2" },
-  { id: "cash-tally-3", label: "Counter 3", pageName: "Cash Tally - Counter 3" },
+  { id: "cash-tally-counter", label: "Cash Tally Counter", pageName: "Cash Tally Counter" },
   { id: "petty-cash", label: "Petty Cash Form", pageName: "Petty Cash Form" },
-  { id: "dashboard", label: "Dashboard", pageName: "Dashboard" },
   { id: "reports", label: "Reports", pageName: "Reports" },
 ];
 
@@ -26,9 +21,9 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.get('page') || "cash-tally-1";
+      return params.get('page') || "cash-tally-counter";
     } catch {
-      return "cash-tally-1";
+      return "cash-tally-counter";
     }
   });
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -43,11 +38,8 @@ function MainApp() {
   }, [window.location.search]);
 
   const PAGE_NAMES: Record<string, string> = {
-    "cash-tally-1": "Cash Tally - Counter 1",
-    "cash-tally-2": "Cash Tally - Counter 2",
-    "cash-tally-3": "Cash Tally - Counter 3",
+    "cash-tally-counter": "Cash Tally Counter",
     "petty-cash": "Petty Cash Form",
-    "dashboard": "Dashboard",
     "reports": "Reports",
   };
 
@@ -91,43 +83,31 @@ function MainApp() {
 
   const getPageTitle = () => {
     switch (activeTab) {
-      case "cash-tally-1":
-        return "Cash Tally — Counter 1";
-      case "cash-tally-2":
-        return "Cash Tally — Counter 2";
-      case "cash-tally-3":
-        return "Cash Tally — Counter 3";
+      case "cash-tally-counter":
+        return "Cash Tally Counter";
       case "petty-cash":
         return "Petty Cash Form";
-      case "dashboard":
-        return "Dashboard Overview";
       case "reports":
         return "Financial Reports";
       case "settings":
         return "Settings — User Management";
       default:
-        return "Cash Tally — Counter 1";
+        return "Cash Tally Counter";
     }
   };
 
   const renderPage = () => {
     switch (activeTab) {
-      case "cash-tally-1":
-        return <Counter1 onClose={() => setActiveTab("cash-tally-1")} />;
-      case "cash-tally-2":
-        return <Counter2 onClose={() => setActiveTab("cash-tally-2")} />;
-      case "cash-tally-3":
-        return <Counter3 onClose={() => setActiveTab("cash-tally-3")} />;
+      case "cash-tally-counter":
+        return <CounterInformation onClose={() => setActiveTab("cash-tally-counter")} />;
       case "petty-cash":
-        return <PettyCash onClose={() => setActiveTab("cash-tally-1")} />;
-      case "dashboard":
-        return <Dashboard />;
+        return <PettyCash onClose={() => setActiveTab("cash-tally-counter")} />;
       case "reports":
         return <Reports />;
       case "settings":
         return <Settings />;
       default:
-        return <Counter1 onClose={() => setActiveTab("cash-tally-1")} />;
+        return <CounterInformation onClose={() => setActiveTab("cash-tally-counter")} />;
     }
   };
 

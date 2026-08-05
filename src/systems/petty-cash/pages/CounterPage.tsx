@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  FaPlus, FaEdit, FaTrash, FaSync, FaSearch,
-  FaCalculator, FaCalendarAlt, FaStore, FaUser,
+  FaPlus, FaEdit, FaTrash, FaSync, FaSearch, FaChevronDown,
+  FaCalendarAlt, FaStore, FaUser,
   FaCoins, FaWallet, FaFileAlt, FaUndo
 } from "react-icons/fa";
 import CashTally from "./CashTally";
@@ -9,13 +9,13 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 
 interface CounterPageProps {
-  counter: number;
   onClose?: () => void;
 }
 
 interface TallyRow {
   id: string;
   tally_id: string;
+  counterVal: string;
   date: string;
   shopName: string;
   name: string;
@@ -27,8 +27,63 @@ interface TallyRow {
 const fmt = (n: number) =>
   `₹${(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 
-export default function CounterPage({ counter }: CounterPageProps) {
-  const { hasCounterAccess } = useAuth();
+export default function CounterPage({ onClose }: CounterPageProps) {
+  const { getAllowedCounters } = useAuth();
+  
+  const [allowedCounters, setAllowedCounters] = useState<string[]>([]);
+  const [showCounterSelectDropdown, setShowCounterSelectDropdown] = useState(false);
+  const tallyDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const parseAllowedCounters = () => {
+      try {
+        const userStr = localStorage.getItem("currentUser");
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          if (u && Array.isArray(u.counter_access)) {
+            return u.counter_access.map((c: any) => String(c).trim().toUpperCase());
+          }
+          if (u && Array.isArray(u.counterAccess)) {
+            return u.counterAccess.map((c: any) => String(c).trim().toUpperCase());
+          }
+        }
+      } catch (e) {
+        console.error("[CounterPage] Error parsing currentUser:", e);
+      }
+
+      try {
+        const hrUserStr = localStorage.getItem("hr_user");
+        if (hrUserStr) {
+          const hr = JSON.parse(hrUserStr);
+          if (hr && Array.isArray(hr.counter_access)) {
+            return hr.counter_access.map((c: any) => String(c).trim().toUpperCase());
+          }
+        }
+      } catch (e) {
+        console.error("[CounterPage] Error parsing hr_user:", e);
+      }
+
+      return getAllowedCounters();
+    };
+
+    setAllowedCounters(parseAllowedCounters());
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        tallyDropdownRef.current &&
+        !tallyDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowCounterSelectDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const [rows, setRows] = useState<TallyRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -38,16 +93,31 @@ export default function CounterPage({ counter }: CounterPageProps) {
   const [shops, setShops] = useState<{ id: number; name: string }[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState<any>(null);
+  const [activeModalCounter, setActiveModalCounter] = useState<string>("COUNTER-1");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteCounter, setDeleteCounter] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Grouped rows expand state (Key is "counter_date")
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+
+  const toggleDate = (counterKey: string, dateVal: string) => {
+    const key = `${counterKey}_${dateVal}`;
+    setExpandedDates(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleFillTallyClick = () => {
+    handleOpenAddModal(allowedCounters[0] || "COUNTER-1");
+  };
+
   const fetchRows = useCallback(async () => {
+    if (allowedCounters.length === 0) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("petty_cash_tallies")
         .select("*")
-        .eq("counter", counter)
+        .in("counter", allowedCounters)
         .order("date", { ascending: false });
 
       if (error) throw error;
@@ -55,6 +125,7 @@ export default function CounterPage({ counter }: CounterPageProps) {
       const mapped: TallyRow[] = (data || []).map((rec: any) => ({
         id: rec.tally_id || rec.id,
         tally_id: rec.tally_id || rec.id,
+        counterVal: rec.counter || "COUNTER-1",
         date: rec.date || "",
         shopName: rec.shop_name || "—",
         name: rec.name || "—",
@@ -65,11 +136,11 @@ export default function CounterPage({ counter }: CounterPageProps) {
 
       setRows(mapped);
     } catch (err) {
-      console.error(`[CounterPage ${counter}] Error fetching rows:`, err);
+      console.error("[CounterPage] Error fetching rows:", err);
     } finally {
       setLoading(false);
     }
-  }, [counter]);
+  }, [allowedCounters]);
 
   const fetchShops = useCallback(async () => {
     try {
@@ -90,21 +161,23 @@ export default function CounterPage({ counter }: CounterPageProps) {
         }
       }
     } catch (err) {
-      console.error(`[CounterPage ${counter}] Error fetching shops:`, err);
+      console.error("[CounterPage] Error fetching shops:", err);
     }
-  }, [counter]);
+  }, []);
 
   useEffect(() => {
     fetchRows();
     fetchShops();
   }, [fetchRows, fetchShops]);
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = (cVal: string) => {
+    setActiveModalCounter(cVal);
     setEditData(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (row: TallyRow) => {
+    setActiveModalCounter(row.counterVal);
     const raw = row.raw || {};
     const formattedData = {
       tally_id: raw.tally_id,
@@ -154,32 +227,39 @@ export default function CounterPage({ counter }: CounterPageProps) {
   };
 
   const confirmDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteId || !deleteCounter) return;
     setDeleting(true);
     try {
       const { error } = await supabase
         .from("petty_cash_tallies")
         .delete()
         .eq("tally_id", deleteId)
-        .eq("counter", counter);
+        .eq("counter", deleteCounter);
       if (error) throw error;
       setRows((prev) => prev.filter((r) => r.id !== deleteId));
       setDeleteId(null);
+      setDeleteCounter(null);
     } catch (err) {
-      console.error(`[CounterPage ${counter}] Error deleting:`, err);
+      console.error("[CounterPage] Error deleting tally:", err);
     } finally {
       setDeleting(false);
     }
   };
 
   const filtered = rows.filter((r) => {
+    const isCounterAllowed = allowedCounters.some(
+      (c) => c.toLowerCase().trim().replace(/[^a-z0-9]/g, '') === r.counterVal.toLowerCase().trim().replace(/[^a-z0-9]/g, '')
+    );
+    if (!isCounterAllowed) return false;
+
     const q = search.toLowerCase();
     const matchesSearch =
       !search.trim() ||
       r.shopName.toLowerCase().includes(q) ||
       r.name.toLowerCase().includes(q) ||
       r.date.includes(q) ||
-      r.tally_id.toLowerCase().includes(q);
+      r.tally_id.toLowerCase().includes(q) ||
+      r.counterVal.toLowerCase().includes(q);
 
     const matchesFromDate = !fromDate || r.date >= fromDate;
     const matchesToDate = !toDate || r.date <= toDate;
@@ -196,17 +276,26 @@ export default function CounterPage({ counter }: CounterPageProps) {
     setShopFilter("");
   };
 
-  if (!hasCounterAccess(counter)) {
+  if (allowedCounters.length === 0) {
     return (
       <div className="p-8 text-center text-gray-500 font-semibold bg-white rounded-2xl border border-gray-200">
-        Access Denied: You do not have permission to view Counter {counter}.
+        Access Denied: You do not have permission to view any cash tally counters.
       </div>
     );
   }
 
+  // Group filtered records by counter
+  const groupedByCounter: Record<string, TallyRow[]> = {};
+  filtered.forEach((row) => {
+    const cVal = row.counterVal;
+    if (!groupedByCounter[cVal]) {
+      groupedByCounter[cVal] = [];
+    }
+    groupedByCounter[cVal].push(row);
+  });
+
   return (
     <div className="space-y-5">
-
       {/* ── Summary Cards (Over table) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
         {/* Total Retail Scan Card */}
@@ -252,7 +341,6 @@ export default function CounterPage({ counter }: CounterPageProps) {
       {/* ── Filter Bar (Below cards) ── */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-3">
         <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
-
           {/* Filters: From Date, To Date, Shop Select, Search */}
           <div className="flex flex-wrap items-center gap-3 flex-1">
             {/* From Date */}
@@ -317,9 +405,8 @@ export default function CounterPage({ counter }: CounterPageProps) {
             )}
           </div>
 
-          {/* Action Buttons */}
+          {/* Refresh & Fill Tally Buttons */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Refresh */}
             <button
               onClick={fetchRows}
               title="Refresh"
@@ -329,102 +416,190 @@ export default function CounterPage({ counter }: CounterPageProps) {
               <span className="hidden sm:inline">Refresh</span>
             </button>
 
-            {/* Fill Tally Form */}
-            <button
-              onClick={handleOpenAddModal}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all shadow-xs text-xs cursor-pointer"
-            >
-              <FaPlus className="text-[10px]" />
-              <span>Fill Tally Form</span>
-            </button>
+            {/* Fill Tally Entry Button */}
+            {allowedCounters.length > 0 && (
+              <button
+                onClick={handleFillTallyClick}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all shadow-xs text-xs cursor-pointer"
+              >
+                <FaPlus className="text-[10px]" />
+                <span>Fill Tally Entry</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ── Table Card ── */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-xs text-left">
-            <thead className="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider">
-              <tr>
-                <th className="px-4 py-2.5">Date</th>
-                <th className="px-4 py-2.5">Shop Name</th>
-                <th className="px-4 py-2.5">Staff Name</th>
-                <th className="px-4 py-2.5">Retail Scan (₹)</th>
-                <th className="px-4 py-2.5">Expense (₹)</th>
-                <th className="px-4 py-2.5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 bg-white font-medium text-gray-800">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-gray-400">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-6 h-6 border-2 border-[#2a5298] border-t-transparent rounded-full animate-spin" />
-                      <span>Loading Counter {counter} Records...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-gray-400">
-                    No cash tally records found for Counter {counter}. Click "Fill Tally Form" to add one.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row) => (
-                  <tr key={row.id} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-4 py-2.5 whitespace-nowrap font-semibold text-gray-900 flex items-center gap-2">
-                      <FaCalendarAlt className="text-gray-400 text-xs" />
-                      {row.date}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-[#2a5298] border border-blue-200">
-                        <FaStore className="text-[10px]" />
-                        {row.shopName}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 text-gray-700">
-                        <FaUser className="text-gray-400 text-xs" />
-                        {row.name}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap font-normal text-slate-800">
-                      {fmt(row.retailScanAmount)}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap font-normal text-rose-600">
-                      {fmt(row.totalExpense)}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-right space-x-1.5">
-                      <button
-                        onClick={() => handleOpenEditModal(row)}
-                        title="Edit Record"
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
-                      >
-                        <FaEdit size={13} />
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(row.id)}
-                        title="Delete Record"
-                        className="p-1 text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                      >
-                        <FaTrash size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {/* ── Table Card for Each Counter ── */}
+      {loading ? (
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm py-20 flex flex-col items-center justify-center gap-3 text-gray-400">
+          <div className="w-8 h-8 border-4 border-[#2a5298] border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs font-semibold uppercase tracking-wider">Loading cash tallies...</span>
         </div>
-      </div>
+      ) : (
+        <div className="space-y-6">
+          {allowedCounters.map((cVal) => {
+            const rowsForThisCounter = groupedByCounter[cVal] || [];
+
+            // Group by date
+            const dateGroups: Record<string, TallyRow[]> = {};
+            rowsForThisCounter.forEach((row) => {
+              const d = row.date;
+              if (!dateGroups[d]) {
+                dateGroups[d] = [];
+              }
+              dateGroups[d].push(row);
+            });
+
+            const sortedDates = Object.keys(dateGroups).sort((a, b) => b.localeCompare(a));
+
+            return (
+              <div key={cVal} className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+                {/* Collapsible header */}
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-blue-600 rounded-full"></span>
+                    {cVal}
+                    <span className="text-xs text-gray-400 font-normal">
+                      ({rowsForThisCounter.length} records)
+                    </span>
+                  </h2>
+
+                </div>
+
+                {rowsForThisCounter.length === 0 ? (
+                  <div className="py-8 text-center text-gray-400 text-xs">
+                    No cash tally records found for {cVal}.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-xs text-left">
+                      <thead className="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-2.5 w-44">Date</th>
+                          <th className="px-4 py-2.5">Shop Name(s)</th>
+                          <th className="px-4 py-2.5">Staff Name(s)</th>
+                          <th className="px-4 py-2.5 w-32">Total Retail Scan (₹)</th>
+                          <th className="px-4 py-2.5 w-32">Total Expense (₹)</th>
+                          <th className="px-4 py-2.5 w-24 text-right">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white font-medium text-gray-850">
+                        {sortedDates.map((dateVal) => {
+                          const entries = dateGroups[dateVal];
+                          const expandKey = `${cVal}_${dateVal}`;
+                          const isExpanded = !!expandedDates[expandKey];
+                          const totalRetail = entries.reduce((s, r) => s + r.retailScanAmount, 0);
+                          const totalExp = entries.reduce((s, r) => s + r.totalExpense, 0);
+
+                          const uniqueShops = Array.from(new Set(entries.map((e) => e.shopName))).join(", ");
+                          const uniqueNames = Array.from(new Set(entries.map((e) => e.name))).join(", ");
+
+                          return (
+                            <tbody key={dateVal} className="divide-y divide-gray-100">
+                              {/* Date summary row */}
+                              <tr
+                                onClick={() => toggleDate(cVal, dateVal)}
+                                className="bg-slate-50/50 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                              >
+                                <td className="px-4 py-2.5 whitespace-nowrap font-bold text-gray-900 flex items-center gap-2">
+                                  <span className="text-[9px] text-gray-500 w-3">{isExpanded ? "▼" : "▶"}</span>
+                                  <FaCalendarAlt className="text-gray-400 text-[11px]" />
+                                  {dateVal}
+                                  {entries.length > 1 && (
+                                    <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-extrabold rounded-full">
+                                      {entries.length} Entries
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 whitespace-nowrap text-gray-600 truncate max-w-[200px]">
+                                  {uniqueShops}
+                                </td>
+                                <td className="px-4 py-2.5 whitespace-nowrap text-gray-600 truncate max-w-[150px]">
+                                  {uniqueNames}
+                                </td>
+                                <td className="px-4 py-2.5 whitespace-nowrap font-semibold text-slate-800">
+                                  {fmt(totalRetail)}
+                                </td>
+                                <td className="px-4 py-2.5 whitespace-nowrap font-semibold text-rose-600">
+                                  {fmt(totalExp)}
+                                </td>
+                                <td className="px-4 py-2.5 whitespace-nowrap text-right text-gray-400 text-[10px] font-bold uppercase tracking-wider select-none">
+                                  {isExpanded ? "Collapse" : "Expand"}
+                                </td>
+                              </tr>
+
+                              {/* Expanded individual sub-rows */}
+                              {isExpanded &&
+                                entries.map((entry) => (
+                                  <tr
+                                    key={entry.id}
+                                    className="bg-white hover:bg-slate-50/80 transition-colors border-l-2 border-blue-500/50"
+                                  >
+                                    <td className="pl-8 pr-4 py-2 whitespace-nowrap font-mono text-[10px] text-slate-400">
+                                      ↳ {entry.tally_id}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-blue-50 text-[#2a5298] border border-blue-100 font-semibold">
+                                        <FaStore size={9} />
+                                        {entry.shopName}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-gray-700">
+                                      <span className="inline-flex items-center gap-1">
+                                        <FaUser className="text-gray-400 text-[10px]" />
+                                        {entry.name}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-gray-600 font-normal">
+                                      {fmt(entry.retailScanAmount)}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-rose-500 font-normal">
+                                      {fmt(entry.totalExpense)}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right space-x-2">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenEditModal(entry);
+                                        }}
+                                        title="Edit Record"
+                                        className="p-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        <FaEdit size={12} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteId(entry.id);
+                                          setDeleteCounter(entry.counterVal);
+                                        }}
+                                        title="Delete Record"
+                                        className="p-1 text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        <FaTrash size={12} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Cash Tally Form Modal ── */}
       {isModalOpen && (
         <CashTally
           isOpen={isModalOpen}
-          counter={counter}
+          counter={activeModalCounter}
           initialData={editData}
           onClose={() => {
             setIsModalOpen(false);
@@ -450,7 +625,10 @@ export default function CounterPage({ counter }: CounterPageProps) {
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <button
-                onClick={() => setDeleteId(null)}
+                onClick={() => {
+                  setDeleteId(null);
+                  setDeleteCounter(null);
+                }}
                 disabled={deleting}
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 text-xs font-medium cursor-pointer"
               >

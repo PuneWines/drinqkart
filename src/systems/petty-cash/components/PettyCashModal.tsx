@@ -569,8 +569,8 @@ export default function PettyCashModal({
           transaction_status: formData.transactionStatus || 'Pending',
           total_amount: totalAmount,
           expense_name: entry.expenseName || null,
-          employee_name: entry.expenseName !== 'Shop Name' ? (entry.employeeName || null) : null,
-          from_shop: entry.expenseName === 'Shop Name' ? (entry.fromShop || null) : null,
+          employee_name: (entry.expenseName !== 'Shop Name' && entry.expenseName !== 'Custom Expense Name' && entry.expenseName !== 'Incentive') ? (entry.employeeName || null) : null,
+          from_shop: null,
           to_shop: entry.expenseName === 'Shop Name' ? (entry.toShop || null) : null,
           description: entry.description || null,
           amount: parseFloat(entry.amount) || 0
@@ -912,41 +912,8 @@ export default function PettyCashModal({
                       </select>
                     </div>
 
-                    {/* Standard Fields (When not "Shop Name") */}
-                    {!isShopName ? (
+                    {isShopName ? (
                       <>
-                        {/* Employee Name */}
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Employee Name</label>
-                          <select
-                            value={entry.employeeName}
-                            onChange={(e) => updateOtherExpenseEntry(index, "employeeName", e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
-                          >
-                            <option value="">Select Employee</option>
-                            {getFilteredEmployees().map(u => (
-                              <option key={u.userName} value={u.userName}>{u.userName}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {/* From Shop */}
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">From Shop</label>
-                          <select
-                            value={entry.fromShop}
-                            onChange={(e) => updateOtherExpenseEntry(index, "fromShop", e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
-                          >
-                            <option value="">Select From</option>
-                            {fetchedShopNames.map(s => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        </div>
-
                         {/* To Shop */}
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">To Shop</label>
@@ -962,6 +929,25 @@ export default function PettyCashModal({
                           </select>
                         </div>
                       </>
+                    ) : (
+                      (entry.expenseName !== "Custom Expense Name" && entry.expenseName !== "Incentive") && (
+                        <>
+                          {/* Employee Name */}
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Employee Name</label>
+                            <select
+                              value={entry.employeeName}
+                              onChange={(e) => updateOtherExpenseEntry(index, "employeeName", e.target.value)}
+                              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                            >
+                              <option value="">Select Employee</option>
+                              {getFilteredEmployees().map(u => (
+                                <option key={u.userName} value={u.userName}>{u.userName}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      )
                     )}
 
                     {/* Description */}
