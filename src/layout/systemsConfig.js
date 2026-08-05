@@ -110,6 +110,7 @@ export const systems = [
     subtabs: [
       { label: 'User & System Access', to: '/systems/master-setting' },
       { label: 'Shop', to: '/systems/master-setting/Shop' },
+      { label: 'Counter', to: '/systems/master-setting/Counter' },
       { label: 'Purchase Settings', to: '/systems/master-setting/purchase-settings' },
     ]
   }

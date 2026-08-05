@@ -24,6 +24,7 @@ import {
 import { supabase } from '../lib/supabase';
 import JoiningCompany from '../systems/hr/pages/JoiningCompany';
 import PurchaseSettings from '../systems/purchase/pages/Settings';
+import CounterManagement from './CounterManagement';
 
 // Systems and standard page modules in Drinqkart Master App
 const AVAILABLE_SYSTEMS = [
@@ -127,11 +128,13 @@ export default function MasterSetting() {
   const [showPassword, setShowPassword] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
   const [availableShops, setAvailableShops] = useState([]);
+  const [availableCounters, setAvailableCounters] = useState([]);
 
   // Modal / Editing state
   const [editingUser, setEditingUser] = useState(null);
   const [passwordInput, setPasswordInput] = useState('');
   const [shopNameInput, setShopNameInput] = useState('');
+  const [counterAccessInput, setCounterAccessInput] = useState([]);
   const [accessPermissions, setAccessPermissions] = useState({});
   const [jsonMode, setJsonMode] = useState(false);
   const [rawJsonText, setRawJsonText] = useState('[]');
@@ -193,7 +196,8 @@ export default function MasterSetting() {
     email: '',
     shopName: '',
     can_self_assign: false,
-    systemPreset: 'purchase' // 'all', 'purchase', 'checklist', 'hr', 'inventory', 'petty-cash'
+    systemPreset: 'purchase', // 'all', 'purchase', 'checklist', 'hr', 'inventory', 'petty-cash'
+    counterAccess: []
   });
 
   // Filter employees from hr_management_employees who are NOT present in the users table
@@ -248,7 +252,8 @@ export default function MasterSetting() {
       email: '',
       shopName: '',
       can_self_assign: false,
-      systemPreset: 'purchase'
+      systemPreset: 'purchase',
+      counterAccess: []
     });
     setShowAddModal(true);
     fetchEmployeesList();
@@ -352,6 +357,7 @@ export default function MasterSetting() {
         can_self_assign: Boolean(newUserForm.can_self_assign),
         status: 'active',
         master_user_system_page_access: initialPerms,
+        counter_access: newUserForm.counterAccess || [],
         HR_SYSTEM_employee_details: selectedEmployee || null
       };
 
@@ -434,9 +440,24 @@ export default function MasterSetting() {
     }
   };
 
+  const fetchCounters = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('master_counter')
+        .select('name')
+        .order('name', { ascending: true });
+      if (!error && data) {
+        setAvailableCounters(data.map(c => c.name));
+      }
+    } catch (err) {
+      console.error('Exception fetching counters:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchShops();
+    fetchCounters();
   }, []);
 
   const selectedShopsList = shopNameInput
@@ -487,6 +508,7 @@ export default function MasterSetting() {
     });
     setPasswordInput(user.password || '');
     setShopNameInput(user.shop_name || '');
+    setCounterAccessInput(user.counter_access || []);
 
     // Parse master_user_system_page_access
     let permObj = {};
@@ -604,7 +626,8 @@ export default function MasterSetting() {
           shop_name: shopVal,
           user_access: shopVal,
           can_self_assign: Boolean(editingUser.can_self_assign),
-          master_user_system_page_access: finalAccess
+          master_user_system_page_access: finalAccess,
+          counter_access: counterAccessInput
         })
         .eq('id', editingUser.id);
 
@@ -642,6 +665,11 @@ export default function MasterSetting() {
   // Sub-route: Shop (Joining Company)
   if (location.pathname.includes('/Shop') || location.pathname.toLowerCase().includes('/shop')) {
     return <JoiningCompany />;
+  }
+
+  // Sub-route: Counter
+  if (location.pathname.includes('/Counter') || location.pathname.toLowerCase().includes('/counter')) {
+    return <CounterManagement />;
   }
 
   return (
@@ -711,7 +739,7 @@ export default function MasterSetting() {
       {/* Users Table with Actions in Column 1 */}
       <div className="bg-white border-[0.5px] border-[#1A1A1A]/10 shadow-sm overflow-hidden">
         <div className="overflow-auto max-h-[75vh] custom-scrollbar">
-          <table className="w-full text-left border-collapse text-xs relative">
+          <table className="w-full min-w-[1500px] text-left border-collapse text-xs relative">
             <thead className="sticky top-0 z-10 bg-[#1A1A1A]">
               <tr className="bg-[#1A1A1A] border-b border-[#1A1A1A] uppercase font-serif text-[#C9A84C] tracking-[0.15em] text-[10.5px]">
                 <th className="py-4 px-4 w-28">Actions</th>
@@ -720,19 +748,20 @@ export default function MasterSetting() {
                 <th className="py-4 px-4">Shop Name</th>
                 <th className="py-4 px-4">Password</th>
                 <th className="py-4 px-4">Master System Page Access</th>
+                <th className="py-4 px-4">MASTER SYSTEM COUNTER ACCESS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1A1A1A]/10">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50">
+                  <td colSpan={7} className="py-16 text-center text-[#1A1A1A]/50">
                     <RefreshCw size={24} className="animate-spin mx-auto mb-3 text-[#C9A84C]" />
                     <span className="uppercase tracking-widest text-xs font-bold">Loading User Directory...</span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
+                  <td colSpan={7} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
                     No users found matching your search term.
                   </td>
                 </tr>
@@ -871,6 +900,25 @@ export default function MasterSetting() {
                           </span>
                         )}
                       </td>
+
+                      {/* Column 7: Master System Counter Access */}
+                      <td className="py-3.5 px-4 font-sans text-xs">
+                        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">
+                          {u.counter_access && Array.isArray(u.counter_access) && u.counter_access.length > 0 ? (
+                            u.counter_access.map((counter, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 bg-[#C9A84C]/15 text-[#1A1A1A] border border-[#C9A84C]/45 rounded text-[10px] font-semibold tracking-wider font-sans truncate"
+                                title={counter}
+                              >
+                                {counter}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[#1A1A1A]/40 italic text-[11px]">No Counter Access</span>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
@@ -1001,69 +1049,134 @@ export default function MasterSetting() {
                         <div className="p-5 space-y-6 bg-slate-50/40">
                           {/* Shop Access Section inside Checklist Delegation */}
                           {sys.id === 'checklist' && (
-                            <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
-                              <div className="flex items-center justify-between">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
-                                  <Building size={16} className="text-[#C9A84C]" />
-                                  Shop Access (<code className="font-mono text-[#8C6D23] lowercase">shop_name</code>)
-                                </label>
-                                {availableShops.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={handleSelectAllShops}
-                                    className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
-                                  >
-                                    {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
-                                  </button>
+                            <>
+                              <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                                    <Building size={16} className="text-[#C9A84C]" />
+                                    Shop Access (<code className="font-mono text-[#8C6D23] lowercase">shop_name</code>)
+                                  </label>
+                                  {availableShops.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={handleSelectAllShops}
+                                      className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                                    >
+                                      {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
+                                    </button>
+                                  )}
+                                </div>
+
+                                <p className="text-[11px] text-slate-500 font-medium">
+                                  Select assigned shop locations from the database <code className="font-mono font-bold text-[#1C120C]">shop</code> table:
+                                </p>
+
+                                {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
+                                {availableShops.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                    {availableShops.map((shop) => {
+                                      const isSelected = selectedShopsList.includes(shop);
+                                      return (
+                                        <button
+                                          key={shop}
+                                          type="button"
+                                          onClick={() => handleToggleShop(shop)}
+                                          className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
+                                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
+                                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
+                                            }`}
+                                        >
+                                          <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                                            }`}>
+                                            {isSelected && '✓'}
+                                          </span>
+                                          <span>{shop}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
+                                )}
+
+                                {/* Comma-Separated Text Input */}
+                                <div className="pt-1">
+                                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                    Assigned Shop Locations (Comma-separated text)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={shopNameInput}
+                                    onChange={(e) => setShopNameInput(e.target.value)}
+                                    placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                                    className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Counter Access Section */}
+                              <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3 mt-4">
+                                <div className="flex items-center justify-between">
+                                  <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                                    <Lock size={16} className="text-[#C9A84C]" />
+                                    Counter Access (<code className="font-mono text-[#8C6D23] lowercase">counter_access</code>)
+                                  </label>
+                                  {availableCounters.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (counterAccessInput.length === availableCounters.length) {
+                                          setCounterAccessInput([]);
+                                        } else {
+                                          setCounterAccessInput([...availableCounters]);
+                                        }
+                                      }}
+                                      className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                                    >
+                                      {counterAccessInput.length === availableCounters.length ? 'Deselect All' : 'Select All Counters'}
+                                    </button>
+                                  )}
+                                </div>
+
+                                <p className="text-[11px] text-slate-500 font-medium">
+                                  Select assigned counters from the database <code className="font-mono font-bold text-[#1C120C]">master_counter</code> table:
+                                </p>
+
+                                {/* Dynamic Counter Badges / Checkboxes from 'master_counter' table */}
+                                {availableCounters.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                    {availableCounters.map((counter) => {
+                                      const isSelected = counterAccessInput.includes(counter);
+                                      return (
+                                        <button
+                                          key={counter}
+                                          type="button"
+                                          onClick={() => {
+                                            if (isSelected) {
+                                              setCounterAccessInput(counterAccessInput.filter(c => c !== counter));
+                                            } else {
+                                              setCounterAccessInput([...counterAccessInput, counter]);
+                                            }
+                                          }}
+                                          className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
+                                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
+                                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
+                                            }`}
+                                        >
+                                          <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                                            }`}>
+                                            {isSelected && '✓'}
+                                          </span>
+                                          <span>{counter}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="text-[11px] text-slate-400 italic">Loading options from master_counter table...</div>
                                 )}
                               </div>
-
-                              <p className="text-[11px] text-slate-500 font-medium">
-                                Select assigned shop locations from the database <code className="font-mono font-bold text-[#1C120C]">shop</code> table:
-                              </p>
-
-                              {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
-                              {availableShops.length > 0 ? (
-                                <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                  {availableShops.map((shop) => {
-                                    const isSelected = selectedShopsList.includes(shop);
-                                    return (
-                                      <button
-                                        key={shop}
-                                        type="button"
-                                        onClick={() => handleToggleShop(shop)}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
-                                            ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
-                                            : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
-                                          }`}
-                                      >
-                                        <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                                          }`}>
-                                          {isSelected && '✓'}
-                                        </span>
-                                        <span>{shop}</span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
-                              )}
-
-                              {/* Comma-Separated Text Input */}
-                              <div className="pt-1">
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                                  Assigned Shop Locations (Comma-separated text)
-                                </label>
-                                <input
-                                  type="text"
-                                  value={shopNameInput}
-                                  onChange={(e) => setShopNameInput(e.target.value)}
-                                  placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
-                                  className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
-                                />
-                              </div>
-                            </div>
+                            </>
                           )}
 
                           {sectionsToRender.map((sec, secIdx) => (
@@ -1507,6 +1620,50 @@ export default function MasterSetting() {
                     placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:border-[#C9A84C]"
                   />
+                </div>
+
+                {/* Counter Access Section */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/70 mb-1.5 flex items-center justify-between">
+                    <span>Counter Access (counter_access)</span>
+                    {availableCounters.length > 0 && (
+                      <span className="text-[9px] font-mono text-[#C9A84C] font-bold">
+                        {availableCounters.length} Counters Loaded
+                      </span>
+                    )}
+                  </label>
+                  {availableCounters.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto custom-scrollbar bg-slate-50 p-2.5 rounded border border-slate-200">
+                      {availableCounters.map((counter) => {
+                        const isSelected = (newUserForm.counterAccess || []).includes(counter);
+                        return (
+                          <button
+                            key={counter}
+                            type="button"
+                            onClick={() => {
+                              const currentList = newUserForm.counterAccess || [];
+                              const updated = currentList.includes(counter)
+                                ? currentList.filter(c => c !== counter)
+                                : [...currentList, counter];
+                              setNewUserForm({ ...newUserForm, counterAccess: updated });
+                            }}
+                            className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${isSelected
+                                ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]'
+                                : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
+                              }`}
+                          >
+                            <span className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                              }`}>
+                              {isSelected && '✓'}
+                            </span>
+                            <span>{counter}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 italic">Loading options from master_counter table...</div>
+                  )}
                 </div>
               </div>
 

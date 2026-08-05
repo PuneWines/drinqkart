@@ -181,13 +181,13 @@ export default function AdminDashboard() {
       const summary = await queryClient.fetchQuery({
         queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter],
         queryFn: () => getDashboardSummaryApi(
-          currentType, 
-          currentStaffFilter === 'all' ? null : currentStaffFilter, 
+          currentType,
+          currentStaffFilter === 'all' ? null : currentStaffFilter,
           currentShopFilter === 'all' ? null : currentShopFilter
         ),
         staleTime: 2 * 60 * 1000
       });
-      
+
       // Guard against race conditions: only update state if filters haven't changed since request started
       if (
         currentShopFilter !== shopFilter ||
@@ -196,7 +196,7 @@ export default function AdminDashboard() {
       ) {
         return;
       }
-      
+
       setShopData(prev => ({
         ...prev,
         totalTasks: summary.totalTasks,
@@ -219,27 +219,27 @@ export default function AdminDashboard() {
 
     let reportingUsers = [username?.toLowerCase()];
     if (userRole === "hod") {
-        const { data: reports } = await supabase
-            .from("users")
-            .select("user_name")
-            .eq("reported_by", username);
-        if (reports) {
-            reportingUsers = [username.toLowerCase(), ...reports.map(r => r.user_name.toLowerCase())];
-        }
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      if (reports) {
+        reportingUsers = [username.toLowerCase(), ...reports.map(r => r.user_name.toLowerCase())];
+      }
     } else if (userRole === "manager") {
-        const { data: allDbUsers } = await supabase
-            .from("users")
-            .select("user_name, shop_name, user_access");
-        if (allDbUsers) {
-            const userAccess = localStorage.getItem("user_access") || "";
-            const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-            const matchedUsers = allDbUsers.filter(u => {
-                const userShop = (u.shop_name || u.user_access || "").toLowerCase();
-                const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-                return userShopsList.some(s => managerShopsList.includes(s));
-            }).map(u => (u.user_name || "").toLowerCase());
-            reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
-        }
+      const { data: allDbUsers } = await supabase
+        .from("users")
+        .select("user_name, shop_name, user_access");
+      if (allDbUsers) {
+        const userAccess = localStorage.getItem("user_access") || "";
+        const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const matchedUsers = allDbUsers.filter(u => {
+          const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+          const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+          return userShopsList.some(s => managerShopsList.includes(s));
+        }).map(u => (u.user_name || "").toLowerCase());
+        reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
+      }
     }
 
     let totalTasks = 0;
@@ -248,7 +248,7 @@ export default function AdminDashboard() {
     let overdueTasks = 0;
 
     const process = (dataStream, statsObject) => {
-        // ... nested processing logic or just call it after getReportees
+      // ... nested processing logic or just call it after getReportees
     };
 
 
@@ -275,9 +275,9 @@ export default function AdminDashboard() {
         const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
 
         if (userRole === "hod" || userRole === "manager") {
-            if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
-                return null;
-            }
+          if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
+            return null;
+          }
         } else if (userRole !== "admin") {
           if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
             return null;
@@ -576,7 +576,7 @@ export default function AdminDashboard() {
         if (result) {
           data = result.tasks || [];
           summary = result.summaryStats || null;
-          
+
           // Sync filteredDateStats state
           if (page === 1 && summary) {
             setFilteredDateStats(summary);
@@ -588,8 +588,8 @@ export default function AdminDashboard() {
           summary = await queryClient.fetchQuery({
             queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter],
             queryFn: () => getDashboardSummaryApi(
-              currentType, 
-              currentStaffFilter === 'all' ? null : currentStaffFilter, 
+              currentType,
+              currentStaffFilter === 'all' ? null : currentStaffFilter,
               currentShopFilter === 'all' ? null : currentShopFilter
             ),
             staleTime: 2 * 60 * 1000
@@ -617,7 +617,7 @@ export default function AdminDashboard() {
       // This ensures the staff dropdown updates correctly even if a shop has 0 tasks.
       const currentUsername = localStorage.getItem("user-name")
       const currentUserRoleForStaff = (localStorage.getItem("role") || "").toLowerCase()
-      
+
       let uniqueStaff;
       if (currentUserRoleForStaff === "manager" && currentUsername) {
         try {
@@ -627,13 +627,13 @@ export default function AdminDashboard() {
             .ilike("user_name", currentUsername)
             .maybeSingle();
           const managerShop = mgrData?.shop_name || "";
-          
+
           const { data: shopUsers } = await supabase
             .from("users")
             .select("user_name")
             .eq("shop_name", managerShop)
             .eq("status", "active");
-          
+
           uniqueStaff = (shopUsers || []).map(u => u.user_name).filter(Boolean);
         } catch (error) {
           console.error('Error fetching manager shop staff:', error);
@@ -743,27 +743,27 @@ export default function AdminDashboard() {
       let reportingUsers = [username?.toLowerCase()];
       const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
       if (currentUserRole === "hod") {
-          const { data: reports } = await supabase
-              .from("users")
-              .select("user_name")
-              .eq("reported_by", username);
-          if (reports) {
-              reportingUsers = [username.toLowerCase(), ...reports.map(r => (r.user_name || "").toLowerCase())];
-          }
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        if (reports) {
+          reportingUsers = [username.toLowerCase(), ...reports.map(r => (r.user_name || "").toLowerCase())];
+        }
       } else if (currentUserRole === "manager") {
-          const { data: allDbUsers } = await supabase
-              .from("users")
-              .select("user_name, shop_name, user_access");
-          if (allDbUsers) {
-              const userAccess = localStorage.getItem("user_access") || "";
-              const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-              const matchedUsers = allDbUsers.filter(u => {
-                  const userShop = (u.shop_name || u.user_access || "").toLowerCase();
-                  const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-                  return userShopsList.some(s => managerShopsList.includes(s));
-              }).map(u => (u.user_name || "").toLowerCase());
-              reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
-          }
+        const { data: allDbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (allDbUsers) {
+          const userAccess = localStorage.getItem("user_access") || "";
+          const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          const matchedUsers = allDbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => managerShopsList.includes(s));
+          }).map(u => (u.user_name || "").toLowerCase());
+          reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
+        }
       }
 
       // Process tasks with your field names
@@ -777,13 +777,13 @@ export default function AdminDashboard() {
 
           if (roleNormalized !== "admin") {
             if (roleNormalized === 'hod' || roleNormalized === 'manager') {
-                if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
-                    return null;
-                }
+              if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
+                return null;
+              }
             } else {
-                if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
-                    return null;
-                }
+              if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+                return null;
+              }
             }
           }
 
@@ -792,17 +792,17 @@ export default function AdminDashboard() {
           // NEW: Use correct date column per dashboard type
           const taskDateValue = currentType === 'work' ? task.current_date
             : currentType === 'checklist' ? (task.task_start_date || task.planned_date || task.created_at)
-            : (task.planned_date || task.task_start_date || task.created_at);
+              : (task.planned_date || task.task_start_date || task.created_at);
           const taskStartDate = parseTaskStartDate(taskDateValue);
           const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
 
           // Robust completion check across all categories
           const statusLower = (task.status || "").toLowerCase();
-          const isCompleted = (task.submission_date !== null) || 
-                              (statusLower === 'yes') || 
-                              (statusLower.includes('done')) || 
-                              (statusLower.includes('completed')) || 
-                              (currentType === 'delegation' && task.admin_done === true);
+          const isCompleted = (task.submission_date !== null) ||
+            (statusLower === 'yes') ||
+            (statusLower.includes('done')) ||
+            (statusLower.includes('completed')) ||
+            (currentType === 'delegation' && task.admin_done === true);
 
           // Determine task status accurately
           let status;
@@ -1144,7 +1144,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     // Fetch summary stats quickly
     fetchSummaryStats(shopFilter, dashboardStaffFilter, dashboardType)
-    
+
     // Fetch detailed data for charts and tables (first page)
     fetchShopData(1, false, shopFilter, dashboardStaffFilter, dashboardType, mainTab)
 
@@ -1371,7 +1371,7 @@ export default function AdminDashboard() {
                 // Clear current tasks immediately to prevent showing old data on new tab
                 setShopData(prev => ({ ...prev, allTasks: [] }));
                 setDashboardStaffFilter("all");
-                
+
                 if (tabId === 'checklist') {
                   setMainTab("default")
                   setShopFilter("all")

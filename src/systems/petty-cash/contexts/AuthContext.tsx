@@ -150,7 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let { data: usersData } = await supabase
         .from('users')
         .select('*')
-        .or(`user_name.ilike.${user.username},username.ilike.${user.username}`)
+        .eq('user_name', user.username)
         .maybeSingle();
 
       if (usersData) {

@@ -278,7 +278,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
         if (path === "/dashboard/admin" || path === "/dashboard/notifications") return true;
 
         const matchedRoute = routes.find(r => r.href === path || (r.subItems && r.subItems.some(s => s.href === path)));
-        if (!matchedRoute) return true; 
+        if (!matchedRoute) return true;
 
         if (matchedRoute.isSubmenu) {
           const matchedSub = matchedRoute.subItems.find(s => s.href === path);
@@ -476,7 +476,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     >
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
-       
+
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-purple-50/50 pb-24 md:pb-6">
           {children}

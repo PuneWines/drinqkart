@@ -39,10 +39,19 @@ const statusColors: Record<string, string> = {
   Rejected: 'bg-red-100    text-red-700    border border-red-300',
 };
 
+const getBasePattyId = (pattyId: string): string => {
+  if (!pattyId) return '';
+  const parts = pattyId.split('-');
+  if (parts.length >= 2) {
+    return `${parts[0]}-${parts[1]}`;
+  }
+  return pattyId;
+};
+
 // ─── Map DB record → CategoryAmounts ─────────────────────────────────────────
 function mapToFormData(rec: Record<string, any>): CategoryAmounts {
   return {
-    id: rec.patty_id || '',
+    id: getBasePattyId(rec.patty_id || ''),
     username: rec.username || '',
     shopName: rec.shop_name || '',
     openingQty: rec.opening_qty?.toString() || '',
@@ -113,8 +122,23 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
         .select('*')
         .order('date', { ascending: false });
       if (error) throw error;
-      setRows((data || []).map((rec: any) => ({
-        id: rec.patty_id,
+      const uniqueRecords: any[] = [];
+      const seenPattyIds = new Set<string>();
+      if (data) {
+        for (const rec of data) {
+          const baseId = getBasePattyId(rec.patty_id || '');
+          if (baseId) {
+            if (!seenPattyIds.has(baseId)) {
+              seenPattyIds.add(baseId);
+              uniqueRecords.push(rec);
+            }
+          } else {
+            uniqueRecords.push(rec);
+          }
+        }
+      }
+      setRows(uniqueRecords.map((rec: any) => ({
+        id: getBasePattyId(rec.patty_id || ''),
         date: rec.date,
         shopName: rec.shop_name || '—',
         username: rec.username || '—',
@@ -155,7 +179,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     if (!deleteId) return;
     setDeleting(true);
     try {
-      const { error } = await supabase.from('petty_cash_expense').delete().eq('patty_id', deleteId);
+      const { error } = await supabase.from('petty_cash_expense').delete().like('patty_id', `${deleteId}%`);
       if (error) throw error;
       setRows(prev => prev.filter(r => r.id !== deleteId));
     } catch (err) { console.error('Error deleting:', err); }
@@ -365,15 +389,6 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
               <span className="hidden sm:inline">Refresh</span>
             </button>
 
-            {/* Shops */}
-            <button
-              onClick={openShopsPanel}
-              title="Manage Shops"
-              className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
-            >
-              <FaStore />
-              <span className="hidden sm:inline">Shops</span>
-            </button>
 
             {/* Add New Expense */}
             <button
