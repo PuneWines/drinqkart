@@ -72,11 +72,8 @@ export const systems = [
     base: '/systems/petty-cash',
     icon: Coins,
     subtabs: [
-      { label: 'Dashboard', to: '/systems/petty-cash?page=dashboard' },
       { label: 'Petty Cash Form Entry', to: '/systems/petty-cash?page=petty-cash' },
-      { label: 'Cash Tally Counter 1', to: '/systems/petty-cash?page=cash-tally-1' },
-      { label: 'Cash Tally Counter 2', to: '/systems/petty-cash?page=cash-tally-2' },
-      { label: 'Cash Tally Counter 3', to: '/systems/petty-cash?page=cash-tally-3' },
+      { label: 'Cash Tally Counter', to: '/systems/petty-cash?page=cash-tally-counter' },
       { label: 'Financial Reports', to: '/systems/petty-cash?page=reports' },
     ]
   },
@@ -111,6 +108,7 @@ export const systems = [
       { label: 'User & System Access', to: '/systems/master-setting' },
       { label: 'Shop', to: '/systems/master-setting/Shop' },
       { label: 'Counter', to: '/systems/master-setting/Counter' },
+      { label: 'Expenses', to: '/systems/master-setting/Expenses' },
       { label: 'Purchase Settings', to: '/systems/master-setting/purchase-settings' },
     ]
   }

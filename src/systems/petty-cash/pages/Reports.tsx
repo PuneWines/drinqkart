@@ -41,13 +41,48 @@ ChartJS.register(
     "Excise/Police", "Desi Bhada", "Room Expense", "Office Expense", "Personal Expense",
     "Misc Expense", "Misc Remarks", "Purchase Voucher No.", "Vendor Payment",
     "Difference Amount", "Credit Card Charges", "Username", "Total Exp. (Spent)",
-    "Transaction Status", "Total Amount", "Expense Name", "Employee Name", "From Shop",
+    "Transaction Status", "Total Amount", "Expense Name", "Employee Name",
     "To Shop", "Description", "Amount"
   ];
   rows.push(headers);
 
+  const getBasePrefix = (id: string) => {
+    if (!id) return "";
+    const parts = id.split("-");
+    if (parts.length >= 2) {
+      return `${parts[0]}-${parts[1]}`;
+    }
+    return id;
+  };
+
+  const seenPrefixes = new Set<string>();
+
   records.forEach(rec => {
-    const row = [
+    const pattyId = rec.patty_id || "";
+    const prefix = getBasePrefix(pattyId);
+    const isSubsequent = prefix && seenPrefixes.has(prefix);
+
+    if (prefix) {
+      seenPrefixes.add(prefix);
+    }
+
+    const row = isSubsequent ? [
+      rec.created_at || new Date().toISOString(),
+      rec.patty_id || "",
+      rec.date || "",
+      "", "", "", // Opening Balance to Shop Name
+      "", "", "", "", "", // Tea & Snacks to Post Office
+      "", "", "", "", "", // Customer Discount to Patil Petrol
+      "", "", "", "", "", // Excise/Police to Personal Expense
+      "", "", "", "", // Misc Expense to Vendor Payment
+      "", "", "", "", // Difference Amount to Total Exp
+      "", "", // Transaction Status, Total Amount
+      rec.expense_name || "",
+      rec.employee_name || "",
+      rec.to_shop || "",
+      rec.description || "",
+      rec.amount?.toString() || ""
+    ] : [
       rec.created_at || new Date().toISOString(),
       rec.patty_id || "",
       rec.date || "",
@@ -81,7 +116,6 @@ ChartJS.register(
       rec.total_amount?.toString() || "",
       rec.expense_name || "",
       rec.employee_name || "",
-      rec.from_shop || "",
       rec.to_shop || "",
       rec.description || "",
       rec.amount?.toString() || ""
@@ -250,20 +284,9 @@ export default function Reports() {
       }
     };
 
-    const handleExportClickOutside = (event: MouseEvent) => {
-      if (
-        exportMenuRef.current &&
-        !exportMenuRef.current.contains(event.target as Node)
-      ) {
-        setShowExportMenu(false);
-      }
-    };
-
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('mousedown', handleExportClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('mousedown', handleExportClickOutside);
     };
   }, []);
 
@@ -772,38 +795,13 @@ export default function Reports() {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    setShowExportMenu(false);
-  };
-
-  /** Export the currently-filtered summary data (date + category + amount) */
-  const exportSummaryCSV = () => {
-    const dateLabel = dateFrom && dateTo
-      ? `${dateFrom}_to_${dateTo}`
-      : dateFrom ? `from_${dateFrom}`
-        : dateTo ? `to_${dateTo}`
-          : new Date().toISOString().slice(0, 7);
-
-    const headers = ["Date", "Category", "Amount (₹)", "Type", "Description"];
-    const dataRows = filteredData.map(e => [
-      e.date,
-      e.category,
-      String(e.amount),
-      e.type === "petty" ? "Petty Cash" : "Tally Cash",
-      e.description,
-    ]);
-
-    downloadCSV(
-      [headers, ...dataRows],
-      `reports_summary_${cashType}_${dateLabel}.csv`
-    );
   };
 
   /** Export full raw records from Supabase matching current filters */
   const exportFullCSV = async () => {
-    setShowExportMenu(false);
     try {
       if (cashType === "petty") {
-        let query = supabase.from('petty_cash_expense').select('*').order('date', { ascending: false });
+        let query = supabase.from('petty_cash_expense').select('*').order('date', { ascending: false }).order('patty_id', { ascending: true });
         if (dateFrom) query = query.gte('date', dateFrom);
         if (dateTo) query = query.lte('date', dateTo);
         const { data, error } = await query;
@@ -1144,47 +1142,14 @@ export default function Reports() {
               </button>
             )}
 
-            {/* Export CSV dropdown */}
-            <div className="relative" ref={exportMenuRef}>
-              <button
-                onClick={() => setShowExportMenu(prev => !prev)}
-                className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-[#2a5298] bg-blue-50 hover:bg-blue-100 rounded-lg transition-all border border-blue-200 shadow-sm hover:shadow-md active:scale-95"
-              >
-                <FaDownload className="w-3 h-3" />
-                Export CSV
-                <svg className={`w-3 h-3 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {showExportMenu && (
-                <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-xl z-30 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Export Options</p>
-                  </div>
-                  <button
-                    onClick={exportSummaryCSV}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-[#2a5298] transition-colors text-left"
-                  >
-                    <FaFileCsv className="text-green-600 shrink-0" />
-                    <div>
-                      <p className="font-semibold">Summary CSV</p>
-                      <p className="text-xs text-gray-400">Filtered category data</p>
-                    </div>
-                  </button>
-                  <button
-                    onClick={exportFullCSV}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-[#2a5298] transition-colors text-left border-t border-gray-100"
-                  >
-                    <FaFileCsv className="text-blue-600 shrink-0" />
-                    <div>
-                      <p className="font-semibold">Full Records CSV</p>
-                      <p className="text-xs text-gray-400">All raw DB columns</p>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Export CSV Button */}
+            <button
+              onClick={exportFullCSV}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-[#2a5298] bg-blue-50 hover:bg-blue-100 rounded-lg transition-all border border-blue-200 shadow-sm hover:shadow-md active:scale-95 cursor-pointer"
+            >
+              <FaDownload className="w-3 h-3" />
+              Export CSV
+            </button>
           </div>
         </div>
         <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${cashType === "tally" ? "lg:grid-cols-6" : "lg:grid-cols-5"} gap-4`}>

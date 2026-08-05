@@ -9,25 +9,69 @@
 // ============================================================
 import { useState, useEffect } from "react";
 import Toast from "../components/Toast";
-import { FaTimes, FaUser, FaShoppingCart, FaTruck, FaPlus } from "react-icons/fa";
+import { FaTimes, FaUser, FaShoppingCart, FaTruck, FaPlus, FaTrash } from "react-icons/fa";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
+
+const RETAIL_OPTIONS = [
+  { key: "retail500", label: "₹500 (Cash)", isCash: true, denom: 500 },
+  { key: "retail200", label: "₹200 (Cash)", isCash: true, denom: 200 },
+  { key: "retail100", label: "₹100 (Cash)", isCash: true, denom: 100 },
+  { key: "retail50", label: "₹50 (Cash)", isCash: true, denom: 50 },
+  { key: "retail20", label: "₹20 (Cash)", isCash: true, denom: 20 },
+  { key: "retail10", label: "₹10 (Cash)", isCash: true, denom: 10 },
+  { key: "retail1", label: "₹1 (Cash)", isCash: true, denom: 1 },
+  { key: "retailGpay", label: "GPay/UPI (Digital)", isCash: false },
+  { key: "retailCard", label: "Card Payments (Digital)", isCash: false },
+  { key: "retailPhonePe", label: "PhonePe (Digital)", isCash: false },
+  { key: "retailPaytm", label: "Paytm (Digital)", isCash: false },
+  { key: "expense", label: "General Expense (Outflow)", isCash: false },
+];
+
+const WHOLESALE_OPTIONS = [
+  { key: "ws500", label: "₹500 (Cash)", isCash: true, denom: 500 },
+  { key: "ws200", label: "₹200 (Cash)", isCash: true, denom: 200 },
+  { key: "ws100", label: "₹100 (Cash)", isCash: true, denom: 100 },
+  { key: "ws50", label: "₹50 (Cash)", isCash: true, denom: 50 },
+  { key: "ws20", label: "₹20 (Cash)", isCash: true, denom: 20 },
+  { key: "ws10", label: "₹10 (Cash)", isCash: true, denom: 10 },
+  { key: "ws1", label: "₹1 (Cash)", isCash: true, denom: 1 },
+  { key: "wsGpayCard", label: "GPay/Card (Digital)", isCash: false },
+  { key: "wsPhonePe", label: "PhonePe (Digital)", isCash: false },
+  { key: "wsPaytm", label: "Paytm (Digital)", isCash: false },
+  { key: "wsCard", label: "Card Payments (Digital)", isCash: false },
+];
 
 interface CashTallyProps {
   isOpen?: boolean;
   onClose?: () => void;
-  counter?: number;
+  counter?: string | number;
   initialData?: any;
 }
 
 export default function CashTally({
   isOpen = true,
   onClose = () => { },
-  counter = 1,
+  counter = "COUNTER-1",
   initialData,
 }: CashTallyProps) {
   // ── RBAC ─────────────────────────────────────────────────
-  const { hasCounterAccess, hasShopAccess, isAdmin, user } = useAuth();
+  const { hasCounterAccess, hasShopAccess, isAdmin, user, getAllowedCounters } = useAuth();
+
+  const [allowedCounters, setAllowedCounters] = useState<string[]>([]);
+  const [activeCounter, setActiveCounter] = useState<string>("COUNTER-1");
+
+  // Dynamic transactions sections
+  const [addedTransactions, setAddedTransactions] = useState<string[]>([]);
+  const [selectedTxType, setSelectedTxType] = useState("Retail Transactions");
+
+  // Retail dynamic selector states
+  const [selectedRetailKey, setSelectedRetailKey] = useState("retail500");
+  const [retailValueInput, setRetailValueInput] = useState("");
+
+  // Wholesale dynamic selector states
+  const [selectedWSKey, setSelectedWSKey] = useState("ws500");
+  const [wsValueInput, setWsValueInput] = useState("");
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -77,9 +121,6 @@ export default function CashTally({
   const [employees, setEmployees] = useState<string[]>([]);
   const [fetchedShopNames, setFetchedShopNames] = useState<string[]>([]);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
-  // const SCRIPT_URL =
-  //   "https://script.google.com/macros/s/AKfycbx5dryxS1R5zp6myFfUlP1QPimufTqh5hcPcFMNcAJ-FiC-hyQL9mCkgHSbLkOiWTibeg/exec";
 
   const fetchEmployees = async () => {
     try {
@@ -200,23 +241,117 @@ export default function CashTally({
   };
 
   useEffect(() => {
+    const parseAllowedCounters = () => {
+      try {
+        const userStr = localStorage.getItem("currentUser");
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          if (u && Array.isArray(u.counter_access)) {
+            return u.counter_access.map((c: any) => String(c).trim().toUpperCase());
+          }
+          if (u && Array.isArray(u.counterAccess)) {
+            return u.counterAccess.map((c: any) => String(c).trim().toUpperCase());
+          }
+        }
+      } catch (e) {
+        console.error("[CashTally] Error parsing currentUser:", e);
+      }
+
+      try {
+        const hrUserStr = localStorage.getItem("hr_user");
+        if (hrUserStr) {
+          const hr = JSON.parse(hrUserStr);
+          if (hr && Array.isArray(hr.counter_access)) {
+            return hr.counter_access.map((c: any) => String(c).trim().toUpperCase());
+          }
+        }
+      } catch (e) {
+        console.error("[CashTally] Error parsing hr_user:", e);
+      }
+
+      return getAllowedCounters();
+    };
+
+    setAllowedCounters(parseAllowedCounters());
+  }, []);
+
+  useEffect(() => {
     if (isOpen) {
       const defaultUser = user?.name || user?.username || "";
+      const defaultCounter = initialData?.counter || counter || allowedCounters[0] || "COUNTER-1";
+      setActiveCounter(String(defaultCounter));
+
       if (initialData) {
         setFormData({
           ...initialData,
           name: initialData.name || defaultUser,
         });
+
+        // Determine added transaction sections based on non-zero fields
+        const active: string[] = [];
+        const hasRetail = initialData.retail_scan_amount || initialData.retail_500 || initialData.retail_200 || initialData.retail_100 || initialData.retail_50 || initialData.retail_20 || initialData.retail_10 || initialData.retail_1 || initialData.retail_gpay || initialData.retail_phonepe || initialData.retail_paytm || initialData.retail_card || initialData.expense;
+        if (hasRetail) active.push("Retail Transactions");
+
+        const hasWS = initialData.ws_cash_billing_amount || initialData.ws_credit_billing_amount || initialData.ws_credit_receipt || initialData.ws_500 || initialData.ws_200 || initialData.ws_100 || initialData.ws_50 || initialData.ws_20 || initialData.ws_10 || initialData.ws_1 || initialData.ws_gpay_card || initialData.ws_phonepe || initialData.ws_paytm || initialData.ws_card;
+        if (hasWS) active.push("Wholesale Transactions");
+
+        const hasOther = initialData.home_delivery || initialData.void_sale;
+        if (hasOther) active.push("Expenses & Other Transactions");
+
+        setAddedTransactions(active);
       } else {
         setFormData({
           ...emptyForm,
           name: defaultUser,
         });
+        setAddedTransactions([]);
       }
       fetchEmployees();
       fetchShopNames();
     }
-  }, [isOpen, initialData, user]);
+  }, [isOpen, initialData, user, counter, allowedCounters]);
+
+  const handleAddTransaction = () => {
+    if (selectedTxType && !addedTransactions.includes(selectedTxType)) {
+      setAddedTransactions(prev => [...prev, selectedTxType]);
+    }
+  };
+
+  const handleRemoveTransaction = (type: string) => {
+    setAddedTransactions(prev => prev.filter(t => t !== type));
+  };
+
+  const handleAddRetailDenom = () => {
+    if (!retailValueInput) return;
+    setFormData(prev => ({
+      ...prev,
+      [selectedRetailKey]: retailValueInput
+    }));
+    setRetailValueInput("");
+  };
+
+  const handleRemoveRetailDenom = (key: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [key]: ""
+    }));
+  };
+
+  const handleAddWSDenom = () => {
+    if (!wsValueInput) return;
+    setFormData(prev => ({
+      ...prev,
+      [selectedWSKey]: wsValueInput
+    }));
+    setWsValueInput("");
+  };
+
+  const handleRemoveWSDenom = (key: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [key]: ""
+    }));
+  };
 
   const [retailActualSale, setRetailActualSale] = useState(0);
   const [retailDiff, setRetailDiff] = useState(0);
@@ -313,7 +448,7 @@ export default function CashTally({
         const { data, error } = await supabase
           .from('petty_cash_tallies')
           .select('tally_id')
-          .eq('counter', counter)
+          .eq('counter', activeCounter)
           .order('id', { ascending: false })
           .limit(10);
 
@@ -339,7 +474,7 @@ export default function CashTally({
 
       const recordToSubmit = {
         tally_id: initialData?.tally_id || generatedId,
-        counter: counter,
+        counter: activeCounter,
         date: formData.date,
         name: formData.name,
         shop_name: formData.shopName,
@@ -388,7 +523,7 @@ export default function CashTally({
           .from('petty_cash_tallies')
           .update(recordToSubmit)
           .eq('tally_id', initialData.tally_id)
-          .eq('counter', counter);
+          .eq('counter', activeCounter);
       } else {
         response = await supabase
           .from('petty_cash_tallies')
@@ -431,22 +566,19 @@ export default function CashTally({
     }
   };
 
-  // ── [RBAC] Counter access check ──────────────────────────────────────────
-  // Agar user ko is counter ka access nahi hai to kuch show mat karo
-  if (!hasCounterAccess(counter)) {
-    console.warn(`[CashTally] User "${user?.name}" lacks access to Counter ${counter}`);
+  if (activeCounter && !hasCounterAccess(activeCounter)) {
+    console.warn(`[CashTally] User "${user?.name}" lacks access to Counter ${activeCounter}`);
     return null;
   }
 
   if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm">
       <div className="bg-[#f5f7fa] rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-[#f5f7fa] border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
           <h2 className="text-2xl font-bold text-gray-800">
-            Cash Tally - Counter {counter}
+            Cash Tally - {activeCounter}
           </h2>
           <button
             onClick={onClose}
@@ -469,7 +601,7 @@ export default function CashTally({
               <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
                 Basic Information
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                     Date <span className="text-red-500">*</span>
@@ -482,6 +614,25 @@ export default function CashTally({
                     className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                    Counter <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="counter"
+                    value={activeCounter}
+                    onChange={(e) => setActiveCounter(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
+                    required
+                  >
+                    {allowedCounters.map((cVal) => (
+                      <option key={cVal} value={cVal}>
+                        {cVal}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -505,251 +656,338 @@ export default function CashTally({
                     ))}
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
-                    Shop Name
-                  </label>
-                  <select
-                    name="shopName"
-                    value={formData.shopName}
-                    onChange={handleChange}
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
-                  >
-                    <option value="">Select Shop Name</option>
-                    {fetchedShopNames.map((shop, index) => (
-                      <option key={index} value={shop}>
-                        {shop}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             </div>
 
-            {/* Retail Transactions */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
-                Retail Transactions
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Scan Amount
-                  </label>
-                  <input
-                    type="number"
-                    name="retailScanAmount"
-                    value={formData.retailScanAmount}
-                    onChange={handleChange}
-                    placeholder="0"
-                    step="1"
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Actual Sale
-                  </label>
-                  <input
-                    type="text"
-                    value={retailActualSale}
-                    readOnly
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-blue-600 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Diff.
-                  </label>
-                  <input
-                    type="text"
-                    value={retailDiff}
-                    readOnly
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
-                  />
+            {/* Dynamic Section Selector */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex flex-col sm:flex-row items-end gap-3">
+              <div className="w-full sm:w-72">
+                <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                  Transaction Type
+                </label>
+                <select
+                  value={selectedTxType}
+                  onChange={(e) => setSelectedTxType(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800"
+                >
+                  <option value="Retail Transactions">Retail Transactions</option>
+                  <option value="Wholesale Transactions">Wholesale Transactions</option>
+                  <option value="Expenses & Other Transactions">Expenses & Other Transactions</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddTransaction}
+                className="px-4 py-2 bg-[#2a5298] hover:bg-[#1e3d70] text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer h-[32px]"
+              >
+                <FaPlus size={10} /> Add Section
+              </button>
+            </div>
+
+            {/* Retail Transactions Section */}
+            {addedTransactions.includes("Retail Transactions") && (
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Retail Transactions
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTransaction("Retail Transactions")}
+                    className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors cursor-pointer"
+                  >
+                    Remove Section
+                  </button>
                 </div>
 
-                <div className="md:col-span-2 lg:col-span-3">
-                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">
-                    Cash Denominations
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                    {["500", "200", "100", "50", "20", "10", "1"].map((denom) => (
-                      <div key={denom}>
-                        <label className="block text-[10px] text-gray-500 font-bold mb-0.5 text-center">
-                          ₹{denom}
-                        </label>
-                        <input
-                          type="number"
-                          name={`retail${denom}`}
-                          value={(formData as any)[`retail${denom}`]}
-                          onChange={handleChange}
-                          placeholder="0"
-                          step="1"
-                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 text-center bg-white"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {[
-                  { name: "retailGpay", label: "GPay/UPI" },
-                  { name: "retailCard", label: "Card Payments" },
-                  { name: "retailPhonePe", label: "PhonePe" },
-                  { name: "retailPaytm", label: "Paytm" },
-                  { name: "expense", label: "General Expense" },
-                ].map((field) => (
-                  <div key={field.name}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                      {field.label}
+                      Scan Amount
                     </label>
                     <input
                       type="number"
-                      name={field.name}
-                      value={(formData as any)[field.name]}
+                      name="retailScanAmount"
+                      value={formData.retailScanAmount}
                       onChange={handleChange}
                       placeholder="0"
                       step="1"
                       className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 bg-white"
                     />
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Wholesale Transactions */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
-                Wholesale Transactions
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                {[
-                  { name: "wsCashBillingAmount", label: "Cash Billing" },
-                  { name: "wsCreditBillingAmount", label: "Credit Billing" },
-                  { name: "wsCreditReceipt", label: "Credit Receipt" },
-                ].map((field) => (
-                  <div key={field.name}>
+                  <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                      {field.label}
+                      Actual Sale
+                    </label>
+                    <input
+                      type="text"
+                      value={retailActualSale}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-blue-600 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Diff.
+                    </label>
+                    <input
+                      type="text"
+                      value={retailDiff}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* Dropdown-based cash denominations & payments */}
+                <div className="border border-gray-150 rounded-xl p-4 bg-gray-50/50">
+                  <h5 className="text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2.5">
+                    Denominations & Payments Selector
+                  </h5>
+                  <div className="flex flex-col sm:flex-row items-end gap-3 mb-3">
+                    <div className="w-full sm:w-64">
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        Select Denomination / payment
+                      </label>
+                      <select
+                        value={selectedRetailKey}
+                        onChange={(e) => setSelectedRetailKey(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                      >
+                        {RETAIL_OPTIONS.map((opt) => (
+                          <option key={opt.key} value={opt.key}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-full sm:w-36">
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        {RETAIL_OPTIONS.find(o => o.key === selectedRetailKey)?.isCash ? "Count/Qty" : "Amount (₹)"}
+                      </label>
+                      <input
+                        type="number"
+                        value={retailValueInput}
+                        onChange={(e) => setRetailValueInput(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddRetailDenom}
+                      className="flex items-center justify-center bg-[#2a5298] text-white rounded-lg hover:bg-[#1e3d70] transition-colors cursor-pointer h-[32px] w-[32px] shrink-0"
+                    >
+                      <FaPlus size={10} />
+                    </button>
+                  </div>
+
+                  {/* List of Added Items */}
+                  <div className="space-y-1.5 mt-3">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Added Items</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {RETAIL_OPTIONS.map((opt) => {
+                        const valStr = (formData as any)[opt.key];
+                        const valNum = parseFloat(valStr) || 0;
+                        if (!valStr || valNum === 0) return null;
+
+                        const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        return (
+                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
+                            <span className="font-semibold">{opt.label}: <span className="text-[#2a5298]">{valNum}</span>{totalStr}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRetailDenom(opt.key)}
+                              className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            >
+                              <FaTrash size={10} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Wholesale Transactions Section */}
+            {addedTransactions.includes("Wholesale Transactions") && (
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Wholesale Transactions
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTransaction("Wholesale Transactions")}
+                    className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors cursor-pointer"
+                  >
+                    Remove Section
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  {[
+                    { name: "wsCashBillingAmount", label: "Cash Billing" },
+                    { name: "wsCreditBillingAmount", label: "Credit Billing" },
+                    { name: "wsCreditReceipt", label: "Credit Receipt" },
+                  ].map((field) => (
+                    <div key={field.name}>
+                      <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                        {field.label}
+                      </label>
+                      <input
+                        type="number"
+                        name={field.name}
+                        value={(formData as any)[field.name]}
+                        onChange={handleChange}
+                        placeholder="0"
+                        step="1"
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 bg-white"
+                      />
+                    </div>
+                  ))}
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Total Who. Sale
+                    </label>
+                    <input
+                      type="text"
+                      value={wholesaleTotalSale}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-green-600 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Diff.
+                    </label>
+                    <input
+                      type="text"
+                      value={wholesaleDiff}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* Dropdown-based cash denominations & payments */}
+                <div className="border border-gray-150 rounded-xl p-4 bg-gray-50/50">
+                  <h5 className="text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2.5">
+                    Denominations & Payments Selector
+                  </h5>
+                  <div className="flex flex-col sm:flex-row items-end gap-3 mb-3">
+                    <div className="w-full sm:w-64">
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        Select Denomination / payment
+                      </label>
+                      <select
+                        value={selectedWSKey}
+                        onChange={(e) => setSelectedWSKey(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                      >
+                        {WHOLESALE_OPTIONS.map((opt) => (
+                          <option key={opt.key} value={opt.key}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-full sm:w-36">
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        {WHOLESALE_OPTIONS.find(o => o.key === selectedWSKey)?.isCash ? "Count/Qty" : "Amount (₹)"}
+                      </label>
+                      <input
+                        type="number"
+                        value={wsValueInput}
+                        onChange={(e) => setWsValueInput(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddWSDenom}
+                      className="flex items-center justify-center bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors cursor-pointer h-[32px] w-[32px] shrink-0"
+                    >
+                      <FaPlus size={10} />
+                    </button>
+                  </div>
+
+                  {/* List of Added Items */}
+                  <div className="space-y-1.5 mt-3">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Added Items</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {WHOLESALE_OPTIONS.map((opt) => {
+                        const valStr = (formData as any)[opt.key];
+                        const valNum = parseFloat(valStr) || 0;
+                        if (!valStr || valNum === 0) return null;
+
+                        const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        return (
+                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
+                            <span className="font-semibold">{opt.label}: <span className="text-green-600">{valNum}</span>{totalStr}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveWSDenom(opt.key)}
+                              className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            >
+                              <FaTrash size={10} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Expenses & Other Transactions Section */}
+            {addedTransactions.includes("Expenses & Other Transactions") && (
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Expenses & Other Transactions
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTransaction("Expenses & Other Transactions")}
+                    className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors cursor-pointer"
+                  >
+                    Remove Section
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Home Delivery
                     </label>
                     <input
                       type="number"
-                      name={field.name}
-                      value={(formData as any)[field.name]}
+                      name="homeDelivery"
+                      value={formData.homeDelivery}
                       onChange={handleChange}
                       placeholder="0"
                       step="1"
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 bg-white"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 bg-white"
                     />
                   </div>
-                ))}
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Total Who. Sale
-                  </label>
-                  <input
-                    type="text"
-                    value={wholesaleTotalSale}
-                    readOnly
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-green-600 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Diff.
-                  </label>
-                  <input
-                    type="text"
-                    value={wholesaleDiff}
-                    readOnly
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
-                  />
-                </div>
 
-                <div className="md:col-span-2 lg:col-span-3">
-                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">
-                    Cash Denominations
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                    {["500", "200", "100", "50", "20", "10", "1"].map((denom) => (
-                      <div key={denom}>
-                        <label className="block text-[10px] text-gray-500 font-bold mb-0.5 text-center">
-                          ₹{denom}
-                        </label>
-                        <input
-                          type="number"
-                          name={`ws${denom}`}
-                          value={(formData as any)[`ws${denom}`]}
-                          onChange={handleChange}
-                          placeholder="0"
-                          step="1"
-                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 text-center bg-white"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {[
-                  { name: "wsGpayCard", label: "GPay/Card" },
-                  { name: "wsPhonePe", label: "PhonePe" },
-                  { name: "wsPaytm", label: "Paytm" },
-                  { name: "wsCard", label: "Card Payments" },
-                ].map((field) => (
-                  <div key={field.name}>
+                  <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                      {field.label}
+                      Void Sale
                     </label>
                     <input
                       type="number"
-                      name={field.name}
-                      value={(formData as any)[field.name]}
+                      name="voidSale"
+                      value={formData.voidSale}
                       onChange={handleChange}
                       placeholder="0"
                       step="1"
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 bg-white"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 bg-white"
                     />
                   </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Home Delivery & Expenses */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 pb-1 border-b border-gray-100">
-                Expenses & Other Transactions
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Home Delivery
-                  </label>
-                  <input
-                    type="number"
-                    name="homeDelivery"
-                    value={formData.homeDelivery}
-                    onChange={handleChange}
-                    placeholder="0"
-                    step="1"
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Diff.
-                  </label>
-                  <input
-                    type="text"
-                    value={homeDeliveryDiff}
-                    readOnly
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
-                  />
-                </div>
-
-                {formData.homeDelivery &&
-                  parseFloat(formData.homeDelivery) > 0 && (
+                  {formData.homeDelivery && parseFloat(formData.homeDelivery) > 0 && (
                     <div className="md:col-span-2">
                       <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">
                         Home Delivery Cash Denominations
@@ -782,25 +1020,11 @@ export default function CashTally({
                       </div>
                     </div>
                   )}
-
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                    Void Sale
-                  </label>
-                  <input
-                    type="number"
-                    name="voidSale"
-                    value={formData.voidSale}
-                    onChange={handleChange}
-                    placeholder="0"
-                    step="1"
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 bg-white"
-                  />
                 </div>
               </div>
-            </div>
+            )}
           </div>
-
+          
           {/* Total Amount & Actions */}
           <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4 text-sm">

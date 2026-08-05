@@ -25,6 +25,7 @@ import { supabase } from '../lib/supabase';
 import JoiningCompany from '../systems/hr/pages/JoiningCompany';
 import PurchaseSettings from '../systems/purchase/pages/Settings';
 import CounterManagement from './CounterManagement';
+import ExpensesManagement from './ExpensesManagement';
 
 // Systems and standard page modules in Drinqkart Master App
 const AVAILABLE_SYSTEMS = [
@@ -93,7 +94,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'PETTY CASH MODULES',
-        pages: ['Dashboard', 'Form Entry', 'Counter 1', 'Counter 2', 'Counter 3', 'Financial Reports']
+        pages: ['Form Entry', 'Cash Tally Counter', 'Financial Reports']
       }
     ]
   },
@@ -670,6 +671,11 @@ export default function MasterSetting() {
   // Sub-route: Counter
   if (location.pathname.includes('/Counter') || location.pathname.toLowerCase().includes('/counter')) {
     return <CounterManagement />;
+  }
+
+  // Sub-route: Expenses
+  if (location.pathname.includes('/Expenses') || location.pathname.toLowerCase().includes('/expenses')) {
+    return <ExpensesManagement />;
   }
 
   return (

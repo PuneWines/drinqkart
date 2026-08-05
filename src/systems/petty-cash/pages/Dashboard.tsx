@@ -33,7 +33,7 @@ const convertPettyExpensesToSheetRows = (records: any[]): any[][] => {
     "Excise/Police", "Desi Bhada", "Room Expense", "Office Expense", "Personal Expense",
     "Misc Expense", "Misc Remarks", "Purchase Voucher No.", "Vendor Payment",
     "Difference Amount", "Credit Card Charges", "Username", "Total Exp. (Spent)",
-    "Transaction Status", "Total Amount", "Expense Name", "Employee Name", "From Shop",
+    "Transaction Status", "Total Amount", "Expense Name", "Employee Name",
     "To Shop", "Description", "Amount"
   ];
   rows.push(headers);
@@ -73,7 +73,6 @@ const convertPettyExpensesToSheetRows = (records: any[]): any[][] => {
       rec.total_amount?.toString() || "",
       rec.expense_name || "",
       rec.employee_name || "",
-      rec.from_shop || "",
       rec.to_shop || "",
       rec.description || "",
       rec.amount?.toString() || ""

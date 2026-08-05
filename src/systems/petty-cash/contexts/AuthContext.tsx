@@ -5,13 +5,14 @@ import { supabase } from '../supabase';
 // ----- Types -----
 
 export interface User {
-  username: string;   
-  name: string;       
-  role: string;       
-  pages: string[];    
-  shops: string[] | 'all'; 
+  username: string;
+  name: string;
+  role: string;
+  pages: string[];
+  shops: string[] | 'all';
   initials: string;
   loginTime: string;
+  counterAccess?: string[];
 }
 
 interface AuthContextType {
@@ -23,8 +24,8 @@ interface AuthContextType {
   isAdmin: () => boolean;
   hasPageAccess: (pageName: string) => boolean;
   hasShopAccess: (shopName: string) => boolean;
-  hasCounterAccess: (counter: number) => boolean;
-  getAllowedCounters: () => number[];
+  hasCounterAccess: (counter: string | number) => boolean;
+  getAllowedCounters: () => string[];
   refreshUserData: () => Promise<void>;
 }
 
@@ -53,6 +54,14 @@ export const parseShops = (raw: any): string[] | 'all' => {
   return str.split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0);
 };
 
+export const parseCounterAccess = (raw: any): string[] => {
+  if (Array.isArray(raw)) return raw.map(v => String(v).trim());
+  if (!raw) return [];
+  const str = raw.toString().replace(/[{}]/g, "").trim();
+  if (!str) return [];
+  return str.split(",").map((p: string) => p.trim()).filter((p: string) => p.length > 0);
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUserState] = useState<User | null>(() => {
     try {
@@ -74,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           localStorage.setItem('currentUser', JSON.stringify(mappedUser));
           localStorage.setItem('currentUserName', mappedUser.name);
           localStorage.setItem('currentUserRole', mappedUser.role);
-          
+
           // Clear query params to keep URL clean
           const newUrl = window.location.pathname;
           window.history.replaceState({}, document.title, newUrl);
@@ -169,6 +178,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const role = data.role || "User";
         const pages = parsePages(data.pages || data.master_user_system_page_access);
         const shops = parseShops(data.shops || data.shop_name || data.user_access);
+        const counterAccess = parseCounterAccess(data.counter_access);
 
         const initials = name
           .split(' ')
@@ -183,6 +193,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             prev.role !== role ||
             JSON.stringify(prev.pages) !== JSON.stringify(pages) ||
             JSON.stringify(prev.shops) !== JSON.stringify(shops) ||
+            JSON.stringify(prev.counterAccess) !== JSON.stringify(counterAccess) ||
             prev.name !== name;
 
           if (hasChanged) {
@@ -193,7 +204,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               role,
               pages,
               shops,
-              initials
+              initials,
+              counterAccess
             };
           }
           return prev;
@@ -247,6 +259,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const role = data.role || "User";
         const pages = parsePages(data.pages || data.master_user_system_page_access);
         const shops = parseShops(data.shops || data.shop_name || data.user_access);
+        const counterAccess = parseCounterAccess(data.counter_access);
 
         const initials = name
           .split(' ')
@@ -263,6 +276,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           shops,
           initials,
           loginTime: new Date().toISOString(),
+          counterAccess,
         };
 
         setUserState(userData);
@@ -300,6 +314,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       "cashtallycounter1": ["counter1", "cashtally1"],
       "cashtallycounter2": ["counter2", "cashtally2"],
       "cashtallycounter3": ["counter3", "cashtally3"],
+      "counterinformation": ["counter1", "cashtally1", "counter2", "cashtally2", "counter3", "cashtally3", "counterinformation", "cashtallycounter1", "cashtallycounter2", "cashtallycounter3"],
+      "cashtallycounter": ["counter1", "cashtally1", "counter2", "cashtally2", "counter3", "cashtally3", "counterinformation", "cashtallycounter1", "cashtallycounter2", "cashtallycounter3", "cashtallycounter"],
       "dashboard": ["home"],
       "reports": ["report"]
     };
@@ -321,15 +337,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const hasCounterAccess = (counter: number): boolean => {
-    return hasPageAccess(`Cash Tally - Counter ${counter}`);
+  const hasCounterAccess = (counter: string | number): boolean => {
+    if (isAdmin()) return true;
+    if (!user) return false;
+    const cStr = String(counter).trim().toUpperCase();
+    const userCounters = Array.isArray(user.counterAccess) ? user.counterAccess : [];
+
+    const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const target = normalize(cStr);
+
+    return userCounters.map(c => normalize(c)).includes(target);
   };
 
-  const getAllowedCounters = (): number[] => {
-    const counters: number[] = [];
-    if (hasCounterAccess(1)) counters.push(1);
-    if (hasCounterAccess(2)) counters.push(2);
-    if (hasCounterAccess(3)) counters.push(3);
+  const getAllowedCounters = (): string[] => {
+    if (isAdmin()) {
+      return ["COUNTER-1", "COUNTER-2", "COUNTER-3"];
+    }
+    const counters: string[] = [];
+    if (hasCounterAccess("COUNTER-1")) counters.push("COUNTER-1");
+    if (hasCounterAccess("COUNTER-2")) counters.push("COUNTER-2");
+    if (hasCounterAccess("COUNTER-3")) counters.push("COUNTER-3");
+
+    if (user && Array.isArray(user.counterAccess)) {
+      user.counterAccess.forEach(c => {
+        const normalizedVal = String(c).trim().toUpperCase();
+        if (normalizedVal && !counters.includes(normalizedVal)) {
+          counters.push(normalizedVal);
+        }
+      });
+    }
     return counters;
   };
 
