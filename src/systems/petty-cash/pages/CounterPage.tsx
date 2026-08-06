@@ -28,58 +28,12 @@ const fmt = (n: number) =>
   `₹${(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 
 export default function CounterPage({ onClose }: CounterPageProps) {
-  const { getAllowedCounters } = useAuth();
+  const { getAllowedCounters, user, hasPageModifyAccess } = useAuth();
   
-  const [allowedCounters, setAllowedCounters] = useState<string[]>([]);
-  const [counterOptions, setCounterOptions] = useState<string[]>([]);
+  const allowedCounters = useMemo(() => getAllowedCounters(), [getAllowedCounters]);
+  const counterOptions = allowedCounters;
   const [showCounterSelectDropdown, setShowCounterSelectDropdown] = useState(false);
   const tallyDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const parseAllowedCounters = () => {
-      try {
-        const userStr = localStorage.getItem("currentUser");
-        if (userStr) {
-          const u = JSON.parse(userStr);
-          const rawAccess = u && (u.counter_access || u.counterAccess);
-          if (rawAccess) {
-            if (Array.isArray(rawAccess)) {
-              return rawAccess.map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
-            }
-            if (typeof rawAccess === "string") {
-              return rawAccess.split(",").map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("[CounterPage] Error parsing currentUser:", e);
-      }
-
-      try {
-        const hrUserStr = localStorage.getItem("hr_user");
-        if (hrUserStr) {
-          const hr = JSON.parse(hrUserStr);
-          const rawAccess = hr && (hr.counter_access || hr.counterAccess);
-          if (rawAccess) {
-            if (Array.isArray(rawAccess)) {
-              return rawAccess.map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
-            }
-            if (typeof rawAccess === "string") {
-              return rawAccess.split(",").map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("[CounterPage] Error parsing hr_user:", e);
-      }
-
-      return getAllowedCounters();
-    };
-
-    const parsed = parseAllowedCounters();
-    setAllowedCounters(parsed);
-    setCounterOptions(parsed);
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -110,6 +64,8 @@ export default function CounterPage({ onClose }: CounterPageProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteCounter, setDeleteCounter] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const isModifyAllowed = hasPageModifyAccess("Cash Tally Counter");
 
   const handleFillTallyClick = () => {
     handleOpenAddModal(allowedCounters[0] || "COUNTER-1");
@@ -531,10 +487,12 @@ export default function CounterPage({ onClose }: CounterPageProps) {
                     <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-semibold">{fmt(row.retailScanAmount)}</td>
                     <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => handleOpenEditModal(row)} title="Edit" className="p-2 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit /></button>
-                        <button onClick={() => { setDeleteId(row.id); setDeleteCounter(row.counterVal); }} title="Delete" className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><FaTrash /></button>
-                      </div>
+                      {isModifyAllowed && (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleOpenEditModal(row)} title="Edit" className="p-2 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit /></button>
+                          <button onClick={() => { setDeleteId(row.id); setDeleteCounter(row.counterVal); }} title="Delete" className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><FaTrash /></button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

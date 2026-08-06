@@ -140,7 +140,7 @@ const syncSubsystemSessions = (userObj) => {
 
   // 4. Petty Cash Keys
   localStorage.setItem('currentUser', JSON.stringify({
-    username: userObj.username || "",
+    username: userObj.user_name || userObj.username || "",
     name: userObj.user_name || userObj.username || "User",
     role: userObj.role || "user",
     pages: userObj.page_access || ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports'],

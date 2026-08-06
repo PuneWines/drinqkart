@@ -23,6 +23,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: () => boolean;
   hasPageAccess: (pageName: string) => boolean;
+  hasPageModifyAccess: (pageName: string) => boolean;
   hasShopAccess: (shopName: string) => boolean;
   hasCounterAccess: (counter: string | number) => boolean;
   getAllowedCounters: () => string[];
@@ -31,7 +32,20 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ----- Utilities -----
+// ----- Utilities & Constants -----
+
+const PAGE_ALIASES: Record<string, string[]> = {
+  "pettycashform": ["patecashform", "pettycash", "patecash", "formentry", "pettycashformentry"],
+  "pettycashformentry": ["patecashform", "pettycash", "patecash", "formentry", "pettycashform"],
+  "cashtallycounter1": ["counter1", "cashtally1"],
+  "cashtallycounter2": ["counter2", "cashtally2"],
+  "cashtallycounter3": ["counter3", "cashtally3"],
+  "counterinformation": ["counter1", "cashtally1", "counter2", "cashtally2", "counter3", "cashtally3", "counterinformation", "cashtallycounter1", "cashtallycounter2", "cashtallycounter3"],
+  "cashtallycounter": ["counter1", "cashtally1", "counter2", "cashtally2", "counter3", "cashtally3", "counterinformation", "cashtallycounter1", "cashtallycounter2", "cashtallycounter3", "cashtallycounter"],
+  "dashboard": ["home"],
+  "reports": ["report", "financialreports"],
+  "financialreports": ["reports", "report"]
+};
 
 /** Pages parser: handles both array from Supabase and raw strings */
 export const parsePages = (raw: any): string[] => {
@@ -151,15 +165,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
    */
   const refreshUserData = async () => {
     if (!user) return;
+    const searchName = user.username || user.name;
+    if (!searchName) return;
     setIsSyncing(true);
-    console.log(`[AuthContext] Refreshing data for: ${user.username} via Supabase...`);
+    console.log(`[AuthContext] Refreshing data for: ${searchName} via Supabase...`);
 
     try {
       let data: any = null;
       let { data: usersData } = await supabase
         .from('users')
         .select('*')
-        .eq('user_name', user.username)
+        .or(`user_name.eq."${searchName}",username.eq."${searchName}"`)
         .maybeSingle();
 
       if (usersData) {
@@ -168,7 +184,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { data: pcData } = await supabase
           .from('petty_cash_user')
           .select('*')
-          .eq('username', user.username)
+          .eq('username', searchName)
           .maybeSingle();
         data = pcData;
       }
@@ -296,34 +312,99 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUserState(null);
   };
 
+  const getMasterPermissions = (): string[] => {
+    try {
+      const raw = localStorage.getItem("master_user_system_page_access");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.map(v => String(v));
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const hrUserStr = localStorage.getItem("hr_user");
+      if (hrUserStr) {
+        const hr = JSON.parse(hrUserStr);
+        const rawAccess = hr && hr.master_user_system_page_access;
+        if (rawAccess) {
+          if (Array.isArray(rawAccess)) {
+            return rawAccess.map(v => String(v));
+          }
+          if (typeof rawAccess === "string") {
+            return JSON.parse(rawAccess);
+          }
+        }
+      }
+    } catch (e) {}
+
+    if (user && Array.isArray(user.pages)) {
+      return user.pages;
+    }
+    return [];
+  };
+
   const hasPageAccess = (pageName: string): boolean => {
     if (!user) return false;
     if (isAdmin()) return true;
 
-    // Guard: pages may be undefined if session was saved before the field existed
-    if (!Array.isArray(user.pages)) return false;
-
     const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     const target = normalize(pageName);
-    const userPages = user.pages.map(p => normalize(p));
+
+    // Enforcement: Reports / Financial Reports only visible to admin & manager
+    if (target === "reports" || target === "financialreports") {
+      const roleLower = (user.role || '').toLowerCase().trim();
+      if (roleLower !== "admin" && roleLower !== "manager" && roleLower !== "masteradmin") {
+        return false;
+      }
+    }
+
+    const masterPermissions = getMasterPermissions();
+    
+    // Parse permission keys if they are structured like "system.page.access"
+    const userPages = masterPermissions.map(p => {
+      const parts = p.split('.');
+      if (parts.length >= 3) {
+        return normalize(parts[1]);
+      }
+      return normalize(p);
+    });
 
     if (userPages.includes(target)) return true;
 
-    const aliases: Record<string, string[]> = {
-      "pettycashform": ["patecashform", "pettycash", "patecash"],
-      "cashtallycounter1": ["counter1", "cashtally1"],
-      "cashtallycounter2": ["counter2", "cashtally2"],
-      "cashtallycounter3": ["counter3", "cashtally3"],
-      "counterinformation": ["counter1", "cashtally1", "counter2", "cashtally2", "counter3", "cashtally3", "counterinformation", "cashtallycounter1", "cashtallycounter2", "cashtallycounter3"],
-      "cashtallycounter": ["counter1", "cashtally1", "counter2", "cashtally2", "counter3", "cashtally3", "counterinformation", "cashtallycounter1", "cashtallycounter2", "cashtallycounter3", "cashtallycounter"],
-      "dashboard": ["home"],
-      "reports": ["report"]
-    };
-
-    const targetAliases = aliases[target] || [];
+    const targetAliases = PAGE_ALIASES[target] || [];
     if (userPages.some(up => targetAliases.includes(up))) return true;
 
     return false;
+  };
+
+  const hasPageModifyAccess = (pageName: string): boolean => {
+    if (!user) return false;
+    if (isAdmin()) return true;
+
+    const roleLower = (user.role || '').toLowerCase().trim();
+    if (roleLower === 'admin' || roleLower === 'manager' || roleLower === 'masteradmin') return true;
+
+    const masterPermissions = getMasterPermissions();
+
+    const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const target = normalize(pageName);
+
+    // Dotted permissions check (e.g. system.page.modify)
+    const hasDottedModify = masterPermissions.some(p => {
+      const parts = p.split('.');
+      if (parts.length >= 3) {
+        const pgName = parts[1];
+        const action = parts[2];
+        const normPgName = normalize(pgName);
+        const matchesTarget = normPgName === target || (PAGE_ALIASES[target] && PAGE_ALIASES[target].includes(normPgName));
+        return matchesTarget && action === 'modify';
+      }
+      return false;
+    });
+
+    return hasDottedModify;
   };
 
   const hasShopAccess = (shopName: string): boolean => {
@@ -341,7 +422,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (isAdmin()) return true;
     if (!user) return false;
     const cStr = String(counter).trim().toUpperCase();
-    const userCounters = Array.isArray(user.counterAccess) ? user.counterAccess : [];
+    
+    let userCounters: string[] = [];
+    if (Array.isArray(user.counterAccess)) {
+      userCounters = user.counterAccess;
+    }
+
+    if (userCounters.length === 0) {
+      try {
+        const userStr = localStorage.getItem("currentUser");
+        const hrUserStr = localStorage.getItem("hr_user");
+        let rawAccess = null;
+
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          rawAccess = u && (u.counter_access || u.counterAccess);
+        }
+        if (!rawAccess && hrUserStr) {
+          const hr = JSON.parse(hrUserStr);
+          rawAccess = hr && (hr.counter_access || hr.counterAccess);
+        }
+
+        if (rawAccess) {
+          if (Array.isArray(rawAccess)) {
+            userCounters = rawAccess.map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
+          } else if (typeof rawAccess === "string") {
+            userCounters = rawAccess.split(",").map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
+          }
+        }
+      } catch (e) {
+        console.error("[AuthContext] Error parsing counter access fallback:", e);
+      }
+    }
 
     const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     const target = normalize(cStr);
@@ -358,14 +470,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (hasCounterAccess("COUNTER-2")) counters.push("COUNTER-2");
     if (hasCounterAccess("COUNTER-3")) counters.push("COUNTER-3");
 
+    let userCounters: string[] = [];
     if (user && Array.isArray(user.counterAccess)) {
-      user.counterAccess.forEach(c => {
-        const normalizedVal = String(c).trim().toUpperCase();
-        if (normalizedVal && !counters.includes(normalizedVal)) {
-          counters.push(normalizedVal);
-        }
-      });
+      userCounters = user.counterAccess;
     }
+
+    if (userCounters.length === 0) {
+      try {
+        const userStr = localStorage.getItem("currentUser");
+        const hrUserStr = localStorage.getItem("hr_user");
+        let rawAccess = null;
+
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          rawAccess = u && (u.counter_access || u.counterAccess);
+        }
+        if (!rawAccess && hrUserStr) {
+          const hr = JSON.parse(hrUserStr);
+          rawAccess = hr && (hr.counter_access || hr.counterAccess);
+        }
+
+        if (rawAccess) {
+          if (Array.isArray(rawAccess)) {
+            userCounters = rawAccess.map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
+          } else if (typeof rawAccess === "string") {
+            userCounters = rawAccess.split(",").map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
+          }
+        }
+      } catch (e) {}
+    }
+
+    userCounters.forEach(c => {
+      const normalizedVal = String(c).trim().toUpperCase();
+      if (normalizedVal && !counters.includes(normalizedVal)) {
+        counters.push(normalizedVal);
+      }
+    });
+
     return counters;
   };
 
@@ -379,6 +520,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isAuthenticated: !!user,
         isAdmin,
         hasPageAccess,
+        hasPageModifyAccess,
         hasShopAccess,
         hasCounterAccess,
         getAllowedCounters,

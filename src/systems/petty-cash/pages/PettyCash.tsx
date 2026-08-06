@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fa';
 import PettyCashModal, { CategoryAmounts } from '../components/PettyCashModal';
 import { supabase } from '../supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PettyCashRow {
@@ -110,6 +111,9 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   const [shopError, setShopError] = useState('');
   const [shopDeleteTarget, setShopDeleteTarget] = useState<ShopRow | null>(null);
   const [shopDeleting, setShopDeleting] = useState(false);
+
+  const { user, hasPageModifyAccess } = useAuth();
+  const isModifyAllowed = hasPageModifyAccess("Petty Cash Form");
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Expense — fetch / CRUD
@@ -425,10 +429,12 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
                   <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
                   <td className="px-4 py-3 text-emerald-700 font-semibold whitespace-nowrap">{fmt(row.closing)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => openEditModal(row)} title="Edit" className="p-2 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit /></button>
-                      <button onClick={() => setDeleteId(row.id)} title="Delete" className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><FaTrash /></button>
-                    </div>
+                    {isModifyAllowed && (
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => openEditModal(row)} title="Edit" className="p-2 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit /></button>
+                        <button onClick={() => setDeleteId(row.id)} title="Delete" className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><FaTrash /></button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
