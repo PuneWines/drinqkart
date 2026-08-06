@@ -160,14 +160,12 @@ export default function PettyCashModal({
       Math.round(parseFloat(formData.personalExpense)) || 0,
       Math.round(parseFloat(formData.miscExpense)) || 0,
       Math.round(parseFloat(formData.creditCardCharges)) || 0,
+      Math.round(parseFloat(formData.otherVendorPayment)) || 0,
+      Math.round(parseFloat(formData.differenceAmount)) || 0,
       otherExpensesTotal,
     ].reduce((acc, val) => acc + val, 0);
 
-    const grandTotal = expenseSum +
-      (Math.round(parseFloat(formData.openingQty)) || 0) +
-      (Math.round(parseFloat(formData.closing)) || 0) +
-      (Math.round(parseFloat(formData.otherVendorPayment)) || 0) +
-      (Math.round(parseFloat(formData.differenceAmount)) || 0);
+    const grandTotal = expenseSum + (Math.round(parseFloat(formData.openingQty)) || 0);
 
     setTotalExpense(expenseSum);
     setTotalAmount(grandTotal);
@@ -226,7 +224,7 @@ export default function PettyCashModal({
     }
   };
 
-  const getFilteredEmployees = () => {
+   const getFilteredEmployees = () => {
     const targetShop = formData.shopName;
     if (!targetShop) return fetchedUserDetails;
 
@@ -247,14 +245,7 @@ export default function PettyCashModal({
       return str.split(',').map(s => s.trim().toLowerCase()).includes(targetLower);
     };
 
-    return fetchedUserDetails.filter(u => {
-      const loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName');
-      return (
-        (loggedInName && u.userName.toLowerCase() === loggedInName.toLowerCase()) ||
-        userHasShopAccess(u.shopName, targetShop) ||
-        userHasShopAccess(u.userAccess, targetShop)
-      );
-    });
+    return fetchedUserDetails.filter(u => userHasShopAccess(u.shopName, targetShop));
   };
 
   const fetchShopNames = async () => {
@@ -626,7 +617,7 @@ export default function PettyCashModal({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* ── Primary Info Fields (Compact Row) ── */}
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {/* DATE */}
               <div>
                 <label className="block mb-1 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
@@ -691,7 +682,7 @@ export default function PettyCashModal({
                       {fetchedShopNames.length > 0 ? (
                         fetchedShopNames.map((shop, index) => (
                           <li
-                            key={index}
+                             key={index}
                             onClick={() => {
                               setFormData({ ...formData, shopName: shop });
                               setIsShopDropdownOpen(false);
@@ -729,23 +720,6 @@ export default function PettyCashModal({
                   step="1"
                   min="0"
                   className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-emerald-700"
-                />
-              </div>
-
-              {/* Closing */}
-              <div>
-                <label className="block mb-1 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                  Closing Balance <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  name="closing"
-                  value={formData.closing}
-                  onChange={handleChange}
-                  placeholder="0"
-                  step="1"
-                  min="0"
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-blue-700"
                 />
               </div>
             </div>
@@ -881,14 +855,6 @@ export default function PettyCashModal({
               <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                 Additional Custom Expenses (Advance, Breakage, Medical, etc.)
               </h4>
-              <button
-                type="button"
-                onClick={addOtherExpenseEntry}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#2a5298] text-white rounded-md hover:bg-[#1e3d70] transition-all cursor-pointer font-semibold"
-              >
-                <FaPlus className="text-[10px]" />
-                <span>Add Entry</span>
-              </button>
             </div>
 
             {formData.otherExpenses.map((entry, index) => {
@@ -991,6 +957,17 @@ export default function PettyCashModal({
                 </div>
               );
             })}
+
+            <div className="flex justify-start pt-1">
+              <button
+                type="button"
+                onClick={addOtherExpenseEntry}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#2a5298] text-white rounded-md hover:bg-[#1e3d70] transition-all cursor-pointer font-semibold"
+              >
+                <FaPlus className="text-[10px]" />
+                <span>Add Entry</span>
+              </button>
+            </div>
           </div>
 
           {/* ── Summary & Actions Bar ── */}
@@ -999,11 +976,6 @@ export default function PettyCashModal({
               <div>
                 <span className="text-xs text-gray-500 block font-medium">Total Expenses (Spent)</span>
                 <span className="text-xl font-bold text-red-600">₹{Math.round(totalExpense)}</span>
-              </div>
-              <div className="h-8 w-px bg-gray-200" />
-              <div>
-                <span className="text-xs text-gray-500 block font-medium">Grand Total Amount</span>
-                <span className="text-xl font-bold text-[#2a5298]">₹{Math.round(totalAmount)}</span>
               </div>
             </div>
 

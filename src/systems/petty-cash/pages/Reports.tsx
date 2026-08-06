@@ -213,6 +213,8 @@ export default function Reports() {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [allowedShops, setAllowedShops] = useState<string[]>([]);
+  const [shopFilter, setShopFilter] = useState<string>("");
 
   const [cashType, setCashType] = useState<"petty" | "tally">("petty");
   const [viewType, setViewType] = useState<"default" | "daily" | "weekly" | "monthly">("default");
@@ -298,11 +300,95 @@ export default function Reports() {
     if (loginUser?.role?.toLowerCase() === 'admin') {
       sheets.push("All");
     }
-    if (hasPageAccess("Cash Tally - Counter 1")) sheets.push("Cash Tally Counter 1");
-    if (hasPageAccess("Cash Tally - Counter 2")) sheets.push("Cash Tally Counter 2");
-    if (hasPageAccess("Cash Tally - Counter 3")) sheets.push("Cash Tally Counter 3");
-    return sheets;
+
+    try {
+      const userStr = localStorage.getItem("currentUser");
+      const hrUserStr = localStorage.getItem("hr_user");
+      let rawAccess = null;
+
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        rawAccess = u && (u.counter_access || u.counterAccess);
+      }
+      if (!rawAccess && hrUserStr) {
+        const hr = JSON.parse(hrUserStr);
+        rawAccess = hr && (hr.counter_access || hr.counterAccess);
+      }
+
+      let counters: string[] = [];
+      if (rawAccess) {
+        if (Array.isArray(rawAccess)) {
+          counters = rawAccess.map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
+        } else if (typeof rawAccess === "string") {
+          counters = rawAccess.split(",").map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
+        }
+      }
+      counters.forEach(c => {
+        sheets.push(c);
+      });
+    } catch (e) {
+      console.error("[Reports] Error parsing counter_access:", e);
+    }
+    
+    // Fallback if no counters in currentUser
+    if (sheets.length === 0 || (sheets.length === 1 && sheets[0] === "All")) {
+      if (hasPageAccess("Cash Tally - Counter 1")) sheets.push("COUNTER-1");
+      if (hasPageAccess("Cash Tally - Counter 2")) sheets.push("COUNTER-2");
+      if (hasPageAccess("Cash Tally - Counter 3")) sheets.push("COUNTER-3");
+    }
+
+    return Array.from(new Set(sheets));
   }, [loginUser?.role, hasPageAccess]);
+
+  useEffect(() => {
+    const fetchAllowedShops = async () => {
+      try {
+        let userAccessList: string[] = [];
+        const userStr = localStorage.getItem("currentUser");
+        const hrUserStr = localStorage.getItem("hr_user");
+        let rawAccess = null;
+
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          rawAccess = u && (u.user_access || u.userAccess || u.shop_name || u.shops);
+        }
+        if (!rawAccess && hrUserStr) {
+          const hr = JSON.parse(hrUserStr);
+          rawAccess = hr && (hr.user_access || hr.userAccess || hr.shop_name || hr.shops);
+        }
+
+        if (rawAccess) {
+          if (Array.isArray(rawAccess)) {
+            userAccessList = rawAccess.map((s: any) => String(s).trim().toLowerCase()).filter(Boolean);
+          } else if (typeof rawAccess === "string") {
+            userAccessList = rawAccess.split(",").map((s: any) => String(s).trim().toLowerCase()).filter(Boolean);
+          }
+        }
+
+        const { data, error } = await supabase
+          .from("shop")
+          .select("shop_name")
+          .order("shop_name", { ascending: true });
+
+        if (!error && data) {
+          const allShops = data.map((r: any) => r.shop_name || r.name).filter(Boolean);
+          const isAdmin = loginUser?.role?.toLowerCase() === 'admin' || userAccessList.includes('all') || userAccessList.includes('admin');
+          if (isAdmin) {
+            setAllowedShops(allShops);
+          } else {
+            const filtered = allShops.filter((shopName: string) => 
+              userAccessList.includes(shopName.trim().toLowerCase())
+            );
+            setAllowedShops(filtered.length > 0 ? filtered : userAccessList);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching allowed shops for reports:", err);
+      }
+    };
+
+    fetchAllowedShops();
+  }, [loginUser]);
 
   const SHEET_URL = "https://script.google.com/macros/s/AKfycbx5dryxS1R5zp6myFfUlP1QPimufTqh5hcPcFMNcAJ-FiC-hyQL9mCkgHSbLkOiWTibeg/exec";
   const SHEET_ID = "1-NTfh3VGrhEImrxNVSbDdBmFxTESegykHslL-t3Nf8I";
@@ -369,10 +455,16 @@ export default function Reports() {
 
     try {
       if (cashType === "petty") {
-        const { data, error } = await supabase
+        let query = supabase
           .from('petty_cash_expense')
           .select('*')
           .order('date', { ascending: false });
+
+        if (shopFilter) {
+          query = query.eq('shop_name', shopFilter);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -423,12 +515,17 @@ export default function Reports() {
 
         const allExpenses: ExpenseData[] = [];
         for (const sheet of sheetsToFetch) {
-          const counterNum = parseInt(sheet.split(" ").pop() || "1");
-          const { data, error } = await supabase
+          let query = supabase
             .from('petty_cash_tallies')
             .select('*')
-            .eq('counter', counterNum)
+            .eq('counter', sheet)
             .order('date', { ascending: false });
+
+          if (shopFilter) {
+            query = query.eq('shop_name', shopFilter);
+          }
+
+          const { data, error } = await query;
 
           if (error) throw error;
 
@@ -503,7 +600,7 @@ export default function Reports() {
     } finally {
       setLoading(false);
     }
-  }, [cashType, loginUser, selectedTallySheet]);
+  }, [cashType, loginUser, selectedTallySheet, shopFilter]);
 
   // Helper to normalize dates to YYYY-MM-DD
   const normalizeToISO = (dateString: string) => {
@@ -777,6 +874,7 @@ export default function Reports() {
     setSelectedTallySheet("All");
     setSelectedCategories(["Tea & Snacks", "Light Bill", "Stationary", "Petrol"]);
     setViewType("default");
+    setShopFilter("");
   };
 
   // ── CSV Export helpers ──────────────────────────────────────────────────────
@@ -804,6 +902,7 @@ export default function Reports() {
         let query = supabase.from('petty_cash_expense').select('*').order('date', { ascending: false }).order('patty_id', { ascending: true });
         if (dateFrom) query = query.gte('date', dateFrom);
         if (dateTo) query = query.lte('date', dateTo);
+        if (shopFilter) query = query.eq('shop_name', shopFilter);
         const { data, error } = await query;
         if (error) throw error;
         const rows = convertPettyExpensesToSheetRows(data || []);
@@ -816,10 +915,14 @@ export default function Reports() {
         const allRows: any[][] = [];
         let headersAdded = false;
         for (const sheet of sheetsToFetch) {
-          const counterNum = parseInt(sheet.split(" ").pop() || "1");
-          let query = supabase.from('petty_cash_tallies').select('*').eq('counter', counterNum).order('date', { ascending: false });
+          let query = supabase
+            .from('petty_cash_tallies')
+            .select('*')
+            .eq('counter', sheet)
+            .order('date', { ascending: false });
           if (dateFrom) query = query.gte('date', dateFrom);
           if (dateTo) query = query.lte('date', dateTo);
+          if (shopFilter) query = query.eq('shop_name', shopFilter);
           const { data, error } = await query;
           if (error) throw error;
           const rows = convertTallyToRows(data || []);
@@ -1162,6 +1265,20 @@ export default function Reports() {
             >
               <option value="petty">Petty Cash</option>
               <option value="tally">Cash Tally</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Shop</label>
+            <select
+              value={shopFilter}
+              onChange={(e) => setShopFilter(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a5298] focus:border-transparent font-medium bg-white h-[46px] shadow-sm transition-all"
+            >
+              <option value="">All Shops</option>
+              {allowedShops.map(shop => (
+                <option key={shop} value={shop}>{shop}</option>
+              ))}
             </select>
           </div>
 
