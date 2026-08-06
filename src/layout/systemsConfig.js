@@ -144,6 +144,12 @@ export const getVisibleSystems = (user) => {
   const isSubtabAllowed = (systemId, sub) => {
     if (sub.type === 'header') return true;
 
+    if (systemId === 'petty-cash' && sub.label === 'Financial Reports') {
+      if (userRole !== 'admin' && userRole !== 'manager' && userRole !== 'masteradmin') {
+        return false;
+      }
+    }
+
     // For non-checklist systems, masteradmin maintains full access by default
     if (systemId !== 'checklist' && isMasterAdmin) return true;
 
@@ -153,6 +159,7 @@ export const getVisibleSystems = (user) => {
       if (sub.label === 'Work Records') labelsToCheck.push('Work Details');
       if (sub.label === 'Work Details') labelsToCheck.push('Work Records');
       if (sub.label === 'User & System Access') labelsToCheck.push('Master Setting');
+      if (sub.label === 'Petty Cash Form Entry') labelsToCheck.push('Form Entry');
       if (systemId === 'checklist') {
         if (sub.label === 'Holiday List' || sub.label === 'Working Day Calendar') {
           labelsToCheck.push('Holiday');
