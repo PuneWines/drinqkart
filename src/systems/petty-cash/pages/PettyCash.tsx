@@ -271,19 +271,6 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
 
       {/* ── Summary Cards (Over table) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
-        {/* Total Opening Card */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-normal text-gray-500 font-sans">Total Opening</p>
-            <h3 className="text-lg font-medium font-sans text-gray-800 mt-1">
-              {fmt(filtered.reduce((s, r) => s + r.openingQty, 0))}
-            </h3>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
-            <FaCoins className="text-lg" />
-          </div>
-        </div>
-
         {/* Total Expense Card */}
         <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
@@ -294,19 +281,6 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
           </div>
           <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
             <FaWallet className="text-lg" />
-          </div>
-        </div>
-
-        {/* Total Closing Card */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-normal text-gray-500 font-sans">Total Closing</p>
-            <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
-              {fmt(filtered.reduce((s, r) => s + r.closing, 0))}
-            </h3>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
-            <FaFileAlt className="text-lg" />
           </div>
         </div>
       </div>
