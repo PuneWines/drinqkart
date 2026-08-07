@@ -1,0 +1,32 @@
+[
+  {
+    "id": "t1",
+    "name": "Stock Audit Alert",
+    "category": "Operational",
+    "content": "Dear {{Employee Name}},\n\nToday's stock audit will begin at 7:00 PM.\n\nPlease submit your daily sales report before 6:30 PM.\n\nThanks,\nManagement"
+  },
+  {
+    "id": "t2",
+    "name": "Daily Sales Report",
+    "category": "Operational",
+    "content": "Dear {{Employee Name}},\n\nKindly submit the closing sales report for {{Shop Name}} by end of day.\n\nThank you,\nStore Management"
+  },
+  {
+    "id": "t3",
+    "name": "Salary Credit Notice",
+    "category": "Payroll",
+    "content": "Dear {{Employee Name}},\n\nYour salary for this month has been processed and credited to your registered bank account.\n\nBest Regards,\nHR Management"
+  },
+  {
+    "id": "t4",
+    "name": "Festival Discount Offer",
+    "category": "Marketing",
+    "content": "🎉 Special Festival Offer at {{Shop Name}}!\n\nEnjoy exclusive discounts and offers on premium stock this week.\n\nThanks,\nKunal Wines Management"
+  },
+  {
+    "id": "t5",
+    "name": "Shift Schedule Update",
+    "category": "HR",
+    "content": "Dear {{Employee Name}},\n\nYour work shift for {{Date}} at {{Shop Name}} has been updated. Please check with your store supervisor.\n\nThanks,"
+  }
+]

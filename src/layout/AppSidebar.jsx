@@ -99,7 +99,7 @@ const AppSidebar = () => {
     }
   }, [location.pathname]);
 
-  if (!activeSystem) return null;
+  if (!activeSystem || activeSystem.id === 'whatsapp') return null;
 
   const ActiveIcon = activeSystem.icon || Layers;
 

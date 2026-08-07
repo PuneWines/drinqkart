@@ -1,0 +1,62 @@
+[
+  {
+    "id": "shop-1",
+    "name": "KUNAL ULWE",
+    "address": "Sector 19, Ulwe, Navi Mumbai",
+    "totalEmployees": 18,
+    "employees": [
+      { "id": "emp-101", "name": "Rahul Sharma", "role": "Manager", "phone": "+91 98201 11001", "status": "online" },
+      { "id": "emp-102", "name": "Ajay Patil", "role": "Cashier", "phone": "+91 98201 11002", "status": "online" },
+      { "id": "emp-103", "name": "Vikas Verma", "role": "Supervisor", "phone": "+91 98201 11003", "status": "online" },
+      { "id": "emp-104", "name": "Sandeep Kulkarni", "role": "Cashier", "phone": "+91 98201 11004", "status": "offline" },
+      { "id": "emp-105", "name": "Priya Deshmukh", "role": "Manager", "phone": "+91 98201 11005", "status": "online" }
+    ]
+  },
+  {
+    "id": "shop-2",
+    "name": "BALAJI",
+    "address": "Main Road, Nerul, Navi Mumbai",
+    "totalEmployees": 14,
+    "employees": [
+      { "id": "emp-201", "name": "Amit Shinde", "role": "Manager", "phone": "+91 98302 22001", "status": "online" },
+      { "id": "emp-202", "name": "Rohan Gupta", "role": "Supervisor", "phone": "+91 98302 22002", "status": "online" },
+      { "id": "emp-203", "name": "Sneha More", "role": "Cashier", "phone": "+91 98302 22003", "status": "offline" },
+      { "id": "emp-204", "name": "Deepak Jadhav", "role": "Cashier", "phone": "+91 98302 22004", "status": "online" }
+    ]
+  },
+  {
+    "id": "shop-3",
+    "name": "TLS",
+    "address": "Station Road, Panvel",
+    "totalEmployees": 16,
+    "employees": [
+      { "id": "emp-301", "name": "Ganesh Kamble", "role": "Manager", "phone": "+91 98403 33001", "status": "online" },
+      { "id": "emp-302", "name": "Nikhil Sawant", "role": "Cashier", "phone": "+91 98403 33002", "status": "online" },
+      { "id": "emp-303", "name": "Mahesh Bhosale", "role": "Supervisor", "phone": "+91 98403 33003", "status": "online" },
+      { "id": "emp-304", "name": "Kiran Pawar", "role": "Cashier", "phone": "+91 98403 33004", "status": "offline" }
+    ]
+  },
+  {
+    "id": "shop-4",
+    "name": "MADHURA",
+    "address": "Sector 17, Vashi",
+    "totalEmployees": 20,
+    "employees": [
+      { "id": "emp-401", "name": "Sunil Nair", "role": "Manager", "phone": "+91 98504 44001", "status": "online" },
+      { "id": "emp-402", "name": "Prashant Joshi", "role": "Supervisor", "phone": "+91 98504 44002", "status": "online" },
+      { "id": "emp-403", "name": "Anil Mane", "role": "Cashier", "phone": "+91 98504 44003", "status": "online" },
+      { "id": "emp-404", "name": "Vijay Thakur", "role": "Cashier", "phone": "+91 98504 44004", "status": "offline" }
+    ]
+  },
+  {
+    "id": "shop-5",
+    "name": "FRIENDS",
+    "address": "Sector 12, Kharghar",
+    "totalEmployees": 15,
+    "employees": [
+      { "id": "emp-501", "name": "Sagar Kadam", "role": "Manager", "phone": "+91 98605 55001", "status": "online" },
+      { "id": "emp-502", "name": "Rakesh Tambe", "role": "Supervisor", "phone": "+91 98605 55002", "status": "online" },
+      { "id": "emp-503", "name": "Pravin Salunkhe", "role": "Cashier", "phone": "+91 98605 55003", "status": "online" }
+    ]
+  }
+]
