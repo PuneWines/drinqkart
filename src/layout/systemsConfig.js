@@ -5,6 +5,7 @@ import {
   Coins,
   ShoppingCart,
   ShieldCheck,
+  MessageSquare,
 } from 'lucide-react';
 
 export const systems = [
@@ -111,6 +112,15 @@ export const systems = [
       { label: 'Expenses', to: '/systems/master-setting/Expenses' },
       { label: 'Purchase Settings', to: '/systems/master-setting/purchase-settings' },
     ]
+  },
+  {
+    id: 'whatsapp',
+    label: 'WhatsApp Broadcast',
+    base: '/systems/whatsapp',
+    icon: MessageSquare,
+    subtabs: [
+      { label: 'Dashboard', to: '/systems/whatsapp' },
+    ]
   }
 ];
 
@@ -141,7 +151,13 @@ export const getVisibleSystems = (user) => {
     ...parseMasterAccessList(localStorage.getItem('master_user_system_page_access'))
   ];
 
+  console.log('[AccessControl Debug] userRole:', userRole);
+  console.log('[AccessControl Debug] masterAccessList:', masterAccessList);
+
   const isSubtabAllowed = (systemId, sub) => {
+    if (systemId === 'whatsapp') {
+      return masterAccessList.some(item => typeof item === 'string' && item.toLowerCase().trim() === 'whatsapp');
+    }
     if (sub.type === 'header') return true;
 
     if (systemId === 'petty-cash' && sub.label === 'Financial Reports') {

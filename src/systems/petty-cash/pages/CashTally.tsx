@@ -313,7 +313,7 @@ export default function CashTally({
 
   const handleAddTransaction = () => {
     if (selectedTxType && !addedTransactions.includes(selectedTxType)) {
-      setAddedTransactions(prev => [...prev, selectedTxType]);
+      setAddedTransactions(prev => [selectedTxType, ...prev]);
     }
   };
 
@@ -744,7 +744,34 @@ export default function CashTally({
                   <h5 className="text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2.5">
                     Denominations & Payments Selector
                   </h5>
-                  <div className="flex flex-col sm:flex-row items-end gap-3 mb-3">
+
+                  {/* List of Added Items */}
+                  <div className="space-y-1.5 mb-4">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Added Items</p>
+                    <div className="flex flex-col gap-2">
+                      {RETAIL_OPTIONS.map((opt) => {
+                        const valStr = (formData as any)[opt.key];
+                        const valNum = parseFloat(valStr) || 0;
+                        if (!valStr || valNum === 0) return null;
+
+                        const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        return (
+                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
+                            <span className="font-semibold">{opt.label}: <span className="text-[#2a5298]">{valNum}</span>{totalStr}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRetailDenom(opt.key)}
+                              className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            >
+                              <FaTrash size={10} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-end gap-3 mt-3">
                     <div className="w-full sm:w-64">
                       <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                         Select Denomination / payment
@@ -778,32 +805,6 @@ export default function CashTally({
                     >
                       <FaPlus size={10} />
                     </button>
-                  </div>
-
-                  {/* List of Added Items */}
-                  <div className="space-y-1.5 mt-3">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Added Items</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {RETAIL_OPTIONS.map((opt) => {
-                        const valStr = (formData as any)[opt.key];
-                        const valNum = parseFloat(valStr) || 0;
-                        if (!valStr || valNum === 0) return null;
-
-                        const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
-                        return (
-                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
-                            <span className="font-semibold">{opt.label}: <span className="text-[#2a5298]">{valNum}</span>{totalStr}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveRetailDenom(opt.key)}
-                              className="text-red-500 hover:text-red-700 transition-colors p-1"
-                            >
-                              <FaTrash size={10} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -875,7 +876,34 @@ export default function CashTally({
                   <h5 className="text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2.5">
                     Denominations & Payments Selector
                   </h5>
-                  <div className="flex flex-col sm:flex-row items-end gap-3 mb-3">
+
+                  {/* List of Added Items */}
+                  <div className="space-y-1.5 mb-4">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Added Items</p>
+                    <div className="flex flex-col gap-2">
+                      {WHOLESALE_OPTIONS.map((opt) => {
+                        const valStr = (formData as any)[opt.key];
+                        const valNum = parseFloat(valStr) || 0;
+                        if (!valStr || valNum === 0) return null;
+
+                        const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        return (
+                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
+                            <span className="font-semibold">{opt.label}: <span className="text-green-600">{valNum}</span>{totalStr}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveWSDenom(opt.key)}
+                              className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            >
+                              <FaTrash size={10} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-end gap-3 mt-3">
                     <div className="w-full sm:w-64">
                       <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                         Select Denomination / payment
@@ -909,32 +937,6 @@ export default function CashTally({
                     >
                       <FaPlus size={10} />
                     </button>
-                  </div>
-
-                  {/* List of Added Items */}
-                  <div className="space-y-1.5 mt-3">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Added Items</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {WHOLESALE_OPTIONS.map((opt) => {
-                        const valStr = (formData as any)[opt.key];
-                        const valNum = parseFloat(valStr) || 0;
-                        if (!valStr || valNum === 0) return null;
-
-                        const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
-                        return (
-                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
-                            <span className="font-semibold">{opt.label}: <span className="text-green-600">{valNum}</span>{totalStr}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveWSDenom(opt.key)}
-                              className="text-red-500 hover:text-red-700 transition-colors p-1"
-                            >
-                              <FaTrash size={10} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
                 </div>
               </div>

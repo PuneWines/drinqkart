@@ -119,6 +119,10 @@ const AVAILABLE_SYSTEMS = [
         pages: ['Settings']
       }
     ]
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp Broadcast'
   }
 ];
 
@@ -1053,216 +1057,253 @@ export default function MasterSetting() {
 
                         {/* SYSTEM CONTENT (SECTIONS & PAGES) */}
                         <div className="p-5 space-y-6 bg-slate-50/40">
-                          {/* Shop Access Section inside Checklist Delegation */}
-                          {sys.id === 'checklist' && (
-                            <>
-                              <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
-                                    <Building size={16} className="text-[#C9A84C]" />
-                                    Shop Access (<code className="font-mono text-[#8C6D23] lowercase">shop_name</code>)
-                                  </label>
-                                  {availableShops.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={handleSelectAllShops}
-                                      className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
-                                    >
-                                      {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
-                                    </button>
-                                  )}
-                                </div>
-
-                                <p className="text-[11px] text-slate-500 font-medium">
-                                  Select assigned shop locations from the database <code className="font-mono font-bold text-[#1C120C]">shop</code> table:
-                                </p>
-
-                                {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
-                                {availableShops.length > 0 ? (
-                                  <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                    {availableShops.map((shop) => {
-                                      const isSelected = selectedShopsList.includes(shop);
-                                      return (
-                                        <button
-                                          key={shop}
-                                          type="button"
-                                          onClick={() => handleToggleShop(shop)}
-                                          className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
-                                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
-                                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
-                                            }`}
-                                        >
-                                          <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                                            }`}>
-                                            {isSelected && '✓'}
-                                          </span>
-                                          <span>{shop}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                ) : (
-                                  <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
-                                )}
-
-                                {/* Comma-Separated Text Input */}
-                                <div className="pt-1">
-                                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                                    Assigned Shop Locations (Comma-separated text)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={shopNameInput}
-                                    onChange={(e) => setShopNameInput(e.target.value)}
-                                    placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
-                                    className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
-                                  />
-                                </div>
+                          {sys.id === 'whatsapp' ? (
+                            <div className="flex items-center justify-between p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs">
+                              <div className="flex flex-col gap-1 pr-4">
+                                <span className="text-xs font-bold text-[#1C120C] uppercase tracking-wider font-serif">
+                                  System Access Toggle
+                                </span>
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  Enable or disable this user's permission to view the WhatsApp Broadcast system.
+                                </span>
                               </div>
-
-                              {/* Counter Access Section */}
-                              <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3 mt-4">
-                                <div className="flex items-center justify-between">
-                                  <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
-                                    <Lock size={16} className="text-[#C9A84C]" />
-                                    Counter Access (<code className="font-mono text-[#8C6D23] lowercase">counter_access</code>)
-                                  </label>
-                                  {availableCounters.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (counterAccessInput.length === availableCounters.length) {
-                                          setCounterAccessInput([]);
-                                        } else {
-                                          setCounterAccessInput([...availableCounters]);
-                                        }
-                                      }}
-                                      className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
-                                    >
-                                      {counterAccessInput.length === availableCounters.length ? 'Deselect All' : 'Select All Counters'}
-                                    </button>
-                                  )}
-                                </div>
-
-                                <p className="text-[11px] text-slate-500 font-medium">
-                                  Select assigned counters from the database <code className="font-mono font-bold text-[#1C120C]">master_counter</code> table:
-                                </p>
-
-                                {/* Dynamic Counter Badges / Checkboxes from 'master_counter' table */}
-                                {availableCounters.length > 0 ? (
-                                  <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                    {availableCounters.map((counter) => {
-                                      const isSelected = counterAccessInput.includes(counter);
-                                      return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = { ...accessPermissions };
+                                  if (updated['whatsapp']) {
+                                    delete updated['whatsapp'];
+                                  } else {
+                                    updated['whatsapp'] = 'whatsapp';
+                                  }
+                                  setAccessPermissions(updated);
+                                  setRawJsonText(JSON.stringify(Object.keys(updated), null, 2));
+                                }}
+                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  accessPermissions['whatsapp'] ? 'bg-[#C9A84C]' : 'bg-slate-200'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                    accessPermissions['whatsapp'] ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Shop Access Section inside Checklist Delegation */}
+                              {sys.id === 'checklist' && (
+                                <>
+                                  <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                                        <Building size={16} className="text-[#C9A84C]" />
+                                        Shop Access (<code className="font-mono text-[#8C6D23] lowercase">shop_name</code>)
+                                      </label>
+                                      {availableShops.length > 0 && (
                                         <button
-                                          key={counter}
+                                          type="button"
+                                          onClick={handleSelectAllShops}
+                                          className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                                        >
+                                          {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <p className="text-[11px] text-slate-500 font-medium">
+                                      Select assigned shop locations from the database <code className="font-mono font-bold text-[#1C120C]">shop</code> table:
+                                    </p>
+
+                                    {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
+                                    {availableShops.length > 0 ? (
+                                      <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                        {availableShops.map((shop) => {
+                                          const isSelected = selectedShopsList.includes(shop);
+                                          return (
+                                            <button
+                                              key={shop}
+                                              type="button"
+                                              onClick={() => handleToggleShop(shop)}
+                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
+                                                  ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
+                                                  : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                              <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                                                }`}>
+                                                {isSelected && '✓'}
+                                              </span>
+                                              <span>{shop}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
+                                    )}
+
+                                    {/* Comma-Separated Text Input */}
+                                    <div className="pt-1">
+                                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                        Assigned Shop Locations (Comma-separated text)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={shopNameInput}
+                                        onChange={(e) => setShopNameInput(e.target.value)}
+                                        placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                                        className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Counter Access Section */}
+                                  <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3 mt-4">
+                                    <div className="flex items-center justify-between">
+                                      <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                                        <Lock size={16} className="text-[#C9A84C]" />
+                                        Counter Access (<code className="font-mono text-[#8C6D23] lowercase">counter_access</code>)
+                                      </label>
+                                      {availableCounters.length > 0 && (
+                                        <button
                                           type="button"
                                           onClick={() => {
-                                            if (isSelected) {
-                                              setCounterAccessInput(counterAccessInput.filter(c => c !== counter));
+                                            if (counterAccessInput.length === availableCounters.length) {
+                                              setCounterAccessInput([]);
                                             } else {
-                                              setCounterAccessInput([...counterAccessInput, counter]);
+                                              setCounterAccessInput([...availableCounters]);
                                             }
                                           }}
-                                          className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
-                                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
-                                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
-                                            }`}
+                                          className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
                                         >
-                                          <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                                            }`}>
-                                            {isSelected && '✓'}
-                                          </span>
-                                          <span>{counter}</span>
+                                          {counterAccessInput.length === availableCounters.length ? 'Deselect All' : 'Select All Counters'}
                                         </button>
+                                      )}
+                                    </div>
+
+                                    <p className="text-[11px] text-slate-500 font-medium">
+                                      Select assigned counters from the database <code className="font-mono font-bold text-[#1C120C]">master_counter</code> table:
+                                    </p>
+
+                                    {/* Dynamic Counter Badges / Checkboxes from 'master_counter' table */}
+                                    {availableCounters.length > 0 ? (
+                                      <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                        {availableCounters.map((counter) => {
+                                          const isSelected = counterAccessInput.includes(counter);
+                                          return (
+                                            <button
+                                              key={counter}
+                                              type="button"
+                                              onClick={() => {
+                                                if (isSelected) {
+                                                  setCounterAccessInput(counterAccessInput.filter(c => c !== counter));
+                                                } else {
+                                                  setCounterAccessInput([...counterAccessInput, counter]);
+                                                }
+                                              }}
+                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
+                                                  ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
+                                                  : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                              <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
+                                                }`}>
+                                                {isSelected && '✓'}
+                                              </span>
+                                              <span>{counter}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-slate-400 italic">Loading options from master_counter table...</div>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+
+                              {sectionsToRender.map((sec, secIdx) => (
+                                <div key={secIdx} className="space-y-3">
+                                  {/* SECTION HEADER - Highlighted Category Banner */}
+                                  {sec.title && (
+                                    <div className="flex items-center gap-2 border-l-4 border-[#C9A84C] bg-[#C9A84C]/10 px-3.5 py-2 rounded-r-lg">
+                                      <span className="text-xs font-black text-[#1C120C] uppercase tracking-widest font-sans">
+                                        {sec.title}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* PAGE ROWS */}
+                                  <div className="space-y-2 pl-0 sm:pl-2">
+                                    {sec.pages.map((pg) => {
+                                      const currentLevel = getPageLevel(sys.id, pg);
+
+                                      return (
+                                        <div
+                                          key={pg}
+                                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 pl-3.5 bg-white border border-slate-200 rounded-lg hover:border-[#C9A84C] h transition-all"
+                                        >
+                                          {/* Page Title & Bullet */}
+                                          <div className="flex items-center gap-3 min-w-0">
+                                            <span className={`w-2 h-2 rounded-full shrink-0 ${currentLevel === 'modify'
+                                              ? 'bg-[#C9A84C] ring-2 ring-[#C9A84C]/30'
+                                              : currentLevel === 'view'
+                                                ? 'bg-slate-900'
+                                                : 'bg-slate-300'
+                                              }`} />
+                                            <span className="text-xs font-bold text-slate-800 tracking-tight font-serif truncate">
+                                              {pg}
+                                            </span>
+                                          </div>
+
+                                          {/* Page Level Access Toggle Buttons */}
+                                          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 shrink-0 self-end sm:self-auto">
+                                            {/* None Button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => setPageLevel(sys.id, pg, 'none')}
+                                              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${currentLevel === 'none'
+                                                ? 'bg-slate-300 text-slate-800 font-extrabold shadow-xs'
+                                                : 'text-slate-500 hover:text-slate-900'
+                                                }`}
+                                            >
+                                              None
+                                            </button>
+
+                                            {/* View Button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => setPageLevel(sys.id, pg, 'view')}
+                                              className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'view'
+                                                ? 'bg-[#1C120C] text-white font-extrabold shadow-sm'
+                                                : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
+                                                }`}
+                                            >
+                                              .view
+                                            </button>
+
+                                            {/* Modify Button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => setPageLevel(sys.id, pg, 'modify')}
+                                              className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'modify'
+                                                ? 'bg-[#C9A84C] text-[#1C120C] font-black shadow-sm'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                                }`}
+                                            >
+                                              .modify
+                                            </button>
+                                          </div>
+                                        </div>
                                       );
                                     })}
                                   </div>
-                                ) : (
-                                  <div className="text-[11px] text-slate-400 italic">Loading options from master_counter table...</div>
-                                )}
-                              </div>
+                                </div>
+                              ))}
                             </>
                           )}
-
-                          {sectionsToRender.map((sec, secIdx) => (
-                            <div key={secIdx} className="space-y-3">
-                              {/* SECTION HEADER - Highlighted Category Banner */}
-                              {sec.title && (
-                                <div className="flex items-center gap-2 border-l-4 border-[#C9A84C] bg-[#C9A84C]/10 px-3.5 py-2 rounded-r-lg">
-                                  <span className="text-xs font-black text-[#1C120C] uppercase tracking-widest font-sans">
-                                    {sec.title}
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* PAGE ROWS */}
-                              <div className="space-y-2 pl-0 sm:pl-2">
-                                {sec.pages.map((pg) => {
-                                  const currentLevel = getPageLevel(sys.id, pg);
-
-                                  return (
-                                    <div
-                                      key={pg}
-                                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 pl-3.5 bg-white border border-slate-200 rounded-lg hover:border-[#C9A84C] h transition-all"
-                                    >
-                                      {/* Page Title & Bullet */}
-                                      <div className="flex items-center gap-3 min-w-0">
-                                        <span className={`w-2 h-2 rounded-full shrink-0 ${currentLevel === 'modify'
-                                          ? 'bg-[#C9A84C] ring-2 ring-[#C9A84C]/30'
-                                          : currentLevel === 'view'
-                                            ? 'bg-slate-900'
-                                            : 'bg-slate-300'
-                                          }`} />
-                                        <span className="text-xs font-bold text-slate-800 tracking-tight font-serif truncate">
-                                          {pg}
-                                        </span>
-                                      </div>
-
-                                      {/* Page Level Access Toggle Buttons */}
-                                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 shrink-0 self-end sm:self-auto">
-                                        {/* None Button */}
-                                        <button
-                                          type="button"
-                                          onClick={() => setPageLevel(sys.id, pg, 'none')}
-                                          className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${currentLevel === 'none'
-                                            ? 'bg-slate-300 text-slate-800 font-extrabold shadow-xs'
-                                            : 'text-slate-500 hover:text-slate-900'
-                                            }`}
-                                        >
-                                          None
-                                        </button>
-
-                                        {/* View Button */}
-                                        <button
-                                          type="button"
-                                          onClick={() => setPageLevel(sys.id, pg, 'view')}
-                                          className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'view'
-                                            ? 'bg-[#1C120C] text-white font-extrabold shadow-sm'
-                                            : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                            }`}
-                                        >
-                                          .view
-                                        </button>
-
-                                        {/* Modify Button */}
-                                        <button
-                                          type="button"
-                                          onClick={() => setPageLevel(sys.id, pg, 'modify')}
-                                          className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'modify'
-                                            ? 'bg-[#C9A84C] text-[#1C120C] font-black shadow-sm'
-                                            : 'text-slate-600 hover:text-slate-900'
-                                            }`}
-                                        >
-                                          .modify
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       </div>
                     );

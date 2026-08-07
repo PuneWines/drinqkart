@@ -15,6 +15,7 @@ import Shop from './pages/Shop';
 import ProductDetail from './pages/ProductDetail';
 import Login from './pages/Login';
 import MasterSetting from './pages/MasterSetting';
+import BroadcastDashboard from './pages/BroadcastDashboard';
 
 import ChecklistDashboard from './systems/checklist/App';
 import checklistStore from './systems/checklist/redux/store';
@@ -148,6 +149,14 @@ const AppLayout = () => {
             element={
               <ConsoleRoute>
                 <MasterSetting />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/whatsapp/*"
+            element={
+              <ConsoleRoute>
+                <BroadcastDashboard />
               </ConsoleRoute>
             }
           />
