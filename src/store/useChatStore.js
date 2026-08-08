@@ -1,18 +1,9 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 
-const DEFAULT_BROADCAST_TEXT = `Dear {{Employee Name}},
+const DEFAULT_BROADCAST_TEXT = ''
 
-Today's stock audit will begin at 7:00 PM.
-
-Please submit your daily sales report before 6:30 PM.
-
-Thanks,
-Management`
-
-const INITIAL_ATTACHMENTS = [
-  { id: 'att-1', name: 'SalesReport.pdf', size: '2.3 MB', icon: '📄', type: 'application/pdf' },
-]
+const INITIAL_ATTACHMENTS = []
 
 const INITIAL_BROADCAST_HISTORY = [
   {

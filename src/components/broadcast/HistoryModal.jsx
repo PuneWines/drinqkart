@@ -44,9 +44,9 @@ export default function HistoryModal() {
                     </span>
                   </td>
                   <td className="p-3 text-gray-500">
-                    {item.files && item.files.length > 0 ? (
+                    {Array.isArray(item.files) && item.files.filter(f => typeof f === 'string' && f.trim() !== '').length > 0 ? (
                       <div className="flex flex-col gap-1 max-w-[150px]">
-                        {item.files.map((fileUrl, index) => {
+                        {item.files.filter(f => typeof f === 'string' && f.trim() !== '').map((fileUrl, index) => {
                           const fileName = fileUrl.split('/').pop()?.split('_').slice(1).join('_') || fileUrl.split('/').pop() || `File ${index + 1}`;
                           return (
                             <a
