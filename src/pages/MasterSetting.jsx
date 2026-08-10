@@ -123,6 +123,16 @@ const AVAILABLE_SYSTEMS = [
   {
     id: 'whatsapp',
     name: 'WhatsApp Broadcast'
+  },
+  {
+    id: 'business-overview',
+    name: 'Business overview',
+    sections: [
+      {
+        title: 'BUSINESS OVERVIEW MODULES',
+        pages: ['Feedback', 'Trader Invoices']
+      }
+    ]
   }
 ];
 
@@ -1592,6 +1602,7 @@ export default function MasterSetting() {
                       <option value="hr">HR System Only</option>
                       <option value="inventory">Inventory System Only</option>
                       <option value="petty-cash">Petty Cash Only</option>
+                      <option value="business-overview">Business Overview Only</option>
                       <option value="all">Full Access (All Systems)</option>
                       <option value="">Custom Access (Configure Later)</option>
                     </select>

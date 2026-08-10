@@ -68,7 +68,7 @@ const AppHeader = () => {
           className="flex items-center overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0"
         >
           {visibleSystems.map((system) => {
-            const isActive = activeSystem?.id === system.id;
+            const isActive = activeSystem?.id === system.id && location.pathname !== '/systems/profile';
             const defaultSubtabUrl = system.subtabs.find((s) => s.to)?.to || system.base;
 
             return (
@@ -85,6 +85,17 @@ const AppHeader = () => {
               </Link>
             );
           })}
+
+          <Link
+            to="/systems/profile"
+            className={`px-4 py-2.5 text-xs font-bold tracking-wider uppercase whitespace-nowrap transition-all duration-150 shrink-0 cursor-pointer border-b-2 ${
+              location.pathname === '/systems/profile'
+                ? 'bg-[#2C1D11] text-[#C9A84C] border-[#1c120c] font-extrabold shadow-md transform scale-[1.01]'
+                : 'text-[#1c120c] hover:bg-black/10 border-transparent'
+            }`}
+          >
+            <span>Profile</span>
+          </Link>
         </div>
       </nav>
     </header>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Trash2, Calendar, User } from 'lucide-react'
+import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Trash2, Calendar, User, QrCode, Copy, Printer, ExternalLink } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function JoiningCompany() {
@@ -16,6 +16,7 @@ export default function JoiningCompany() {
   const [editingShopName, setEditingShopName] = useState('')
   const [editingGivenBy, setEditingGivenBy] = useState('')
   const [updating, setUpdating] = useState(false)
+  const [qrModalShop, setQrModalShop] = useState(null)
 
   useEffect(() => {
     fetchCompanies()
@@ -224,6 +225,7 @@ export default function JoiningCompany() {
                       <th className="py-3 px-4"># ID</th>
                       <th className="py-3 px-4">Shop Name</th>
                       <th className="py-3 px-4">Created At</th>
+                      <th className="py-3 px-4 text-center">Feedback QR</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
@@ -249,6 +251,16 @@ export default function JoiningCompany() {
                               {formattedDate}
                             </span>
                           </td>
+                          <td className="py-3.5 px-4 text-center text-xs">
+                            <button
+                              onClick={() => setQrModalShop(company)}
+                              className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-[#d4b457]/20 border border-slate-200 text-slate-700 hover:text-slate-900 px-2.5 py-1 rounded transition-colors cursor-pointer"
+                              title="View Customer Feedback QR"
+                            >
+                              <QrCode size={13} className="text-[#d4b457]" />
+                              <span className="font-bold text-[10px] uppercase">View QR</span>
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -259,6 +271,107 @@ export default function JoiningCompany() {
           </div>
         </div>
       </div>
+
+      {/* --- QR Code Modal --- */}
+      {qrModalShop && (
+        <div className="fixed inset-0 z-50 bg-[#1A1A1A]/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-200 max-w-sm w-full overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="bg-[#1C120C] text-white px-4 py-3 border-b border-[#d4b457]/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <QrCode size={16} className="text-[#d4b457]" />
+                <span className="text-xs font-bold uppercase tracking-wider text-white">Feedback QR Code</span>
+              </div>
+              <button
+                onClick={() => setQrModalShop(null)}
+                className="text-white/60 hover:text-white p-1 rounded transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 flex flex-col items-center text-center space-y-4">
+              <h3 className="text-sm font-bold text-slate-950 uppercase tracking-wide">
+                {qrModalShop.shop_name || qrModalShop.company_name}
+              </h3>
+              
+              <div className="p-2 border border-slate-200 rounded-lg bg-white shadow-inner">
+                <img
+                  src={
+                    qrModalShop.qr_link ||
+                    `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                      window.location.origin + '/feedback?shop=' + (qrModalShop.shop_name || qrModalShop.company_name)
+                    )}`
+                  }
+                  alt="Shop QR"
+                  className="w-48 h-48 object-contain"
+                />
+              </div>
+
+              {/* URL String */}
+              <div className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 font-mono text-[10px] text-slate-600 break-all select-all flex items-center justify-between gap-2">
+                <span className="truncate">
+                  {window.location.origin}/feedback?shop={encodeURIComponent(qrModalShop.shop_name || qrModalShop.company_name)}
+                </span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3 w-full pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const link = `${window.location.origin}/feedback?shop=${encodeURIComponent(qrModalShop.shop_name || qrModalShop.company_name)}`;
+                    navigator.clipboard.writeText(link);
+                    toast.success('Feedback link copied!');
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold uppercase rounded transition-colors cursor-pointer"
+                >
+                  <Copy size={13} />
+                  <span>Copy Link</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const printWindow = window.open('', '_blank');
+                    const imageUrl = qrModalShop.qr_link || `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(window.location.origin + '/feedback?shop=' + (qrModalShop.shop_name || qrModalShop.company_name))}`;
+                    printWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>Print QR Code - ${qrModalShop.shop_name || qrModalShop.company_name}</title>
+                          <style>
+                            body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
+                            img { width: 350px; height: 350px; }
+                            h2 { margin-top: 20px; color: #1a1a1a; }
+                            p { font-size: 14px; color: #666; margin-top: 5px; }
+                          </style>
+                        </head>
+                        <body>
+                          <img src="${imageUrl}" />
+                          <h2>${qrModalShop.shop_name || qrModalShop.company_name}</h2>
+                          <p>Scan to Submit Customer Feedback</p>
+                          <script>
+                            window.onload = function() {
+                              window.print();
+                              window.close();
+                            }
+                          </script>
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#d4b457] hover:bg-[#c3a346] text-slate-900 text-xs font-bold uppercase rounded transition-colors cursor-pointer shadow-sm"
+                >
+                  <Printer size={13} />
+                  <span>Print QR</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
