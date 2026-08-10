@@ -16,6 +16,7 @@ import ProductDetail from './pages/ProductDetail';
 import Login from './pages/Login';
 import MasterSetting from './pages/MasterSetting';
 import BroadcastDashboard from './pages/BroadcastDashboard';
+import ProfilePage from './pages/ProfilePage';
 
 import ChecklistDashboard from './systems/checklist/App';
 import checklistStore from './systems/checklist/redux/store';
@@ -24,6 +25,7 @@ import HrApp from './systems/hr/App';
 import InventoryApp from './systems/inventory/App';
 import PettyCashApp from './systems/petty-cash/App';
 import PurchaseApp from './systems/purchase/App';
+import BusinessOverviewApp from './systems/business-overview/App';
 import PublicRegister from './systems/hr/pages/PublicRegister';
 import VendorConfirmation from './systems/purchase/pages/VendorConfirmation';
 import TransporterConfirmation from './systems/purchase/pages/TransporterConfirmation';
@@ -31,6 +33,7 @@ import ReceiverConfirmation from './systems/purchase/pages/ReceiverConfirmation'
 import VendorPortal from './systems/purchase/pages/VendorPortal';
 import TransporterPortal from './systems/purchase/pages/TransporterPortal';
 import ReceiverPortal from './systems/purchase/pages/ReceiverPortal';
+import FeedbackPortal from './systems/business-overview/pages/FeedbackPortal';
 
 // Wraps a merged system's routes: requires a logged-in user and renders
 // the top navigation header and system sub-sidebar alongside content.
@@ -67,7 +70,7 @@ const AppLayout = () => {
   // standalone documents, no storefront chrome.
   const isPurchasePublicPage = [
     '/confirm-po/', '/transporter-confirmation/', '/receiver-confirmation/',
-    '/vendor-portal/', '/transporter-portal/', '/receiver-portal/',
+    '/vendor-portal/', '/transporter-portal/', '/receiver-portal/', '/feedback',
   ].some((prefix) => location.pathname.startsWith(prefix));
   const hideChrome = isLoginPage || isConsolePage || isPurchasePublicPage;
 
@@ -84,6 +87,7 @@ const AppLayout = () => {
           <Route path="/shop" element={<Shop />} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/register" element={<PublicRegister />} />
+          <Route path="/feedback" element={<FeedbackPortal />} />
 
           {/* --- Purchase system public links (sent to vendors/transporters/receivers, no login) --- */}
           <Route path="/confirm-po/:id" element={<VendorConfirmation />} />
@@ -157,6 +161,22 @@ const AppLayout = () => {
             element={
               <ConsoleRoute>
                 <BroadcastDashboard />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/business-overview/*"
+            element={
+              <ConsoleRoute>
+                <BusinessOverviewApp />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/profile"
+            element={
+              <ConsoleRoute>
+                <ProfilePage />
               </ConsoleRoute>
             }
           />

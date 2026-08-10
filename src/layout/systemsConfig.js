@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   ShieldCheck,
   MessageSquare,
+  BarChart3,
 } from 'lucide-react';
 
 export const systems = [
@@ -121,6 +122,24 @@ export const systems = [
     subtabs: [
       { label: 'Dashboard', to: '/systems/whatsapp' },
     ]
+  },
+  {
+    id: 'business-overview',
+    label: 'Business overview',
+    base: '/systems/business-overview',
+    icon: BarChart3,
+    subtabs: [
+      {
+        label: 'Feedback',
+        to: '/systems/business-overview/feedback/customer',
+        children: [
+          { label: 'Customer Feedback', to: '/systems/business-overview/feedback/customer' },
+          { label: 'Assigned Complaints', to: '/systems/business-overview/feedback/assigned' },
+          { label: 'Complaint Resolution', to: '/systems/business-overview/feedback/resolution' }
+        ]
+      },
+      { label: 'Trader Invoices', to: '/systems/business-overview/trader-invoices' }
+    ]
   }
 ];
 
@@ -158,6 +177,10 @@ export const getVisibleSystems = (user) => {
     if (systemId === 'whatsapp') {
       return masterAccessList.some(item => typeof item === 'string' && item.toLowerCase().trim() === 'whatsapp');
     }
+    if (systemId === 'business-overview') {
+      const hasFullAccess = masterAccessList.some(item => typeof item === 'string' && item.toLowerCase().trim() === 'business-overview');
+      if (hasFullAccess) return true;
+    }
     if (sub.type === 'header') return true;
 
     if (systemId === 'petty-cash' && sub.label === 'Financial Reports') {
@@ -176,6 +199,15 @@ export const getVisibleSystems = (user) => {
       if (sub.label === 'Work Details') labelsToCheck.push('Work Records');
       if (sub.label === 'User & System Access') labelsToCheck.push('Master Setting');
       if (sub.label === 'Petty Cash Form Entry') labelsToCheck.push('Form Entry');
+      if (systemId === 'business-overview') {
+        if (
+          sub.label === 'Customer Feedback' ||
+          sub.label === 'Assigned Complaints' ||
+          sub.label === 'Complaint Resolution'
+        ) {
+          labelsToCheck.push('Feedback');
+        }
+      }
       if (systemId === 'checklist') {
         if (sub.label === 'Holiday List' || sub.label === 'Working Day Calendar') {
           labelsToCheck.push('Holiday');
