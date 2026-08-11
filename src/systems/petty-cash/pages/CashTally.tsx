@@ -42,6 +42,17 @@ const WHOLESALE_OPTIONS = [
   { key: "wsCard", label: "Card Payments (Digital)", isCash: false },
 ];
 
+const EXPENSE_OPTIONS = [
+  { key: "retail1500", label: "₹500 (Cash)", isCash: true, denom: 500 },
+  { key: "retail2200", label: "₹200 (Cash)", isCash: true, denom: 200 },
+  { key: "retail3100", label: "₹100 (Cash)", isCash: true, denom: 100 },
+  { key: "retail450", label: "₹50 (Cash)", isCash: true, denom: 50 },
+  { key: "retail520", label: "₹20 (Cash)", isCash: true, denom: 20 },
+  { key: "retail610", label: "₹10 (Cash)", isCash: true, denom: 10 },
+  { key: "retail71", label: "₹1 (Cash)", isCash: true, denom: 1 },
+  { key: "expenseGpayCard", label: "GPay/Card (Digital)", isCash: false },
+];
+
 interface CashTallyProps {
   isOpen?: boolean;
   onClose?: () => void;
@@ -72,6 +83,10 @@ export default function CashTally({
   // Wholesale dynamic selector states
   const [selectedWSKey, setSelectedWSKey] = useState("ws500");
   const [wsValueInput, setWsValueInput] = useState("");
+
+  // Expenses dynamic selector states
+  const [selectedExpenseKey, setSelectedExpenseKey] = useState("retail1500");
+  const [expenseValueInput, setExpenseValueInput] = useState("");
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -142,7 +157,17 @@ export default function CashTally({
         }
       }
 
-      const loggedInName = user?.name || user?.username;
+      let loggedInName = "";
+      try {
+        const savedUserStr = localStorage.getItem('currentUser');
+        if (savedUserStr) {
+          const parsed = JSON.parse(savedUserStr);
+          loggedInName = parsed.user_name || "";
+        }
+      } catch (e) {}
+      if (!loggedInName) {
+        loggedInName = user?.name || user?.username || "";
+      }
       if (loggedInName && !names.includes(loggedInName)) {
         names.unshift(loggedInName);
       }
@@ -277,7 +302,17 @@ export default function CashTally({
 
   useEffect(() => {
     if (isOpen) {
-      const defaultUser = user?.name || user?.username || "";
+      let defaultUser = "";
+      try {
+        const savedUserStr = localStorage.getItem('currentUser');
+        if (savedUserStr) {
+          const parsed = JSON.parse(savedUserStr);
+          defaultUser = parsed.user_name || "";
+        }
+      } catch (e) {}
+      if (!defaultUser) {
+        defaultUser = user?.name || user?.username || "";
+      }
       const defaultCounter = initialData?.counter || counter || allowedCounters[0] || "COUNTER-1";
       setActiveCounter(String(defaultCounter));
 
@@ -353,13 +388,33 @@ export default function CashTally({
     }));
   };
 
+  const handleAddExpenseDenom = () => {
+    if (!expenseValueInput) return;
+    setFormData(prev => ({
+      ...prev,
+      [selectedExpenseKey]: expenseValueInput
+    }));
+    setExpenseValueInput("");
+  };
+
+  const handleRemoveExpenseDenom = (key: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [key]: ""
+    }));
+  };
+
+  const [retailActualScanAmount, setRetailActualScanAmount] = useState(0);
   const [retailActualSale, setRetailActualSale] = useState(0);
   const [retailDiff, setRetailDiff] = useState(0);
-  const [wholesaleTotalSale, setWholesaleTotalSale] = useState(0);
+  const [wholesaleActualSale, setWholesaleActualSale] = useState(0);
+  const [wholesaleTotalBilling, setWholesaleTotalBilling] = useState(0);
   const [wholesaleDiff, setWholesaleDiff] = useState(0);
+  const [expensesAndOthersTotalAmount, setExpensesAndOthersTotalAmount] = useState(0);
   const [homeDeliveryDiff, setHomeDeliveryDiff] = useState(0);
 
   useEffect(() => {
+    // 1. Retail Calculations
     const retailCashSum = [
       (Math.round(parseFloat(formData.retail500)) || 0) * 500,
       (Math.round(parseFloat(formData.retail200)) || 0) * 200,
@@ -370,21 +425,27 @@ export default function CashTally({
       (Math.round(parseFloat(formData.retail1)) || 0) * 1,
     ].reduce((acc, val) => acc + val, 0);
 
-    const actualSale =
-      (Math.round(parseFloat(formData.retailScanAmount)) || 0) -
-      (Math.round(parseFloat(formData.voidSale)) || 0);
-    setRetailActualSale(actualSale);
-
     const retailGpay = Math.round(parseFloat(formData.retailGpay)) || 0;
     const retailCard = Math.round(parseFloat(formData.retailCard)) || 0;
     const retailPhonePe = Math.round(parseFloat(formData.retailPhonePe)) || 0;
     const retailPaytm = Math.round(parseFloat(formData.retailPaytm)) || 0;
     const retailExpense = Math.round(parseFloat(formData.expense)) || 0;
 
-    const retailTotalPayments =
-      retailCashSum + retailGpay + retailCard + retailPhonePe + retailPaytm + retailExpense;
-    setRetailDiff(actualSale - retailTotalPayments);
+    // Actual scan amount = scan amount - void sale
+    const scanAmt = Math.round(parseFloat(formData.retailScanAmount)) || 0;
+    const voidSaleAmt = Math.round(parseFloat(formData.voidSale)) || 0;
+    const actualScanAmt = scanAmt - voidSaleAmt;
+    setRetailActualScanAmount(actualScanAmt);
 
+    // Actual sale = sum total amount of all the denominations/payments added
+    const actualSale =
+      retailCashSum + retailGpay + retailCard + retailPhonePe + retailPaytm + retailExpense;
+    setRetailActualSale(actualSale);
+
+    // Diff = actual scan amount - actual sale
+    setRetailDiff(actualScanAmt - actualSale);
+
+    // 2. Wholesale Calculations
     const wholesaleCashSum = [
       (Math.round(parseFloat(formData.ws500)) || 0) * 500,
       (Math.round(parseFloat(formData.ws200)) || 0) * 200,
@@ -395,21 +456,26 @@ export default function CashTally({
       (Math.round(parseFloat(formData.ws1)) || 0) * 1,
     ].reduce((acc, val) => acc + val, 0);
 
-    const totalWhoSale =
+    const totalWhoBilling =
       (Math.round(parseFloat(formData.wsCashBillingAmount)) || 0) +
       (Math.round(parseFloat(formData.wsCreditReceipt)) || 0);
-    setWholesaleTotalSale(totalWhoSale);
+    setWholesaleTotalBilling(totalWhoBilling);
 
     const wsGpayCard = Math.round(parseFloat(formData.wsGpayCard)) || 0;
     const wsPhonePe = Math.round(parseFloat(formData.wsPhonePe)) || 0;
     const wsPaytm = Math.round(parseFloat(formData.wsPaytm)) || 0;
     const wsCard = Math.round(parseFloat(formData.wsCard)) || 0;
 
-    const wholesaleTotalPayments =
+    // Wholesale actual sale
+    const wholesaleActualSaleVal =
       wholesaleCashSum + wsGpayCard + wsPhonePe + wsPaytm + wsCard;
-    setWholesaleDiff(totalWhoSale - wholesaleTotalPayments);
+    setWholesaleActualSale(wholesaleActualSaleVal);
 
-    const homeDeliveryCashSum = [
+    // Wholesale Diff = total billing - actual sale
+    setWholesaleDiff(totalWhoBilling - wholesaleActualSaleVal);
+
+    // 3. Expenses & Others Calculations
+    const expenseCashSum = [
       (Math.round(parseFloat(formData.retail1500)) || 0) * 500,
       (Math.round(parseFloat(formData.retail2200)) || 0) * 200,
       (Math.round(parseFloat(formData.retail3100)) || 0) * 100,
@@ -419,15 +485,19 @@ export default function CashTally({
       (Math.round(parseFloat(formData.retail71)) || 0) * 1,
     ].reduce((acc, val) => acc + val, 0);
 
+    const expenseGpayCardAmt = Math.round(parseFloat(formData.expenseGpayCard)) || 0;
+
+    const expenseTotal = expenseCashSum + expenseGpayCardAmt;
+    setExpensesAndOthersTotalAmount(expenseTotal);
+
+    // Home Delivery Diff calculation if still needed
     const hdAmount = Math.round(parseFloat(formData.homeDelivery)) || 0;
-    const homeDeliveryDiffValue = hdAmount - homeDeliveryCashSum;
+    const homeDeliveryDiffValue = hdAmount - expenseCashSum;
     setHomeDeliveryDiff(homeDeliveryDiffValue);
 
-    const totalDiffSum =
-      actualSale - retailTotalPayments +
-      (totalWhoSale - wholesaleTotalPayments) +
-      homeDeliveryDiffValue;
-    setTotalAmount(totalDiffSum);
+    // 4. Bottom Total Amount: sum of the difference fields under the 3 sections (retail diff, wholesale diff, and home delivery diff)
+    const bottomTotal = (actualScanAmt - actualSale) + (totalWhoBilling - wholesaleActualSaleVal) + homeDeliveryDiffValue;
+    setTotalAmount(bottomTotal);
   }, [formData]);
 
   const handleChange = (
@@ -700,7 +770,7 @@ export default function CashTally({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
                   <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
                       Scan Amount
@@ -717,13 +787,38 @@ export default function CashTally({
                   </div>
                   <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Void Sale
+                    </label>
+                    <input
+                      type="number"
+                      name="voidSale"
+                      value={formData.voidSale}
+                      onChange={handleChange}
+                      placeholder="0"
+                      step="1"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Actual Scan Amount
+                    </label>
+                    <input
+                      type="text"
+                      value={retailActualScanAmount}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-blue-600 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
                       Actual Sale
                     </label>
                     <input
                       type="text"
                       value={retailActualSale}
                       readOnly
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-blue-600 font-bold"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-emerald-600 font-bold"
                     />
                   </div>
                   <div>
@@ -826,7 +921,7 @@ export default function CashTally({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                   {[
                     { name: "wsCashBillingAmount", label: "Cash Billing" },
                     { name: "wsCreditBillingAmount", label: "Credit Billing" },
@@ -849,13 +944,24 @@ export default function CashTally({
                   ))}
                   <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                      Total Who. Sale
+                      Total Billing
                     </label>
                     <input
                       type="text"
-                      value={wholesaleTotalSale}
+                      value={wholesaleTotalBilling}
                       readOnly
                       className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-green-600 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Actual Sale
+                    </label>
+                    <input
+                      type="text"
+                      value={wholesaleActualSale}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-emerald-600 font-bold"
                     />
                   </div>
                   <div>
@@ -958,7 +1064,7 @@ export default function CashTally({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
                       Home Delivery
@@ -976,52 +1082,96 @@ export default function CashTally({
 
                   <div>
                     <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                      Void Sale
+                      Total Amount
                     </label>
                     <input
-                      type="number"
-                      name="voidSale"
-                      value={formData.voidSale}
-                      onChange={handleChange}
-                      placeholder="0"
-                      step="1"
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 bg-white"
+                      type="text"
+                      value={expensesAndOthersTotalAmount}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-purple-600 font-bold"
                     />
                   </div>
 
-                  {formData.homeDelivery && parseFloat(formData.homeDelivery) > 0 && (
-                    <div className="md:col-span-2">
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">
-                        Home Delivery Cash Denominations
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                        {[
-                          ["1500", "500"],
-                          ["2200", "200"],
-                          ["3100", "100"],
-                          ["450", "50"],
-                          ["520", "20"],
-                          ["610", "10"],
-                          ["71", "1"],
-                        ].map(([fieldKey, displayDenom]) => (
-                          <div key={fieldKey}>
-                            <label className="block text-[10px] text-gray-500 font-bold mb-0.5 text-center">
-                              ₹{displayDenom}
-                            </label>
-                            <input
-                              type="number"
-                              name={`retail${fieldKey}`}
-                              value={(formData as any)[`retail${fieldKey}`]}
-                              onChange={handleChange}
-                              placeholder="0"
-                              step="1"
-                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 text-center bg-white"
-                            />
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Home Delivery Diff.
+                    </label>
+                    <input
+                      type="text"
+                      value={homeDeliveryDiff}
+                      readOnly
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-50 text-red-600 font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* Dropdown-based cash denominations & payments */}
+                <div className="border border-gray-150 rounded-xl p-4 bg-gray-50/50">
+                  <h5 className="text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2.5">
+                    Denominations & Payments Selector
+                  </h5>
+
+                  {/* List of Added Items */}
+                  <div className="space-y-1.5 mb-4">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Added Items</p>
+                    <div className="flex flex-col gap-2">
+                      {EXPENSE_OPTIONS.map((opt) => {
+                        const valStr = (formData as any)[opt.key];
+                        const valNum = parseFloat(valStr) || 0;
+                        if (!valStr || valNum === 0) return null;
+
+                        const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        return (
+                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
+                            <span className="font-semibold">{opt.label}: <span className="text-purple-600">{valNum}</span>{totalStr}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveExpenseDenom(opt.key)}
+                              className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            >
+                              <FaTrash size={10} />
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-end gap-3 mt-3">
+                    <div className="w-full sm:w-64">
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        Select Denomination / payment
+                      </label>
+                      <select
+                        value={selectedExpenseKey}
+                        onChange={(e) => setSelectedExpenseKey(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                      >
+                        {EXPENSE_OPTIONS.map((opt) => (
+                          <option key={opt.key} value={opt.key}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-full sm:w-36">
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        {EXPENSE_OPTIONS.find(o => o.key === selectedExpenseKey)?.isCash ? "Count/Qty" : "Amount (₹)"}
+                      </label>
+                      <input
+                        type="number"
+                        value={expenseValueInput}
+                        onChange={(e) => setExpenseValueInput(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddExpenseDenom}
+                      className="flex items-center justify-center bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors cursor-pointer h-[32px] w-[32px] shrink-0"
+                    >
+                      <FaPlus size={10} />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

@@ -203,7 +203,17 @@ export default function PettyCashModal({
         }
       }
 
-      const loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName');
+      let loggedInName = "";
+      try {
+        const savedUserStr = localStorage.getItem('currentUser');
+        if (savedUserStr) {
+          const parsed = JSON.parse(savedUserStr);
+          loggedInName = parsed.user_name || "";
+        }
+      } catch (e) {}
+      if (!loggedInName) {
+        loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
+      }
       if (loggedInName) {
         if (!usernames.includes(loggedInName)) {
           usernames.unshift(loggedInName);
@@ -275,7 +285,7 @@ export default function PettyCashModal({
 
       // Restrict shop names based on the logged-in user's allowed shops, regardless of admin status.
       // (Unless they are allowed "all" shops)
-      let rawShops = user?.shops;
+      let rawShops: any = user?.shops;
       if (!rawShops) {
         try {
           const savedUserStr = localStorage.getItem('currentUser');
@@ -342,7 +352,17 @@ export default function PettyCashModal({
 
   useEffect(() => {
     if (isOpen) {
-      const defaultUser = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
+      let defaultUser = "";
+      try {
+        const savedUserStr = localStorage.getItem('currentUser');
+        if (savedUserStr) {
+          const parsed = JSON.parse(savedUserStr);
+          defaultUser = parsed.user_name || "";
+        }
+      } catch (e) {}
+      if (!defaultUser) {
+        defaultUser = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
+      }
       if (initialData) {
         setFormData({
           ...initialData,

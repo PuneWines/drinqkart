@@ -6,7 +6,8 @@ import toast, { Toaster } from 'react-hot-toast';
 
 export default function FeedbackPortal() {
   const [searchParams] = useSearchParams();
-  const rawShopParam = searchParams.get('shop');
+  const shopParam = searchParams.get('shop');
+  const rawShopParam = shopParam ? shopParam.replace(/-/g, ' ') : null;
 
   // Page States
   const [resolvedShopName, setResolvedShopName] = useState('');
