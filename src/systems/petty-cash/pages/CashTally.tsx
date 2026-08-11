@@ -139,24 +139,6 @@ export default function CashTally({
 
   const fetchEmployees = async () => {
     try {
-      let names: string[] = [];
-      const { data, error } = await supabase
-        .from('users')
-        .select('user_name, name, username')
-        .order('user_name', { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        names = data.map((row: any) => row.user_name || row.name || row.username).filter(Boolean);
-      } else {
-        const { data: pcData, error: pcError } = await supabase
-          .from('petty_cash_user')
-          .select('name');
-
-        if (!pcError && pcData) {
-          names = pcData.map((row: any) => row.name).filter(Boolean);
-        }
-      }
-
       let loggedInName = "";
       try {
         const savedUserStr = localStorage.getItem('currentUser');
@@ -168,11 +150,7 @@ export default function CashTally({
       if (!loggedInName) {
         loggedInName = user?.name || user?.username || "";
       }
-      if (loggedInName && !names.includes(loggedInName)) {
-        names.unshift(loggedInName);
-      }
-
-      setEmployees(Array.from(new Set(names)));
+      setEmployees([loggedInName].filter(Boolean));
     } catch (error) {
       console.error("[CashTally] Error fetching employees:", error);
     }

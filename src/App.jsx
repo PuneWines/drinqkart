@@ -34,6 +34,7 @@ import VendorPortal from './systems/purchase/pages/VendorPortal';
 import TransporterPortal from './systems/purchase/pages/TransporterPortal';
 import ReceiverPortal from './systems/purchase/pages/ReceiverPortal';
 import FeedbackPortal from './systems/business-overview/pages/FeedbackPortal';
+import PublicTraderInvoiceForm from './systems/business-overview/pages/PublicTraderInvoiceForm';
 
 // Wraps a merged system's routes: requires a logged-in user and renders
 // the top navigation header and system sub-sidebar alongside content.
@@ -71,6 +72,7 @@ const AppLayout = () => {
   const isPurchasePublicPage = [
     '/confirm-po/', '/transporter-confirmation/', '/receiver-confirmation/',
     '/vendor-portal/', '/transporter-portal/', '/receiver-portal/', '/feedback',
+    '/trader-invoice-form',
   ].some((prefix) => location.pathname.startsWith(prefix));
   const hideChrome = isLoginPage || isConsolePage || isPurchasePublicPage;
 
@@ -88,6 +90,7 @@ const AppLayout = () => {
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/register" element={<PublicRegister />} />
           <Route path="/feedback" element={<FeedbackPortal />} />
+          <Route path="/trader-invoice-form" element={<PublicTraderInvoiceForm />} />
 
           {/* --- Purchase system public links (sent to vendors/transporters/receivers, no login) --- */}
           <Route path="/confirm-po/:id" element={<VendorConfirmation />} />
