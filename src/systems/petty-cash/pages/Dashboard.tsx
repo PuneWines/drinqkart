@@ -217,7 +217,7 @@ export default function Dashboard() {
   const allowedCounterNumbers = getAllowedCounters(); // e.g. [1, 2] for non-admin
   const userTallyCounters = isAdmin()
     ? allTallyCounters
-    : allTallyCounters.filter((_, idx) => allowedCounterNumbers.includes(idx + 1));
+    : allTallyCounters.filter((_, idx) => (allowedCounterNumbers as any).includes(String(idx + 1)) || (allowedCounterNumbers as any).includes(idx + 1));
   const tallySheets = ["All", ...userTallyCounters];
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
