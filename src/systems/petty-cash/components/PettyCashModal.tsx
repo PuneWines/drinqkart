@@ -56,6 +56,7 @@ export interface CategoryAmounts {
   miscRemarks: string;
 
   transactionStatus: string;
+  status?: string;
 
   date: string;
 }
@@ -103,6 +104,7 @@ export default function PettyCashModal({
     miscRemarks: "",
 
     transactionStatus: "Pending",
+    status: "pending",
     date: new Date().toISOString().split("T")[0],
   });
 
@@ -173,36 +175,6 @@ export default function PettyCashModal({
 
   const fetchUsernames = async () => {
     try {
-      let usernames: string[] = [];
-      let details: { userName: string; shopName: any; userAccess: any }[] = [];
-
-      const { data, error } = await supabase
-        .from('users')
-        .select('user_name, shop_name, user_access')
-        .order('user_name', { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        usernames = data.map((row: any) => row.user_name).filter(Boolean);
-        details = data.map((row: any) => ({
-          userName: row.user_name || "",
-          shopName: row.shop_name,
-          userAccess: row.user_access
-        })).filter(u => u.userName);
-      } else {
-        const { data: pcData, error: pcError } = await supabase
-          .from('petty_cash_user')
-          .select('name');
-
-        if (!pcError && pcData) {
-          usernames = pcData.map((row: any) => row.name).filter(Boolean);
-          details = pcData.map((row: any) => ({
-            userName: row.name || "",
-            shopName: "All",
-            userAccess: "All"
-          })).filter(u => u.userName);
-        }
-      }
-
       let loggedInName = "";
       try {
         const savedUserStr = localStorage.getItem('currentUser');
@@ -214,21 +186,13 @@ export default function PettyCashModal({
       if (!loggedInName) {
         loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
       }
-      if (loggedInName) {
-        if (!usernames.includes(loggedInName)) {
-          usernames.unshift(loggedInName);
-        }
-        if (!details.some(d => d.userName.toLowerCase() === loggedInName.toLowerCase())) {
-          details.unshift({
-            userName: loggedInName,
-            shopName: "All",
-            userAccess: "All"
-          });
-        }
-      }
 
-      setFetchedUsers(Array.from(new Set(usernames)));
-      setFetchedUserDetails(details);
+      setFetchedUsers([loggedInName].filter(Boolean));
+      setFetchedUserDetails([{
+        userName: loggedInName,
+        shopName: "All",
+        userAccess: "All"
+      }]);
     } catch (error) {
       console.error("Error fetching usernames:", error);
     }
@@ -367,6 +331,7 @@ export default function PettyCashModal({
         setFormData({
           ...initialData,
           username: initialData.username || defaultUser,
+          status: initialData.status || "pending",
         });
 
         if (initialData.id) {
@@ -425,6 +390,7 @@ export default function PettyCashModal({
           miscRemarks: "",
 
           transactionStatus: "Pending",
+          status: "pending",
           date: new Date().toISOString().split("T")[0],
         });
       }
@@ -540,6 +506,7 @@ export default function PettyCashModal({
           total_expense: totalExpense,
           transaction_status: formData.transactionStatus || 'Pending',
           total_amount: totalAmount,
+          status: formData.status || 'pending',
           expense_name: null,
           employee_name: null,
           from_shop: null,
@@ -579,6 +546,7 @@ export default function PettyCashModal({
           total_expense: totalExpense,
           transaction_status: formData.transactionStatus || 'Pending',
           total_amount: totalAmount,
+          status: formData.status || 'pending',
           expense_name: entry.expenseName || null,
           employee_name: (entry.expenseName !== 'Shop Name' && entry.expenseName !== 'Custom Expense Name' && entry.expenseName !== 'Incentive') ? (entry.employeeName || null) : null,
           from_shop: null,
@@ -1000,6 +968,20 @@ export default function PettyCashModal({
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto">
+              {initialData?.id && (
+                <div className="flex items-center gap-1.5 mr-2">
+                  <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Status:</label>
+                  <select
+                    name="status"
+                    value={formData.status || "pending"}
+                    onChange={handleChange}
+                    className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800"
+                  >
+                    <option value="pending">pending</option>
+                    <option value="completed">completed</option>
+                  </select>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={onClose}

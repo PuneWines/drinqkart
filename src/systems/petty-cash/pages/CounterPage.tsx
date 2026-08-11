@@ -260,72 +260,74 @@ export default function CounterPage({ onClose }: CounterPageProps) {
   return (
     <div className="space-y-5">
       {/* ── Summary Cards (Over table) ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 font-sans">
-        {/* Total Retail Scan Card */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-normal text-gray-500 font-sans">Total Retail Scan</p>
-            <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
-              {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
-            </h3>
+      {isModifyAllowed && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 font-sans">
+          {/* Total Retail Scan Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-normal text-gray-500 font-sans">Total Retail Scan</p>
+              <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
+              <FaCoins className="text-lg" />
+            </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
-            <FaCoins className="text-lg" />
-          </div>
-        </div>
 
-        {/* Total Wholesale Scan Card */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-normal text-gray-500 font-sans">Total Wholesale Scan</p>
-            <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
-              {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0) + (Number(r.raw.ws_credit_receipt) || 0), 0))}
-            </h3>
+          {/* Total Wholesale Scan Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-normal text-gray-500 font-sans">Total Wholesale Scan</p>
+              <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0) + (Number(r.raw.ws_credit_receipt) || 0), 0))}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0 border border-green-100">
+              <FaCoins className="text-lg" />
+            </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0 border border-green-100">
-            <FaCoins className="text-lg" />
-          </div>
-        </div>
 
-        {/* Total Expenses and Others Scan Card */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-normal text-gray-500 font-sans">Total Expenses & Others Scan</p>
-            <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
-              {fmt(filtered.reduce((s, r) => s + r.totalExpense + (Number(r.raw.home_delivery) || 0) + (Number(r.raw.void_sale) || 0) + (Number(r.raw.expense_gpay_card) || 0), 0))}
-            </h3>
+          {/* Total Expenses and Others Scan Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-normal text-gray-500 font-sans">Total Expenses & Others Scan</p>
+              <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                {fmt(filtered.reduce((s, r) => s + r.totalExpense + (Number(r.raw.home_delivery) || 0) + (Number(r.raw.void_sale) || 0) + (Number(r.raw.expense_gpay_card) || 0), 0))}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
+              <FaWallet className="text-lg" />
+            </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
-            <FaWallet className="text-lg" />
-          </div>
-        </div>
 
-        {/* Total Expenses Card */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-normal text-gray-500">Total Expenses</p>
-            <h3 className="text-lg font-medium font-normal text-rose-600 mt-1">
-              {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
-            </h3>
+          {/* Total Expenses Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-normal text-gray-500">Total Expenses</p>
+              <h3 className="text-lg font-medium font-normal text-rose-600 mt-1">
+                {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+              <FaWallet className="text-lg" />
+            </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-            <FaWallet className="text-lg" />
-          </div>
-        </div>
 
-        {/* Net Total Card */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-normal text-gray-500 font-sans">Net Total</p>
-            <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
-              {fmt(filtered.reduce((s, r) => s + (r.retailScanAmount - r.totalExpense), 0))}
-            </h3>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
-            <FaFileAlt className="text-lg" />
+          {/* Net Total Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-normal text-gray-500 font-sans">Net Total</p>
+              <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
+                {fmt(filtered.reduce((s, r) => s + (r.retailScanAmount - r.totalExpense), 0))}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
+              <FaFileAlt className="text-lg" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── Filter Bar (Below cards) ── */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-3">
@@ -339,7 +341,8 @@ export default function CounterPage({ onClose }: CounterPageProps) {
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white"
+                disabled={!isModifyAllowed}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white disabled:opacity-60"
               />
             </div>
 
@@ -350,7 +353,8 @@ export default function CounterPage({ onClose }: CounterPageProps) {
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white"
+                disabled={!isModifyAllowed}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white disabled:opacity-60"
               />
             </div>
 
@@ -360,7 +364,8 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <select
                 value={shopFilter}
                 onChange={(e) => setShopFilter(e.target.value)}
-                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white max-w-[160px]"
+                disabled={!isModifyAllowed}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white max-w-[160px] disabled:opacity-60"
               >
                 <option value="">All Shops</option>
                 {shops.map((s) => (
@@ -377,7 +382,8 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <select
                 value={counterFilter}
                 onChange={(e) => setCounterFilter(e.target.value)}
-                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white min-w-[120px]"
+                disabled={!isModifyAllowed}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all bg-white min-w-[120px] disabled:opacity-60"
               >
                 <option value="">All Counters</option>
                 {counterOptions.map((c) => (
@@ -396,7 +402,8 @@ export default function CounterPage({ onClose }: CounterPageProps) {
                 placeholder="Search tally records…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all"
+                disabled={!isModifyAllowed}
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2a5298] transition-all disabled:opacity-60"
               />
             </div>
 
@@ -413,14 +420,16 @@ export default function CounterPage({ onClose }: CounterPageProps) {
 
           {/* Refresh & Fill Tally Buttons */}
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={fetchRows}
-              title="Refresh"
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
-            >
-              <FaSync className={loading ? "animate-spin text-[11px]" : "text-[11px]"} />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
+            {isModifyAllowed && (
+              <button
+                onClick={fetchRows}
+                title="Refresh"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
+              >
+                <FaSync className={loading ? "animate-spin text-[11px]" : "text-[11px]"} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+            )}
 
             {/* Fill Tally Entry Button */}
             {allowedCounters.length > 0 && (
@@ -437,13 +446,14 @@ export default function CounterPage({ onClose }: CounterPageProps) {
       </div>
 
       {/* ── Table Card ── */}
-      {loading ? (
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm py-20 flex flex-col items-center justify-center gap-3 text-gray-400">
-          <div className="w-8 h-8 border-4 border-[#2a5298] border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-xs font-semibold uppercase tracking-wider">Loading cash tallies...</span>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {isModifyAllowed && (
+        loading ? (
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm py-20 flex flex-col items-center justify-center gap-3 text-gray-400">
+            <div className="w-8 h-8 border-4 border-[#2a5298] border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-xs font-semibold uppercase tracking-wider">Loading cash tallies...</span>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2 text-sm text-gray-500">
             <FaFileAlt className="text-[#2a5298]" />
             <span>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
@@ -500,7 +510,8 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             </table>
           </div>
         </div>
-      )}
+      )
+    )}
 
       {/* ── Cash Tally Form Modal ── */}
       {isModalOpen && (
