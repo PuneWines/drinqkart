@@ -2,7 +2,7 @@ import React from 'react';
 import { X, FileText } from 'lucide-react';
 import TraderInvoiceForm from './TraderInvoiceForm';
 
-export default function TraderInvoiceFormModal({ isOpen, onClose, onSuccess }) {
+export default function TraderInvoiceFormModal({ isOpen, onClose, onSuccess, initialData }) {
   if (!isOpen) return null;
 
   return (
@@ -25,7 +25,7 @@ export default function TraderInvoiceFormModal({ isOpen, onClose, onSuccess }) {
 
         {/* Form Body */}
         <div className="p-2 max-h-[80vh] overflow-y-auto">
-          <TraderInvoiceForm onSuccess={onSuccess} onCancel={onClose} isPublic={false} />
+          <TraderInvoiceForm onSuccess={onSuccess} onCancel={onClose} isPublic={false} initialData={initialData} />
         </div>
 
       </div>

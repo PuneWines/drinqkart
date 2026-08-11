@@ -21,6 +21,7 @@ interface TallyRow {
   name: string;
   retailScanAmount: number;
   totalExpense: number;
+  status: string;
   raw: any;
 }
 
@@ -92,6 +93,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
         name: rec.name || "—",
         retailScanAmount: Number(rec.retail_scan_amount) || 0,
         totalExpense: Number(rec.expense) || 0,
+        status: rec.status || "pending",
         raw: rec,
       }));
 
@@ -145,6 +147,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
       date: raw.date,
       name: raw.name,
       shopName: raw.shop_name,
+      status: raw.status || "pending",
       retailScanAmount: raw.retail_scan_amount?.toString() || "",
       retail500: raw.retail_500?.toString() || "",
       retail200: raw.retail_200?.toString() || "",
@@ -173,15 +176,18 @@ export default function CounterPage({ onClose }: CounterPageProps) {
       wsCard: raw.ws_card?.toString() || "",
       expense: raw.expense?.toString() || "",
       homeDelivery: raw.home_delivery?.toString() || "",
-      retail1500: raw.retail_1500?.toString() || "",
-      retail2200: raw.retail_2200?.toString() || "",
-      retail3100: raw.retail_3100?.toString() || "",
-      retail450: raw.retail_450?.toString() || "",
-      retail520: raw.retail_520?.toString() || "",
-      retail610: raw.retail_610?.toString() || "",
-      retail71: raw.retail_71?.toString() || "",
+      hd500: raw.retail_1500?.toString() || "",
+      hd200: raw.retail_2200?.toString() || "",
+      hd100: raw.retail_3100?.toString() || "",
+      hd50: raw.retail_450?.toString() || "",
+      hd20: raw.retail_520?.toString() || "",
+      hd10: raw.retail_610?.toString() || "",
+      hd1: raw.retail_71?.toString() || "",
+      hdGpay:    (raw.hd_gpay    ?? raw.expense_gpay_card ?? "")?.toString() || "",
+      hdCard:    (raw.hd_card    ?? "")?.toString() || "",
+      hdPhonePe: (raw.hd_phonepe ?? "")?.toString() || "",
+      hdPaytm:   (raw.hd_paytm   ?? "")?.toString() || "",
       voidSale: raw.void_sale?.toString() || "",
-      expenseGpayCard: raw.expense_gpay_card?.toString() || "",
     };
     setEditData(formattedData);
     setIsModalOpen(true);
@@ -463,7 +469,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <table className="w-full text-sm">
               <thead className="bg-[#2a5298] text-white text-left">
                 <tr>
-                  {['#', 'ID', 'Date', 'Counter', 'Shop', 'User', 'Retail Scan', 'Expense', 'Actions'].map(h => (
+                  {['#', 'ID', 'Date', 'Counter', 'Shop', 'User', 'Retail Scan', 'Expense', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -471,7 +477,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="text-center py-16 text-gray-400">
+                    <td colSpan={10} className="text-center py-16 text-gray-400">
                       <div className="flex flex-col items-center gap-2">
                         <FaFileAlt className="text-4xl text-gray-300" />
                         <p className="font-medium">No records found</p>
@@ -496,6 +502,15 @@ export default function CounterPage({ onClose }: CounterPageProps) {
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{row.name}</td>
                     <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-semibold">{fmt(row.retailScanAmount)}</td>
                     <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        (row.status || 'pending').toLowerCase() === 'completed'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}>
+                        {row.status || 'pending'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {isModifyAllowed && (
                         <div className="flex items-center gap-2">

@@ -169,7 +169,7 @@ export default function PettyCashModal({
 
     const grandTotal = expenseSum + (Math.round(parseFloat(formData.openingQty)) || 0);
 
-    setTotalExpense(expenseSum);
+    setTotalExpense(grandTotal);
     setTotalAmount(grandTotal);
   }, [formData]);
 
