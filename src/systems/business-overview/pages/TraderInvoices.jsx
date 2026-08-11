@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { 
-  FileText, Plus, RefreshCw, Search, FileImage, ShieldAlert, CheckSquare, Calendar, Store, User
+  FileText, Plus, RefreshCw, Search, FileImage, ShieldAlert, CheckSquare, Calendar, Store, User, Edit, Trash2
 } from 'lucide-react';
 import TraderInvoiceFormModal from '../components/TraderInvoiceFormModal';
 
@@ -12,6 +12,9 @@ export default function TraderInvoices() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editData, setEditData] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -47,7 +50,36 @@ export default function TraderInvoices() {
 
   const handleSaveSuccess = () => {
     setIsModalOpen(false);
+    setEditData(null);
     fetchInvoices();
+  };
+
+  const handleEditClick = (item) => {
+    setEditData(item);
+    setIsModalOpen(true);
+  };
+
+  const handleCreateClick = () => {
+    setEditData(null);
+    setIsModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('bis_overview_trader_invoices')
+        .delete()
+        .eq('id', deleteId);
+      if (error) throw error;
+      setInvoices(prev => prev.filter(item => item.id !== deleteId));
+      setDeleteId(null);
+    } catch (err) {
+      console.error('Error deleting:', err);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Client-side filtering
@@ -104,7 +136,7 @@ export default function TraderInvoices() {
           </button>
           
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleCreateClick}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#2a5298] text-white rounded-lg text-xs font-bold hover:bg-[#1e3d70] transition-all shadow-xs cursor-pointer"
           >
             <Plus size={14} />
@@ -190,18 +222,27 @@ export default function TraderInvoices() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs table-fixed">
             <thead className="bg-[#2a5298] text-white">
               <tr>
-                {['#', 'Trader/Area', 'Shop', 'Invoice No/Date', 'TP No/Date', 'Salesman', 'Amount', 'Delivery', 'Handed To', 'Photo', 'Signature'].map(h => (
-                  <th key={h} className="text-left px-4 py-3 font-bold text-xs uppercase tracking-wider whitespace-nowrap">{h}</th>
-                ))}
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[35px]">#</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[120px]">Trader</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[80px]">Shop</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[110px]">Invoice No/Date</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[110px]">TP No/Date</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[90px]">Salesman</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[90px]">Amount</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[80px]">Delivery</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[90px]">Handed To</th>
+                <th className="text-center px-2 py-2 font-bold text-xs uppercase tracking-wider w-[45px]">Photo</th>
+                <th className="text-center px-2 py-2 font-bold text-xs uppercase tracking-wider w-[45px]">Sign</th>
+                <th className="text-center px-2 py-2 font-bold text-xs uppercase tracking-wider w-[65px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && (
                 <tr>
-                  <td colSpan={11} className="text-center py-16 text-gray-400">
+                  <td colSpan={12} className="text-center py-16 text-gray-400">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-8 h-8 border-4 border-[#2a5298] border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs font-semibold uppercase tracking-wider">Loading invoices...</span>
@@ -212,7 +253,7 @@ export default function TraderInvoices() {
 
               {!loading && filteredInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="text-center py-16 text-gray-400">
+                  <td colSpan={12} className="text-center py-16 text-gray-400">
                     <div className="flex flex-col items-center gap-2">
                       <ShieldAlert size={36} className="text-gray-300" />
                       <p className="font-semibold text-gray-600">No records found</p>
@@ -224,60 +265,84 @@ export default function TraderInvoices() {
 
               {!loading && filteredInvoices.map((item, idx) => (
                 <tr key={item.id} className="hover:bg-blue-50/40 transition-colors">
-                  <td className="px-4 py-3 text-gray-400 text-xs font-medium">{idx + 1}</td>
-                  <td className="px-4 py-3 font-semibold text-gray-800 whitespace-nowrap">{item.trader_name_or_area || '—'}</td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 border border-slate-200 font-bold uppercase">
+                  <td className="px-2 py-2 text-gray-400 text-xs font-medium">{idx + 1}</td>
+                  <td className="px-2 py-2 font-semibold text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]" title={item.trader_name_or_area}>
+                    {item.trader_name_or_area || '—'}
+                  </td>
+                  <td className="px-2 py-2 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis max-w-[80px]">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] bg-slate-100 text-slate-700 border border-slate-200 font-bold uppercase" title={item.shop_name}>
                       {item.shop_name || '—'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                    <div className="font-mono font-semibold text-[#2a5298]">{item.invoice_number || '—'}</div>
-                    <div className="text-[10px] text-gray-400 font-medium">
+                  <td className="px-2 py-2 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis max-w-[110px]">
+                    <div className="font-mono font-semibold text-[#2a5298] truncate" title={item.invoice_number}>{item.invoice_number || '—'}</div>
+                    <div className="text-[9px] text-gray-400 font-medium">
                       {item.invoice_date ? new Date(item.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                    <div className="font-mono text-slate-600">{item.tp_number || '—'}</div>
-                    <div className="text-[10px] text-gray-400 font-medium">
+                  <td className="px-2 py-2 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis max-w-[110px]">
+                    <div className="font-mono text-slate-600 truncate" title={item.tp_number}>{item.tp_number || '—'}</div>
+                    <div className="text-[9px] text-gray-400 font-medium">
                       {item.tp_date ? new Date(item.tp_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{item.salesman_name || '—'}</td>
-                  <td className="px-4 py-3 text-emerald-700 font-bold whitespace-nowrap">{fmt(item.bill_amount)}</td>
-                  <td className="px-4 py-3 text-gray-600 font-semibold whitespace-nowrap text-xs lowercase">
+                  <td className="px-2 py-2 text-gray-600 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[90px]" title={item.salesman_name}>
+                    {item.salesman_name || '—'}
+                  </td>
+                  <td className="px-2 py-2 text-emerald-700 font-bold whitespace-nowrap overflow-hidden text-ellipsis max-w-[90px]">{fmt(item.bill_amount)}</td>
+                  <td className="px-2 py-2 text-gray-600 font-semibold whitespace-nowrap text-[10px] lowercase overflow-hidden text-ellipsis max-w-[80px]" title={item.delivered_at}>
                     {item.delivered_at || '—'}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{item.handed_over_to || '—'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-2 py-2 text-gray-600 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[90px]" title={item.handed_over_to}>
+                    {item.handed_over_to || '—'}
+                  </td>
+                  <td className="px-2 py-2 text-center whitespace-nowrap">
                     {item.photo ? (
                       <a
                         href={item.photo}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold transition-all"
+                        title="View Invoice Photo"
+                        className="inline-flex items-center justify-center p-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md transition-all border border-blue-200/40"
                       >
-                        <FileImage size={12} />
-                        <span>View Photo</span>
+                        <FileImage size={13} />
                       </a>
                     ) : (
-                      <span className="text-gray-400 text-xs">—</span>
+                      <span className="text-gray-300 text-xs">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-2 py-2 text-center whitespace-nowrap">
                     {item.digital_signature ? (
                       <a
                         href={item.digital_signature}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-semibold transition-all border border-amber-200/50"
+                        title="View Digital Signature"
+                        className="inline-flex items-center justify-center p-1 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-md transition-all border border-amber-200/40"
                       >
-                        <CheckSquare size={12} />
-                        <span>View Sign</span>
+                        <CheckSquare size={13} />
                       </a>
                     ) : (
-                      <span className="text-gray-400 text-xs">—</span>
+                      <span className="text-gray-300 text-xs">—</span>
                     )}
+                  </td>
+                  <td className="px-2 py-2 text-center whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleEditClick(item)}
+                        title="Edit Invoice"
+                        className="p-1 rounded-md text-[#2a5298] hover:bg-blue-50 hover:text-[#1e3d70] transition-colors cursor-pointer"
+                      >
+                        <Edit size={13} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteId(item.id)}
+                        title="Delete Invoice"
+                        className="p-1 rounded-md text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -290,9 +355,49 @@ export default function TraderInvoices() {
       {/* Trader Invoice Modal wrapper */}
       <TraderInvoiceFormModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditData(null);
+        }}
         onSuccess={handleSaveSuccess}
+        initialData={editData}
       />
+
+      {/* ── Delete Confirmation Dialog ── */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4 border border-gray-100 animate-in zoom-in-95 duration-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="text-red-500" size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800">Delete Invoice</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Are you sure you want to delete this invoice record? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDeleteId(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 text-xs font-semibold cursor-pointer transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-xs font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-60 transition-all"
+              >
+                {deleting && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {deleting ? "Deleting..." : "Yes, Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

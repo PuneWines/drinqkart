@@ -9,7 +9,7 @@
 // ============================================================
 import { useState, useEffect } from "react";
 import Toast from "../components/Toast";
-import { FaTimes, FaUser, FaShoppingCart, FaTruck, FaPlus, FaTrash } from "react-icons/fa";
+import { FaTimes, FaUser, FaShoppingCart, FaTruck, FaPlus, FaTrash, FaEdit } from "react-icons/fa";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 
@@ -43,14 +43,17 @@ const WHOLESALE_OPTIONS = [
 ];
 
 const EXPENSE_OPTIONS = [
-  { key: "retail1500", label: "₹500 (Cash)", isCash: true, denom: 500 },
-  { key: "retail2200", label: "₹200 (Cash)", isCash: true, denom: 200 },
-  { key: "retail3100", label: "₹100 (Cash)", isCash: true, denom: 100 },
-  { key: "retail450", label: "₹50 (Cash)", isCash: true, denom: 50 },
-  { key: "retail520", label: "₹20 (Cash)", isCash: true, denom: 20 },
-  { key: "retail610", label: "₹10 (Cash)", isCash: true, denom: 10 },
-  { key: "retail71", label: "₹1 (Cash)", isCash: true, denom: 1 },
-  { key: "expenseGpayCard", label: "GPay/Card (Digital)", isCash: false },
+  { key: "hd500", label: "₹500 (Cash)", isCash: true, denom: 500 },
+  { key: "hd200", label: "₹200 (Cash)", isCash: true, denom: 200 },
+  { key: "hd100", label: "₹100 (Cash)", isCash: true, denom: 100 },
+  { key: "hd50",  label: "₹50 (Cash)",  isCash: true, denom: 50  },
+  { key: "hd20",  label: "₹20 (Cash)",  isCash: true, denom: 20  },
+  { key: "hd10",  label: "₹10 (Cash)",  isCash: true, denom: 10  },
+  { key: "hd1",   label: "₹1 (Cash)",   isCash: true, denom: 1   },
+  { key: "hdGpay",    label: "GPay/UPI (Digital)",     isCash: false },
+  { key: "hdCard",    label: "Card Payments (Digital)", isCash: false },
+  { key: "hdPhonePe", label: "PhonePe (Digital)",       isCash: false },
+  { key: "hdPaytm",   label: "Paytm (Digital)",         isCash: false },
 ];
 
 interface CashTallyProps {
@@ -71,6 +74,7 @@ export default function CashTally({
 
   const [allowedCounters, setAllowedCounters] = useState<string[]>([]);
   const [activeCounter, setActiveCounter] = useState<string>("COUNTER-1");
+  const [userShops, setUserShops] = useState<string[]>([]);
 
   // Dynamic transactions sections
   const [addedTransactions, setAddedTransactions] = useState<string[]>([]);
@@ -85,8 +89,18 @@ export default function CashTally({
   const [wsValueInput, setWsValueInput] = useState("");
 
   // Expenses dynamic selector states
-  const [selectedExpenseKey, setSelectedExpenseKey] = useState("retail1500");
+  const [selectedExpenseKey, setSelectedExpenseKey] = useState("hd500");
   const [expenseValueInput, setExpenseValueInput] = useState("");
+
+  // Shared inline-edit state for all three denomination lists
+  const [inlineEdit, setInlineEdit] = useState<{ key: string; value: string } | null>(null);
+
+  const handleInlineEditDone = () => {
+    if (!inlineEdit || !inlineEdit.value) { setInlineEdit(null); return; }
+    setFormData(prev => ({ ...prev, [inlineEdit.key]: inlineEdit.value }));
+    setInlineEdit(null);
+  };
+  const handleInlineEditCancel = () => setInlineEdit(null);
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -120,15 +134,19 @@ export default function CashTally({
     wsPaytm: "",
     wsCard: "",
     homeDelivery: "",
-    retail1500: "",
-    retail2200: "",
-    retail3100: "",
-    retail450: "",
-    retail520: "",
-    retail610: "",
-    retail71: "",
-    expenseGpayCard: "",
+    hd500: "",
+    hd200: "",
+    hd100: "",
+    hd50: "",
+    hd20: "",
+    hd10: "",
+    hd1: "",
+    hdGpay: "",
+    hdCard: "",
+    hdPhonePe: "",
+    hdPaytm: "",
     voidSale: "",
+    status: "pending",
   });
 
   const [totalAmount, setTotalAmount] = useState(0);
@@ -140,19 +158,56 @@ export default function CashTally({
   const fetchEmployees = async () => {
     try {
       let loggedInName = "";
+      let loggedInShopName = "";
       try {
         const savedUserStr = localStorage.getItem('currentUser');
         if (savedUserStr) {
           const parsed = JSON.parse(savedUserStr);
           loggedInName = parsed.user_name || "";
+          loggedInShopName = parsed.shop_name || parsed.shopName || parsed.shops || "";
         }
       } catch (e) {}
       if (!loggedInName) {
         loggedInName = user?.name || user?.username || "";
       }
+      if (!loggedInShopName) {
+        loggedInShopName = (user as any)?.shop_name || (user as any)?.shops || "";
+      }
       setEmployees([loggedInName].filter(Boolean));
+
+      let foundShops: string[] = [];
+      if (loggedInShopName) {
+        foundShops = Array.from(new Set(
+          String(loggedInShopName).split(',').map((s: string) => s.trim()).filter(Boolean)
+        ));
+      }
+
+      // Fallback to fetching shop names from users table if not in localStorage
+      if (foundShops.length === 0 && loggedInName) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('shop_name')
+          .or(`user_name.eq."${loggedInName}",username.eq."${loggedInName}"`);
+        
+        if (!error && data && data.length > 0) {
+          const rawShopsStr = data.map((d: any) => d.shop_name).filter(Boolean).join(',');
+          foundShops = Array.from(new Set(
+            rawShopsStr.split(',').map((s: string) => s.trim()).filter(Boolean)
+          ));
+        }
+      }
+
+      setUserShops(foundShops);
+
+      // Auto-populate initial shopName if not set
+      if (foundShops.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          shopName: prev.shopName || foundShops[0]
+        }));
+      }
     } catch (error) {
-      console.error("[CashTally] Error fetching employees:", error);
+      console.error("[CashTally] Error fetching employees/shops:", error);
     }
   };
 
@@ -232,15 +287,19 @@ export default function CashTally({
     wsPaytm: "",
     wsCard: "",
     homeDelivery: "",
-    retail1500: "",
-    retail2200: "",
-    retail3100: "",
-    retail450: "",
-    retail520: "",
-    retail610: "",
-    retail71: "",
-    expenseGpayCard: "",
+    hd500: "",
+    hd200: "",
+    hd100: "",
+    hd50: "",
+    hd20: "",
+    hd10: "",
+    hd1: "",
+    hdGpay: "",
+    hdCard: "",
+    hdPhonePe: "",
+    hdPaytm: "",
     voidSale: "",
+    status: "pending",
   };
 
   useEffect(() => {
@@ -298,6 +357,7 @@ export default function CashTally({
         setFormData({
           ...initialData,
           name: initialData.name || defaultUser,
+          status: initialData.status || "pending",
         });
 
         // Determine added transaction sections based on non-zero fields
@@ -308,8 +368,8 @@ export default function CashTally({
         const hasWS = initialData.ws_cash_billing_amount || initialData.ws_credit_billing_amount || initialData.ws_credit_receipt || initialData.ws_500 || initialData.ws_200 || initialData.ws_100 || initialData.ws_50 || initialData.ws_20 || initialData.ws_10 || initialData.ws_1 || initialData.ws_gpay_card || initialData.ws_phonepe || initialData.ws_paytm || initialData.ws_card;
         if (hasWS) active.push("Wholesale Transactions");
 
-        const hasOther = initialData.home_delivery || initialData.void_sale;
-        if (hasOther) active.push("Expenses & Other Transactions");
+        const hasOther = initialData.home_delivery || initialData.homeDelivery || initialData.void_sale || initialData.voidSale || initialData.hd500 || initialData.hd200 || initialData.hd100 || initialData.hd50 || initialData.hd20 || initialData.hd10 || initialData.hd1 || initialData.hdGpay || initialData.hdCard || initialData.hdPhonePe || initialData.hdPaytm || initialData.retail_1500 || initialData.expense_gpay_card;
+        if (hasOther) active.push("Home Delivery Transactions");
 
         setAddedTransactions(active);
       } else {
@@ -350,6 +410,10 @@ export default function CashTally({
     }));
   };
 
+  const handleEditRetailDenom = (key: string, value: any) => {
+    setInlineEdit({ key, value: String(value || "") });
+  };
+
   const handleAddWSDenom = () => {
     if (!wsValueInput) return;
     setFormData(prev => ({
@@ -366,6 +430,10 @@ export default function CashTally({
     }));
   };
 
+  const handleEditWSDenom = (key: string, value: any) => {
+    setInlineEdit({ key, value: String(value || "") });
+  };
+
   const handleAddExpenseDenom = () => {
     if (!expenseValueInput) return;
     setFormData(prev => ({
@@ -380,6 +448,10 @@ export default function CashTally({
       ...prev,
       [key]: ""
     }));
+  };
+
+  const handleEditExpenseDenom = (key: string, value: any) => {
+    setInlineEdit({ key, value: String(value || "") });
   };
 
   const [retailActualScanAmount, setRetailActualScanAmount] = useState(0);
@@ -452,25 +524,29 @@ export default function CashTally({
     // Wholesale Diff = total billing - actual sale
     setWholesaleDiff(totalWhoBilling - wholesaleActualSaleVal);
 
-    // 3. Expenses & Others Calculations
-    const expenseCashSum = [
-      (Math.round(parseFloat(formData.retail1500)) || 0) * 500,
-      (Math.round(parseFloat(formData.retail2200)) || 0) * 200,
-      (Math.round(parseFloat(formData.retail3100)) || 0) * 100,
-      (Math.round(parseFloat(formData.retail450)) || 0) * 50,
-      (Math.round(parseFloat(formData.retail520)) || 0) * 20,
-      (Math.round(parseFloat(formData.retail610)) || 0) * 10,
-      (Math.round(parseFloat(formData.retail71)) || 0) * 1,
+    // 3. Home Delivery Calculations
+    const hdCashSum = [
+      (Math.round(parseFloat(formData.hd500)) || 0) * 500,
+      (Math.round(parseFloat(formData.hd200)) || 0) * 200,
+      (Math.round(parseFloat(formData.hd100)) || 0) * 100,
+      (Math.round(parseFloat(formData.hd50))  || 0) * 50,
+      (Math.round(parseFloat(formData.hd20))  || 0) * 20,
+      (Math.round(parseFloat(formData.hd10))  || 0) * 10,
+      (Math.round(parseFloat(formData.hd1))   || 0) * 1,
     ].reduce((acc, val) => acc + val, 0);
 
-    const expenseGpayCardAmt = Math.round(parseFloat(formData.expenseGpayCard)) || 0;
+    const hdGpay    = Math.round(parseFloat(formData.hdGpay))    || 0;
+    const hdCard    = Math.round(parseFloat(formData.hdCard))    || 0;
+    const hdPhonePe = Math.round(parseFloat(formData.hdPhonePe)) || 0;
+    const hdPaytm   = Math.round(parseFloat(formData.hdPaytm))   || 0;
 
-    const expenseTotal = expenseCashSum + expenseGpayCardAmt;
+    const hdDigitalSum = hdGpay + hdCard + hdPhonePe + hdPaytm;
+    const expenseTotal = hdCashSum + hdDigitalSum;
     setExpensesAndOthersTotalAmount(expenseTotal);
 
-    // Home Delivery Diff calculation if still needed
+    // Home Delivery Diff = home_delivery amount - total collected
     const hdAmount = Math.round(parseFloat(formData.homeDelivery)) || 0;
-    const homeDeliveryDiffValue = hdAmount - expenseCashSum;
+    const homeDeliveryDiffValue = hdAmount - expenseTotal;
     setHomeDeliveryDiff(homeDeliveryDiffValue);
 
     // 4. Bottom Total Amount: sum of the difference fields under the 3 sections (retail diff, wholesale diff, and home delivery diff)
@@ -554,15 +630,24 @@ export default function CashTally({
         ws_card: parseFloat(formData.wsCard) || 0,
         expense: parseFloat(formData.expense) || 0,
         home_delivery: parseFloat(formData.homeDelivery) || 0,
-        retail_1500: parseInt(formData.retail1500) || 0,
-        retail_2200: parseInt(formData.retail2200) || 0,
-        retail_3100: parseInt(formData.retail3100) || 0,
-        retail_450: parseInt(formData.retail450) || 0,
-        retail_520: parseInt(formData.retail520) || 0,
-        retail_610: parseInt(formData.retail610) || 0,
-        retail_71: parseInt(formData.retail71) || 0,
+        retail_1500: parseInt(formData.hd500) || 0,
+        retail_2200: parseInt(formData.hd200) || 0,
+        retail_3100: parseInt(formData.hd100) || 0,
+        retail_450:  parseInt(formData.hd50)  || 0,
+        retail_520:  parseInt(formData.hd20)  || 0,
+        retail_610:  parseInt(formData.hd10)  || 0,
+        retail_71:   parseInt(formData.hd1)   || 0,
+        expense_gpay_card: parseFloat(formData.hdGpay) || 0,
+        hd_gpay:    parseFloat(formData.hdGpay)    || 0,
+        hd_card:    parseFloat(formData.hdCard)    || 0,
+        hd_phonepe: parseFloat(formData.hdPhonePe) || 0,
+        hd_paytm:   parseFloat(formData.hdPaytm)   || 0,
         void_sale: parseFloat(formData.voidSale) || 0,
-        expense_gpay_card: parseFloat(formData.expenseGpayCard) || 0,
+        status: formData.status || "pending",
+        retail_diff: retailDiff,
+        wholesale_diff: wholesaleDiff,
+        home_delivery_diff: homeDeliveryDiff,
+        total_amount: totalAmount,
       };
 
       let response;
@@ -704,6 +789,26 @@ export default function CashTally({
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                    Shop Name <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="shopName"
+                    value={formData.shopName}
+                    onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800 cursor-pointer"
+                    required
+                  >
+                    <option value="">Select shop</option>
+                    {(userShops.length > 0 ? userShops : fetchedShopNames).map((s, index) => (
+                      <option key={index} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -720,7 +825,7 @@ export default function CashTally({
                 >
                   <option value="Retail Transactions">Retail Transactions</option>
                   <option value="Wholesale Transactions">Wholesale Transactions</option>
-                  <option value="Expenses & Other Transactions">Expenses & Other Transactions</option>
+                  <option value="Home Delivery Transactions">Home Delivery Transactions</option>
                 </select>
               </div>
               <button
@@ -828,16 +933,32 @@ export default function CashTally({
                         if (!valStr || valNum === 0) return null;
 
                         const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        const isEditing = inlineEdit?.key === opt.key;
                         return (
-                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
-                            <span className="font-semibold">{opt.label}: <span className="text-[#2a5298]">{valNum}</span>{totalStr}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveRetailDenom(opt.key)}
-                              className="text-red-500 hover:text-red-700 transition-colors p-1"
-                            >
-                              <FaTrash size={10} />
-                            </button>
+                          <div key={opt.key} className="flex flex-col bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs gap-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold">{opt.label}: <span className="text-[#2a5298]">{valNum}</span>{totalStr}</span>
+                              {!isEditing && (
+                                <div className="flex items-center gap-1.5">
+                                  <button type="button" onClick={() => handleEditRetailDenom(opt.key, valStr)} title="Edit" className="text-[#2a5298] hover:text-[#1e3d70] transition-colors p-1 cursor-pointer"><FaEdit size={11} /></button>
+                                  <button type="button" onClick={() => handleRemoveRetailDenom(opt.key)} title="Remove" className="text-red-500 hover:text-red-700 transition-colors p-1 cursor-pointer"><FaTrash size={10} /></button>
+                                </div>
+                              )}
+                            </div>
+                            {isEditing && (
+                              <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                                <input
+                                  type="number"
+                                  autoFocus
+                                  value={inlineEdit.value}
+                                  onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                                  className="flex-1 px-2 py-1 text-xs border border-[#2a5298] rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-[#2a5298]"
+                                  placeholder="Enter new value"
+                                />
+                                <button type="button" onClick={handleInlineEditDone} className="px-2.5 py-1 text-[10px] font-bold bg-[#2a5298] text-white rounded-md hover:bg-[#1e3d70] transition-colors cursor-pointer">Done</button>
+                                <button type="button" onClick={handleInlineEditCancel} className="px-2.5 py-1 text-[10px] font-bold bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition-colors cursor-pointer">Cancel</button>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -971,16 +1092,32 @@ export default function CashTally({
                         if (!valStr || valNum === 0) return null;
 
                         const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        const isEditing = inlineEdit?.key === opt.key;
                         return (
-                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
-                            <span className="font-semibold">{opt.label}: <span className="text-green-600">{valNum}</span>{totalStr}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveWSDenom(opt.key)}
-                              className="text-red-500 hover:text-red-700 transition-colors p-1"
-                            >
-                              <FaTrash size={10} />
-                            </button>
+                          <div key={opt.key} className="flex flex-col bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs gap-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold">{opt.label}: <span className="text-green-600">{valNum}</span>{totalStr}</span>
+                              {!isEditing && (
+                                <div className="flex items-center gap-1.5">
+                                  <button type="button" onClick={() => handleEditWSDenom(opt.key, valStr)} title="Edit" className="text-green-600 hover:text-green-800 transition-colors p-1 cursor-pointer"><FaEdit size={11} /></button>
+                                  <button type="button" onClick={() => handleRemoveWSDenom(opt.key)} title="Remove" className="text-red-500 hover:text-red-700 transition-colors p-1 cursor-pointer"><FaTrash size={10} /></button>
+                                </div>
+                              )}
+                            </div>
+                            {isEditing && (
+                              <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                                <input
+                                  type="number"
+                                  autoFocus
+                                  value={inlineEdit.value}
+                                  onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                                  className="flex-1 px-2 py-1 text-xs border border-green-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                                  placeholder="Enter new value"
+                                />
+                                <button type="button" onClick={handleInlineEditDone} className="px-2.5 py-1 text-[10px] font-bold bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors cursor-pointer">Done</button>
+                                <button type="button" onClick={handleInlineEditCancel} className="px-2.5 py-1 text-[10px] font-bold bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition-colors cursor-pointer">Cancel</button>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1027,15 +1164,15 @@ export default function CashTally({
             )}
 
             {/* Expenses & Other Transactions Section */}
-            {addedTransactions.includes("Expenses & Other Transactions") && (
+            {addedTransactions.includes("Home Delivery Transactions") && (
               <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-4">
                 <div className="flex items-center justify-between pb-2 border-b border-gray-100">
                   <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Expenses & Other Transactions
+                    Home Delivery Transactions
                   </h4>
                   <button
                     type="button"
-                    onClick={() => handleRemoveTransaction("Expenses & Other Transactions")}
+                    onClick={() => handleRemoveTransaction("Home Delivery Transactions")}
                     className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors cursor-pointer"
                   >
                     Remove Section
@@ -1099,16 +1236,32 @@ export default function CashTally({
                         if (!valStr || valNum === 0) return null;
 
                         const totalStr = opt.isCash && opt.denom ? ` (Total: ₹${valNum * opt.denom})` : "";
+                        const isEditing = inlineEdit?.key === opt.key;
                         return (
-                          <div key={opt.key} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs">
-                            <span className="font-semibold">{opt.label}: <span className="text-purple-600">{valNum}</span>{totalStr}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveExpenseDenom(opt.key)}
-                              className="text-red-500 hover:text-red-700 transition-colors p-1"
-                            >
-                              <FaTrash size={10} />
-                            </button>
+                          <div key={opt.key} className="flex flex-col bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 shadow-2xs gap-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold">{opt.label}: <span className="text-purple-600">{valNum}</span>{totalStr}</span>
+                              {!isEditing && (
+                                <div className="flex items-center gap-1.5">
+                                  <button type="button" onClick={() => handleEditExpenseDenom(opt.key, valStr)} title="Edit" className="text-purple-600 hover:text-purple-800 transition-colors p-1 cursor-pointer"><FaEdit size={11} /></button>
+                                  <button type="button" onClick={() => handleRemoveExpenseDenom(opt.key)} title="Remove" className="text-red-500 hover:text-red-700 transition-colors p-1 cursor-pointer"><FaTrash size={10} /></button>
+                                </div>
+                              )}
+                            </div>
+                            {isEditing && (
+                              <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                                <input
+                                  type="number"
+                                  autoFocus
+                                  value={inlineEdit.value}
+                                  onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                                  className="flex-1 px-2 py-1 text-xs border border-purple-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                  placeholder="Enter new value"
+                                />
+                                <button type="button" onClick={handleInlineEditDone} className="px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors cursor-pointer">Done</button>
+                                <button type="button" onClick={handleInlineEditCancel} className="px-2.5 py-1 text-[10px] font-bold bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition-colors cursor-pointer">Cancel</button>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1167,6 +1320,20 @@ export default function CashTally({
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto">
+              {Boolean(initialData) && (
+                <div className="flex items-center gap-1.5 mr-2">
+                  <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Status:</label>
+                  <select
+                    name="status"
+                    value={formData.status || "pending"}
+                    onChange={handleChange}
+                    className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800 cursor-pointer"
+                  >
+                    <option value="pending">pending</option>
+                    <option value="completed">completed</option>
+                  </select>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={onClose}

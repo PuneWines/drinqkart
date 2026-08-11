@@ -17,8 +17,9 @@ function dataURLtoFile(dataurl, filename) {
   return new File([u8arr], filename, { type: mime });
 }
 
-export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = false }) {
+export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = false, initialData }) {
   const [formData, setFormData] = useState({
+    id: '',
     traderNameOrArea: '',
     shopName: '',
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -63,6 +64,32 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
     };
     fetchMetadata();
   }, []);
+
+  // Set form data from initialData if editing
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        id: initialData.id || '',
+        traderNameOrArea: initialData.trader_name_or_area || '',
+        shopName: initialData.shop_name || '',
+        invoiceDate: initialData.invoice_date || '',
+        invoiceNumber: initialData.invoice_number || '',
+        tpDate: initialData.tp_date || '',
+        tpNumber: initialData.tp_number || '',
+        salesmanName: initialData.salesman_name || '',
+        invoiceSubmittedDate: initialData.invoice_submitted_date || '',
+        billAmount: initialData.bill_amount?.toString() || '',
+        deliveredAt: initialData.delivered_at || 'via whatsapp',
+        handedOverTo: initialData.handed_over_to || '',
+      });
+      if (initialData.photo) {
+        setPhotoPreview(initialData.photo);
+      }
+      if (initialData.digital_signature) {
+        setSignatureDataUrl(initialData.digital_signature);
+      }
+    }
+  }, [initialData]);
 
   // Filter users based on selected shop name
   const filteredUsers = useMemo(() => {
@@ -109,83 +136,113 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
 
     try {
       if (!formData.shopName) throw new Error('Please select a Shop Name.');
-      if (!photoFile) throw new Error('Please upload a photo of the invoice.');
-      if (!signatureDataUrl) throw new Error('Please provide a digital signature.');
+      
+      if (!formData.id) {
+        if (!photoFile) throw new Error('Please upload a photo of the invoice.');
+        if (!signatureDataUrl) throw new Error('Please provide a digital signature.');
+      } else {
+        if (!photoPreview) throw new Error('Please upload a photo of the invoice.');
+        if (!signatureDataUrl) throw new Error('Please provide a digital signature.');
+      }
 
       const timestampStr = Date.now();
       const bucketName = 'business_overview_trader_invoices';
 
       // 1. Upload Photo to business_overview_trader_invoices/Photos/
-      const photoExtension = photoFile.name.split('.').pop() || 'jpg';
-      const photoPath = `Photos/photo_${timestampStr}_${Math.floor(Math.random() * 1000)}.${photoExtension}`;
-      const { error: photoUploadErr } = await supabase.storage
-        .from(bucketName)
-        .upload(photoPath, photoFile);
-      
-      if (photoUploadErr) {
-        throw new Error(`Failed to upload photo: ${photoUploadErr.message}. Make sure the bucket "${bucketName}" exists and is public.`);
-      }
+      let photoUrlToSave = photoPreview;
+      if (photoFile) {
+        const photoExtension = photoFile.name.split('.').pop() || 'jpg';
+        const photoPath = `Photos/photo_${timestampStr}_${Math.floor(Math.random() * 1000)}.${photoExtension}`;
+        const { error: photoUploadErr } = await supabase.storage
+          .from(bucketName)
+          .upload(photoPath, photoFile);
+        
+        if (photoUploadErr) {
+          throw new Error(`Failed to upload photo: ${photoUploadErr.message}. Make sure the bucket "${bucketName}" exists and is public.`);
+        }
 
-      const { data: { publicUrl: photoPublicUrl } } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(photoPath);
+        const { data: { publicUrl: photoPublicUrl } } = supabase.storage
+          .from(bucketName)
+          .getPublicUrl(photoPath);
+
+        photoUrlToSave = photoPublicUrl;
+      }
 
       // 2. Upload Digital Signature to business_overview_trader_invoices/Digital_signatures/
-      const signatureFile = dataURLtoFile(signatureDataUrl, `signature_${timestampStr}.png`);
-      const signaturePath = `Digital_signatures/signature_${timestampStr}.png`;
-      const { error: sigUploadErr } = await supabase.storage
-        .from(bucketName)
-        .upload(signaturePath, signatureFile);
+      let sigUrlToSave = signatureDataUrl;
+      if (signatureDataUrl && signatureDataUrl.startsWith('data:image')) {
+        const signatureFile = dataURLtoFile(signatureDataUrl, `signature_${timestampStr}.png`);
+        const signaturePath = `Digital_signatures/signature_${timestampStr}.png`;
+        const { error: sigUploadErr } = await supabase.storage
+          .from(bucketName)
+          .upload(signaturePath, signatureFile);
 
-      if (sigUploadErr) {
-        throw new Error(`Failed to upload signature: ${sigUploadErr.message}`);
+        if (sigUploadErr) {
+          throw new Error(`Failed to upload signature: ${sigUploadErr.message}`);
+        }
+
+        const { data: { publicUrl: sigPublicUrl } } = supabase.storage
+          .from(bucketName)
+          .getPublicUrl(signaturePath);
+
+        sigUrlToSave = sigPublicUrl;
       }
 
-      const { data: { publicUrl: sigPublicUrl } } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(signaturePath);
+      const payload = {
+        trader_name_or_area: formData.traderNameOrArea || null,
+        invoice_date: formData.invoiceDate || null,
+        tp_date: formData.tpDate || null,
+        salesman_name: formData.salesmanName || null,
+        invoice_submitted_date: formData.invoiceSubmittedDate || null,
+        shop_name: formData.shopName || null,
+        invoice_number: formData.invoiceNumber || null,
+        tp_number: formData.tpNumber || null,
+        delivered_at: formData.deliveredAt || null,
+        receiver_sign: null,
+        photo: photoUrlToSave,
+        bill_amount: parseFloat(formData.billAmount) || 0,
+        handed_over_to: formData.handedOverTo || null,
+        digital_signature: sigUrlToSave
+      };
 
-      // 3. Insert Row into bis_overview_trader_invoices
-      const { error: dbInsertErr } = await supabase
-        .from('bis_overview_trader_invoices')
-        .insert({
-          trader_name_or_area: formData.traderNameOrArea || null,
-          invoice_date: formData.invoiceDate || null,
-          tp_date: formData.tpDate || null,
-          salesman_name: formData.salesmanName || null,
-          invoice_submitted_date: formData.invoiceSubmittedDate || null,
-          shop_name: formData.shopName || null,
-          invoice_number: formData.invoiceNumber || null,
-          tp_number: formData.tpNumber || null,
-          delivered_at: formData.deliveredAt || null,
-          receiver_sign: null, // deprecated or left empty as digital signature handles it
-          photo: photoPublicUrl,
-          bill_amount: parseFloat(formData.billAmount) || 0,
-          handed_over_to: formData.handedOverTo || null,
-          digital_signature: sigPublicUrl
-        });
+      if (formData.id) {
+        // Update existing row
+        const { error: dbUpdateErr } = await supabase
+          .from('bis_overview_trader_invoices')
+          .update(payload)
+          .eq('id', formData.id);
 
-      if (dbInsertErr) throw dbInsertErr;
+        if (dbUpdateErr) throw dbUpdateErr;
+        setSuccessMsg('Invoice updated successfully!');
+      } else {
+        // Insert new row
+        const { error: dbInsertErr } = await supabase
+          .from('bis_overview_trader_invoices')
+          .insert(payload);
 
-      setSuccessMsg('Invoice submitted successfully!');
+        if (dbInsertErr) throw dbInsertErr;
+        setSuccessMsg('Invoice submitted successfully!');
+      }
       
-      // Clear Form state
-      setFormData({
-        traderNameOrArea: '',
-        shopName: '',
-        invoiceDate: new Date().toISOString().split('T')[0],
-        invoiceNumber: '',
-        tpDate: new Date().toISOString().split('T')[0],
-        tpNumber: '',
-        salesmanName: '',
-        invoiceSubmittedDate: new Date().toISOString().split('T')[0],
-        billAmount: '',
-        deliveredAt: 'via whatsapp',
-        handedOverTo: '',
-      });
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      setSignatureDataUrl(null);
+      // Clear Form state if NOT editing
+      if (!formData.id) {
+        setFormData({
+          traderNameOrArea: '',
+          shopName: '',
+          invoiceDate: new Date().toISOString().split('T')[0],
+          invoiceNumber: '',
+          tpDate: new Date().toISOString().split('T')[0],
+          tpNumber: '',
+          salesmanName: '',
+          invoiceSubmittedDate: new Date().toISOString().split('T')[0],
+          billAmount: '',
+          deliveredAt: 'via whatsapp',
+          handedOverTo: '',
+        });
+        setPhotoFile(null);
+        setPhotoPreview(null);
+        setSignatureDataUrl(null);
+      }
 
       if (onSuccess) {
         setTimeout(() => {

@@ -258,7 +258,20 @@ export default function Reports() {
         if (dateTo) query = query.lte('date', dateTo);
         const { data, error } = await query;
         if (!error && data) {
-          setTablePettyRows(data);
+          // Group rows by base ID: "PT-01-01" → "PT-01"
+          const grouped: Map<string, any> = new Map();
+          data.forEach((row: any) => {
+            const rawId: string = row.patty_id || '';
+            // Strip last -NN suffix: PT-01-01 → PT-01, PT-02-03 → PT-02
+            const parts = rawId.split('-');
+            const baseId = parts.length >= 3
+              ? parts.slice(0, parts.length - 1).join('-')
+              : rawId;
+            if (!grouped.has(baseId)) {
+              grouped.set(baseId, { ...row, patty_id: baseId });
+            }
+          });
+          setTablePettyRows(Array.from(grouped.values()));
         }
       } else {
         let query = supabase.from('petty_cash_tallies').select('*').order('date', { ascending: false });
