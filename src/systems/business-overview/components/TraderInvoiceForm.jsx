@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { FileText, Camera, Edit3, CheckCircle, AlertCircle, QrCode } from 'lucide-react';
+import { FileText, Camera, Edit3, CheckCircle, AlertCircle, QrCode, Upload } from 'lucide-react';
 import SignaturePadModal from './SignaturePadModal';
 import qrImage from './QR-TRADER-INVOICE-FORM.png';
 
@@ -18,6 +18,9 @@ function dataURLtoFile(dataurl, filename) {
 }
 
 export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = false, initialData }) {
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+
   const [formData, setFormData] = useState({
     id: '',
     traderNameOrArea: '',
@@ -40,6 +43,7 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
   const [shops, setShops] = useState([]);
   const [users, setUsers] = useState([]);
   const [isSigPadOpen, setIsSigPadOpen] = useState(false);
+  const [isPhotoSourceModalOpen, setIsPhotoSourceModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -433,24 +437,15 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
               <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                 Handed Over To <span className="text-red-500">*</span>
               </label>
-              <select
+              <input
+                type="text"
                 name="handedOverTo"
                 value={formData.handedOverTo}
                 onChange={handleChange}
+                placeholder="Enter person name"
                 required
-                disabled={!formData.shopName}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              >
-                {!formData.shopName ? (
-                  <option value="">Select a shop name first</option>
-                ) : filteredUsers.length === 0 ? (
-                  <option value="">No matching users for this shop</option>
-                ) : (
-                  filteredUsers.map(u => (
-                    <option key={u.user_name} value={u.user_name}>{u.user_name}</option>
-                  ))
-                )}
-              </select>
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
+              />
             </div>
           </div>
         </div>
@@ -469,22 +464,38 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
               <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                 Upload Photo <span className="text-red-500">*</span>
               </label>
-              <div className="flex flex-col items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl bg-slate-50 hover:bg-slate-100/50 transition-colors relative cursor-pointer group">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                />
+              
+              {/* Hidden file inputs */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+
+              <div
+                onClick={() => setIsPhotoSourceModalOpen(true)}
+                className="flex flex-col items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl bg-slate-50 hover:bg-slate-100/70 transition-colors relative cursor-pointer min-h-[160px] group"
+              >
                 {photoPreview ? (
-                  <div className="w-full h-32 relative rounded-lg overflow-hidden">
+                  <div className="w-full h-32 relative rounded-lg overflow-hidden flex items-center justify-center">
                     <img src={photoPreview} alt="Invoice preview" className="w-full h-full object-contain" />
+                    <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded-md backdrop-blur-xs font-medium">Click to change</span>
                   </div>
                 ) : (
                   <div className="text-center py-4">
                     <Camera className="mx-auto text-gray-400 group-hover:text-gray-600 transition-colors mb-1.5" size={24} />
-                    <span className="text-xs text-gray-600 font-semibold">Select Photo</span>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Click to capture or choose file</p>
+                    <span className="text-xs text-gray-700 font-semibold">Click to Select Photo</span>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Upload from device or open camera</p>
                   </div>
                 )}
               </div>
@@ -550,6 +561,75 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
           </button>
         </div>
       </form>
+
+      {/* Photo Source Choice Modal */}
+      {isPhotoSourceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-xs w-full p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 border border-gray-100">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+              <h3 className="font-bold text-sm text-gray-800 flex items-center gap-2">
+                <Camera size={16} className="text-[#2a5298]" />
+                Select Photo Source
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsPhotoSourceModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              {/* Option 1: Upload from Device */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPhotoSourceModalOpen(false);
+                  fileInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#2a5298] hover:bg-blue-50/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-9 h-9 rounded-lg bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100 group-hover:bg-[#2a5298] group-hover:text-white transition-colors">
+                  <Upload size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-800">Upload from Device</h4>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Select image from gallery or files</p>
+                </div>
+              </button>
+
+              {/* Option 2: Open Camera */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPhotoSourceModalOpen(false);
+                  cameraInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#2a5298] hover:bg-blue-50/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <Camera size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-800">Open Camera</h4>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Take photo directly using camera</p>
+                </div>
+              </button>
+            </div>
+
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                onClick={() => setIsPhotoSourceModalOpen(false)}
+                className="text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Signature pad modal overlay */}
       <SignaturePadModal
