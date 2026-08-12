@@ -187,18 +187,40 @@ export default function PettyCashModal({
         loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
       }
 
-      setFetchedUsers([loggedInName].filter(Boolean));
-      setFetchedUserDetails([{
-        userName: loggedInName,
-        shopName: "All",
-        userAccess: "All"
-      }]);
+      const { data, error } = await supabase
+        .from('users')
+        .select('user_name, shop_name')
+        .order('user_name', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const userDetails = data
+          .map((row: any) => ({
+            userName: row.user_name || row.username || row.name || "",
+            shopName: row.shop_name || "All",
+            userAccess: row.shop_name || "All",
+          }))
+          .filter((u: any) => u.userName);
+
+        const namesSet = new Set<string>();
+        if (loggedInName) namesSet.add(loggedInName);
+        userDetails.forEach((u: any) => namesSet.add(u.userName));
+
+        setFetchedUsers(Array.from(namesSet));
+        setFetchedUserDetails(userDetails);
+      } else {
+        setFetchedUsers([loggedInName].filter(Boolean));
+        setFetchedUserDetails([{
+          userName: loggedInName,
+          shopName: "All",
+          userAccess: "All"
+        }]);
+      }
     } catch (error) {
       console.error("Error fetching usernames:", error);
     }
   };
 
-   const getFilteredEmployees = () => {
+  const getFilteredEmployees = () => {
     const targetShop = formData.shopName;
     if (!targetShop) return fetchedUserDetails;
 
@@ -209,14 +231,15 @@ export default function PettyCashModal({
       if (Array.isArray(userShopsRaw)) {
         return userShopsRaw.some(s => {
           const sLower = String(s).trim().toLowerCase();
-          return sLower === 'all' || sLower === targetLower;
+          return sLower === 'all' || sLower === targetLower || targetLower.includes(sLower) || sLower.includes(targetLower);
         });
       }
       
       const str = String(userShopsRaw).trim().toLowerCase();
       if (str === 'all') return true;
       
-      return str.split(',').map(s => s.trim().toLowerCase()).includes(targetLower);
+      const shopItems = str.split(',').map(s => s.trim().toLowerCase());
+      return shopItems.some(s => s === targetLower || targetLower.includes(s) || s.includes(targetLower));
     };
 
     return fetchedUserDetails.filter(u => userHasShopAccess(u.shopName, targetShop));
