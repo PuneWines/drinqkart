@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   FaPlus, FaEdit, FaTrash, FaSync, FaSearch, FaChevronDown,
   FaCalendarAlt, FaStore, FaUser,
-  FaCoins, FaWallet, FaFileAlt, FaUndo
+  FaCoins, FaWallet, FaFileAlt, FaUndo, FaFileExcel
 } from "react-icons/fa";
 import CashTally from "./CashTally";
 import { useAuth } from "../contexts/AuthContext";
@@ -375,6 +375,55 @@ export default function CounterPage({ onClose }: CounterPageProps) {
     setCounterFilter("");
   };
 
+  const handleExportCSV = () => {
+    const headers = [
+      "#", "Tally ID", "Date", "Counter", "Shop Name", "User",
+      "Retail Scan Amount", "Total Cash", "Total GPay", "Total PhonePe", "Total Paytm",
+      "Total Card", "Total Diff", "Credit Receipt", "Wholesale Amount",
+      "Home Delivery Amount", "Total Expense", "Status"
+    ];
+
+    const csvRows = [headers.join(",")];
+
+    filtered.forEach((row, idx) => {
+      const raw = row.raw || {};
+      const totDiff = getRowTotalDiff(raw);
+      const dateStr = row.date ? new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : "";
+      
+      const values = [
+        idx + 1,
+        `"${(row.tally_id || "").replace(/"/g, '""')}"`,
+        `"${dateStr.replace(/"/g, '""')}"`,
+        `"${(row.counterVal || "").replace(/"/g, '""')}"`,
+        `"${(row.shopName || "").replace(/"/g, '""')}"`,
+        `"${(row.name || "").replace(/"/g, '""')}"`,
+        row.retailScanAmount || 0,
+        getRowTotalCash(raw),
+        getRowTotalGpay(raw),
+        getRowTotalPhonePe(raw),
+        getRowTotalPaytm(raw),
+        getRowTotalCard(raw),
+        totDiff,
+        getRowCreditReceipt(raw),
+        getRowWholesaleAmount(raw),
+        getRowHomeDeliveryAmount(raw),
+        row.totalExpense || 0,
+        `"${(row.status || "pending").replace(/"/g, '""')}"`
+      ];
+      csvRows.push(values.join(","));
+    });
+
+    const csvContent = "\uFEFF" + csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Cash_Tally_Export_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (allowedCounters.length === 0) {
     return (
       <div className="p-8 text-center text-gray-500 font-semibold bg-white rounded-2xl border border-gray-200">
@@ -623,17 +672,28 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             )}
           </div>
 
-          {/* Refresh & Fill Tally Buttons */}
+          {/* Refresh, Export & Fill Tally Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {isModifyAllowed && (
-              <button
-                onClick={fetchRows}
-                title="Refresh"
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
-              >
-                <FaSync className={loading ? "animate-spin text-[11px]" : "text-[11px]"} />
-                <span className="hidden sm:inline">Refresh</span>
-              </button>
+              <>
+                <button
+                  onClick={fetchRows}
+                  title="Refresh"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
+                >
+                  <FaSync className={loading ? "animate-spin text-[11px]" : "text-[11px]"} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+
+                <button
+                  onClick={handleExportCSV}
+                  title="Export as CSV"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-all text-xs font-semibold rounded-lg cursor-pointer"
+                >
+                  <FaFileExcel className="text-[12px] text-emerald-700" />
+                  <span>Export as CSV</span>
+                </button>
+              </>
             )}
 
             {/* Fill Tally Entry Button */}
