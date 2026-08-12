@@ -477,7 +477,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* Total Expenses and Others Scan Card */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-gray-500 font-sans">Total Expenses & Others Scan</p>
+                <p className="text-xs font-semibold text-gray-500 font-sans">Home Delivery Scan</p>
                 <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                   {fmt(filtered.reduce((s, r) => s + r.totalExpense + (Number(r.raw.home_delivery) || 0) + (Number(r.raw.void_sale) || 0) + (Number(r.raw.expense_gpay_card) || 0), 0))}
                 </div>

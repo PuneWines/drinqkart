@@ -234,7 +234,7 @@ export default function TraderInvoices() {
                 <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[90px]">Amount</th>
                 <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[80px]">Delivery</th>
                 <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[90px]">Handed To</th>
-                <th className="text-center px-2 py-2 font-bold text-xs uppercase tracking-wider w-[45px]">Photo</th>
+                <th className="text-left px-2 py-2 font-bold text-xs uppercase tracking-wider w-[100px]">Invoice Sub. Date</th>
                 <th className="text-center px-2 py-2 font-bold text-xs uppercase tracking-wider w-[45px]">Sign</th>
                 <th className="text-center px-2 py-2 font-bold text-xs uppercase tracking-wider w-[65px]">Actions</th>
               </tr>
@@ -296,20 +296,10 @@ export default function TraderInvoices() {
                   <td className="px-2 py-2 text-gray-600 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[90px]" title={item.handed_over_to}>
                     {item.handed_over_to || '—'}
                   </td>
-                  <td className="px-2 py-2 text-center whitespace-nowrap">
-                    {item.photo ? (
-                      <a
-                        href={item.photo}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="View Invoice Photo"
-                        className="inline-flex items-center justify-center p-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md transition-all border border-blue-200/40"
-                      >
-                        <FileImage size={13} />
-                      </a>
-                    ) : (
-                      <span className="text-gray-300 text-xs">—</span>
-                    )}
+                  <td className="px-2 py-2 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]" title={item.invoice_submitted_date}>
+                    <div className="font-medium text-slate-700 text-xs">
+                      {item.invoice_submitted_date ? new Date(item.invoice_submitted_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </div>
                   </td>
                   <td className="px-2 py-2 text-center whitespace-nowrap">
                     {item.digital_signature ? (
