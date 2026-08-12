@@ -28,6 +28,136 @@ interface TallyRow {
 const fmt = (n: number) =>
   `₹${(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 
+const getRowTotalCash = (rec: any) => {
+  if (!rec) return 0;
+  const rCash =
+    (Number(rec.retail_500) || 0) * 500 +
+    (Number(rec.retail_200) || 0) * 200 +
+    (Number(rec.retail_100) || 0) * 100 +
+    (Number(rec.retail_50) || 0) * 50 +
+    (Number(rec.retail_20) || 0) * 20 +
+    (Number(rec.retail_10) || 0) * 10 +
+    (Number(rec.retail_1) || 0) * 1;
+  const wsCash =
+    (Number(rec.ws_500) || 0) * 500 +
+    (Number(rec.ws_200) || 0) * 200 +
+    (Number(rec.ws_100) || 0) * 100 +
+    (Number(rec.ws_50) || 0) * 50 +
+    (Number(rec.ws_20) || 0) * 20 +
+    (Number(rec.ws_10) || 0) * 10 +
+    (Number(rec.ws_1) || 0) * 1;
+  const hdCash =
+    (Number(rec.retail_1500) || 0) * 500 +
+    (Number(rec.retail_2200) || 0) * 200 +
+    (Number(rec.retail_3100) || 0) * 100 +
+    (Number(rec.retail_450) || 0) * 50 +
+    (Number(rec.retail_520) || 0) * 20 +
+    (Number(rec.retail_610) || 0) * 10 +
+    (Number(rec.retail_71) || 0) * 1;
+  return rCash + wsCash + hdCash;
+};
+
+const getRowTotalGpay = (rec: any) => {
+  if (!rec) return 0;
+  return (
+    (Number(rec.retail_gpay) || 0) +
+    (Number(rec.ws_gpay_card) || Number(rec.ws_gpay) || 0) +
+    (Number(rec.hd_gpay) || Number(rec.expense_gpay_card) || 0)
+  );
+};
+
+const getRowTotalPhonePe = (rec: any) => {
+  if (!rec) return 0;
+  return (
+    (Number(rec.retail_phonepe) || 0) +
+    (Number(rec.ws_phonepe) || 0) +
+    (Number(rec.hd_phonepe) || Number(rec.bd_phonepe) || 0)
+  );
+};
+
+const getRowTotalPaytm = (rec: any) => {
+  if (!rec) return 0;
+  return (
+    (Number(rec.retail_paytm) || 0) +
+    (Number(rec.ws_paytm) || Number(rec.ws_patym) || 0) +
+    (Number(rec.hd_paytm) || 0)
+  );
+};
+
+const getRowTotalCard = (rec: any) => {
+  if (!rec) return 0;
+  return (
+    (Number(rec.retail_card) || 0) +
+    (Number(rec.ws_card) || 0) +
+    (Number(rec.hd_card) || 0)
+  );
+};
+
+const getRowTotalDiff = (rec: any) => {
+  if (!rec) return 0;
+  if (rec.retail_diff !== undefined || rec.wholesale_diff !== undefined || rec.home_delivery_diff !== undefined) {
+    return (Number(rec.retail_diff) || 0) + (Number(rec.wholesale_diff) || 0) + (Number(rec.home_delivery_diff) || 0);
+  }
+  const rScan = Number(rec.retail_scan_amount) || 0;
+  const rCash = (Number(rec.retail_500) || 0) * 500 + (Number(rec.retail_200) || 0) * 200 + (Number(rec.retail_100) || 0) * 100 + (Number(rec.retail_50) || 0) * 50 + (Number(rec.retail_20) || 0) * 20 + (Number(rec.retail_10) || 0) * 10 + (Number(rec.retail_1) || 0) * 1;
+  const rCollected = rCash + (Number(rec.retail_gpay) || 0) + (Number(rec.retail_phonepe) || 0) + (Number(rec.retail_paytm) || 0) + (Number(rec.retail_card) || 0);
+  const rDiff = rScan - rCollected;
+
+  const wsBilling = (Number(rec.ws_cash_billing_amount) || 0) + (Number(rec.ws_credit_receipt) || 0);
+  const wsCash = (Number(rec.ws_500) || 0) * 500 + (Number(rec.ws_200) || 0) * 200 + (Number(rec.ws_100) || 0) * 100 + (Number(rec.ws_50) || 0) * 50 + (Number(rec.ws_20) || 0) * 20 + (Number(rec.ws_10) || 0) * 10 + (Number(rec.ws_1) || 0) * 1;
+  const wsActual = wsCash + (Number(rec.ws_gpay_card) || Number(rec.ws_gpay) || 0) + (Number(rec.ws_phonepe) || 0) + (Number(rec.ws_paytm) || Number(rec.ws_patym) || 0) + (Number(rec.ws_card) || 0);
+  const wsDiff = wsBilling - wsActual;
+
+  const hdAmt = Number(rec.home_delivery) || 0;
+  const hdCash = (Number(rec.retail_1500) || 0) * 500 + (Number(rec.retail_2200) || 0) * 200 + (Number(rec.retail_3100) || 0) * 100 + (Number(rec.retail_450) || 0) * 50 + (Number(rec.retail_520) || 0) * 20 + (Number(rec.retail_610) || 0) * 10 + (Number(rec.retail_71) || 0) * 1;
+  const hdCollected = hdCash + (Number(rec.hd_gpay) || Number(rec.expense_gpay_card) || 0) + (Number(rec.hd_card) || 0) + (Number(rec.hd_phonepe) || Number(rec.bd_phonepe) || 0) + (Number(rec.hd_paytm) || 0);
+  const hdDiff = hdAmt - hdCollected;
+
+  return rDiff + wsDiff + hdDiff;
+};
+
+const getRowCreditReceipt = (rec: any) => Number(rec?.ws_credit_receipt) || 0;
+
+const getRowWholesaleAmount = (rec: any) => {
+  if (!rec) return 0;
+  const wsCash =
+    (Number(rec.ws_500) || 0) * 500 +
+    (Number(rec.ws_200) || 0) * 200 +
+    (Number(rec.ws_100) || 0) * 100 +
+    (Number(rec.ws_50) || 0) * 50 +
+    (Number(rec.ws_20) || 0) * 20 +
+    (Number(rec.ws_10) || 0) * 10 +
+    (Number(rec.ws_1) || 0) * 1;
+  return (
+    wsCash +
+    (Number(rec.ws_gpay_card) || Number(rec.ws_gpay) || 0) +
+    (Number(rec.ws_phonepe) || 0) +
+    (Number(rec.ws_paytm) || Number(rec.ws_patym) || 0) +
+    (Number(rec.ws_card) || 0)
+  );
+};
+
+const getRowHomeDeliveryAmount = (rec: any) => {
+  if (!rec) return 0;
+  const hdCash =
+    (Number(rec.retail_1500) || 0) * 500 +
+    (Number(rec.retail_2200) || 0) * 200 +
+    (Number(rec.retail_3100) || 0) * 100 +
+    (Number(rec.retail_450) || 0) * 50 +
+    (Number(rec.retail_520) || 0) * 20 +
+    (Number(rec.retail_610) || 0) * 10 +
+    (Number(rec.retail_71) || 0) * 1;
+  return (
+    hdCash +
+    (Number(rec.hd_gpay) || Number(rec.expense_gpay_card) || 0) +
+    (Number(rec.hd_card) || 0) +
+    (Number(rec.hd_phonepe) || Number(rec.bd_phonepe) || 0) +
+    (Number(rec.hd_paytm) || 0)
+  );
+};
+
+const getRowVoidSale = (rec: any) => Number(rec?.void_sale) || 0;
+
 export default function CounterPage({ onClose }: CounterPageProps) {
   const { getAllowedCounters, user, hasPageModifyAccess } = useAuth();
   
@@ -267,69 +397,138 @@ export default function CounterPage({ onClose }: CounterPageProps) {
     <div className="space-y-5">
       {/* ── Summary Cards (Over table) ── */}
       {isModifyAllowed && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 font-sans">
-          {/* Total Retail Scan Card */}
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-            <div>
-              <p className="text-xs font-normal text-gray-500 font-sans">Total Retail Scan</p>
-              <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
-                {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
-              </h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 font-sans">
+            {/* Total Retail Scan Card */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-normal text-gray-500 font-sans">Total Retail Scan</p>
+                <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                  {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
+                </h3>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
+                <FaCoins className="text-lg" />
+              </div>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
-              <FaCoins className="text-lg" />
+
+            {/* Total Wholesale Scan Card */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-normal text-gray-500 font-sans">Total Wholesale Scan</p>
+                <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                  {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0) + (Number(r.raw.ws_credit_receipt) || 0), 0))}
+                </h3>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0 border border-green-100">
+                <FaCoins className="text-lg" />
+              </div>
+            </div>
+
+            {/* Total Expenses and Others Scan Card */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-normal text-gray-500 font-sans">Total Expenses & Others Scan</p>
+                <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                  {fmt(filtered.reduce((s, r) => s + r.totalExpense + (Number(r.raw.home_delivery) || 0) + (Number(r.raw.void_sale) || 0) + (Number(r.raw.expense_gpay_card) || 0), 0))}
+                </h3>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
+                <FaWallet className="text-lg" />
+              </div>
+            </div>
+
+            {/* Total Expenses Card */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-normal text-gray-500">Total Expenses</p>
+                <h3 className="text-lg font-medium font-normal text-rose-600 mt-1">
+                  {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
+                </h3>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                <FaWallet className="text-lg" />
+              </div>
+            </div>
+
+            {/* Net Total Card */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-normal text-gray-500 font-sans">Net Total</p>
+                <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
+                  {fmt(filtered.reduce((s, r) => s + (r.retailScanAmount - r.totalExpense), 0))}
+                </h3>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
+                <FaFileAlt className="text-lg" />
+              </div>
             </div>
           </div>
 
-          {/* Total Wholesale Scan Card */}
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-            <div>
-              <p className="text-xs font-normal text-gray-500 font-sans">Total Wholesale Scan</p>
-              <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
-                {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0) + (Number(r.raw.ws_credit_receipt) || 0), 0))}
-              </h3>
+          {/* ── Secondary Summary Cards (Small cards in single line) ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 font-sans">
+            {/* Total Cash */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total Cash</span>
+              <h4 className="text-sm font-bold text-emerald-700 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalCash(r.raw), 0))}
+              </h4>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0 border border-green-100">
-              <FaCoins className="text-lg" />
-            </div>
-          </div>
 
-          {/* Total Expenses and Others Scan Card */}
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-            <div>
-              <p className="text-xs font-normal text-gray-500 font-sans">Total Expenses & Others Scan</p>
-              <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
-                {fmt(filtered.reduce((s, r) => s + r.totalExpense + (Number(r.raw.home_delivery) || 0) + (Number(r.raw.void_sale) || 0) + (Number(r.raw.expense_gpay_card) || 0), 0))}
-              </h3>
+            {/* Total GPay */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total GPay</span>
+              <h4 className="text-sm font-bold text-blue-700 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalGpay(r.raw), 0))}
+              </h4>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
-              <FaWallet className="text-lg" />
-            </div>
-          </div>
 
-          {/* Total Expenses Card */}
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-            <div>
-              <p className="text-xs font-normal text-gray-500">Total Expenses</p>
-              <h3 className="text-lg font-medium font-normal text-rose-600 mt-1">
-                {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
-              </h3>
+            {/* Total PhonePe */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total PhonePe</span>
+              <h4 className="text-sm font-bold text-purple-700 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalPhonePe(r.raw), 0))}
+              </h4>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-              <FaWallet className="text-lg" />
-            </div>
-          </div>
 
-          {/* Net Total Card */}
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-            <div>
-              <p className="text-xs font-normal text-gray-500 font-sans">Net Total</p>
-              <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
-                {fmt(filtered.reduce((s, r) => s + (r.retailScanAmount - r.totalExpense), 0))}
-              </h3>
+            {/* Total Paytm */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total Paytm</span>
+              <h4 className="text-sm font-bold text-cyan-700 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalPaytm(r.raw), 0))}
+              </h4>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
-              <FaFileAlt className="text-lg" />
+
+            {/* Total Card */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total Card</span>
+              <h4 className="text-sm font-bold text-indigo-700 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalCard(r.raw), 0))}
+              </h4>
+            </div>
+
+            {/* Total Difference */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total Difference</span>
+              <h4 className="text-sm font-bold text-slate-800 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalDiff(r.raw), 0))}
+              </h4>
+            </div>
+
+            {/* Total Credit Receipt */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total Credit Receipt</span>
+              <h4 className="text-sm font-bold text-teal-700 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowCreditReceipt(r.raw), 0))}
+              </h4>
+            </div>
+
+            {/* Total Void Sale */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-gray-500 truncate">Total Void Sale</span>
+              <h4 className="text-sm font-bold text-rose-600 mt-1 truncate">
+                {fmt(filtered.reduce((sum, r) => sum + getRowVoidSale(r.raw), 0))}
+              </h4>
             </div>
           </div>
         </div>
@@ -469,7 +668,12 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <table className="w-full text-sm">
               <thead className="bg-[#2a5298] text-white text-left">
                 <tr>
-                  {['#', 'ID', 'Date', 'Counter', 'Shop', 'User', 'Retail Scan', 'Expense', 'Status', 'Actions'].map(h => (
+                  {[
+                    '#', 'ID', 'Date', 'Counter', 'Shop', 'User', 'Retail Scan',
+                    'Total Cash', 'Total GPay', 'Total PhonePe', 'Total Paytm', 'Total Card',
+                    'Total Diff', 'Credit Receipt', 'Wholesale Amount', 'Home Delivery Amount',
+                    'Expense', 'Status', 'Actions'
+                  ].map(h => (
                     <th key={h} className="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -477,7 +681,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="text-center py-16 text-gray-400">
+                    <td colSpan={19} className="text-center py-16 text-gray-400">
                       <div className="flex flex-col items-center gap-2">
                         <FaFileAlt className="text-4xl text-gray-300" />
                         <p className="font-medium">No records found</p>
@@ -486,41 +690,53 @@ export default function CounterPage({ onClose }: CounterPageProps) {
                     </td>
                   </tr>
                 )}
-                {filtered.map((row, idx) => (
-                  <tr key={row.id} className="hover:bg-blue-50/40 transition-colors">
-                    <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
-                    <td className="px-4 py-3 font-mono font-semibold text-[#2a5298] whitespace-nowrap">{row.tally_id}</td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                      {row.date ? new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 font-medium whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 border border-slate-200 font-semibold uppercase">
-                        {row.counterVal}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 font-medium whitespace-nowrap">{row.shopName}</td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{row.name}</td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-semibold">{fmt(row.retailScanAmount)}</td>
-                    <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        (row.status || 'pending').toLowerCase() === 'completed'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : 'bg-amber-100 text-amber-800 border border-amber-200'
-                      }`}>
-                        {row.status || 'pending'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {isModifyAllowed && (
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => handleOpenEditModal(row)} title="Edit" className="p-2 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit /></button>
-                          <button onClick={() => { setDeleteId(row.id); setDeleteCounter(row.counterVal); }} title="Delete" className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><FaTrash /></button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((row, idx) => {
+                  const totDiff = getRowTotalDiff(row.raw);
+                  return (
+                    <tr key={row.id} className="hover:bg-blue-50/40 transition-colors">
+                      <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
+                      <td className="px-4 py-3 font-mono font-semibold text-[#2a5298] whitespace-nowrap">{row.tally_id}</td>
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                        {row.date ? new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 font-medium whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 border border-slate-200 font-semibold uppercase">
+                          {row.counterVal}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 font-medium whitespace-nowrap">{row.shopName}</td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{row.name}</td>
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-semibold">{fmt(row.retailScanAmount)}</td>
+                      <td className="px-4 py-3 text-emerald-700 whitespace-nowrap font-semibold">{fmt(getRowTotalCash(row.raw))}</td>
+                      <td className="px-4 py-3 text-blue-700 whitespace-nowrap font-semibold">{fmt(getRowTotalGpay(row.raw))}</td>
+                      <td className="px-4 py-3 text-purple-700 whitespace-nowrap font-semibold">{fmt(getRowTotalPhonePe(row.raw))}</td>
+                      <td className="px-4 py-3 text-cyan-700 whitespace-nowrap font-semibold">{fmt(getRowTotalPaytm(row.raw))}</td>
+                      <td className="px-4 py-3 text-indigo-700 whitespace-nowrap font-semibold">{fmt(getRowTotalCard(row.raw))}</td>
+                      <td className={`px-4 py-3 whitespace-nowrap font-semibold ${totDiff < 0 ? 'text-red-600' : totDiff > 0 ? 'text-amber-600' : 'text-gray-700'}`}>{fmt(totDiff)}</td>
+                      <td className="px-4 py-3 text-teal-700 whitespace-nowrap font-semibold">{fmt(getRowCreditReceipt(row.raw))}</td>
+                      <td className="px-4 py-3 text-green-700 whitespace-nowrap font-semibold">{fmt(getRowWholesaleAmount(row.raw))}</td>
+                      <td className="px-4 py-3 text-amber-700 whitespace-nowrap font-semibold">{fmt(getRowHomeDeliveryAmount(row.raw))}</td>
+                      <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          (row.status || 'pending').toLowerCase() === 'completed'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-amber-100 text-amber-800 border border-amber-200'
+                        }`}>
+                          {row.status || 'pending'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {isModifyAllowed && (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleOpenEditModal(row)} title="Edit" className="p-2 rounded-lg text-[#2a5298] hover:bg-blue-100 transition-colors"><FaEdit /></button>
+                            <button onClick={() => { setDeleteId(row.id); setDeleteCounter(row.counterVal); }} title="Delete" className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><FaTrash /></button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
