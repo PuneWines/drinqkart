@@ -124,11 +124,12 @@ export const useChatStore = create((set, get) => ({
 
       if (shopsErr) throw shopsErr;
 
-      // 2. Fetch active users (employees) from Supabase
+      // 2. Fetch active users (employees) with a valid phone number from Supabase
       const { data: usersDb, error: usersErr } = await supabase
         .from('users')
         .select('id, user_name, number, role, shop_name, status')
         .eq('status', 'active')
+        .not('number', 'is', null)
         .order('user_name', { ascending: true });
 
       if (usersErr) throw usersErr;
@@ -136,12 +137,12 @@ export const useChatStore = create((set, get) => ({
       // 3. Group and map users to shops
       const mappedShops = (shopsDb || []).map((shop) => {
         const shopEmployees = (usersDb || [])
-          .filter((u) => u.shop_name === shop.shop_name)
+          .filter((u) => u.shop_name === shop.shop_name && u.number && String(u.number).trim() !== '')
           .map((u) => ({
             id: u.id.toString(), // Stringified for safe string-comparison in UI checkboxes
             name: u.user_name || 'Unnamed',
             role: u.role || 'Staff',
-            phone: u.number || '',
+            phone: String(u.number).trim(),
             status: 'online',
           }));
 
@@ -231,7 +232,7 @@ export const useChatStore = create((set, get) => ({
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}.${fileExt}`;
-      
+
       const { data, error } = await supabase.storage
         .from('whatsapp_broadcast')
         .upload(fileName, file, {
@@ -399,10 +400,10 @@ export const useChatStore = create((set, get) => ({
             if (response.ok) {
               const resData = await response.json();
               console.log("[WhatsApp] Maytapi raw response for", toNumber, ":", resData);
-              
+
               // Extract message ID from various possible locations in Maytapi response
               const parsedId = resData.data?.id || resData.data?.messageId || resData.id || resData.messageId;
-              
+
               if (parsedId) {
                 messageId = String(parsedId);
                 status = 'sent';

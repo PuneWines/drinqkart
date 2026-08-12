@@ -18,16 +18,13 @@ function dataURLtoFile(dataurl, filename) {
 }
 
 export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = false, initialData }) {
-  const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
-
   const [formData, setFormData] = useState({
     id: '',
     traderNameOrArea: '',
     shopName: '',
-    invoiceDate: new Date().toISOString().split('T')[0],
+    invoiceDate: '',
     invoiceNumber: '',
-    tpDate: new Date().toISOString().split('T')[0],
+    tpDate: '',
     tpNumber: '',
     salesmanName: '',
     invoiceSubmittedDate: new Date().toISOString().split('T')[0],
@@ -36,25 +33,24 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
     handedOverTo: '',
   });
 
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
   const [signatureDataUrl, setSignatureDataUrl] = useState(null);
 
   const [shops, setShops] = useState([]);
   const [users, setUsers] = useState([]);
+  const [traders, setTraders] = useState([]);
   const [isSigPadOpen, setIsSigPadOpen] = useState(false);
-  const [isPhotoSourceModalOpen, setIsPhotoSourceModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Fetch Shops and Users
+  // Fetch Shops, Users, and Vendors (Traders)
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
-        const [shopsRes, usersRes] = await Promise.all([
+        const [shopsRes, usersRes, vendorsRes] = await Promise.all([
           supabase.from('shop').select('shop_name').order('shop_name', { ascending: true }),
-          supabase.from('users').select('user_name, shop_name').order('user_name', { ascending: true })
+          supabase.from('users').select('user_name, shop_name').order('user_name', { ascending: true }),
+          supabase.from('purchase_vendors').select('party_name').order('party_name', { ascending: true })
         ]);
 
         if (shopsRes.error) throw shopsRes.error;
@@ -62,6 +58,7 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
 
         setShops((shopsRes.data || []).map(s => s.shop_name).filter(Boolean));
         setUsers(usersRes.data || []);
+        setTraders((vendorsRes.data || []).map(v => v.party_name).filter(Boolean));
       } catch (err) {
         console.error('Error fetching form meta:', err);
       }
@@ -95,30 +92,6 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
     }
   }, [initialData]);
 
-  // Filter users based on selected shop name
-  const filteredUsers = useMemo(() => {
-    if (!formData.shopName) return [];
-    const targetShop = formData.shopName.trim().toLowerCase();
-    return users.filter(u => {
-      const uShops = (u.shop_name || '')
-        .split(',')
-        .map(s => s.trim().toLowerCase());
-      return uShops.includes(targetShop);
-    });
-  }, [formData.shopName, users]);
-
-  // Set default handedOverTo when matching users list changes
-  useEffect(() => {
-    if (filteredUsers.length > 0) {
-      // If the currently selected user is not in the filtered list, reset it
-      if (!filteredUsers.some(u => u.user_name === formData.handedOverTo)) {
-        setFormData(prev => ({ ...prev, handedOverTo: filteredUsers[0].user_name }));
-      }
-    } else {
-      setFormData(prev => ({ ...prev, handedOverTo: '' }));
-    }
-  }, [filteredUsers]);
-
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -140,39 +113,12 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
 
     try {
       if (!formData.shopName) throw new Error('Please select a Shop Name.');
-      
-      if (!formData.id) {
-        if (!photoFile) throw new Error('Please upload a photo of the invoice.');
-        if (!signatureDataUrl) throw new Error('Please provide a digital signature.');
-      } else {
-        if (!photoPreview) throw new Error('Please upload a photo of the invoice.');
-        if (!signatureDataUrl) throw new Error('Please provide a digital signature.');
-      }
+      if (!signatureDataUrl) throw new Error('Please provide a digital signature.');
 
       const timestampStr = Date.now();
       const bucketName = 'business_overview_trader_invoices';
 
-      // 1. Upload Photo to business_overview_trader_invoices/Photos/
-      let photoUrlToSave = photoPreview;
-      if (photoFile) {
-        const photoExtension = photoFile.name.split('.').pop() || 'jpg';
-        const photoPath = `Photos/photo_${timestampStr}_${Math.floor(Math.random() * 1000)}.${photoExtension}`;
-        const { error: photoUploadErr } = await supabase.storage
-          .from(bucketName)
-          .upload(photoPath, photoFile);
-        
-        if (photoUploadErr) {
-          throw new Error(`Failed to upload photo: ${photoUploadErr.message}. Make sure the bucket "${bucketName}" exists and is public.`);
-        }
-
-        const { data: { publicUrl: photoPublicUrl } } = supabase.storage
-          .from(bucketName)
-          .getPublicUrl(photoPath);
-
-        photoUrlToSave = photoPublicUrl;
-      }
-
-      // 2. Upload Digital Signature to business_overview_trader_invoices/Digital_signatures/
+      // Upload Digital Signature to business_overview_trader_invoices/Digital_signatures/
       let sigUrlToSave = signatureDataUrl;
       if (signatureDataUrl && signatureDataUrl.startsWith('data:image')) {
         const signatureFile = dataURLtoFile(signatureDataUrl, `signature_${timestampStr}.png`);
@@ -203,7 +149,7 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
         tp_number: formData.tpNumber || null,
         delivered_at: formData.deliveredAt || null,
         receiver_sign: null,
-        photo: photoUrlToSave,
+        photo: initialData?.photo || null,
         bill_amount: parseFloat(formData.billAmount) || 0,
         handed_over_to: formData.handedOverTo || null,
         digital_signature: sigUrlToSave
@@ -233,9 +179,9 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
         setFormData({
           traderNameOrArea: '',
           shopName: '',
-          invoiceDate: new Date().toISOString().split('T')[0],
+          invoiceDate: '',
           invoiceNumber: '',
-          tpDate: new Date().toISOString().split('T')[0],
+          tpDate: '',
           tpNumber: '',
           salesmanName: '',
           invoiceSubmittedDate: new Date().toISOString().split('T')[0],
@@ -243,8 +189,6 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
           deliveredAt: 'via whatsapp',
           handedOverTo: '',
         });
-        setPhotoFile(null);
-        setPhotoPreview(null);
         setSignatureDataUrl(null);
       }
 
@@ -285,15 +229,18 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
               <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                 Trader Name / Area <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 name="traderNameOrArea"
                 value={formData.traderNameOrArea}
                 onChange={handleChange}
-                placeholder="Enter name or area"
                 required
                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
-              />
+              >
+                <option value="">Select Trader / Party Name</option>
+                {traders.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -392,12 +339,11 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
                 Invoice Submitted Date <span className="text-red-500">*</span>
               </label>
               <input
-                type="date"
+                type="text"
                 name="invoiceSubmittedDate"
                 value={formData.invoiceSubmittedDate}
-                onChange={handleChange}
-                required
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
+                readOnly
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md bg-gray-100 font-semibold text-gray-600 cursor-not-allowed select-none"
               />
             </div>
 
@@ -450,78 +396,32 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
           </div>
         </div>
 
-        {/* Media & Signature Fields */}
+        {/* Signature Field */}
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-4">
           <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider pb-1 border-b border-gray-100 flex items-center gap-1.5">
-            <Camera size={14} className="text-[#2a5298]" />
-            Verification & Verification File Proofs
+            <Edit3 size={14} className="text-[#2a5298]" />
+            Digital Signature Verification
           </h4>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Photo upload field */}
-            <div className="space-y-2">
-              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
-                Upload Photo <span className="text-red-500">*</span>
-              </label>
-              
-              {/* Hidden file inputs */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoChange}
-                className="hidden"
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhotoChange}
-                className="hidden"
-              />
-
-              <div
-                onClick={() => setIsPhotoSourceModalOpen(true)}
-                className="flex flex-col items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl bg-slate-50 hover:bg-slate-100/70 transition-colors relative cursor-pointer min-h-[160px] group"
-              >
-                {photoPreview ? (
-                  <div className="w-full h-32 relative rounded-lg overflow-hidden flex items-center justify-center">
-                    <img src={photoPreview} alt="Invoice preview" className="w-full h-full object-contain" />
-                    <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded-md backdrop-blur-xs font-medium">Click to change</span>
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <Camera className="mx-auto text-gray-400 group-hover:text-gray-600 transition-colors mb-1.5" size={24} />
-                    <span className="text-xs text-gray-700 font-semibold">Click to Select Photo</span>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Upload from device or open camera</p>
-                  </div>
-                )}
-              </div>
+          {/* Signature field */}
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+              Digital Signature <span className="text-red-500">*</span>
+            </label>
+            <div className="flex flex-col items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl bg-slate-50 hover:bg-slate-100/50 transition-colors relative cursor-pointer min-h-[140px] group"
+                 onClick={() => setIsSigPadOpen(true)}>
+              {signatureDataUrl ? (
+                <div className="w-full h-28 relative rounded-lg overflow-hidden bg-white p-1 border border-gray-200 flex items-center justify-center">
+                  <img src={signatureDataUrl} alt="Signature preview" className="w-full h-full object-contain" />
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <Edit3 className="mx-auto text-gray-400 group-hover:text-gray-600 transition-colors mb-1.5" size={24} />
+                  <span className="text-xs text-gray-600 font-semibold">Sign Here</span>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Click to draw digital signature</p>
+                </div>
+              )}
             </div>
-
-            {/* Signature field */}
-            <div className="space-y-2">
-              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
-                Digital Signature <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-col items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl bg-slate-50 hover:bg-slate-100/50 transition-colors relative cursor-pointer min-h-[160px] group"
-                   onClick={() => setIsSigPadOpen(true)}>
-                {signatureDataUrl ? (
-                  <div className="w-full h-24 relative rounded-lg overflow-hidden bg-white p-1 border border-gray-200">
-                    <img src={signatureDataUrl} alt="Signature preview" className="w-full h-full object-contain" />
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <Edit3 className="mx-auto text-gray-400 group-hover:text-gray-600 transition-colors mb-1.5" size={24} />
-                    <span className="text-xs text-gray-600 font-semibold">Sign Here</span>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Click to draw digital signature</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
           </div>
         </div>
 
@@ -561,75 +461,6 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
           </button>
         </div>
       </form>
-
-      {/* Photo Source Choice Modal */}
-      {isPhotoSourceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-xs w-full p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 border border-gray-100">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="font-bold text-sm text-gray-800 flex items-center gap-2">
-                <Camera size={16} className="text-[#2a5298]" />
-                Select Photo Source
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsPhotoSourceModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2.5 pt-1">
-              {/* Option 1: Upload from Device */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPhotoSourceModalOpen(false);
-                  fileInputRef.current?.click();
-                }}
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#2a5298] hover:bg-blue-50/50 transition-all text-left group cursor-pointer"
-              >
-                <div className="w-9 h-9 rounded-lg bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100 group-hover:bg-[#2a5298] group-hover:text-white transition-colors">
-                  <Upload size={18} />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-gray-800">Upload from Device</h4>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Select image from gallery or files</p>
-                </div>
-              </button>
-
-              {/* Option 2: Open Camera */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPhotoSourceModalOpen(false);
-                  cameraInputRef.current?.click();
-                }}
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#2a5298] hover:bg-blue-50/50 transition-all text-left group cursor-pointer"
-              >
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                  <Camera size={18} />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-gray-800">Open Camera</h4>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Take photo directly using camera</p>
-                </div>
-              </button>
-            </div>
-
-            <div className="pt-1 text-center">
-              <button
-                type="button"
-                onClick={() => setIsPhotoSourceModalOpen(false)}
-                className="text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Signature pad modal overlay */}
       <SignaturePadModal
