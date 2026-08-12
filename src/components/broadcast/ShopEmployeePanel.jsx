@@ -17,18 +17,29 @@ export default function ShopEmployeePanel() {
     toggleAllEmployees,
   } = useChatStore()
 
-  // Filter shops by search query
-  const filteredShops = shops.filter((shop) => {
-    if (showNamesOnly && !selectedShopIds.includes(shop.id)) {
-      return false
-    }
-    const q = shopSearchQuery.toLowerCase()
-    const matchesName = shop.name.toLowerCase().includes(q)
-    const matchesEmp = shop.employees.some((e) => e.name.toLowerCase().includes(q) || e.role.toLowerCase().includes(q))
-    return matchesName || matchesEmp
-  })
+  // Filter shops by search query and sort employee-matching shops to top
+  const filteredShops = shops
+    .filter((shop) => {
+      if (showNamesOnly && !selectedShopIds.includes(shop.id)) {
+        return false
+      }
+      const q = shopSearchQuery.toLowerCase().trim()
+      if (!q) return true
+      const matchesName = shop.name.toLowerCase().includes(q)
+      const matchesEmp = shop.employees.some((e) => e.name.toLowerCase().includes(q) || e.role.toLowerCase().includes(q))
+      return matchesName || matchesEmp
+    })
+    .sort((a, b) => {
+      if (!shopSearchQuery.trim()) return 0
+      const q = shopSearchQuery.toLowerCase().trim()
+      const aEmpMatch = a.employees.some((e) => e.name.toLowerCase().includes(q))
+      const bEmpMatch = b.employees.some((e) => e.name.toLowerCase().includes(q))
+      if (aEmpMatch && !bEmpMatch) return -1
+      if (!aEmpMatch && bEmpMatch) return 1
+      return 0
+    })
 
-  // Get employees from currently selected shops
+  // Get employees from currently selected shops, filter by search query & sort matching names to the top
   const activeEmployees = shops
     .filter((shop) => selectedShopIds.includes(shop.id))
     .flatMap((shop) => shop.employees)
@@ -36,9 +47,25 @@ export default function ShopEmployeePanel() {
       if (showNamesOnly && !selectedEmployeeIds.includes(emp.id)) {
         return false
       }
-      if (roleFilter === 'Managers') return emp.role.toLowerCase().includes('manager')
-      if (roleFilter === 'Admins') return emp.role.toLowerCase().includes('admin')
+      if (roleFilter === 'Managers' && !emp.role.toLowerCase().includes('manager')) return false
+      if (roleFilter === 'Admins' && !emp.role.toLowerCase().includes('admin')) return false
+
+      if (shopSearchQuery.trim()) {
+        const q = shopSearchQuery.toLowerCase().trim()
+        const matchesName = emp.name.toLowerCase().includes(q)
+        const matchesRole = emp.role.toLowerCase().includes(q)
+        return matchesName || matchesRole
+      }
       return true
+    })
+    .sort((a, b) => {
+      if (!shopSearchQuery.trim()) return 0
+      const q = shopSearchQuery.toLowerCase().trim()
+      const aStarts = a.name.toLowerCase().startsWith(q)
+      const bStarts = b.name.toLowerCase().startsWith(q)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return 0
     })
 
   const allActiveEmpIds = activeEmployees.map((e) => e.id)

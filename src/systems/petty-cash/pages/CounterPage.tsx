@@ -447,14 +447,14 @@ export default function CounterPage({ onClose }: CounterPageProps) {
       {/* ── Summary Cards (Over table) ── */}
       {isModifyAllowed && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 font-sans">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {/* Total Retail Scan Card */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-normal text-gray-500 font-sans">Total Retail Scan</p>
-                <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                <p className="text-xs font-semibold text-gray-500 font-sans">Total Retail Scan</p>
+                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                   {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
-                </h3>
+                </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
                 <FaCoins className="text-lg" />
@@ -464,10 +464,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* Total Wholesale Scan Card */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-normal text-gray-500 font-sans">Total Wholesale Scan</p>
-                <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                <p className="text-xs font-semibold text-gray-500 font-sans">Total Wholesale Scan</p>
+                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                   {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0) + (Number(r.raw.ws_credit_receipt) || 0), 0))}
-                </h3>
+                </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0 border border-green-100">
                 <FaCoins className="text-lg" />
@@ -477,10 +477,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* Total Expenses and Others Scan Card */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-normal text-gray-500 font-sans">Total Expenses & Others Scan</p>
-                <h3 className="text-lg font-medium font-sans text-slate-800 mt-1">
+                <p className="text-xs font-semibold text-gray-500 font-sans">Total Expenses & Others Scan</p>
+                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                   {fmt(filtered.reduce((s, r) => s + r.totalExpense + (Number(r.raw.home_delivery) || 0) + (Number(r.raw.void_sale) || 0) + (Number(r.raw.expense_gpay_card) || 0), 0))}
-                </h3>
+                </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
                 <FaWallet className="text-lg" />
@@ -490,10 +490,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* Total Expenses Card */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-normal text-gray-500">Total Expenses</p>
-                <h3 className="text-lg font-medium font-normal text-rose-600 mt-1">
+                <p className="text-xs font-semibold text-gray-500 font-sans">Total Expenses</p>
+                <div className="text-xl font-bold text-rose-600 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                   {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
-                </h3>
+                </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
                 <FaWallet className="text-lg" />
@@ -503,10 +503,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* Net Total Card */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-normal text-gray-500 font-sans">Net Total</p>
-                <h3 className="text-lg font-medium font-sans text-emerald-700 mt-1">
+                <p className="text-xs font-semibold text-gray-500 font-sans">Net Total</p>
+                <div className="text-xl font-bold text-emerald-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                   {fmt(filtered.reduce((s, r) => s + (r.retailScanAmount - r.totalExpense), 0))}
-                </h3>
+                </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
                 <FaFileAlt className="text-lg" />
@@ -518,66 +518,66 @@ export default function CounterPage({ onClose }: CounterPageProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 font-sans">
             {/* Total Cash */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total Cash</span>
-              <h4 className="text-sm font-bold text-emerald-700 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Cash</span>
+              <div className="text-base font-bold text-emerald-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowTotalCash(r.raw), 0))}
-              </h4>
+              </div>
             </div>
 
             {/* Total GPay */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total GPay</span>
-              <h4 className="text-sm font-bold text-blue-700 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total GPay</span>
+              <div className="text-base font-bold text-blue-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowTotalGpay(r.raw), 0))}
-              </h4>
+              </div>
             </div>
 
             {/* Total PhonePe */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total PhonePe</span>
-              <h4 className="text-sm font-bold text-purple-700 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total PhonePe</span>
+              <div className="text-base font-bold text-purple-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowTotalPhonePe(r.raw), 0))}
-              </h4>
+              </div>
             </div>
 
             {/* Total Paytm */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total Paytm</span>
-              <h4 className="text-sm font-bold text-cyan-700 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Paytm</span>
+              <div className="text-base font-bold text-cyan-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowTotalPaytm(r.raw), 0))}
-              </h4>
+              </div>
             </div>
 
             {/* Total Card */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total Card</span>
-              <h4 className="text-sm font-bold text-indigo-700 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Card</span>
+              <div className="text-base font-bold text-indigo-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowTotalCard(r.raw), 0))}
-              </h4>
+              </div>
             </div>
 
             {/* Total Difference */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total Difference</span>
-              <h4 className="text-sm font-bold text-slate-800 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Difference</span>
+              <div className="text-base font-bold text-slate-800 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowTotalDiff(r.raw), 0))}
-              </h4>
+              </div>
             </div>
 
             {/* Total Credit Receipt */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total Credit Receipt</span>
-              <h4 className="text-sm font-bold text-teal-700 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Credit Receipt</span>
+              <div className="text-base font-bold text-teal-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowCreditReceipt(r.raw), 0))}
-              </h4>
+              </div>
             </div>
 
             {/* Total Void Sale */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-medium text-gray-500 truncate">Total Void Sale</span>
-              <h4 className="text-sm font-bold text-rose-600 mt-1 truncate">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Void Sale</span>
+              <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowVoidSale(r.raw), 0))}
-              </h4>
+              </div>
             </div>
           </div>
         </div>
