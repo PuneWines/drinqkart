@@ -109,31 +109,23 @@ TEAM MAMTA HOSPITAL`;
  * @returns {Promise<boolean>} true on success, false on failure
  */
 export const sendWhatsAppMessage = async (toNumber, message) => {
-  if (!MAYTAPI_PRODUCT_ID || !MAYTAPI_PHONE_ID || !MAYTAPI_TOKEN) {
-    console.warn("[WhatsApp] Maytapi credentials are not configured in .env");
+  if (!MAYTAPI_PHONE_ID) {
+    console.warn("[WhatsApp] Maytapi phone ID is not configured in .env");
     return false;
   }
 
-  const url = `https://api.maytapi.com/api/${MAYTAPI_PRODUCT_ID}/${MAYTAPI_PHONE_ID}/sendMessage`;
-
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-maytapi-key": MAYTAPI_TOKEN,
-      },
-      body: JSON.stringify({
+    const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
+      body: {
+        phone_id: MAYTAPI_PHONE_ID,
         to_number: toNumber,
-        type: "text",
         message: message,
-      }),
+        message_type: "text",
+      },
     });
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      console.error("[WhatsApp] Failed to send text message:", data);
+    if (error || !data?.success) {
+      console.error("[WhatsApp] Failed to send text message via Edge Function:", error || data);
       return false;
     }
 
