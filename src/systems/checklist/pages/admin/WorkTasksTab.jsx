@@ -117,7 +117,7 @@ const renderUserStatus = (task, formatDateWithTime) => {
 const renderManagerStatus = (task, formatDateWithTime) => {
   const isApproved = task.status === "APPROVED" || task.status === "MANAGER_APPROVED" || !!task.manager_approval_date;
   const isRejected = task.status === "REJECTED" && !!task.manager_approved_by;
-  
+
   if (isApproved) {
     return (
       <div className="flex flex-col">
@@ -166,7 +166,7 @@ const renderManagerStatus = (task, formatDateWithTime) => {
 const renderAdminStatus = (task) => {
   const isApproved = task.status === "APPROVED" || !!task.admin_approval_date;
   const isRejected = task.status === "REJECTED" && !!task.admin_approved_by;
-  
+
   if (isApproved) {
     return (
       <div className="flex flex-col">
@@ -565,7 +565,7 @@ const WorkTasksTab = ({
         console.error("WorkTasksTab Supabase fetch error:", fetchError);
         throw fetchError;
       }
-      
+
       const mappedData = (data || []).map(item => {
         const mapped = {
           ...item,
@@ -583,7 +583,7 @@ const WorkTasksTab = ({
 
         return mapped;
       });
-      
+
       let filteredWorkTasks = mappedData;
       if (filterByShop) {
         filteredWorkTasks = mappedData.filter(item => {
@@ -597,7 +597,7 @@ const WorkTasksTab = ({
           item.name === currentUsername || item.manager_name === currentUsername
         );
       }
-      
+
       filteredWorkTasks = filteredWorkTasks.filter(item => {
         const taskDate = item.current_date?.split('T')[0];
         if (!taskDate) return true;
@@ -1568,8 +1568,8 @@ const WorkTasksTab = ({
 
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Employee</p>
-                                  <p className="text-sm font-bold text-gray-900">{task.name || "—"}</p>
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Employee</p>
+                                <p className="text-sm font-bold text-gray-900">{task.name || "—"}</p>
                               </div>
                               {showHistory ? (
                                 <div className="space-y-2 col-span-2 border-t border-gray-100 pt-2">

@@ -141,19 +141,19 @@ const AllTasks = () => {
       const managerUser = allUsers.find(u => typeof u === 'object' && u.user_name === currentUsername);
       const userAccess = localStorage.getItem("user_access") || (managerUser ? managerUser.user_access : "") || "";
       const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      
+
       const matched = allUsers.filter(u => {
         if (typeof u !== 'object') return false;
         const userShop = (u.shop_name || u.user_access || "").toLowerCase();
         const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
         return userShopsList.some(s => managerShops.includes(s));
       }).map(u => u.user_name);
-      
+
       return [...new Set([currentUsername, ...matched])].filter(Boolean);
     } else if (role === "user") {
       return [currentUsername].filter(Boolean);
     }
-    
+
     return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
   }, [allUsers, userRole, username]);
 
@@ -1214,7 +1214,7 @@ const AllTasks = () => {
         {/* Sticky Header Section */}
         {/* Sticky Header Section */}
         <div className="sticky top-0 z-30  py-2 transition-all duration-300">
-          <div className="max-w-7xl mx-auto space-y-2"> 
+          <div className="max-w-7xl mx-auto space-y-2">
             {/* Tab System & Primary Actions */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
               <div className="flex-shrink-0">
@@ -1322,29 +1322,29 @@ const AllTasks = () => {
                           <div className="absolute z-50 mt-2 w-40 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                             {(activeTab === "work"
                               ? [
-                                  { id: 'all', label: 'All Tasks' },
-                                  { id: 'today', label: 'Today' },
-                                  { id: 'upcoming', label: 'Upcoming' }
-                                ]
+                                { id: 'all', label: 'All Tasks' },
+                                { id: 'today', label: 'Today' },
+                                { id: 'upcoming', label: 'Upcoming' }
+                              ]
                               : [
-                                  { id: 'all', label: 'All Tasks' },
-                                  { id: 'overdue', label: 'Overdue' },
-                                  { id: 'today', label: 'Today' },
-                                  { id: 'upcoming', label: 'Upcoming' }
-                                ]
+                                { id: 'all', label: 'All Tasks' },
+                                { id: 'overdue', label: 'Overdue' },
+                                { id: 'today', label: 'Today' },
+                                { id: 'upcoming', label: 'Upcoming' }
+                              ]
                             ).map((filter) => (
-                                <button
-                                  key={filter.id}
-                                  onClick={() => {
-                                    setDateFilter(filter.id);
-                                    setSelectedItems(new Set());
-                                    setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
-                                  }}
-                                  className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
-                                >
-                                  {filter.label}
-                                </button>
-                              ))}
+                              <button
+                                key={filter.id}
+                                onClick={() => {
+                                  setDateFilter(filter.id);
+                                  setSelectedItems(new Set());
+                                  setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
+                                }}
+                                className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                              >
+                                {filter.label}
+                              </button>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1649,46 +1649,46 @@ const AllTasks = () => {
                                                       : formatDateWithTime(task[header.id])
                                                     : header.id === "status"
                                                       ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
-                                                          ? (
-                                                            <select
-                                                              value={statusData[task.id] || task.status || ""}
-                                                              onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
-                                                              disabled={!selectedItems.has(task.id)}
-                                                              className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
-                                                              style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                            >
-                                                              <option value="">Select Status</option>
-                                                              {activeTab === "ea" ? (
-                                                                <>
-                                                                  <option value="done">Done</option>
-                                                                  <option value="extended">Extend</option>
-                                                                </>
-                                                              ) : (
-                                                                <>
-                                                                  <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
-                                                                  <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
-                                                                </>
-                                                              )}
-                                                            </select>
-                                                          )
-                                                          : (
-                                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${activeTab === "ea"
-                                                              ? (task[header.id]?.toLowerCase() === "approved" ? "bg-green-100 text-green-800" : task[header.id]?.toLowerCase() === "done" ? "bg-orange-100 text-orange-800" : (task[header.id]?.toLowerCase() === "pending" || task[header.id]?.toLowerCase() === "extend" || task[header.id]?.toLowerCase() === "extended") ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800")
-                                                              : (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "approved" || task[header.id] === "Completed")
-                                                                ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                                                : (task[header.id] === "extend" || task[header.id] === "pending" || task[header.id] === "extended")
-                                                                  ? "bg-yellow-100 text-yellow-800"
-                                                                  : "bg-gray-100 text-gray-800"
-                                                              }`}>
-                                                              {activeTab === "ea" && showHistory
-                                                                ? (task[header.id]?.toLowerCase() === "approved" || (task[header.id]?.toLowerCase() === "done" && task.admin_done) ? "Completed" : task[header.id]?.toLowerCase() === "done" ? "Pending Approval" : (task[header.id]?.toLowerCase() === "extended" || task[header.id]?.toLowerCase() === "extend") ? "Extended" : task[header.id])
-                                                                : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && !task.admin_done)
-                                                                  ? "Pending Approval"
-                                                                  : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && task.admin_done)
-                                                                    ? "Approved"
-                                                                    : task[header.id]}
-                                                            </span>
-                                                          )
+                                                        ? (
+                                                          <select
+                                                            value={statusData[task.id] || task.status || ""}
+                                                            onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                                            disabled={!selectedItems.has(task.id)}
+                                                            className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
+                                                            style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
+                                                          >
+                                                            <option value="">Select Status</option>
+                                                            {activeTab === "ea" ? (
+                                                              <>
+                                                                <option value="done">Done</option>
+                                                                <option value="extended">Extend</option>
+                                                              </>
+                                                            ) : (
+                                                              <>
+                                                                <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
+                                                                <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
+                                                              </>
+                                                            )}
+                                                          </select>
+                                                        )
+                                                        : (
+                                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${activeTab === "ea"
+                                                            ? (task[header.id]?.toLowerCase() === "approved" ? "bg-green-100 text-green-800" : task[header.id]?.toLowerCase() === "done" ? "bg-orange-100 text-orange-800" : (task[header.id]?.toLowerCase() === "pending" || task[header.id]?.toLowerCase() === "extend" || task[header.id]?.toLowerCase() === "extended") ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800")
+                                                            : (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "approved" || task[header.id] === "Completed")
+                                                              ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                                              : (task[header.id] === "extend" || task[header.id] === "pending" || task[header.id] === "extended")
+                                                                ? "bg-yellow-100 text-yellow-800"
+                                                                : "bg-gray-100 text-gray-800"
+                                                            }`}>
+                                                            {activeTab === "ea" && showHistory
+                                                              ? (task[header.id]?.toLowerCase() === "approved" || (task[header.id]?.toLowerCase() === "done" && task.admin_done) ? "Completed" : task[header.id]?.toLowerCase() === "done" ? "Pending Approval" : (task[header.id]?.toLowerCase() === "extended" || task[header.id]?.toLowerCase() === "extend") ? "Extended" : task[header.id])
+                                                              : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && !task.admin_done)
+                                                                ? "Pending Approval"
+                                                                : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && task.admin_done)
+                                                                  ? "Approved"
+                                                                  : task[header.id]}
+                                                          </span>
+                                                        )
                                                       : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder" || header.id === "attachment")
                                                         ? (task[header.id] ? "Yes" : "No")
                                                         : (header.id === 'name' || header.id === 'assigned_person' || header.id === 'doer_name' || header.id === 'manager_name')
