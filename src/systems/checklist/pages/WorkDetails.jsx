@@ -123,7 +123,7 @@ export default function WorkDetails() {
 
   // Filter & UI States
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedShop, setSelectedShop] = useState("All");
+  const [selectedShop, setSelectedShop] = useState("select");
   const [bulkStartDate, setBulkStartDate] = useState("");
   const [bulkEndDate, setBulkEndDate] = useState("");
   const [selectedRows, setSelectedRows] = useState(new Set());
@@ -157,7 +157,7 @@ export default function WorkDetails() {
         return false;
       }
 
-      if (selectedShop !== "All") {
+      if (selectedShop !== "All" && selectedShop !== "select") {
         return userShopsList.includes(selectedShop.toLowerCase());
       }
 
@@ -325,7 +325,7 @@ export default function WorkDetails() {
 
   useEffect(() => {
     if (!hasAllShopsAccess && availableShops.length > 0) {
-      if (selectedShop === "All" || !availableShops.map(s => String(s).toLowerCase()).includes(String(selectedShop).toLowerCase())) {
+      if (selectedShop !== "select" && (selectedShop === "All" || !availableShops.map(s => String(s).toLowerCase()).includes(String(selectedShop).toLowerCase()))) {
         setSelectedShop(availableShops[0]);
       }
     }
@@ -369,7 +369,7 @@ export default function WorkDetails() {
       if (role === "manager" && !managerShops.includes(itemShopLower)) {
         return false;
       }
-      const matchesShop = selectedShop === "All" || item.shopName === selectedShop;
+      const matchesShop = selectedShop === "All" || selectedShop === "select" || item.shopName === selectedShop;
       const matchesSearch = item.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.manager_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -422,6 +422,16 @@ export default function WorkDetails() {
     }
 
     handleFieldChange(item.taskId, field, combineDateAndTime(date, time));
+  };
+
+  const handleDateChange = (item, field, newDate) => {
+    const currentTask = mergedData.find(t => t.taskId === item.taskId) || item;
+    const existingVal = modifiedRows[item.taskId]?.[field] !== undefined 
+      ? modifiedRows[item.taskId][field] 
+      : currentTask[field];
+    const time = getTimePart(existingVal);
+    const newCombined = combineDateAndTime(newDate, time);
+    handleFieldChange(item.taskId, field, newCombined);
   };
 
   const applyBulkDates = () => {
@@ -846,111 +856,112 @@ export default function WorkDetails() {
               ? { height: "auto", opacity: 1, overflow: "visible" }
               : showMobileFilters
                 ? {
-                    height: "auto",
-                    opacity: 1,
-                    transitionEnd: { overflow: "visible" }
-                  }
+                  height: "auto",
+                  opacity: 1,
+                  transitionEnd: { overflow: "visible" }
+                }
                 : {
-                    height: 0,
-                    opacity: 0,
-                    overflow: "hidden"
-                  }
+                  height: 0,
+                  opacity: 0,
+                  overflow: "hidden"
+                }
           }
           transition={{ duration: 0.3, ease: "easeInOut" }}
           className="overflow-hidden w-full"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 bg-white p-4 shadow-sm items-end border-x border-gray-100">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
-              <LayoutGrid size={10} className="text-blue-500" /> Filter Shop
-            </label>
-            <div className="relative group">
-              <select
-                className="w-full pl-2.5 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none appearance-none transition-all group-hover:bg-blue-50/50"
-                value={selectedShop}
-                onChange={(e) => setSelectedShop(e.target.value)}
-              >
-                {hasAllShopsAccess && <option value="All">All</option>}
-                {availableShops.map(shop => <option key={shop} value={shop}>{shop}</option>)}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none group-hover:text-blue-600" />
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
+                <LayoutGrid size={10} className="text-blue-500" /> Filter Shop
+              </label>
+              <div className="relative group">
+                <select
+                  className="w-full pl-2.5 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none appearance-none transition-all group-hover:bg-blue-50/50"
+                  value={selectedShop}
+                  onChange={(e) => setSelectedShop(e.target.value)}
+                >
+                  <option value="select">select</option>
+                  {hasAllShopsAccess && <option value="All">All</option>}
+                  {availableShops.map(shop => <option key={shop} value={shop}>{shop}</option>)}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none group-hover:text-blue-600" />
+              </div>
             </div>
-          </div>
 
-          {(isAdmin || isHOD) && (
-            <>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
-                  <Calendar size={10} className="text-emerald-500" /> Bulk Start Date
-                </label>
-                <input
-                  type="date"
-                  className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-emerald-50/30 transition-all"
-                  value={bulkStartDate}
-                  onChange={(e) => setBulkStartDate(e.target.value)}
-                />
-              </div>
+            {(isAdmin || isHOD) && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
+                    <Calendar size={10} className="text-emerald-500" /> Bulk Start Date
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-emerald-50/30 transition-all"
+                    value={bulkStartDate}
+                    onChange={(e) => setBulkStartDate(e.target.value)}
+                  />
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
-                  <Calendar size={10} className="text-orange-500" /> Bulk End Date
-                </label>
-                <input
-                  type="date"
-                  className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-orange-50/30 transition-all"
-                  value={bulkEndDate}
-                  onChange={(e) => setBulkEndDate(e.target.value)}
-                />
-              </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
+                    <Calendar size={10} className="text-orange-500" /> Bulk End Date
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-orange-50/30 transition-all"
+                    value={bulkEndDate}
+                    onChange={(e) => setBulkEndDate(e.target.value)}
+                  />
+                </div>
 
-              <button
-                onClick={applyBulkDates}
-                disabled={selectedRows.size === 0}
-                className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:grayscale text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-emerald-200 active:scale-95"
-              >
-                <CheckCircle2 size={14} /> Apply Bulk
-              </button>
-            </>
-          )}
+                <button
+                  onClick={applyBulkDates}
+                  disabled={selectedRows.size === 0}
+                  className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:grayscale text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-emerald-200 active:scale-95"
+                >
+                  <CheckCircle2 size={14} /> Apply Bulk
+                </button>
+              </>
+            )}
 
-          <button
-            onClick={handleSaveChanges}
-            disabled={saving || Object.keys(modifiedRows).length === 0}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-blue-200 active:scale-95"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {saving ? "Saving..." : "Save All"}
-          </button>
-
-          {isAdmin && (
-            <>
-              <button
-                onClick={handleBulkGenerate}
-                disabled={selectedRows.size === 0}
-                className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-indigo-200 active:scale-95"
-              >
-                <CheckCircle2 size={14} /> Generate Tasks
-              </button>
-              <button
-                onClick={handleBulkReset}
-                disabled={selectedRows.size === 0}
-                className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-red-200 active:scale-95"
-              >
-                <Clock size={14} /> Unlock Tasks
-              </button>
-            </>
-          )}
-
-          {isAdmin && (
             <button
-              onClick={() => navigate('/dashboard/work-records/bulk-import')}
-              className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-purple-200 active:scale-95"
+              onClick={handleSaveChanges}
+              disabled={saving || Object.keys(modifiedRows).length === 0}
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-blue-200 active:scale-95"
             >
-              <Upload size={14} /> Add Tasks
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {saving ? "Saving..." : "Save All"}
             </button>
-          )}
-        </div>
-      </motion.div>
+
+            {isAdmin && (
+              <>
+                <button
+                  onClick={handleBulkGenerate}
+                  disabled={selectedRows.size === 0}
+                  className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-indigo-200 active:scale-95"
+                >
+                  <CheckCircle2 size={14} /> Generate Tasks
+                </button>
+                <button
+                  onClick={handleBulkReset}
+                  disabled={selectedRows.size === 0}
+                  className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-red-200 active:scale-95"
+                >
+                  <Clock size={14} /> Unlock Tasks
+                </button>
+              </>
+            )}
+
+            {isAdmin && (
+              <button
+                onClick={() => navigate('/dashboard/work-records/bulk-import')}
+                className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-purple-200 active:scale-95"
+              >
+                <Upload size={14} /> Add Tasks
+              </button>
+            )}
+          </div>
+        </motion.div>
 
         {/* Error State */}
         {error && (
@@ -1047,8 +1058,8 @@ export default function WorkDetails() {
                               type="number"
                               min="0"
                               className={`w-16 px-1 py-1 border rounded text-[10px] font-bold text-center outline-none transition-all ${modifiedRows[item.taskId]?.estimated_minutes !== undefined
-                                  ? 'border-amber-300 bg-amber-50/50'
-                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                                 }`}
                               value={
                                 modifiedRows[item.taskId]?.estimated_minutes !== undefined
@@ -1066,19 +1077,39 @@ export default function WorkDetails() {
                         )}
                       </td>
                       <td className="px-2 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar size={10} className={isModified && modifiedRows[item.taskId]?.start_datetime ? "text-amber-500" : "text-emerald-500"} />
-                          <span className={`text-[10px] font-bold ${isModified && modifiedRows[item.taskId]?.start_datetime ? "text-amber-700" : "text-gray-700"}`}>
-                            {getDatePart(item.start_datetime) ? getDatePart(item.start_datetime).split('-').reverse().join('/') : "--"}
-                          </span>
+                        <div className="flex items-center gap-1 relative group">
+                          <input
+                            type="date"
+                            className={`w-full px-1 py-1 border rounded text-[10px] font-bold outline-none transition-all cursor-pointer ${
+                              isModified && modifiedRows[item.taskId]?.start_datetime
+                                ? 'border-amber-300 bg-amber-50/50 text-amber-800'
+                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
+                            }`}
+                            value={getDatePart(item.start_datetime)}
+                            onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
+                            onClick={(e) => { try { e.target.showPicker(); } catch {} }}
+                            disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                          />
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar size={10} className={isModified && modifiedRows[item.taskId]?.end_datetime ? "text-amber-500" : "text-orange-500"} />
-                          <span className={`text-[10px] font-bold ${isModified && modifiedRows[item.taskId]?.end_datetime ? "text-amber-700" : "text-gray-700"}`}>
-                            {getDatePart(item.end_datetime) ? getDatePart(item.end_datetime).split('-').reverse().join('/') : "--"}
-                          </span>
+                        <div className="flex items-center gap-1 relative group">
+                          <input
+                            type="date"
+                            className={`w-full px-1 py-1 border rounded text-[10px] font-bold outline-none transition-all cursor-pointer ${
+                              isModified && modifiedRows[item.taskId]?.end_datetime
+                                ? 'border-amber-300 bg-amber-50/50 text-amber-800'
+                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
+                            }`}
+                            value={getDatePart(item.end_datetime)}
+                            onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
+                            onClick={(e) => { try { e.target.showPicker(); } catch {} }}
+                            disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                          />
                         </div>
                       </td>
                       {isAdmin && (
@@ -1087,10 +1118,10 @@ export default function WorkDetails() {
                             <input
                               type="time"
                               className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].start_datetime
-                                  ? 'border-amber-300 bg-amber-50/50'
-                                  : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                    ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                                 }`}
                               value={getTimePart(item.start_datetime)}
                               onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
@@ -1101,10 +1132,10 @@ export default function WorkDetails() {
                             <input
                               type="time"
                               className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].end_datetime
-                                  ? 'border-amber-300 bg-amber-50/50'
-                                  : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                    ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                                 }`}
                               value={getTimePart(item.end_datetime)}
                               onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
@@ -1119,10 +1150,10 @@ export default function WorkDetails() {
                             type="text"
                             placeholder="Manager.."
                             className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].manager_name
-                                ? 'border-amber-300 bg-amber-50/50'
-                                : item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime
-                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                              ? 'border-amber-300 bg-amber-50/50'
+                              : item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                               }`}
                             value={item.manager_name || ""}
                             onChange={(e) => {
@@ -1198,8 +1229,8 @@ export default function WorkDetails() {
                                 type="text"
                                 placeholder={item.employee_name ? "Add employee..." : "Employee.."}
                                 className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].employee_name
-                                    ? 'border-amber-300 bg-amber-50/50'
-                                    : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                                  ? 'border-amber-300 bg-amber-50/50'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                                   }`}
                                 value={(searchDropdown.type === "employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
                                 onChange={(e) => {
@@ -1335,38 +1366,74 @@ export default function WorkDetails() {
 
                 {/* Edit Fields Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-gray-50">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">Start Date</label>
+                    <input
+                      type="date"
+                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.start_datetime
+                        ? 'border-amber-300 bg-amber-50/50 text-amber-800'
+                        : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
+                        }`}
+                      value={getDatePart(item.start_datetime)}
+                      onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
+                      onClick={(e) => { try { e.target.showPicker(); } catch {} }}
+                      disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">End Date</label>
+                    <input
+                      type="date"
+                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.end_datetime
+                        ? 'border-amber-300 bg-amber-50/50 text-amber-800'
+                        : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
+                        }`}
+                      value={getDatePart(item.end_datetime)}
+                      onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
+                      onClick={(e) => { try { e.target.showPicker(); } catch {} }}
+                      disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                    />
+                  </div>
+
                   {isAdmin && (
                     <>
                       {/* Start Time */}
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Time</label>
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">Start Time</label>
                         <input
                           type="time"
-                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].start_datetime
-                              ? 'border-amber-300 bg-amber-50/50'
-                              : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.start_datetime
+                            ? 'border-amber-300 bg-amber-50/50'
+                            : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                             }`}
                           value={getTimePart(item.start_datetime)}
                           onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
+                          onClick={(e) => { try { e.target.showPicker(); } catch {} }}
                           disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
                         />
                       </div>
 
                       {/* End Time */}
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Time</label>
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">End Time</label>
                         <input
                           type="time"
-                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].end_datetime
-                              ? 'border-amber-300 bg-amber-50/50'
-                              : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.end_datetime
+                            ? 'border-amber-300 bg-amber-50/50'
+                            : (item.status === 'GENERATED' || !!item.next_start_datetime)
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                             }`}
                           value={getTimePart(item.end_datetime)}
                           onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
+                          onClick={(e) => { try { e.target.showPicker(); } catch {} }}
                           disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
                         />
                       </div>
@@ -1384,10 +1451,10 @@ export default function WorkDetails() {
                         type="text"
                         placeholder="Assign Manager.."
                         className={`w-full px-2.5 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].manager_name
-                            ? 'border-amber-300 bg-amber-50/50'
-                            : item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          ? 'border-amber-300 bg-amber-50/50'
+                          : item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                           }`}
                         value={item.manager_name || ""}
                         onChange={(e) => {
@@ -1475,8 +1542,8 @@ export default function WorkDetails() {
                             type="text"
                             placeholder={item.employee_name ? "Add employee..." : "Assign Employee.."}
                             className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].employee_name
-                                ? 'border-amber-300 bg-amber-50/50'
-                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                              ? 'border-amber-300 bg-amber-50/50'
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                               }`}
                             value={(searchDropdown.type === "employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
                             onChange={(e) => {
