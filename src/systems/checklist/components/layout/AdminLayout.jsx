@@ -328,7 +328,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
         const { data } = await supabase
           .from("users")
           .select("profile_image, page_access, master_user_system_page_access")
-          .or(`user_name.ilike."${storedUsername}",username.ilike."${storedUsername}"`)
+          .ilike("user_name", storedUsername)
           .limit(1)
           .maybeSingle();
 

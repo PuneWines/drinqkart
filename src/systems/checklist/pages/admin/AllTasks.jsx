@@ -197,6 +197,8 @@ const AllTasks = () => {
       setShowHistory(false);
       setWorkEmployeeFilter(user || "");
     }
+
+    console.log(userRole)
   }, []);
 
   // Format date to dd/mm/yyyy
@@ -516,7 +518,7 @@ const AllTasks = () => {
           const matchedUsers = allDbUsers.filter(u => {
             const userShop = (u.shop_name || u.user_access || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-            return userShopsList.some(s => managerShops.includes(s));
+            return managerShops.includes("all") || managerShops.includes("admin") || userShopsList.some(s => managerShops.includes(s));
           }).map(u => u.user_name || "");
           reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
         }
