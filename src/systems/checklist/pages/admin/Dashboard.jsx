@@ -80,7 +80,7 @@ export default function AdminDashboard() {
           const { data: userDb } = await supabase
             .from("users")
             .select("shop_name, user_access")
-            .or(`user_name.ilike.${currentUsername},username.ilike.${currentUsername}`)
+            .eq("user_name", currentUsername)
             .maybeSingle();
           if (userDb) {
             rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
@@ -1073,7 +1073,7 @@ export default function AdminDashboard() {
             const { data: userDb } = await supabase
               .from("users")
               .select("shop_name, user_access")
-              .or(`user_name.ilike.${currentUsername},username.ilike.${currentUsername}`)
+              .eq("user_name", currentUsername)
               .maybeSingle();
             if (userDb) {
               rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();

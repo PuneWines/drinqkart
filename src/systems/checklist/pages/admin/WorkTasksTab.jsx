@@ -285,7 +285,7 @@ const WorkTasksTab = ({
               const { data: userDb } = await supabase
                 .from("users")
                 .select("shop_name, user_access")
-                .or(`user_name.ilike.${currentUsername},username.ilike.${currentUsername}`)
+                .eq("user_name", currentUsername)
                 .maybeSingle();
               if (userDb) {
                 rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
@@ -469,18 +469,6 @@ const WorkTasksTab = ({
 
       if (isSuperAdmin) {
         applyNameFilter = false;
-      } else if (filterByShop) {
-        applyNameFilter = false;
-      } else if (currentUserRole === "admin") {
-        applyNameFilter = false;
-      } else if (currentUserRole === "hod") {
-        const { data: reports } = await supabase
-          .from("users")
-          .select("user_name")
-          .eq("reported_by", username);
-        if (reports && reports.length > 0) {
-          reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
-        }
       } else if (currentUserRole === "manager") {
         const { data: allDbUsers } = await supabase
           .from("users")
@@ -490,13 +478,25 @@ const WorkTasksTab = ({
           const matchedUsers = allDbUsers.filter(u => {
             const userShop = (u.shop_name || u.user_access || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-            return userShopsList.some(s => managerShops.includes(s));
+            return managerShops.includes("all") || managerShops.includes("admin") || userShopsList.some(s => managerShops.includes(s));
           }).map(u => u.user_name || "");
           reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
         }
+        applyNameFilter = true;
+      } else if (currentUserRole === "hod") {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        if (reports && reports.length > 0) {
+          reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
+        }
+        applyNameFilter = true;
+      } else if (currentUserRole === "admin" || filterByShop) {
+        applyNameFilter = false;
       }
 
-      if (applyNameFilter) {
+      if (applyNameFilter && reportingUsers.length > 0) {
         query = query.in("name", reportingUsers);
       }
 
@@ -522,9 +522,11 @@ const WorkTasksTab = ({
 
         query = query.or('submission_date.is.null,status.eq.REJECTED');
 
-        // Only today tasks in 'live'
-        if (dateFilter === "today" || dateFilter === "all") {
+        // Today or All pending tasks in 'live'
+        if (dateFilter === "today") {
           query = query.eq('current_date', todayStr);
+        } else if (dateFilter === "all") {
+          query = query.lte('current_date', todayStr);
         } else {
           // "not_done" or "upcoming" filter should return empty since live is today only
           query = query.eq('id', -1);
@@ -572,7 +574,7 @@ const WorkTasksTab = ({
           id: item.id || item.task_id,
           _table: item._table || tableName,
           shop: item.shop || item.shop_name || "-",
-          manager_name: item.task_assignments?.manager_name || "—"
+          manager_name: item.task_assignments?.manager_name || item.given_by || item.manager_name || "—"
         };
 
         if (mapped.status === "REJECTED") {
@@ -593,9 +595,16 @@ const WorkTasksTab = ({
       }
 
       if (currentUserRole === "manager") {
-        filteredWorkTasks = filteredWorkTasks.filter(item =>
-          item.name === currentUsername || item.manager_name === currentUsername
-        );
+        const mgrLower = (currentUsername || "").toLowerCase().trim();
+        filteredWorkTasks = filteredWorkTasks.filter(item => {
+          const itemDoer = (item.name || "").toLowerCase().trim();
+          const itemMgr = (item.manager_name || item.given_by || "").toLowerCase().trim();
+          const itemShop = (item.shop || item.shop_name || "").toLowerCase().trim();
+
+          const isDirectUserMatch = itemDoer === mgrLower || itemMgr === mgrLower;
+          const isShopMatch = allowedShops.length > 0 && allowedShops.some(s => itemShop === s || itemShop.includes(s) || s.includes(itemShop));
+          return isDirectUserMatch || isShopMatch;
+        });
       }
 
       filteredWorkTasks = filteredWorkTasks.filter(item => {
