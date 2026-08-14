@@ -8,8 +8,11 @@ import { Loader2, CheckCircle2, Clock, AlertCircle, Search, Filter, Paperclip, M
 
 const getWorkTaskTimeBounds = (task) => {
   const startStr = task.task_assignments?.start_datetime;
+  const endStr = task.task_assignments?.end_datetime;
   let startHour = 0;
   let startMin = 0;
+  let endHour = 23;
+  let endMin = 59;
   if (startStr) {
     const parts = startStr.split('T');
     if (parts[1]) {
@@ -18,11 +21,20 @@ const getWorkTaskTimeBounds = (task) => {
       startMin = parseInt(timeParts[1]) || 0;
     }
   }
+  if (endStr) {
+    const parts = endStr.split('T');
+    if (parts[1]) {
+      const timeParts = parts[1].split(':');
+      endHour = parseInt(timeParts[0]) || 0;
+      endMin = parseInt(timeParts[1]) || 0;
+    }
+  }
   const [year, month, day] = task.current_date.split('-').map(Number);
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
-  const duration = task.duration || 0; // minutes
-  const taskEnd = new Date(taskStart.getTime() + duration * 60 * 1000);
-  return { taskStart, taskEnd };
+  const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
+  const duration = task.duration || task.estimated_minutes || 0; // minutes
+  const taskEnd = new Date(baseEnd.getTime() + duration * 60 * 1000);
+  return { taskStart, baseEnd, taskEnd };
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
@@ -51,7 +63,7 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
 
   if (currentTime < taskStart) {
     return "UPCOMING";
-  } else if (currentTime >= taskStart && currentTime < taskEnd) {
+  } else if (currentTime >= taskStart && currentTime <= taskEnd) {
     return "ACTIVE";
   } else {
     return "NOT_DONE";
