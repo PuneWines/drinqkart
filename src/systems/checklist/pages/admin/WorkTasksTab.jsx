@@ -67,12 +67,12 @@ const getWorkTaskTimeBounds = (task) => {
   }
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
 
-  const estimatedMins = task.duration || 0;
+  const estimatedMins = task.duration || task.estimated_minutes || 0;
   const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
   const taskEnd = new Date(baseEnd.getTime() + estimatedMins * 60 * 1000);
   const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
 
-  return { taskStart, taskEnd, endOfDay };
+  return { taskStart, baseEnd, taskEnd, endOfDay };
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
@@ -80,11 +80,11 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
   if (task.status === "REJECTED") return "REJECTED";
 
-  const { taskStart, endOfDay } = getWorkTaskTimeBounds(task);
+  const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
 
   if (currentTime < taskStart) {
     return "UPCOMING";
-  } else if (currentTime <= endOfDay) {
+  } else if (currentTime <= taskEnd) {
     return "ACTIVE";
   } else {
     return "NOT_DONE";
