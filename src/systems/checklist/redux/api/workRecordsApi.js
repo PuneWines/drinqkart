@@ -9,7 +9,7 @@ export const fetchMasterWorkTasksApi = async () => {
   try {
     const { data, error } = await supabase
       .from('master_work_tasks')
-      .select('*, shop(id, shop_name)')
+      .select('*, shop(id, shop_name), task_assignments(*)')
       .eq('is_active', true)
       .order('id', { ascending: true });
 

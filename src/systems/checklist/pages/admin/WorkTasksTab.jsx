@@ -393,7 +393,7 @@ const WorkTasksTab = ({
       { id: "department", label: "Department" },
       { id: "name", label: "Employee" },
       { id: "current_date", label: "Date" },
-      { id: "duration", label: "Mins" },
+      { id: "duration", label: "Extra Time" },
     ];
 
     if (showHistory) {
@@ -1077,7 +1077,7 @@ const WorkTasksTab = ({
         "Shop",
         "Department",
         "Employee",
-        "Duration (Mins)",
+        "Extra Time (Mins)",
         "Employee Status",
         "Submission Date",
         "Manager Status",

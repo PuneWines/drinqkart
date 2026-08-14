@@ -88,8 +88,8 @@ export const updateDelegationTask = createAsyncThunk(
 
 export const uniqueWorkTaskData = createAsyncThunk(
   'fetch/workTask',
-  async ({ page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', append = false }) => {
-    const result = await fetchWorkTaskData(page, pageSize, nameFilter, dateFilter);
+  async ({ page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', shopFilter = 'All', statusFilter = 'All', append = false }) => {
+    const result = await fetchWorkTaskData(page, pageSize, nameFilter, dateFilter, shopFilter, statusFilter);
     return { ...result, append };
   }
 );

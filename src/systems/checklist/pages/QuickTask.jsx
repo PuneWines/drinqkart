@@ -194,12 +194,12 @@ export default function QuickTask() {
         dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
       } else if (activeTab === 'work') {
         dispatch(resetWorkPagination());
-        dispatch(uniqueWorkTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
+        dispatch(uniqueWorkTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm, shopFilter: workShopFilter, statusFilter: workStatusFilter }));
       }
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [dispatch, activeTab, dateFilter, freqFilter, searchTerm]);
+  }, [dispatch, activeTab, dateFilter, freqFilter, searchTerm, workShopFilter, workStatusFilter]);
 
 
   // Add this new function
@@ -231,11 +231,13 @@ export default function QuickTask() {
           page: workPage,
           pageSize: 50,
           append: true,
-          nameFilter: searchTerm
+          nameFilter: searchTerm,
+          shopFilter: workShopFilter,
+          statusFilter: workStatusFilter
         }));
       }
     }
-  }, [loading, maintenanceLoading, activeTab, checklistHasMore, delegationHasMore, maintenanceHasMore, workHasMore, checklistPage, delegationPage, workPage, maintenancePage, dispatch, searchTerm]);
+  }, [loading, maintenanceLoading, activeTab, checklistHasMore, delegationHasMore, maintenanceHasMore, workHasMore, checklistPage, delegationPage, workPage, maintenancePage, dispatch, searchTerm, workShopFilter, workStatusFilter]);
 
   // Options for Maintenance dropdowns
   const machineOptions = useMemo(() =>
@@ -721,15 +723,19 @@ export default function QuickTask() {
 
     return [...unique].sort((a, b) => {
       if (sortConfig.key) {
-        const valA = a[sortConfig.key];
-        const valB = b[sortConfig.key];
+        const valA = a[sortConfig.key] ?? '';
+        const valB = b[sortConfig.key] ?? '';
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          const comp = valA.localeCompare(valB, undefined, { sensitivity: 'base' });
+          return sortConfig.direction === 'asc' ? comp : -comp;
+        }
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       }
-      const dateA = new Date(a.task_start_date || 0);
-      const dateB = new Date(b.task_start_date || 0);
-      return dateA - dateB;
+      const idA = Number(a.task_id || a.id || 0);
+      const idB = Number(b.task_id || b.id || 0);
+      return idA - idB;
     });
   }, [workTasks, sortConfig, searchTerm, workShopFilter, workStatusFilter]);
 
@@ -752,18 +758,22 @@ export default function QuickTask() {
       return true;
     });
 
-    // Sort by sortConfig or default to task_start_date ascending
+    // Sort by sortConfig or default to task_id ascending
     return [...unique].sort((a, b) => {
       if (sortConfig.key) {
-        const valA = a[sortConfig.key];
-        const valB = b[sortConfig.key];
+        const valA = a[sortConfig.key] ?? '';
+        const valB = b[sortConfig.key] ?? '';
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          const comp = valA.localeCompare(valB, undefined, { sensitivity: 'base' });
+          return sortConfig.direction === 'asc' ? comp : -comp;
+        }
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       }
-      const dateA = new Date(a.task_start_date || 0);
-      const dateB = new Date(b.task_start_date || 0);
-      return dateA - dateB;
+      const idA = Number(a.task_id || a.id || 0);
+      const idB = Number(b.task_id || b.id || 0);
+      return idA - idB;
     });
   }, [quickTask, sortConfig, searchTerm]);
 
@@ -1882,7 +1892,7 @@ export default function QuickTask() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Duration (HH:MM)</label>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Extra Time (HH:MM)</label>
                         <input
                           type="text"
                           value={editFormData.duration || ''}

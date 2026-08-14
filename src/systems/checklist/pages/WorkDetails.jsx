@@ -84,12 +84,16 @@ const formatDateTime = (value) => {
 
 const getDatePart = (value) => {
   if (!value) return "";
-  return String(value).split("T")[0] || "";
+  const str = String(value).trim();
+  return str.split(/[T ]/)[0] || "";
 };
 
 const getTimePart = (value) => {
-  if (!value || !String(value).includes("T")) return "";
-  return String(value).split("T")[1]?.substring(0, 5) || "";
+  if (!value) return "";
+  const str = String(value).trim();
+  if (str.includes("T")) return str.split("T")[1]?.substring(0, 5) || "";
+  if (str.includes(" ")) return str.split(" ")[1]?.substring(0, 5) || "";
+  return "";
 };
 
 const combineDateAndTime = (date, time) => {
@@ -339,12 +343,8 @@ export default function WorkDetails() {
   // Merge Master Tasks and Current Assignments
   const mergedData = useMemo(() => {
     return masterTasks.map(task => {
-      let assignment = assignments.find(a => a.task_id === task.id);
-
-      // Auto-Reset Logic: If end_datetime has passed, treat as unassigned
-      if (assignment && assignment.end_datetime && new Date(assignment.end_datetime) < currentTime) {
-        assignment = null;
-      }
+      const joinedAsgn = Array.isArray(task.task_assignments) ? task.task_assignments[0] : task.task_assignments;
+      let assignment = joinedAsgn || assignments.find(a => a.task_id === task.id);
 
       const modified = modifiedRows[task.id] || {};
 
@@ -988,7 +988,7 @@ export default function WorkDetails() {
                 <th className="px-2 py-4">Shop</th>
                 <th className="px-2 py-4 w-[22%]">Task Description</th>
                 <th className="px-2 py-4">Dept</th>
-                <th className="px-2 py-4 text-center">Mins</th>
+                <th className="px-2 py-4 text-center">Extra Time</th>
                 <th className="px-2 py-4">Start Date</th>
                 <th className="px-2 py-4">End Date</th>
                 {isAdmin && (
@@ -1052,98 +1052,37 @@ export default function WorkDetails() {
                         </span>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        {isAdmin ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <input
-                              type="number"
-                              min="0"
-                              className={`w-16 px-1 py-1 border rounded text-[10px] font-bold text-center outline-none transition-all ${modifiedRows[item.taskId]?.estimated_minutes !== undefined
-                                ? 'border-amber-300 bg-amber-50/50'
-                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                                }`}
-                              value={
-                                modifiedRows[item.taskId]?.estimated_minutes !== undefined
-                                  ? modifiedRows[item.taskId].estimated_minutes
-                                  : (item.estimated_minutes || 0)
-                              }
-                              onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
-                            <Clock size={10} />
-                            {item.estimated_minutes || "--"}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-2 py-3">
-                        <div className="flex items-center gap-1 relative group">
-                          <input
-                            type="date"
-                            className={`w-full px-1 py-1 border rounded text-[10px] font-bold outline-none transition-all cursor-pointer ${
-                              isModified && modifiedRows[item.taskId]?.start_datetime
-                                ? 'border-amber-300 bg-amber-50/50 text-amber-800'
-                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
-                            }`}
-                            value={getDatePart(item.start_datetime)}
-                            onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
-                            onClick={(e) => { try { e.target.showPicker(); } catch {} }}
-                            disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
-                          />
+                        <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
+                          <Clock size={10} />
+                          {item.estimated_minutes || "--"} Mins
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <div className="flex items-center gap-1 relative group">
-                          <input
-                            type="date"
-                            className={`w-full px-1 py-1 border rounded text-[10px] font-bold outline-none transition-all cursor-pointer ${
-                              isModified && modifiedRows[item.taskId]?.end_datetime
-                                ? 'border-amber-300 bg-amber-50/50 text-amber-800'
-                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
-                            }`}
-                            value={getDatePart(item.end_datetime)}
-                            onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
-                            onClick={(e) => { try { e.target.showPicker(); } catch {} }}
-                            disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
-                          />
+                        <div className="flex items-center gap-1.5">
+                          <Calendar size={10} className="text-emerald-500" />
+                          <span className="text-[10px] font-bold text-gray-700">
+                            {getDatePart(item.start_datetime) ? getDatePart(item.start_datetime).split('-').reverse().join('/') : (bulkStartDate ? bulkStartDate.split('-').reverse().join('/') : "--")}
+                          </span>
                         </div>
                       </td>
-                      {isAdmin && (
-                        <>
-                          <td className="px-2 py-3">
-                            <input
-                              type="time"
-                              className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].start_datetime
-                                ? 'border-amber-300 bg-amber-50/50'
-                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                                }`}
-                              value={getTimePart(item.start_datetime)}
-                              onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                              disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
-                            />
-                          </td>
-                          <td className="px-2 py-3">
-                            <input
-                              type="time"
-                              className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].end_datetime
-                                ? 'border-amber-300 bg-amber-50/50'
-                                : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                                }`}
-                              value={getTimePart(item.end_datetime)}
-                              onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                              disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
-                            />
-                          </td>
-                        </>
-                      )}
+                      <td className="px-2 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar size={10} className="text-orange-500" />
+                          <span className="text-[10px] font-bold text-gray-700">
+                            {getDatePart(item.end_datetime) ? getDatePart(item.end_datetime).split('-').reverse().join('/') : (bulkEndDate ? bulkEndDate.split('-').reverse().join('/') : "--")}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <span className="px-2 py-1 bg-gray-100/70 border border-gray-200 rounded text-[10px] font-bold text-gray-700">
+                          {getTimePart(item.start_datetime) || "--:--"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3">
+                        <span className="px-2 py-1 bg-gray-100/70 border border-gray-200 rounded text-[10px] font-bold text-gray-700">
+                          {getTimePart(item.end_datetime) || "--:--"}
+                        </span>
+                      </td>
                       <td className="px-2 py-3 relative">
                         <div className="relative dropdown-container">
                           <input
@@ -1317,27 +1256,10 @@ export default function WorkDetails() {
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    {isAdmin ? (
-                      <div className="flex items-center gap-1 mt-1">
-                        <input
-                          type="number"
-                          min="0"
-                          className="w-14 px-1 py-0.5 border rounded text-[10px] font-bold text-center outline-none"
-                          value={
-                            modifiedRows[item.taskId]?.estimated_minutes !== undefined
-                              ? modifiedRows[item.taskId].estimated_minutes
-                              : (item.estimated_minutes || 0)
-                          }
-                          onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", parseInt(e.target.value) || 0)}
-                        />
-                        <span className="text-[9px] text-gray-400 font-bold">Mins</span>
-                      </div>
-                    ) : (
-                      <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
-                        <Clock size={10} />
-                        <span>{item.estimated_minutes || "--"} Mins</span>
-                      </div>
-                    )}
+                    <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
+                      <Clock size={10} />
+                      <span>{item.estimated_minutes || "--"} Mins (Extra Time)</span>
+                    </div>
                     {(() => {
                       const statusInfo = getTaskStatusInfo(item, isModified);
                       return (
@@ -1364,82 +1286,27 @@ export default function WorkDetails() {
                   )}
                 </div>
 
-                {/* Edit Fields Grid */}
+                {/* Read-only Fields Grid */}
+                <div className="grid grid-cols-2 gap-3.5 pt-2 border-t border-gray-50 text-[10px] font-bold text-gray-700">
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Date</span>
+                    <div>{getDatePart(item.start_datetime) ? getDatePart(item.start_datetime).split('-').reverse().join('/') : (bulkStartDate ? bulkStartDate.split('-').reverse().join('/') : "--")}</div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Date</span>
+                    <div>{getDatePart(item.end_datetime) ? getDatePart(item.end_datetime).split('-').reverse().join('/') : (bulkEndDate ? bulkEndDate.split('-').reverse().join('/') : "--")}</div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Time</span>
+                    <div>{getTimePart(item.start_datetime) || "--:--"}</div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Time</span>
+                    <div>{getTimePart(item.end_datetime) || "--:--"}</div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-gray-50">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">Start Date</label>
-                    <input
-                      type="date"
-                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.start_datetime
-                        ? 'border-amber-300 bg-amber-50/50 text-amber-800'
-                        : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
-                        }`}
-                      value={getDatePart(item.start_datetime)}
-                      onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
-                      onClick={(e) => { try { e.target.showPicker(); } catch {} }}
-                      disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">End Date</label>
-                    <input
-                      type="date"
-                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.end_datetime
-                        ? 'border-amber-300 bg-amber-50/50 text-amber-800'
-                        : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300 text-gray-700'
-                        }`}
-                      value={getDatePart(item.end_datetime)}
-                      onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
-                      onClick={(e) => { try { e.target.showPicker(); } catch {} }}
-                      disabled={(item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
-                    />
-                  </div>
-
-                  {isAdmin && (
-                    <>
-                      {/* Start Time */}
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">Start Time</label>
-                        <input
-                          type="time"
-                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.start_datetime
-                            ? 'border-amber-300 bg-amber-50/50'
-                            : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                            }`}
-                          value={getTimePart(item.start_datetime)}
-                          onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                          onClick={(e) => { try { e.target.showPicker(); } catch {} }}
-                          disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
-                        />
-                      </div>
-
-                      {/* End Time */}
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block cursor-pointer">End Time</label>
-                        <input
-                          type="time"
-                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all cursor-pointer ${isModified && modifiedRows[item.taskId]?.end_datetime
-                            ? 'border-amber-300 bg-amber-50/50'
-                            : (item.status === 'GENERATED' || !!item.next_start_datetime)
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                            }`}
-                          value={getTimePart(item.end_datetime)}
-                          onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                          onClick={(e) => { try { e.target.showPicker(); } catch {} }}
-                          disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
-                        />
-                      </div>
-                    </>
-                  )}
-
                   {/* Manager Input */}
                   <div className="space-y-1 relative">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Manager</label>
