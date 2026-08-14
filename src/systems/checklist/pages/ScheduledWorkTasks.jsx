@@ -49,12 +49,16 @@ const getTaskStatusInfo = (item, isModified) => {
 
 const getDatePart = (value) => {
   if (!value) return "";
-  return String(value).split("T")[0] || "";
+  const str = String(value).trim();
+  return str.split(/[T ]/)[0] || "";
 };
 
 const getTimePart = (value) => {
-  if (!value || !String(value).includes("T")) return "";
-  return String(value).split("T")[1]?.substring(0, 5) || "";
+  if (!value) return "";
+  const str = String(value).trim();
+  if (str.includes("T")) return str.split("T")[1]?.substring(0, 5) || "";
+  if (str.includes(" ")) return str.split(" ")[1]?.substring(0, 5) || "";
+  return "";
 };
 
 const combineDateAndTime = (date, time) => {
@@ -192,7 +196,8 @@ export default function ScheduledWorkTasks() {
   // Merge Master Tasks and Current Assignments
   const mergedData = useMemo(() => {
     return masterTasks.map(task => {
-      const assignment = assignments.find(a => a.task_id === task.id) || {};
+      const joinedAsgn = Array.isArray(task.task_assignments) ? task.task_assignments[0] : task.task_assignments;
+      const assignment = joinedAsgn || assignments.find(a => a.task_id === task.id) || {};
       const modified = modifiedRows[task.id] || {};
 
       return {
@@ -616,11 +621,11 @@ export default function ScheduledWorkTasks() {
                 <th className="px-2 py-4">Shop</th>
                 <th className="px-2 py-4 w-[20%]">Task Description</th>
                 <th className="px-2 py-4">Dept</th>
-                <th className="px-2 py-4 text-center">Mins</th>
+                <th className="px-2 py-4 text-center">Extra Time</th>
                 <th className="px-2 py-4">Next Start Date</th>
                 <th className="px-2 py-4">Next End Date</th>
-                <th className="px-2 py-4">Next Start Time</th>
-                <th className="px-2 py-4">Next End Time</th>
+                <th className="px-2 py-4 whitespace-nowrap text-center">Next Start Time</th>
+                <th className="px-2 py-4 whitespace-nowrap text-center">Next End Time</th>
                 <th className="px-2 py-4">Next Manager</th>
                 <th className="px-2 py-4">Next Employee(s)</th>
                 <th className="px-2 py-4 text-center">Action</th>
@@ -629,8 +634,8 @@ export default function ScheduledWorkTasks() {
             <tbody className="divide-y divide-gray-50">
               {filteredTasks.map((item, index) => {
                 const isModified = !!modifiedRows[item.taskId];
-                const displayStart = item.next_start_datetime || "";
-                const displayEnd = item.next_end_datetime || "";
+                const displayStart = item.next_start_datetime || item.start_datetime || "";
+                const displayEnd = item.next_end_datetime || item.end_datetime || "";
 
                 return (
                   <tr key={item.taskId} className={`hover:bg-indigo-50/20 transition-all group ${isModified ? 'bg-amber-50/20' : ''}`}>
@@ -699,33 +704,17 @@ export default function ScheduledWorkTasks() {
                     </td>
 
                     {/* Next Start Time */}
-                    <td className="px-2 py-3">
-                      <input
-                        type="time"
-                        className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                          isAdmin 
-                            ? 'border-gray-200 bg-gray-50 hover:bg-white focus:border-indigo-500' 
-                            : 'border-gray-100 bg-gray-100 text-gray-400 cursor-not-allowed'
-                        }`}
-                        value={getTimePart(displayStart)}
-                        onChange={(e) => handleScheduledTimeChange(item, "next_start_datetime", e.target.value)}
-                        disabled={!isAdmin}
-                      />
+                    <td className="px-2 py-3 whitespace-nowrap text-center">
+                      <span className="inline-block px-2.5 py-1 bg-gray-100/80 border border-gray-200 rounded-md text-[10px] font-bold text-gray-700 shadow-xs">
+                        {getTimePart(displayStart) || "--:--"}
+                      </span>
                     </td>
 
                     {/* Next End Time */}
-                    <td className="px-2 py-3">
-                      <input
-                        type="time"
-                        className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                          isAdmin 
-                            ? 'border-gray-200 bg-gray-50 hover:bg-white focus:border-indigo-500' 
-                            : 'border-gray-100 bg-gray-100 text-gray-400 cursor-not-allowed'
-                        }`}
-                        value={getTimePart(displayEnd)}
-                        onChange={(e) => handleScheduledTimeChange(item, "next_end_datetime", e.target.value)}
-                        disabled={!isAdmin}
-                      />
+                    <td className="px-2 py-3 whitespace-nowrap text-center">
+                      <span className="inline-block px-2.5 py-1 bg-gray-100/80 border border-gray-200 rounded-md text-[10px] font-bold text-gray-700 shadow-xs">
+                        {getTimePart(displayEnd) || "--:--"}
+                      </span>
                     </td>
 
                     {/* Next Manager */}
@@ -899,27 +888,15 @@ export default function ScheduledWorkTasks() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next Start Time</label>
-                    <input
-                      type="time"
-                      className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none ${
-                        isAdmin ? 'border-gray-200 bg-gray-50' : 'border-gray-100 bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                      value={getTimePart(displayStart)}
-                      onChange={(e) => handleScheduledTimeChange(item, "next_start_datetime", e.target.value)}
-                      disabled={!isAdmin}
-                    />
+                    <div className="px-2.5 py-1.5 bg-gray-100/70 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700">
+                      {getTimePart(displayStart) || "--:--"}
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next End Time</label>
-                    <input
-                      type="time"
-                      className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none ${
-                        isAdmin ? 'border-gray-200 bg-gray-50' : 'border-gray-100 bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                      value={getTimePart(displayEnd)}
-                      onChange={(e) => handleScheduledTimeChange(item, "next_end_datetime", e.target.value)}
-                      disabled={!isAdmin}
-                    />
+                    <div className="px-2.5 py-1.5 bg-gray-100/70 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700">
+                      {getTimePart(displayEnd) || "--:--"}
+                    </div>
                   </div>
                 </div>
 

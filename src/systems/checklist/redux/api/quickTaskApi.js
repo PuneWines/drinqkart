@@ -392,7 +392,7 @@ export const fetchChecklistHistory = async () => {
 };
 
 // Fetch unique work task assignments
-export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
+export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', shopFilter = 'All', statusFilter = 'All') => {
   try {
     const FETCH_LIMIT = 100000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
@@ -442,6 +442,16 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
         (item.name || '').toLowerCase().includes(term) ||
         (item.given_by || '').toLowerCase().includes(term)
       );
+    }
+
+    if (shopFilter && shopFilter !== 'All') {
+      const termShop = shopFilter.trim().toLowerCase();
+      mapped = mapped.filter(item => (item.shop_name || item.shop || '').trim().toLowerCase() === termShop);
+    }
+
+    if (statusFilter && statusFilter !== 'All') {
+      const termStatus = statusFilter.trim().toLowerCase();
+      mapped = mapped.filter(item => (item.status || '').trim().toLowerCase() === termStatus);
     }
 
     const start = page * pageSize;
