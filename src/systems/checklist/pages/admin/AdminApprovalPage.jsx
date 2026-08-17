@@ -317,7 +317,7 @@ export default function AdminApprovalPage() {
     if (activeTab === "work") {
       filteredData = filteredData.filter((task) => {
         const isPast = isPastDeadline(task);
-        const taskStatus = (task.status || "").toLowerCase();
+        const taskStatus = (task.work_status || task.status || "").toLowerCase();
 
         if (currentUserRole === "manager") {
           // Manager filtering

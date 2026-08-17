@@ -57,6 +57,37 @@ export const upsertTaskAssignmentsApi = async (assignments) => {
   }
 };
 
+export const extractTimeFromDatetime = (datetimeVal) => {
+  if (!datetimeVal) return null;
+
+  if (typeof datetimeVal === 'string') {
+    const str = datetimeVal.trim();
+    if (str.includes('T')) {
+      const timePart = str.split('T')[1];
+      if (timePart) return timePart.split('.')[0].split('+')[0].split('Z')[0].trim();
+    }
+    if (str.includes(' ')) {
+      const spaceParts = str.split(/\s+/);
+      if (spaceParts.length > 1) {
+        return spaceParts[1].split('.')[0].split('+')[0].split('Z')[0].trim();
+      }
+    }
+    if (str.includes(':')) {
+      return str;
+    }
+  }
+
+  const d = new Date(datetimeVal);
+  if (!isNaN(d.getTime())) {
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  return null;
+};
+
 /**
  * Generates individual work_task records for each day in the assignment range.
  */
@@ -97,7 +128,7 @@ export const generateWorkTasksApi = async (assignments) => {
     let existingTasks = [];
     if (employeeNames.length > 0 && dateStrings.length > 0) {
       const { data, error } = await supabase
-        .from('work_task')
+        .from('work_task_new')
         .select('assignment_id, current_date, name, task_description, task_id')
         .in('name', employeeNames)
         .in('current_date', dateStrings);
@@ -130,13 +161,13 @@ export const generateWorkTasksApi = async (assignments) => {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
         for (const empName of employeeNamesList) {
-          const asgnKey = `${asgn.assignmentId}_${dateStr}_${empName}`;
+          const asgnKey = `${asgn.assignmentId || asgn.id}_${dateStr}_${empName}`;
           const descKey = `${empName}_${dateStr}_${asgn.task_name}`;
           const idKey = `${empName}_${dateStr}_${asgn.task_id}`;
 
           // Avoid inserting if it already exists in the database under any of the unique constraints
           const existsInDb =
-            (asgn.assignmentId && existingAsgnKeys.has(asgnKey)) ||
+            ((asgn.assignmentId || asgn.id) && existingAsgnKeys.has(asgnKey)) ||
             existingDescKeys.has(descKey) ||
             existingIdKeys.has(idKey);
 
@@ -149,18 +180,17 @@ export const generateWorkTasksApi = async (assignments) => {
 
             tasksToInsert.push({
               task_id: asgn.task_id,
+              assignment_id: asgn.assignmentId || asgn.id,
               name: empName,
               task_description: asgn.task_name,
               shop_name: asgn.shopName,
               department: asgn.department,
               duration: asgn.estimated_minutes,
               "current_date": dateStr,
-              status: (new Date(d.getFullYear(), d.getMonth(), d.getDate()) < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()))
-                ? 'OVERDUE'
-                : (new Date(d.getFullYear(), d.getMonth(), d.getDate()) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()))
-                  ? 'UPCOMING'
-                  : 'PENDING',
-              assignment_id: asgn.assignmentId
+              start_time: extractTimeFromDatetime(asgn.start_datetime),
+              end_time: extractTimeFromDatetime(asgn.end_datetime),
+              tab_status: 'live',
+              work_status: 'PENDING'
             });
           }
         }
@@ -168,9 +198,9 @@ export const generateWorkTasksApi = async (assignments) => {
     }
 
     if (tasksToInsert.length > 0) {
-      // 1. Insert into work_task
+      // 1. Insert into work_task_new
       const { error: insertError } = await supabase
-        .from('work_task')
+        .from('work_task_new')
         .insert(tasksToInsert);
 
       if (insertError) throw insertError;
@@ -192,13 +222,13 @@ export const generateWorkTasksApi = async (assignments) => {
 };
 
 /**
- * Resets task assignments and deletes generated work_tasks.
+ * Resets task assignments and deletes generated work_task_new records.
  */
 export const resetWorkTasksApi = async (assignmentIds) => {
   try {
-    // 1. Delete from work_task
+    // 1. Delete from work_task_new
     const { error: deleteError } = await supabase
-      .from('work_task')
+      .from('work_task_new')
       .delete()
       .in('assignment_id', assignmentIds);
 
@@ -244,11 +274,11 @@ export const fetchWorkTasksForUserApi = async (username) => {
 export const submitWorkTaskApi = async (taskId, submissionData) => {
   try {
     const { data, error } = await supabase
-      .from('work_task')
+      .from('work_task_new')
       .update({
         remark: submissionData.remark,
         image: submissionData.image,
-        status: 'Done',
+        work_status: 'SUBMITTED',
         submission_date: new Date().toISOString()
       })
       .eq('id', taskId)
@@ -268,14 +298,14 @@ export const submitWorkTaskApi = async (taskId, submissionData) => {
 export const fetchPendingWorkApprovalsApi = async (role) => {
   try {
     const userRole = (role || "").toLowerCase();
-    let query = supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name, end_datetime)');
+    let query = supabase.from('work_task_new').select('*, task_assignments:assignment_id(manager_name, end_datetime)');
 
     if (userRole === 'manager') {
-      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
+      query = query.or('work_status.eq.SUBMITTED,work_status.eq.Done,work_status.eq.done,work_status.eq.COMPLETED,work_status.eq.completed');
     } else if (userRole === 'admin') {
-      query = query.eq('status', 'MANAGER_APPROVED');
+      query = query.eq('work_status', 'MANAGER_APPROVED');
     } else {
-      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
+      query = query.or('work_status.eq.SUBMITTED,work_status.eq.Done,work_status.eq.done,work_status.eq.COMPLETED,work_status.eq.completed');
     }
 
     const { data, error } = await query
@@ -297,15 +327,15 @@ export const fetchWorkTaskHistoryApi = async (role, username) => {
   try {
     const userRole = (role || localStorage.getItem("role") || "").toLowerCase();
     const userName = username || localStorage.getItem("user-name");
-    let query = supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name, end_datetime)');
+    let query = supabase.from('work_task_new').select('*, task_assignments:assignment_id(manager_name, end_datetime)');
 
     if (userRole === 'manager') {
       query = query
-        .or(`manager_approved_by.eq."${userName}",admin_approved_by.eq."${userName}",status.in.("SUBMITTED","Done","done","COMPLETED","completed","APPROVED","REJECTED")`)
+        .or(`manager_approved_by.eq."${userName}",admin_approved_by.eq."${userName}",work_status.in.("SUBMITTED","Done","done","COMPLETED","completed","APPROVED","ADMIN_APPROVED","MANAGER_APPROVED","REJECTED")`)
         .order('submission_date', { ascending: false });
     } else {
       query = query
-        .in('status', ['APPROVED', 'REJECTED', 'MANAGER_APPROVED', 'SUBMITTED', 'Done', 'done', 'COMPLETED', 'completed'])
+        .in('work_status', ['APPROVED', 'ADMIN_APPROVED', 'REJECTED', 'MANAGER_APPROVED', 'SUBMITTED', 'Done', 'done', 'COMPLETED', 'completed'])
         .order('submission_date', { ascending: false });
     }
 
@@ -330,21 +360,20 @@ export const approveWorkTaskApi = async (taskId) => {
     let updateFields = {};
     if (role === 'manager') {
       updateFields = {
-        status: 'MANAGER_APPROVED',
+        work_status: 'MANAGER_APPROVED',
         manager_approved_by: userName,
         manager_approval_date: now
       };
     } else {
       updateFields = {
-        status: 'APPROVED',
-        admin_done: true,
+        work_status: 'ADMIN_APPROVED',
         admin_approved_by: userName,
         admin_approval_date: now
       };
     }
 
     const { data, error } = await supabase
-      .from('work_task')
+      .from('work_task_new')
       .update(updateFields)
       .eq('id', taskId)
       .select();
@@ -369,7 +398,7 @@ export const rejectWorkTaskApi = async (taskId, reason) => {
     let updateFields = {};
     if (role === 'manager') {
       updateFields = {
-        status: 'REJECTED',
+        work_status: 'REJECTED',
         rejection_reason: reason,
         submission_date: null,
         manager_approved_by: userName,
@@ -377,17 +406,16 @@ export const rejectWorkTaskApi = async (taskId, reason) => {
       };
     } else {
       updateFields = {
-        status: 'REJECTED',
+        work_status: 'REJECTED',
         rejection_reason: reason,
         submission_date: null,
-        admin_done: false,
         admin_approved_by: userName,
         admin_approval_date: now
       };
     }
 
     const { data, error } = await supabase
-      .from('work_task')
+      .from('work_task_new')
       .update(updateFields)
       .eq('id', taskId)
       .select();

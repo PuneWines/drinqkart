@@ -27,38 +27,31 @@ const isAudioUrl = (url) => {
 };
 
 const getWorkTaskTimeBounds = (task) => {
-  const startStr = task.task_assignments?.start_datetime;
-  const endStr = task.task_assignments?.end_datetime;
-
   let startHour = 0;
   let startMin = 0;
   let endHour = 23;
   let endMin = 59;
 
+  const startStr = task.start_time || task.task_assignments?.start_datetime;
+  const endStr = task.end_time || task.task_assignments?.end_datetime;
+
   if (startStr) {
-    const parts = startStr.split('T');
-    if (parts[1]) {
-      const timeParts = parts[1].split(':');
-      startHour = parseInt(timeParts[0]) || 0;
-      startMin = parseInt(timeParts[1]) || 0;
-    }
+    const timePart = startStr.includes('T') ? startStr.split('T')[1] : startStr;
+    const timeParts = timePart.split(':');
+    startHour = parseInt(timeParts[0], 10) || 0;
+    startMin = parseInt(timeParts[1], 10) || 0;
   }
 
   if (endStr) {
-    const parts = endStr.split('T');
-    if (parts[1]) {
-      const timeParts = parts[1].split(':');
-      endHour = parseInt(timeParts[0]) || 0;
-      endMin = parseInt(timeParts[1]) || 0;
-    }
+    const timePart = endStr.includes('T') ? endStr.split('T')[1] : endStr;
+    const timeParts = timePart.split(':');
+    endHour = parseInt(timeParts[0], 10) || 0;
+    endMin = parseInt(timeParts[1], 10) || 0;
   }
 
   let year, month, day;
   if (task.current_date && typeof task.current_date === 'string' && task.current_date.includes('-')) {
     [year, month, day] = task.current_date.split('-').map(Number);
-  } else if (startStr && startStr.includes('T')) {
-    const datePart = startStr.split('T')[0];
-    [year, month, day] = datePart.split('-').map(Number);
   } else {
     const today = new Date();
     year = today.getFullYear();
@@ -76,9 +69,8 @@ const getWorkTaskTimeBounds = (task) => {
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
-  if (task.status === "APPROVED") return "APPROVED";
-  if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
-  if (task.status === "REJECTED") return "REJECTED";
+  const wStatus = (task.work_status || task.status || "").toUpperCase();
+  if (wStatus === "REJECTED") return "REJECTED";
 
   const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
 
@@ -92,7 +84,9 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
 };
 
 const renderUserStatus = (task, formatDateWithTime) => {
-  const isDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
+  const wStatus = (task.work_status || task.status || "").toUpperCase();
+  const isDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "ADMIN_APPROVED", "APPROVED"].includes(wStatus));
+
   if (isDone) {
     return (
       <div className="flex flex-col">
@@ -107,16 +101,24 @@ const renderUserStatus = (task, formatDateWithTime) => {
       </div>
     );
   }
+  if (wStatus === "REJECTED") {
+    return (
+      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit">
+        Rejected
+      </span>
+    );
+  }
   return (
-    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit">
       Not Done
     </span>
   );
 };
 
 const renderManagerStatus = (task, formatDateWithTime) => {
-  const isApproved = task.status === "APPROVED" || task.status === "MANAGER_APPROVED" || !!task.manager_approval_date;
-  const isRejected = task.status === "REJECTED" && !!task.manager_approved_by;
+  const wStatus = (task.work_status || task.status || "").toUpperCase();
+  const isApproved = ["MANAGER_APPROVED", "ADMIN_APPROVED", "APPROVED"].includes(wStatus) || !!task.manager_approval_date;
+  const isRejected = wStatus === "REJECTED" && !!task.manager_approved_by;
 
   if (isApproved) {
     return (
@@ -152,8 +154,8 @@ const renderManagerStatus = (task, formatDateWithTime) => {
       </div>
     );
   }
-  const isUserDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
-  if (!isUserDone) {
+  const isUserSubmitted = !!(task.submission_date || wStatus === "SUBMITTED");
+  if (!isUserSubmitted) {
     return <span className="text-gray-400 text-xs">—</span>;
   }
   return (
@@ -163,9 +165,10 @@ const renderManagerStatus = (task, formatDateWithTime) => {
   );
 };
 
-const renderAdminStatus = (task) => {
-  const isApproved = task.status === "APPROVED" || !!task.admin_approval_date;
-  const isRejected = task.status === "REJECTED" && !!task.admin_approved_by;
+const renderAdminStatus = (task, formatDateWithTime) => {
+  const wStatus = (task.work_status || task.status || "").toUpperCase();
+  const isApproved = wStatus === "ADMIN_APPROVED" || wStatus === "APPROVED" || !!task.admin_approval_date;
+  const isRejected = wStatus === "REJECTED" && !!task.admin_approved_by;
 
   if (isApproved) {
     return (
@@ -175,6 +178,11 @@ const renderAdminStatus = (task) => {
         </span>
         {task.admin_approved_by && (
           <span className="text-[10px] text-gray-500 mt-0.5">By: {task.admin_approved_by}</span>
+        )}
+        {task.admin_approval_date && (
+          <span className="text-[10px] text-gray-500 mt-0.5">
+            {formatDateWithTime ? formatDateWithTime(task.admin_approval_date) : task.admin_approval_date}
+          </span>
         )}
       </div>
     );
@@ -188,11 +196,16 @@ const renderAdminStatus = (task) => {
         {task.admin_approved_by && (
           <span className="text-[10px] text-gray-500 mt-0.5">By: {task.admin_approved_by}</span>
         )}
+        {task.admin_approval_date && (
+          <span className="text-[10px] text-gray-500 mt-0.5">
+            {formatDateWithTime ? formatDateWithTime(task.admin_approval_date) : task.admin_approval_date}
+          </span>
+        )}
       </div>
     );
   }
-  const isUserDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
-  if (!isUserDone) {
+  const isPendingAdmin = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED"].includes(wStatus));
+  if (!isPendingAdmin) {
     return <span className="text-gray-400 text-xs">—</span>;
   }
   return (
@@ -437,15 +450,15 @@ const WorkTasksTab = ({
         setHistoryData([]);
       }
 
-      const tableName = "work_task";
+      const tableName = "work_task_new";
       let selectStr = "*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)";
       if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
         selectStr = "*, task_assignments:assignment_id!inner(start_datetime, end_datetime, manager_name)";
       }
       let query = supabase.from(tableName).select(selectStr);
 
-      // Apply pagination limit/range in database
-      const limit = 50;
+      // Apply pagination limit/range in database (100 per page)
+      const limit = 100;
       const from = pageNumber * limit;
       const to = from + limit - 1;
       query = query.range(from, to);
@@ -507,9 +520,18 @@ const WorkTasksTab = ({
         return `${yyyy}-${mm}-${dd}`;
       };
 
+      const getLocalStyleTimeStr = (d) => {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${hh}:${mm}:${ss}`;
+      };
+
+      const todayStr = getLocalStyleDate(new Date());
+      const currentTimeStr = getLocalStyleTimeStr(new Date());
+
       if (showHistory) {
-        const todayStr = getLocalStyleDate(new Date());
-        query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr}`);
+        query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr},and(current_date.eq.${todayStr},end_time.lt.${currentTimeStr})`);
         if (startDate) {
           query = query.gte("current_date", startDate);
         }
@@ -518,22 +540,11 @@ const WorkTasksTab = ({
         }
         query = query.order('current_date', { ascending: false });
       } else {
-        const todayStr = getLocalStyleDate(new Date());
-
-        query = query.or('submission_date.is.null,status.eq.REJECTED');
-
-        // Today or All pending tasks in 'live'
-        if (dateFilter === "today") {
-          query = query.eq('current_date', todayStr);
-        } else if (dateFilter === "all") {
-          query = query.lte('current_date', todayStr);
-        } else {
-          // "not_done" or "upcoming" filter should return empty since live is today only
-          query = query.eq('id', -1);
-        }
-
-        // Ascending order: today's tasks
-        query = query.order('current_date', { ascending: true });
+        query = query
+          .eq('current_date', todayStr)
+          .gte('end_time', currentTimeStr)
+          .is('submission_date', null)
+          .order('start_time', { ascending: true });
       }
 
       if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
@@ -883,10 +894,10 @@ const WorkTasksTab = ({
         const updates = {
           remark: remarksData[id] || null,
           image: imageUrl,
-          status: 'SUBMITTED',
+          work_status: 'SUBMITTED',
           submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
         };
-        const { error: updateError } = await supabase.from("work_task").update(updates).eq("id", id);
+        const { error: updateError } = await supabase.from("work_task_new").update(updates).eq("id", id);
         if (updateError) throw updateError;
       });
 
