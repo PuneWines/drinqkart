@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { FileText, Camera, Edit3, CheckCircle, AlertCircle, QrCode, Upload } from 'lucide-react';
+import { FileText, Camera, Edit3, CheckCircle, AlertCircle, QrCode, Upload, Printer, Download } from 'lucide-react';
 import SignaturePadModal from './SignaturePadModal';
 import qrImage from './QR-TRADER-INVOICE-FORM.png';
 
@@ -205,6 +205,100 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
     }
   };
 
+  const handlePrintQR = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    const imgUrl = new URL(qrImage, window.location.href).href;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print QR Code - Trader Invoice Form</title>
+          <style>
+            @media print {
+              @page { size: auto; margin: 15mm; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+            body {
+              margin: 0;
+              padding: 40px 20px;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 80vh;
+              background-color: #ffffff;
+              color: #0f172a;
+            }
+            .qr-container {
+              border: 2px solid #e2e8f0;
+              border-radius: 20px;
+              padding: 32px 24px;
+              text-align: center;
+              max-width: 320px;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            }
+            .qr-img {
+              width: 220px;
+              height: 220px;
+              object-fit: contain;
+              margin: 0 auto 16px auto;
+              display: block;
+            }
+            .title {
+              font-size: 18px;
+              font-weight: 700;
+              margin: 0 0 6px 0;
+              color: #1e293b;
+            }
+            .subtitle {
+              font-size: 12px;
+              font-weight: 600;
+              color: #64748b;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin: 0;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="qr-container">
+            <img src="${imgUrl}" alt="Trader Invoice Form QR Code" class="qr-img" />
+            <h2 class="title">Trader Invoice Form</h2>
+            <p class="subtitle">Scan QR code to open form on mobile</p>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 300);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleDownloadQR = async () => {
+    try {
+      const response = await fetch(qrImage);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'trader-invoice-form-qr.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading QR image:', err);
+    }
+  };
+
   return (
     <div className="bg-white p-5 rounded-2xl w-full max-w-2xl mx-auto space-y-5 font-sans">
       
@@ -212,7 +306,25 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
       {!isPublic && (
         <div className="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-xs">
           <img src={qrImage} alt="QR Code" className="w-28 h-28 object-contain mb-1.5" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Scan QR Code to Open Form on Mobile</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Scan QR Code to Open Form on Mobile</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrintQR}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2a5298] hover:bg-[#1e3c72] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <Printer size={13} />
+              <span>Print QR</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadQR}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <Download size={13} />
+              <span>Download</span>
+            </button>
+          </div>
         </div>
       )}
 
