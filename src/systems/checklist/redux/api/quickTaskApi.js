@@ -480,28 +480,40 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
       })()
     ) : null;
 
+    const resolvedStartDatetime = updatedTask.start_datetime || updatedTask.task_start_date;
+    const resolvedEndDatetime = updatedTask.end_datetime;
+
     const datesChanged = originalTask && (
-      originalTask.start_datetime !== updatedTask.start_datetime ||
-      originalTask.end_datetime !== updatedTask.end_datetime
+      originalTask.start_datetime !== resolvedStartDatetime ||
+      originalTask.end_datetime !== resolvedEndDatetime
     );
 
     const employeesChanged = originalTask && originalTask.name !== updatedTask.name;
 
-    const { data: updatedAsgn, error: asgnError } = await supabase
+    const targetAsgnId = updatedTask.assignmentId || updatedTask.assignment_id;
+    const targetTaskId = updatedTask.task_id || updatedTask.taskId || updatedTask.id;
+
+    let asgnQuery = supabase
       .from('task_assignments')
       .update({
         employee_name: updatedTask.name,
         manager_name: updatedTask.given_by,
-        start_datetime: updatedTask.start_datetime,
-        end_datetime: updatedTask.end_datetime,
+        start_datetime: resolvedStartDatetime,
+        end_datetime: resolvedEndDatetime,
         status: (datesChanged || employeesChanged) ? 'LOCKED' : updatedTask.status,
         updated_at: new Date().toISOString()
-      })
-      .eq('id', updatedTask.id)
-      .select()
-      .single();
+      });
+
+    if (targetAsgnId) {
+      asgnQuery = asgnQuery.eq('id', targetAsgnId);
+    } else {
+      asgnQuery = asgnQuery.or(`id.eq.${updatedTask.id},task_id.eq.${targetTaskId}`);
+    }
+
+    const { data: updatedAsgnList, error: asgnError } = await asgnQuery.select();
 
     if (asgnError) throw asgnError;
+    const updatedAsgn = updatedAsgnList?.[0] || null;
 
     if (originalTask && originalTask.task_description !== updatedTask.task_description) {
       const { error: masterError } = await supabase
@@ -524,18 +536,18 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
 
     if (datesChanged || employeesChanged) {
       const { error: deleteError } = await supabase
-        .from('work_task')
+        .from('work_task_new')
         .delete()
-        .eq('assignment_id', updatedTask.id)
+        .eq('assignment_id', targetAsgnId || updatedTask.id)
         .is('submission_date', null);
       if (deleteError) throw deleteError;
     } else {
       const { error: syncError } = await supabase
-        .from('work_task')
+        .from('work_task_new')
         .update({
           task_description: updatedTask.task_description
         })
-        .eq('assignment_id', updatedTask.id)
+        .eq('assignment_id', targetAsgnId || updatedTask.id)
         .is('submission_date', null);
       if (syncError) throw syncError;
     }
@@ -551,7 +563,7 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
 export const deleteWorkTaskAssignmentApi = async (tasks) => {
   for (const task of tasks) {
     const { error: taskError } = await supabase
-      .from('work_task')
+      .from('work_task_new')
       .delete()
       .eq('assignment_id', task.id);
     if (taskError) throw taskError;

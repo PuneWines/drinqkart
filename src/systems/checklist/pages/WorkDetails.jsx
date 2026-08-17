@@ -495,10 +495,13 @@ export default function WorkDetails() {
 
   const handleTimeChange = (item, field, time) => {
     const bulkDate = field === "start_datetime" ? bulkStartDate : bulkEndDate;
-    const date = getDatePart(item[field]) || (selectedRows.has(item.taskId) ? bulkDate : "");
+    const existingVal = modifiedRows[item.taskId]?.[field] !== undefined 
+      ? modifiedRows[item.taskId][field] 
+      : item[field];
+    const date = getDatePart(existingVal) || (selectedRows.has(item.taskId) ? bulkDate : "");
 
     if (time && !date) {
-      showToast("Please apply bulk date for this task first", "error");
+      showToast("Please select date for this task first", "error");
       return;
     }
 
@@ -679,16 +682,14 @@ export default function WorkDetails() {
     }
 
     try {
-      // 0. Update estimated_minutes in master_work_tasks if modified by Admin
-      if (isAdmin) {
-        for (const id of allIdsToProcess) {
-          if (modifiedRows[id]?.estimated_minutes !== undefined) {
-            const { error: masterErr } = await supabase
-              .from('master_work_tasks')
-              .update({ estimated_minutes: modifiedRows[id].estimated_minutes })
-              .eq('id', id);
-            if (masterErr) throw masterErr;
-          }
+      // 0. Update estimated_minutes in master_work_tasks if modified
+      for (const id of allIdsToProcess) {
+        if (modifiedRows[id]?.estimated_minutes !== undefined) {
+          const { error: masterErr } = await supabase
+            .from('master_work_tasks')
+            .update({ estimated_minutes: modifiedRows[id].estimated_minutes })
+            .eq('id', id);
+          if (masterErr) throw masterErr;
         }
       }
 
@@ -754,7 +755,7 @@ export default function WorkDetails() {
       const assignmentIdsToClear = selectedAssignments.map(a => a.assignmentId).filter(Boolean);
       if (assignmentIdsToClear.length > 0) {
         const { error: deleteError } = await supabase
-          .from('work_task')
+          .from('work_task_new')
           .delete()
           .in('assignment_id', assignmentIdsToClear)
           .is('submission_date', null);
@@ -1087,12 +1088,8 @@ export default function WorkDetails() {
                 <th className="px-2 py-4 text-center">Extra Time</th>
                 <th className="px-2 py-4">Start Date</th>
                 <th className="px-2 py-4">End Date</th>
-                {isAdmin && (
-                  <>
-                    <th className="px-2 py-4">Start Time</th>
-                    <th className="px-2 py-4">End Time</th>
-                  </>
-                )}
+                <th className="px-2 py-4">Start Time</th>
+                <th className="px-2 py-4">End Time</th>
                 <th className="px-2 py-4">Manager</th>
                 <th className="px-2 py-4">Employee</th>
               </tr>
@@ -1148,36 +1145,90 @@ export default function WorkDetails() {
                         </span>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
-                          <Clock size={10} />
-                          {item.estimated_minutes || "--"} Mins
+                        <div className="flex items-center justify-center gap-1">
+                          <Clock size={10} className="text-orange-500 shrink-0" />
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Mins"
+                            className={`w-16 px-1.5 py-1 border rounded text-[10px] font-bold outline-none text-center transition-all ${
+                              isModified && modifiedRows[item.taskId]?.estimated_minutes !== undefined
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
+                            value={modifiedRows[item.taskId]?.estimated_minutes !== undefined ? modifiedRows[item.taskId].estimated_minutes : (item.estimated_minutes || "")}
+                            onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
+                            disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                          />
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar size={10} className="text-emerald-500" />
-                          <span className="text-[10px] font-bold text-gray-700">
-                            {getDatePart(item.start_datetime) ? getDatePart(item.start_datetime).split('-').reverse().join('/') : (bulkStartDate ? bulkStartDate.split('-').reverse().join('/') : "--")}
-                          </span>
+                        <div className="flex items-center gap-1">
+                          <Calendar size={10} className="text-emerald-500 shrink-0" />
+                          <input
+                            type="date"
+                            className={`w-28 px-1.5 py-1 border rounded text-[10px] font-bold outline-none transition-all ${
+                              isModified && modifiedRows[item.taskId]?.start_datetime !== undefined
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
+                            value={getDatePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
+                            onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
+                            disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                          />
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar size={10} className="text-orange-500" />
-                          <span className="text-[10px] font-bold text-gray-700">
-                            {getDatePart(item.end_datetime) ? getDatePart(item.end_datetime).split('-').reverse().join('/') : (bulkEndDate ? bulkEndDate.split('-').reverse().join('/') : "--")}
-                          </span>
+                        <div className="flex items-center gap-1">
+                          <Calendar size={10} className="text-orange-500 shrink-0" />
+                          <input
+                            type="date"
+                            className={`w-28 px-1.5 py-1 border rounded text-[10px] font-bold outline-none transition-all ${
+                              isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
+                            value={getDatePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
+                            onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
+                            disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                          />
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <span className="px-2 py-1 bg-gray-100/70 border border-gray-200 rounded text-[10px] font-bold text-gray-700">
-                          {getTimePart(item.start_datetime) || "--:--"}
-                        </span>
+                        <input
+                          type="time"
+                          className={`w-24 px-1.5 py-1 border rounded text-[10px] font-bold outline-none transition-all ${
+                            isModified && modifiedRows[item.taskId]?.start_datetime !== undefined
+                              ? 'border-amber-300 bg-amber-50/50'
+                              : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          }`}
+                          value={getTimePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
+                          onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
+                          disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                        />
                       </td>
                       <td className="px-2 py-3">
-                        <span className="px-2 py-1 bg-gray-100/70 border border-gray-200 rounded text-[10px] font-bold text-gray-700">
-                          {getTimePart(item.end_datetime) || "--:--"}
-                        </span>
+                        <input
+                          type="time"
+                          className={`w-24 px-1.5 py-1 border rounded text-[10px] font-bold outline-none transition-all ${
+                            isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
+                              ? 'border-amber-300 bg-amber-50/50'
+                              : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          }`}
+                          value={getTimePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
+                          onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
+                          disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                        />
                       </td>
                       <td className="px-2 py-3 relative">
                         <div className="relative dropdown-container">
@@ -1352,9 +1403,25 @@ export default function WorkDetails() {
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
-                      <Clock size={10} />
-                      <span>{item.estimated_minutes || "--"} Mins (Extra Time)</span>
+                    <div className="inline-flex items-center gap-1">
+                      <Clock size={10} className="text-orange-500 shrink-0" />
+                      <span className="text-[9px] font-bold text-gray-500">Extra:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Mins"
+                        className={`w-16 px-1.5 py-0.5 border rounded text-[10px] font-bold outline-none text-center transition-all ${
+                          isModified && modifiedRows[item.taskId]?.estimated_minutes !== undefined
+                            ? 'border-amber-300 bg-amber-50/50'
+                            : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                        }`}
+                        value={modifiedRows[item.taskId]?.estimated_minutes !== undefined ? modifiedRows[item.taskId].estimated_minutes : (item.estimated_minutes || "")}
+                        onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
+                        disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                      />
+                      <span className="text-[9px] font-bold text-gray-500">Mins</span>
                     </div>
                     {(() => {
                       const statusInfo = getTaskStatusInfo(item, isModified);
@@ -1382,23 +1449,71 @@ export default function WorkDetails() {
                   )}
                 </div>
 
-                {/* Read-only Fields Grid */}
-                <div className="grid grid-cols-2 gap-3.5 pt-2 border-t border-gray-50 text-[10px] font-bold text-gray-700">
-                  <div className="space-y-0.5">
+                {/* Editable Fields Grid */}
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-50 text-[10px] font-bold text-gray-700">
+                  <div className="space-y-1">
                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Date</span>
-                    <div>{getDatePart(item.start_datetime) ? getDatePart(item.start_datetime).split('-').reverse().join('/') : (bulkStartDate ? bulkStartDate.split('-').reverse().join('/') : "--")}</div>
+                    <input
+                      type="date"
+                      className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                        isModified && modifiedRows[item.taskId]?.start_datetime !== undefined
+                          ? 'border-amber-300 bg-amber-50/50'
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                      }`}
+                      value={getDatePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
+                      onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
+                      disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                    />
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Date</span>
-                    <div>{getDatePart(item.end_datetime) ? getDatePart(item.end_datetime).split('-').reverse().join('/') : (bulkEndDate ? bulkEndDate.split('-').reverse().join('/') : "--")}</div>
+                    <input
+                      type="date"
+                      className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                        isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
+                          ? 'border-amber-300 bg-amber-50/50'
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                      }`}
+                      value={getDatePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
+                      onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
+                      disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                    />
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Time</span>
-                    <div>{getTimePart(item.start_datetime) || "--:--"}</div>
+                    <input
+                      type="time"
+                      className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                        isModified && modifiedRows[item.taskId]?.start_datetime !== undefined
+                          ? 'border-amber-300 bg-amber-50/50'
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                      }`}
+                      value={getTimePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
+                      onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
+                      disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                    />
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Time</span>
-                    <div>{getTimePart(item.end_datetime) || "--:--"}</div>
+                    <input
+                      type="time"
+                      className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                        isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
+                          ? 'border-amber-300 bg-amber-50/50'
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                      }`}
+                      value={getTimePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
+                      onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
+                      disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
+                    />
                   </div>
                 </div>
 
