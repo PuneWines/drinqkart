@@ -12,7 +12,8 @@ import {
   Check,
   Loader2,
   AlertCircle,
-  Upload
+  Upload,
+  Download
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -376,6 +377,86 @@ export default function WorkDetails() {
       return matchesShop && matchesSearch;
     });
   }, [mergedData, selectedShop, searchTerm, role, managerShops, hasAllShopsAccess, assignedShops]);
+
+  const handleExportCSV = useCallback(() => {
+    if (!filteredTasks || filteredTasks.length === 0) {
+      showToast("No records available to export.", "error");
+      return;
+    }
+
+    const headers = [
+      "Shop",
+      "Task Description",
+      "Department",
+      "Extra Time (Mins)",
+      "Start Date",
+      "End Date",
+      "Start Time",
+      "End Time",
+      "Manager",
+      "Employee",
+      "Status"
+    ];
+
+    const escapeCSV = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const rows = filteredTasks.map(item => {
+      const isModified = !!modifiedRows[item.taskId];
+      const statusText = getTaskStatusInfo(item, isModified).text;
+
+      let employeeStr = "";
+      if (item.employee_name) {
+        if (Array.isArray(item.employee_name)) {
+          employeeStr = item.employee_name.map(e => String(e).trim()).filter(Boolean).join(", ");
+        } else {
+          employeeStr = String(item.employee_name)
+            .split(",")
+            .map(e => e.trim())
+            .filter(Boolean)
+            .join(", ");
+        }
+      }
+
+      const startDateVal = getDatePart(item.start_datetime)
+        ? getDatePart(item.start_datetime).split('-').reverse().join('/')
+        : (bulkStartDate ? bulkStartDate.split('-').reverse().join('/') : "--");
+
+      const endDateVal = getDatePart(item.end_datetime)
+        ? getDatePart(item.end_datetime).split('-').reverse().join('/')
+        : (bulkEndDate ? bulkEndDate.split('-').reverse().join('/') : "--");
+
+      return [
+        escapeCSV(item.shopName || ""),
+        escapeCSV(item.task_name || ""),
+        escapeCSV(item.department || ""),
+        escapeCSV(item.estimated_minutes || ""),
+        escapeCSV(startDateVal),
+        escapeCSV(endDateVal),
+        escapeCSV(getTimePart(item.start_datetime) || "--:--"),
+        escapeCSV(getTimePart(item.end_datetime) || "--:--"),
+        escapeCSV(item.manager_name || ""),
+        escapeCSV(employeeStr || ""),
+        escapeCSV(statusText)
+      ].join(",");
+    });
+
+    const csvContent = [headers.map(escapeCSV).join(","), ...rows].join("\r\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const today = new Date().toISOString().split("T")[0];
+    link.setAttribute("download", `Master_Work_Records_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Master Work Records exported to CSV successfully!", "success");
+  }, [filteredTasks, modifiedRows, bulkStartDate, bulkEndDate, showToast]);
 
   // Handlers
   const handleSelectRow = (id) => {
@@ -818,6 +899,14 @@ export default function WorkDetails() {
               <Calendar size={14} /> Scheduled Tasks 📅
             </button>
 
+            {/* Export to CSV Button */}
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 shrink-0 cursor-pointer"
+            >
+              <Download size={14} /> Export to CSV 📊
+            </button>
+
             <div className="relative group w-full md:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={16} />
               <input
@@ -960,6 +1049,13 @@ export default function WorkDetails() {
                 <Upload size={14} /> Add Tasks
               </button>
             )}
+
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95 cursor-pointer"
+            >
+              <Download size={14} /> Export to CSV
+            </button>
           </div>
         </motion.div>
 
