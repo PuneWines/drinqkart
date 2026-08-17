@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles, Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText, ExternalLink, ChevronLeft } from 'lucide-react'
+import { Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles, Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText, ExternalLink, ChevronLeft, Printer, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 // Storage bucket name
@@ -1379,10 +1379,127 @@ export default function EmployeeManagement() {
                           href="/register"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-1.5  shadow-sm transition-all duration-200"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-1.5 rounded-lg shadow-sm transition-all duration-200"
                         >
                           Open Page <ExternalLink size={14} />
                         </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const registerUrl = window.location.origin + '/register';
+                            const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(registerUrl)}`;
+                            const printWindow = window.open('', '_blank');
+                            if (!printWindow) return;
+                            printWindow.document.write(`
+                              <!DOCTYPE html>
+                              <html>
+                                <head>
+                                  <title>Print QR Code - Employee Self-Registration</title>
+                                  <style>
+                                    @media print {
+                                      @page { size: auto; margin: 15mm; }
+                                      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                                    }
+                                    body {
+                                      margin: 0;
+                                      padding: 40px 20px;
+                                      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                                      display: flex;
+                                      flex-direction: column;
+                                      align-items: center;
+                                      justify-content: center;
+                                      min-height: 80vh;
+                                      background-color: #ffffff;
+                                      color: #0f172a;
+                                    }
+                                    .qr-card {
+                                      border: 2px solid #e2e8f0;
+                                      border-radius: 20px;
+                                      padding: 32px 24px;
+                                      text-align: center;
+                                      max-width: 340px;
+                                      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                                    }
+                                    .qr-img {
+                                      width: 240px;
+                                      height: 240px;
+                                      object-fit: contain;
+                                      margin: 0 auto 16px auto;
+                                      display: block;
+                                    }
+                                    .title {
+                                      font-size: 18px;
+                                      font-weight: 700;
+                                      margin: 0 0 6px 0;
+                                      color: #1e293b;
+                                    }
+                                    .subtitle {
+                                      font-size: 13px;
+                                      font-weight: 500;
+                                      color: #475569;
+                                      margin: 0 0 12px 0;
+                                      line-height: 1.4;
+                                    }
+                                    .url-badge {
+                                      display: inline-block;
+                                      font-size: 11px;
+                                      font-family: monospace;
+                                      color: #4f46e5;
+                                      background-color: #eef2ff;
+                                      padding: 4px 10px;
+                                      border-radius: 6px;
+                                      word-break: break-all;
+                                    }
+                                  </style>
+                                </head>
+                                <body>
+                                  <div class="qr-card">
+                                    <img src="${qrImageUrl}" alt="Employee Self-Registration QR Code" class="qr-img" />
+                                    <h2 class="title">Employee Registration</h2>
+                                    <p class="subtitle">Scan this QR code on your mobile phone to complete candidate registration.</p>
+                                    <div class="url-badge">${registerUrl}</div>
+                                  </div>
+                                  <script>
+                                    window.onload = function() {
+                                      setTimeout(function() {
+                                        window.print();
+                                        window.close();
+                                      }, 400);
+                                    };
+                                  </script>
+                                </body>
+                              </html>
+                            `);
+                            printWindow.document.close();
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 px-3.5 py-1.5 rounded-lg shadow-sm transition-all duration-200 cursor-pointer"
+                        >
+                          <Printer size={14} /> Print QR
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const registerUrl = window.location.origin + '/register';
+                              const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(registerUrl)}`;
+                              const response = await fetch(qrImageUrl);
+                              const blob = await response.blob();
+                              const url = window.URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = 'employee-registration-qr.png';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              window.URL.revokeObjectURL(url);
+                            } catch (err) {
+                              console.error('Error downloading registration QR code:', err);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-3.5 py-1.5 rounded-lg shadow-sm transition-all duration-200 cursor-pointer"
+                        >
+                          <Download size={14} /> Download QR
+                        </button>
                       </div>
                     </div>
                   </div>
