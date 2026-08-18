@@ -48,7 +48,7 @@ export const fetchDashboardDataApi = async (
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
       dashboardType === 'repair' ? 'repair_tasks' :
         dashboardType === 'ea' ? 'ea_tasks' :
-          dashboardType === 'work' ? 'work_task' : dashboardType;
+          dashboardType === 'work' ? 'work_task_new' : dashboardType;
 
     const nameField = getNameField(dashboardType);
 
@@ -544,7 +544,7 @@ export const fetchStaffTasksDataApi = async (
       .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
           dashboardType === 'ea' ? 'ea_tasks' :
-            dashboardType === 'work' ? 'work_task' : dashboardType)
+            dashboardType === 'work' ? 'work_task_new' : dashboardType)
       .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime, manager_name)' : '*')
       .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
