@@ -120,11 +120,20 @@ export default function AdminDashboard() {
     completedRatingThreePlus: 0,
   })
 
-  // New state for date range filtering
-  const [dateRange, setDateRange] = useState({
-    startDate: "",
-    endDate: "",
-    filtered: false,
+  // New state for date range filtering - default to last week (Monday to Sunday)
+  const [dateRange, setDateRange] = useState(() => {
+    const today = new Date()
+    const dayOfWeek = today.getDay()
+    const daysToSubtract = (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + 7
+    const prevMonday = new Date(today)
+    prevMonday.setDate(today.getDate() - daysToSubtract)
+    const prevSunday = new Date(prevMonday)
+    prevSunday.setDate(prevMonday.getDate() + 6)
+    return {
+      startDate: prevMonday.toISOString().split('T')[0],
+      endDate: prevSunday.toISOString().split('T')[0],
+      filtered: true,
+    }
   })
 
   // State to store filtered statistics
