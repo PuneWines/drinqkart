@@ -25,6 +25,15 @@ import { useMagicToast } from "../context/MagicToastContext";
 import { generateWorkTasksApi, resetWorkTasksApi, checkAndPromoteAssignmentsApi, fetchPaginatedWorkRecordsApi } from "../redux/api/workRecordsApi";
 import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../services/whatsappService";
 
+const isAssignmentExpired = (item) => {
+  if (!item.end_datetime) return false;
+  const end = new Date(item.end_datetime);
+  if (isNaN(end.getTime())) return false;
+  const durationMins = Number(item.duration || item.estimated_minutes || 0);
+  const endWithDuration = new Date(end.getTime() + durationMins * 60 * 1000);
+  return new Date() > endWithDuration;
+};
+
 const getTaskStatusInfo = (item, isModified) => {
   if (isModified) {
     return {
@@ -34,7 +43,8 @@ const getTaskStatusInfo = (item, isModified) => {
     };
   }
 
-  if (!item.assignmentId) {
+  // Display Available if there is no assignment OR if current assignment expired with no next assignment scheduled
+  if (item.isAvailable || !item.assignmentId || (isAssignmentExpired(item) && !item.next_start_datetime)) {
     return {
       text: "Available",
       className: "bg-green-50 text-green-700 border-green-200",
@@ -143,85 +153,39 @@ export default function WorkDetails() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Helper: apply shop-access filter shared by both lists
-  const shopFilteredUsers = useMemo(() => {
-    return userData.filter(u => {
-      // Exclude inactive users
-      if (u.status && u.status.toLowerCase() !== 'active') {
-        return false;
-      }
-
-      const userShopsList = (u.shop_name || u.user_access || "")
-        .toLowerCase()
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean);
-
-      const isManagerOrHOD = (role || "").toLowerCase() === "manager" || (role || "").toLowerCase() === "hod";
-      if (isManagerOrHOD && managerShops.length > 0 && !userShopsList.some(s => managerShops.includes(s))) {
-        return false;
-      }
-
-      if (selectedShop !== "All" && selectedShop !== "select") {
-        return userShopsList.includes(selectedShop.toLowerCase());
-      }
-
-      return true;
-    });
-  }, [userData, role, managerShops, selectedShop]);
-
-  // Manager dropdown: only users whose role is "manager"
-  const managerUserData = useMemo(() => {
-    return shopFilteredUsers.filter(u => (u.role || "").toLowerCase() === "manager");
-  }, [shopFilteredUsers]);
-
+  // Manager dropdown: users with role === "manager" whose shop_name matches the task shop
   const getManagersForTask = useCallback((taskShopName) => {
-    const isOffice = (taskShopName || "").toLowerCase() === "office";
-    if (isOffice) {
-      return shopFilteredUsers.filter(u => {
-        const r = (u.role || "").toLowerCase();
-        if (r === "manager") return true;
-        if (r === "admin") {
-          const userShopsList = (u.shop_name || u.user_access || "")
-            .toLowerCase()
-            .split(',')
-            .map(s => s.trim())
-            .filter(Boolean);
-          return userShopsList.includes("office");
-        }
-        return false;
-      });
-    }
-    return managerUserData;
-  }, [shopFilteredUsers, managerUserData]);
+    if (!taskShopName) return [];
+    const targetShopLower = String(taskShopName).trim().toLowerCase();
 
-  // Employee dropdown: users whose role is "user" OR "manager"
-  const employeeUserData = useMemo(() => {
-    return shopFilteredUsers.filter(u => {
+    return userData.filter(u => {
+      if (u.status && u.status.toLowerCase() !== 'active') return false;
       const r = (u.role || "").toLowerCase();
-      return r === "user" || r === "manager";
-    });
-  }, [shopFilteredUsers]);
+      if (r !== "manager") return false;
 
+      const rawShops = (u.shop_name || "").toLowerCase();
+      if (rawShops === "all") return true;
+      const shopList = rawShops.split(',').map(s => s.trim()).filter(Boolean);
+      return shopList.includes(targetShopLower);
+    });
+  }, [userData]);
+
+  // Employee dropdown: users with role === "user" or "manager" whose user_access contains the task shop
   const getEmployeesForTask = useCallback((taskShopName) => {
-    const isOffice = (taskShopName || "").toLowerCase() === "office";
-    if (isOffice) {
-      return shopFilteredUsers.filter(u => {
-        const r = (u.role || "").toLowerCase();
-        if (r === "user" || r === "manager") return true;
-        if (r === "admin") {
-          const userShopsList = (u.shop_name || u.user_access || "")
-            .toLowerCase()
-            .split(',')
-            .map(s => s.trim())
-            .filter(Boolean);
-          return userShopsList.includes("office");
-        }
-        return false;
-      });
-    }
-    return employeeUserData;
-  }, [shopFilteredUsers, employeeUserData]);
+    if (!taskShopName) return [];
+    const targetShopLower = String(taskShopName).trim().toLowerCase();
+
+    return userData.filter(u => {
+      if (u.status && u.status.toLowerCase() !== 'active') return false;
+      const r = (u.role || "").toLowerCase();
+      if (r !== "user" && r !== "manager") return false;
+
+      const rawAccess = (u.user_access || "").toLowerCase();
+      if (rawAccess === "all") return true;
+      const accessList = rawAccess.split(',').map(s => s.trim()).filter(Boolean);
+      return accessList.includes(targetShopLower);
+    });
+  }, [userData]);
 
   // Local state for modified fields (spreadsheet-style editing)
   const [modifiedRows, setModifiedRows] = useState({});
@@ -347,15 +311,30 @@ export default function WorkDetails() {
       const joinedAsgn = Array.isArray(task.task_assignments) ? task.task_assignments[0] : task.task_assignments;
       let assignment = joinedAsgn || assignments.find(a => a.task_id === task.id);
 
+      const isAvailable = !assignment?.id || (isAssignmentExpired(assignment) && !assignment?.next_start_datetime);
+
+      const startTime = getTimePart(assignment?.start_datetime);
+      const endTime = getTimePart(assignment?.end_datetime);
+
+      const baseAssignmentData = isAvailable ? {
+        start_datetime: startTime ? `T${startTime}` : "",
+        end_datetime: endTime ? `T${endTime}` : "",
+        estimated_minutes: task.estimated_minutes || assignment?.estimated_minutes || 0,
+        manager_name: "",
+        employee_name: "",
+        status: ""
+      } : (assignment || {});
+
       const modified = modifiedRows[task.id] || {};
 
       return {
         ...task,
-        ...(assignment || {}),
+        ...baseAssignmentData,
         ...modified, // local overrides
         taskId: task.id, // reference to master task
         shopName: task.shop?.shop_name || "N/A",
-        assignmentId: assignment?.id || null // explicitly track if it's currently assigned
+        assignmentId: assignment?.id || null, // explicitly track if it's currently assigned
+        isAvailable
       };
     });
   }, [masterTasks, assignments, modifiedRows]);

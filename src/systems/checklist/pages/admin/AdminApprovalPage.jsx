@@ -114,11 +114,13 @@ const getWorkTaskDeadline = (task) => {
       ? `${plannedDateStr}T${timeStr}`
       : `${plannedDateStr}T${timeStr}+05:30`;
       
-  const deadlineDate = new Date(reconstructedStr);
-  if (isNaN(deadlineDate.getTime())) {
-      return new Date(`${plannedDateStr}T23:59:59+05:30`);
+  let baseDeadline = new Date(reconstructedStr);
+  if (isNaN(baseDeadline.getTime())) {
+    baseDeadline = new Date(`${plannedDateStr}T23:59:59+05:30`);
   }
-  return deadlineDate;
+
+  const durationMins = Number(task.duration || task.estimated_minutes || 0);
+  return new Date(baseDeadline.getTime() + durationMins * 60 * 1000);
 };
 
 const isPastDeadline = (task) => {
