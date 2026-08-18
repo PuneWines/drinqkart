@@ -50,7 +50,15 @@ const AllTasks = () => {
   const { customDropdowns = [] } = useSelector((state) => state.setting || {});
   const { showToast } = useMagicToast();
   // Active tab state
-  const [activeTab, setActiveTab] = useState("checklist"); // checklist, maintenance, repair, ea
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem("alltasks_active_tab") || "checklist";
+  });
+
+  useEffect(() => {
+    if (activeTab) {
+      localStorage.setItem("alltasks_active_tab", activeTab);
+    }
+  }, [activeTab]);
   const [showHistory, setShowHistory] = useState(false);
 
   // Data states
@@ -509,18 +517,34 @@ const AllTasks = () => {
           reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
         }
       } else if (currentUserRole === "manager") {
+        const userAccess = localStorage.getItem("user_access") || localStorage.getItem("shop_name") || "";
+        const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        const managerShops = rawShops.map(s => s.toLowerCase());
+
         const { data: allDbUsers } = await supabase
           .from("users")
           .select("user_name, shop_name, user_access");
         if (allDbUsers) {
-          const userAccess = localStorage.getItem("user_access") || "";
-          const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
           const matchedUsers = allDbUsers.filter(u => {
             const userShop = (u.shop_name || u.user_access || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return managerShops.includes("all") || managerShops.includes("admin") || userShopsList.some(s => managerShops.includes(s));
           }).map(u => u.user_name || "");
           reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
+        }
+
+        if (rawShops.length > 0 && !managerShops.includes("all") && !managerShops.includes("admin")) {
+          if (activeTab === "checklist" || activeTab === "regular" || activeTab === "delegation" || activeTab === "maintenance") {
+            const allowedShops = [...new Set(
+              rawShops.flatMap(s => [
+                s,
+                s.toUpperCase(),
+                s.toLowerCase(),
+                s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+              ])
+            )];
+            query = query.in('shop_name', allowedShops);
+          }
         }
       }
 

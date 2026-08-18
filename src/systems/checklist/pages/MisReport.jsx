@@ -575,7 +575,7 @@ function StaffTasksPage() {
                     supabase.from('delegation').select('*').gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`).range(from, to)
                 ),
                 fetchAllRecords((from, to) =>
-                    supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name)').gte('current_date', startDate).lte('current_date', endDate).range(from, to)
+                    supabase.from('work_task_new').select('*, task_assignments:assignment_id(manager_name)').gte('current_date', startDate).lte('current_date', endDate).range(from, to)
                 ),
                 fetchAllRecords((from, to) =>
                     supabase.from('maintenance_tasks').select('*').gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`).range(from, to)
