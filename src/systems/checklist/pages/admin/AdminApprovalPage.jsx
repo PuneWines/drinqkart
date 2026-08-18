@@ -133,7 +133,17 @@ export default function AdminApprovalPage() {
   const { showToast } = useMagicToast();
   const currentRole = (localStorage.getItem("role") || "").toLowerCase();
   const isManager = currentRole === "manager";
-  const [activeTab, setActiveTab] = useState(isManager ? "work" : "checklist");
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem("admin_approval_active_tab");
+    if (saved) return saved;
+    return isManager ? "work" : "checklist";
+  });
+
+  useEffect(() => {
+    if (activeTab) {
+      localStorage.setItem("admin_approval_active_tab", activeTab);
+    }
+  }, [activeTab]);
   const [viewMode, setViewMode] = useState("pending"); // 'pending' or 'history'
   const [pendingTasks, setPendingTasks] = useState([]);
   const [mgrStartDate, setMgrStartDate] = useState("");

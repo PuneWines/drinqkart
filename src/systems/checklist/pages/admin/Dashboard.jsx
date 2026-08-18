@@ -36,7 +36,29 @@ import EAView from "./dashboard/views/EAView.jsx"
 import TaskManagementTabs from "../../components/TaskManagementTabs.jsx"
 
 export default function AdminDashboard() {
-  const [dashboardType, setDashboardType] = useState("checklist")
+  const [mainTab, setMainTab] = useState(() => {
+    const saved = localStorage.getItem("dashboard_active_tab") || "checklist";
+    if (saved === "checklist") return "default";
+    return saved;
+  });
+
+  const [dashboardType, setDashboardType] = useState(() => {
+    const saved = localStorage.getItem("dashboard_active_tab") || "checklist";
+    return saved;
+  });
+
+  const [shopFilter, setShopFilter] = useState(() => {
+    const saved = localStorage.getItem("dashboard_active_tab") || "checklist";
+    if (saved === "maintenance") return "Maintenance";
+    if (saved === "repair") return "Repair";
+    return "all";
+  });
+
+  useEffect(() => {
+    const tabToSave = mainTab === "default" ? (dashboardType || "checklist") : mainTab;
+    localStorage.setItem("dashboard_active_tab", tabToSave);
+  }, [mainTab, dashboardType]);
+
   const [taskView, setTaskView] = useState("recent")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterStaff, setFilterStaff] = useState("all")
@@ -53,9 +75,7 @@ export default function AdminDashboard() {
   const [hasMoreData, setHasMoreData] = useState(true)
   const [allTasks, setAllTasks] = useState([])
   const [batchSize] = useState(1000)
-  const [shopFilter, setShopFilter] = useState("all")
   const [availableShops, setAvailableShops] = useState([])
-  const [mainTab, setMainTab] = useState("default") // "default", "maintenance", "repair", "ea"
   const handleShopFilterChange = (newShop) => {
     setShopFilter(newShop)
     setDashboardStaffFilter("all")
@@ -90,12 +110,13 @@ export default function AdminDashboard() {
         }
       }
 
-      if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
-        const firstShop = rawShopStr.split(',').map(s => s.trim()).filter(Boolean)[0];
-        if (firstShop) {
-          setShopFilter(firstShop);
-        }
-      }
+      // Keep shopFilter as "all" by default instead of forcing firstShop
+      // if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+      //   const firstShop = rawShopStr.split(',').map(s => s.trim()).filter(Boolean)[0];
+      //   if (firstShop) {
+      //     setShopFilter(firstShop);
+      //   }
+      // }
     };
     initializeUserShop();
   }, [userRole, username]);
@@ -1103,7 +1124,7 @@ export default function AdminDashboard() {
             return userShopsList.includes(sName);
           });
           setAvailableShops(matched);
-          if (matched.length > 0 && (shopFilter === "all" || !matched.map(m => (typeof m === 'string' ? m : m.shop_name || '').toLowerCase()).includes(shopFilter.toLowerCase()))) {
+          if (matched.length > 0 && shopFilter !== "all" && !matched.map(m => (typeof m === 'string' ? m : m.shop_name || '').toLowerCase()).includes(shopFilter.toLowerCase())) {
             setShopFilter(typeof matched[0] === 'string' ? matched[0] : matched[0].shop_name);
           }
         } else {
@@ -1377,6 +1398,7 @@ export default function AdminDashboard() {
             <TaskManagementTabs
               activeTab={mainTab === 'default' ? 'checklist' : mainTab}
               setActiveTab={(tabId) => {
+                localStorage.setItem("dashboard_active_tab", tabId);
                 // Clear current tasks immediately to prevent showing old data on new tab
                 setShopData(prev => ({ ...prev, allTasks: [] }));
                 setDashboardStaffFilter("all");

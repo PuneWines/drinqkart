@@ -21,6 +21,29 @@ export default function StaffTasksTable({
   const [availableMonths, setAvailableMonths] = useState([])
   const itemsPerPage = 50
 
+  const [userRolesMap, setUserRolesMap] = useState({})
+
+  // Fetch user roles from users table
+  useEffect(() => {
+    const fetchUserRoles = async () => {
+      try {
+        const { data } = await supabase.from('users').select('user_name, role');
+        if (data) {
+          const rMap = {};
+          data.forEach(u => {
+            if (u.user_name) {
+              rMap[u.user_name.toLowerCase().trim()] = u.role || 'user';
+            }
+          });
+          setUserRolesMap(rMap);
+        }
+      } catch (err) {
+        console.error("Error fetching user roles in StaffTaskTable:", err);
+      }
+    };
+    fetchUserRoles();
+  }, []);
+
   // Generate available months (last 12 months)
   useEffect(() => {
     const months = [];
@@ -353,7 +376,9 @@ export default function StaffTasksTable({
                           )}
                           <div>
                             <div className="text-sm font-bold text-gray-900 tracking-tight">{staff.name}</div>
-                            <div className="text-[10px] text-gray-400 font-medium">#{staff.id.split('-').pop()}</div>
+                            <div className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">
+                              {userRolesMap[(staff.name || "").toLowerCase().trim()] || "user"}
+                            </div>
                           </div>
                         </div>
                       </td>

@@ -180,7 +180,7 @@ export default function DashboardHeader({
                                         onChange={(e) => setShopFilter(e.target.value)}
                                         className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
                                     >
-                                        {hasAllShopsAccess && <option value="all">All Shops</option>}
+                                        <option value="all">All Shops</option>
                                         {availableShops.map((shop) => (
                                             <option key={shop} value={shop}>
                                                 {shop}
@@ -305,7 +305,7 @@ export default function DashboardHeader({
                                 onChange={(e) => setShopFilter(e.target.value)}
                                 className="w-[110px] sm:w-[160px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                             >
-                                {hasAllShopsAccess && <option value="all">All Shops</option>}
+                                <option value="all">All Shops</option>
                                 {availableShops.map((shop) => (
                                     <option key={shop} value={shop}>
                                         {shop}

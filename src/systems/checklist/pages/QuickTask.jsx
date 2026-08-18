@@ -70,7 +70,15 @@ export default function QuickTask() {
   const [tasks, setTasks] = useState([]);
   const [delegationLoading, setDelegationLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('checklist');
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem("quicktask_active_tab") || 'checklist';
+  });
+
+  useEffect(() => {
+    if (activeTab) {
+      localStorage.setItem("quicktask_active_tab", activeTab);
+    }
+  }, [activeTab]);
   const tableContainerRef = useRef(null);
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);

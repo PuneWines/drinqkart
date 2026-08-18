@@ -400,17 +400,15 @@ export const rejectWorkTaskApi = async (taskId, reason) => {
       updateFields = {
         work_status: 'REJECTED',
         rejection_reason: reason,
-        submission_date: null,
-        manager_approved_by: userName,
-        manager_approval_date: now
+        submission_date: null
       };
     } else {
       updateFields = {
         work_status: 'REJECTED',
         rejection_reason: reason,
         submission_date: null,
-        admin_approved_by: userName,
-        admin_approval_date: now
+        manager_approved_by: null,
+        manager_approval_date: null
       };
     }
 

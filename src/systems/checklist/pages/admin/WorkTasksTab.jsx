@@ -546,16 +546,31 @@ const WorkTasksTab = ({
 
       if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
         const cleanTerm = debouncedSearchTerm.trim();
-        const searchFields = ["task_description", "shop_name", "name"];
-
-        const orQueryParts = [];
-        searchFields.forEach(f => {
-          orQueryParts.push(`${f}.ilike.%${cleanTerm}%`);
-        });
-
-        if (orQueryParts.length > 0) {
-          query = query.or(orQueryParts.join(','));
+        
+        let matchingAssignmentIds = [];
+        try {
+          const { data: matchedAssignments } = await supabase
+            .from('task_assignments')
+            .select('id')
+            .ilike('manager_name', `%${cleanTerm}%`);
+          if (matchedAssignments && matchedAssignments.length > 0) {
+            matchingAssignmentIds = matchedAssignments.map(a => a.id).filter(Boolean);
+          }
+        } catch (e) {
+          console.error("Error searching task_assignments for manager_name:", e);
         }
+
+        const orQueryParts = [
+          `task_description.ilike.%${cleanTerm}%`,
+          `shop_name.ilike.%${cleanTerm}%`,
+          `name.ilike.%${cleanTerm}%`
+        ];
+
+        if (matchingAssignmentIds.length > 0) {
+          orQueryParts.push(`assignment_id.in.(${matchingAssignmentIds.join(',')})`);
+        }
+
+        query = query.or(orQueryParts.join(','));
       }
 
       if (workEmployeeFilter && workEmployeeFilter !== "all") {
