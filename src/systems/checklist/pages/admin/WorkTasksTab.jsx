@@ -463,8 +463,20 @@ const WorkTasksTab = ({
       const to = from + limit - 1;
       query = query.range(from, to);
 
-      const currentUsername = (username || "");
-      const currentUserRole = (userRole || "").toLowerCase();
+      let currentUsername = (username || localStorage.getItem("user-name") || "").trim();
+      let currentUserRole = (userRole || localStorage.getItem("role") || "").toLowerCase().trim();
+
+      try {
+        const currentUserRaw = localStorage.getItem("currentUser");
+        if (currentUserRaw) {
+          const parsed = JSON.parse(currentUserRaw);
+          if (parsed.username || parsed.name) currentUsername = (parsed.username || parsed.name).trim();
+          if (parsed.role) currentUserRole = parsed.role.toLowerCase().trim();
+        }
+      } catch (e) {
+        console.error("Error parsing currentUser from localStorage:", e);
+      }
+
       const userShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
       const isSuperAdmin = currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
 
@@ -480,22 +492,8 @@ const WorkTasksTab = ({
         }
       }
 
-      if (isSuperAdmin) {
+      if (isSuperAdmin || currentUserRole === "manager") {
         applyNameFilter = false;
-      } else if (currentUserRole === "manager") {
-        const { data: allDbUsers } = await supabase
-          .from("users")
-          .select("user_name, shop_name, user_access");
-        if (allDbUsers) {
-          const managerShops = userShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-          const matchedUsers = allDbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
-            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-            return managerShops.includes("all") || managerShops.includes("admin") || userShopsList.some(s => managerShops.includes(s));
-          }).map(u => u.user_name || "");
-          reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
-        }
-        applyNameFilter = true;
       } else if (currentUserRole === "hod") {
         const { data: reports } = await supabase
           .from("users")
@@ -531,7 +529,7 @@ const WorkTasksTab = ({
       const currentTimeStr = getLocalStyleTimeStr(new Date());
 
       if (showHistory) {
-        query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr},and(current_date.eq.${todayStr},end_time.lt.${currentTimeStr})`);
+        query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr},current_date.eq.${todayStr}`);
         if (startDate) {
           query = query.gte("current_date", startDate);
         }
@@ -542,7 +540,6 @@ const WorkTasksTab = ({
       } else {
         query = query
           .eq('current_date', todayStr)
-          .gte('end_time', currentTimeStr)
           .is('submission_date', null)
           .order('start_time', { ascending: true });
       }
@@ -609,12 +606,14 @@ const WorkTasksTab = ({
         const mgrLower = (currentUsername || "").toLowerCase().trim();
         filteredWorkTasks = filteredWorkTasks.filter(item => {
           const itemDoer = (item.name || "").toLowerCase().trim();
-          const itemMgr = (item.manager_name || item.given_by || "").toLowerCase().trim();
-          const itemShop = (item.shop || item.shop_name || "").toLowerCase().trim();
+          const itemMgrList = (item.manager_name || item.task_assignments?.manager_name || item.given_by || "")
+            .toLowerCase()
+            .split(',')
+            .map(m => m.trim())
+            .filter(Boolean);
 
-          const isDirectUserMatch = itemDoer === mgrLower || itemMgr === mgrLower;
-          const isShopMatch = allowedShops.length > 0 && allowedShops.some(s => itemShop === s || itemShop.includes(s) || s.includes(itemShop));
-          return isDirectUserMatch || isShopMatch;
+          const isDirectUserMatch = itemDoer === mgrLower || itemMgrList.includes(mgrLower);
+          return isDirectUserMatch;
         });
       }
 
@@ -635,7 +634,11 @@ const WorkTasksTab = ({
         });
         setHistoryData(prev => append ? [...prev, ...historyTasks] : historyTasks);
       } else {
-        setTasks(prev => append ? [...prev, ...filteredWorkTasks] : filteredWorkTasks);
+        const liveTasks = filteredWorkTasks.filter(item => {
+          const { taskEnd } = getWorkTaskTimeBounds(item);
+          return currentTime <= taskEnd;
+        });
+        setTasks(prev => append ? [...prev, ...liveTasks] : liveTasks);
       }
     } catch (err) {
       console.error("Fetch error:", err);
