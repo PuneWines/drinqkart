@@ -950,9 +950,8 @@ const WorkTasksTab = ({
     showToast("Preparing CSV export...", "info");
 
     try {
-      const tableName = "work_task";
-      let query = supabase.from(tableName).select("*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)");
-
+      const tableName = "work_task_new";
+      
       const currentUsername = (username || "");
       const currentUserRole = (userRole || "").toLowerCase();
       const isSuperAdmin = currentUsername.toLowerCase() === "admin";
@@ -997,10 +996,6 @@ const WorkTasksTab = ({
         }
       }
 
-      if (applyNameFilter) {
-        query = query.in("name", reportingUsers);
-      }
-
       const getLocalStyleDate = (d) => {
         const yyyy = d.getFullYear();
         const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -1009,40 +1004,63 @@ const WorkTasksTab = ({
       };
 
       const todayStr = getLocalStyleDate(new Date());
-      query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr}`);
-      if (startDate) {
-        query = query.gte("current_date", startDate);
-      }
-      if (endDate) {
-        query = query.lte("current_date", endDate);
-      }
-      query = query.order('current_date', { ascending: false });
 
-      if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
-        const cleanTerm = debouncedSearchTerm.trim();
-        const searchFields = ["task_description", "shop_name", "name"];
+      // Fetch all records with pagination to prevent Supabase 1000 limit
+      let allExportTasks = [];
+      let exportPage = 0;
+      const exportLimit = 1000;
+      let hasMoreExportData = true;
 
-        const orQueryParts = [];
-        searchFields.forEach(f => {
-          orQueryParts.push(`${f}.ilike.%${cleanTerm}%`);
-        });
+      while (hasMoreExportData) {
+        let pageQuery = supabase
+          .from(tableName)
+          .select("*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)")
+          .range(exportPage * exportLimit, (exportPage + 1) * exportLimit - 1);
 
-        if (orQueryParts.length > 0) {
-          query = query.or(orQueryParts.join(','));
+        if (applyNameFilter) {
+          pageQuery = pageQuery.in("name", reportingUsers);
+        }
+
+        pageQuery = pageQuery.or(`submission_date.not.is.null,current_date.lt.${todayStr}`);
+
+        if (startDate) {
+          pageQuery = pageQuery.gte("current_date", startDate);
+        }
+        if (endDate) {
+          pageQuery = pageQuery.lte("current_date", endDate);
+        }
+        pageQuery = pageQuery.order('current_date', { ascending: false });
+
+        if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
+          const cleanTerm = debouncedSearchTerm.trim();
+          const searchFields = ["task_description", "shop_name", "name"];
+          const orQueryParts = searchFields.map(f => `${f}.ilike.%${cleanTerm}%`);
+          pageQuery = pageQuery.or(orQueryParts.join(','));
+        }
+
+        if (workEmployeeFilter && workEmployeeFilter !== "all") {
+          pageQuery = pageQuery.eq('name', workEmployeeFilter);
+        }
+
+        const { data: pageData, error: fetchError } = await pageQuery;
+        if (fetchError) {
+          console.error("Export fetch error:", fetchError);
+          throw fetchError;
+        }
+
+        if (pageData && pageData.length > 0) {
+          allExportTasks = [...allExportTasks, ...pageData];
+          if (pageData.length < exportLimit) {
+            hasMoreExportData = false;
+          } else {
+            exportPage++;
+          }
+        } else {
+          hasMoreExportData = false;
         }
       }
 
-      if (workEmployeeFilter && workEmployeeFilter !== "all") {
-        query = query.eq('name', workEmployeeFilter);
-      }
-
-      const { data, error: fetchError } = await query;
-      if (fetchError) {
-        console.error("Export fetch error:", fetchError);
-        throw fetchError;
-      }
-
-      const mappedData = (data || []).map(item => {
+      const mappedData = allExportTasks.map(item => {
         const mapped = {
           ...item,
           id: item.id || item.task_id,
@@ -1074,17 +1092,7 @@ const WorkTasksTab = ({
         );
       }
 
-      filteredWorkTasks = filteredWorkTasks.filter(item => {
-        const taskDate = item.current_date?.split('T')[0];
-        if (!taskDate) return true;
-        const isHoliday = holidaysList.includes(taskDate);
-        return !isHoliday;
-      });
-
-      const historyTasks = filteredWorkTasks.filter(item => {
-        const ds = getWorkTaskDynamicStatus(item, currentTime);
-        return ds === "NOT_DONE" || item.submission_date;
-      });
+      const historyTasks = filteredWorkTasks;
 
       const finalTasks = historyTasks.filter((task) => {
         let matchesShop = true;
