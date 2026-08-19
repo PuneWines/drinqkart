@@ -5,6 +5,7 @@ import Toast from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import PettyCash from "./pages/PettyCash";
 import CounterInformation from "./pages/CounterInformation";
+import BankAudit from "./pages/BankAudit";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Footer from "./components/Footer";
@@ -13,6 +14,7 @@ import Footer from "./components/Footer";
 const ALL_NAV_ITEMS = [
   { id: "cash-tally-counter", label: "Cash Tally Counter", pageName: "Cash Tally Counter" },
   { id: "petty-cash", label: "Petty Cash Form", pageName: "Petty Cash Form" },
+  { id: "bank-audit", label: "Bank Audit", pageName: "Bank Audit" },
   { id: "reports", label: "Reports", pageName: "Reports" },
 ];
 
@@ -40,6 +42,7 @@ function MainApp() {
   const PAGE_NAMES: Record<string, string> = {
     "cash-tally-counter": "Cash Tally Counter",
     "petty-cash": "Petty Cash Form",
+    "bank-audit": "Bank Audit",
     "reports": "Reports",
   };
 
@@ -87,6 +90,8 @@ function MainApp() {
         return "Cash Tally Counter";
       case "petty-cash":
         return "Petty Cash Form";
+      case "bank-audit":
+        return "Bank Audit Table";
       case "reports":
         return "Financial Reports";
       case "settings":
@@ -102,6 +107,8 @@ function MainApp() {
         return <CounterInformation onClose={() => setActiveTab("cash-tally-counter")} />;
       case "petty-cash":
         return <PettyCash onClose={() => setActiveTab("cash-tally-counter")} />;
+      case "bank-audit":
+        return <BankAudit />;
       case "reports":
         return <Reports />;
       case "settings":
