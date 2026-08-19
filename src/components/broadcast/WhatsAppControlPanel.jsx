@@ -325,9 +325,8 @@ export default function WhatsAppControlPanel() {
                 <div
                   key={conv.id}
                   onClick={() => selectWhatsAppConversation(conv.id)}
-                  className={`p-3 flex items-center gap-3 cursor-pointer transition-all hover:bg-emerald-50/60 ${
-                    isSelected ? 'bg-emerald-50/90 border-l-4 border-[#25D366]' : ''
-                  }`}
+                  className={`p-3 flex items-center gap-3 cursor-pointer transition-all hover:bg-emerald-50/60 ${isSelected ? 'bg-emerald-50/90 border-l-4 border-[#25D366]' : ''
+                    }`}
                 >
                   {/* Avatar */}
                   {contact?.avatar_url ? (
@@ -432,11 +431,10 @@ export default function WhatsAppControlPanel() {
                     className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[75%] sm:max-w-[65%] px-3.5 py-2 rounded-2xl shadow-xs text-xs relative ${
-                        isMe
+                      className={`max-w-[75%] sm:max-w-[65%] px-3.5 py-2 rounded-2xl shadow-xs text-xs relative ${isMe
                           ? 'bg-gradient-to-r from-[#25D366] to-emerald-600 text-white rounded-tr-none'
                           : 'bg-white text-gray-900 rounded-tl-none border border-gray-100'
-                      }`}
+                        }`}
                     >
                       {/* Smart Media Component (Video/GIF, Audio, Document, Image) */}
                       {renderMediaElement(msg)}
@@ -450,9 +448,8 @@ export default function WhatsAppControlPanel() {
 
                       {/* Message Footer (Time & Read Status Ticks) */}
                       <div
-                        className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${
-                          isMe ? 'text-emerald-100' : 'text-gray-400'
-                        }`}
+                        className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isMe ? 'text-emerald-100' : 'text-gray-400'
+                          }`}
                       >
                         <span>{formatMessageTime(msg.timestamp)}</span>
 
@@ -574,11 +571,10 @@ export default function WhatsAppControlPanel() {
                       key={cat.id}
                       type="button"
                       onClick={() => setActiveEmojiCategory(cat.id)}
-                      className={`px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
-                        activeEmojiCategory === cat.id
+                      className={`px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${activeEmojiCategory === cat.id
                           ? 'bg-emerald-100 text-emerald-800 font-bold'
                           : 'text-gray-500 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       <span>{cat.icon}</span>
                     </button>
@@ -643,9 +639,8 @@ export default function WhatsAppControlPanel() {
                   setShowAttachmentMenu(!showAttachmentMenu)
                   setShowEmojiPicker(false)
                 }}
-                className={`p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors ${
-                  showAttachmentMenu ? 'bg-emerald-100 text-emerald-700' : ''
-                }`}
+                className={`p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors ${showAttachmentMenu ? 'bg-emerald-100 text-emerald-700' : ''
+                  }`}
                 title="Attach Media or File"
               >
                 <Plus className="w-5 h-5" />
@@ -658,9 +653,8 @@ export default function WhatsAppControlPanel() {
                   setShowEmojiPicker(!showEmojiPicker)
                   setShowAttachmentMenu(false)
                 }}
-                className={`p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors ${
-                  showEmojiPicker ? 'bg-emerald-100 text-emerald-700' : ''
-                }`}
+                className={`p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors ${showEmojiPicker ? 'bg-emerald-100 text-emerald-700' : ''
+                  }`}
                 title="Add Emoji"
               >
                 <Smile className="w-5 h-5" />
