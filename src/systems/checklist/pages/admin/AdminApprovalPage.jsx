@@ -131,7 +131,20 @@ const isPastDeadline = (task) => {
 
 export default function AdminApprovalPage() {
   const { showToast } = useMagicToast();
-  const currentRole = (localStorage.getItem("role") || "").toLowerCase();
+  
+  const currentUserObj = useMemo(() => {
+    try {
+      const currentUserStr = localStorage.getItem("currentUser");
+      if (currentUserStr) {
+        return JSON.parse(currentUserStr);
+      }
+    } catch (e) {
+      console.error("Error parsing currentUser from localStorage:", e);
+    }
+    return null;
+  }, []);
+
+  const currentRole = (currentUserObj?.role || localStorage.getItem("role") || "").toLowerCase();
   const isManager = currentRole === "manager";
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem("admin_approval_active_tab");
@@ -770,8 +783,8 @@ export default function AdminApprovalPage() {
                 >
                   <div className="w-1 h-6 sm:w-1.5 sm:h-8 bg-purple-600 rounded-full" />
                   <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-                    {currentRole.toLowerCase() === "manager"
-                      ? "Manager"
+                    {isManager
+                      ? "Manager's"
                       : "Admin"}{" "}
                     <span className="text-purple-600">Approval</span>
                   </h1>

@@ -263,31 +263,20 @@ const WorkTasksTab = ({
   });
   const [historyManagerFilter, setHistoryManagerFilter] = useState("all");
   const [availableShops, setAvailableShops] = useState([]);
-  const [availableManagers, setAvailableManagers] = useState([]);
+  const [allManagerUsers, setAllManagerUsers] = useState([]);
 
   useEffect(() => {
-    const role = (userRole || "").toLowerCase();
-    if (role === "manager" && availableShops.length > 0) {
-      const userAccess = localStorage.getItem("user_access") || "";
-      const firstShop = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)[0];
-      if (firstShop) {
-        const matchedShop = availableShops.find(s => s.toLowerCase() === firstShop);
-        if (matchedShop) {
-          setHistoryShopFilter(matchedShop);
-        }
-      }
-    }
-  }, [userRole, availableShops]);
-
-  useEffect(() => {
+    let isMounted = true;
     const fetchFilterOptions = async () => {
       try {
         const [shopsRes, managersRes, officeAdminsRes] = await Promise.all([
           supabase.from('shop').select('shop_name').order('shop_name', { ascending: true }),
-          supabase.from('users').select('user_name').eq('status', 'active').ilike('role', 'manager').order('user_name', { ascending: true }),
-          // Also fetch admins with OFFICE shop access (they act as managers for OFFICE tasks)
+          supabase.from('users').select('user_name, shop_name, user_access').eq('status', 'active').ilike('role', 'manager').order('user_name', { ascending: true }),
           supabase.from('users').select('user_name, shop_name, user_access').eq('status', 'active').ilike('role', 'admin')
         ]);
+
+        if (!isMounted) return;
+
         if (shopsRes.data) {
           const allShops = shopsRes.data.map(s => s.shop_name).filter(Boolean);
           const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
@@ -317,31 +306,45 @@ const WorkTasksTab = ({
             const matched = allShops.filter(s => userShopsList.includes(s.toLowerCase()));
             setAvailableShops(matched);
             if (matched.length > 0) {
-              setHistoryShopFilter(matched[0]);
+              setHistoryShopFilter(prev => (prev === "all" ? matched[0] : prev));
             }
           } else {
             setAvailableShops(allShops);
           }
         }
-        if (managersRes.data) {
-          const managerNames = managersRes.data.map(u => u.user_name).filter(Boolean);
-          // Add OFFICE admins who act as managers for OFFICE shop tasks
-          const officeAdminNames = (officeAdminsRes.data || [])
-            .filter(u => {
-              const shops = (u.shop_name || u.user_access || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-              return shops.includes('office');
-            })
-            .map(u => u.user_name)
-            .filter(Boolean);
-          const combined = [...new Set([...managerNames, ...officeAdminNames])].sort();
-          setAvailableManagers(combined);
-        }
+
+        const mgrs = managersRes.data || [];
+        const admins = (officeAdminsRes.data || []).filter(u => {
+          const shops = (u.shop_name || u.user_access || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+          return shops.includes('office');
+        });
+        setAllManagerUsers([...mgrs, ...admins]);
       } catch (err) {
         console.error("Error fetching history filter options:", err);
       }
     };
+
     fetchFilterOptions();
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  const availableManagers = useMemo(() => {
+    const isShopSelected = historyShopFilter && historyShopFilter !== "all";
+    const targetShopLower = (historyShopFilter || "").trim().toLowerCase();
+
+    const matchedNames = allManagerUsers
+      .filter(u => {
+        if (!isShopSelected) return true;
+        const shops = (u.shop_name || u.user_access || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+        return shops.includes(targetShopLower);
+      })
+      .map(u => u.user_name)
+      .filter(Boolean);
+
+    return [...new Set(matchedNames)].sort((a, b) => a.localeCompare(b));
+  }, [historyShopFilter, allManagerUsers]);
   const [statusData, setStatusData] = useState({});
   const [imagePreviews, setImagePreviews] = useState({});
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
