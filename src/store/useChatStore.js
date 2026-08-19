@@ -7,7 +7,7 @@ const formatWhatsAppNumber = (rawPhone) => {
   if (!rawPhone) return { cleanPhone: '', cid: '' }
   let str = String(rawPhone).split('@')[0]
   let digits = str.replace(/[^0-9]/g, '')
-  if (!digits) return { cleanPhone: '', cid: '' }
+  if (!digits || digits.startsWith('120') || digits.length > 15) return { cleanPhone: '', cid: '' }
   if (digits.length === 10 && /^[6-9]/.test(digits)) {
     digits = '91' + digits
   }
@@ -66,7 +66,7 @@ export const useChatStore = create((set, get) => ({
   messageStats: { sent: 0, delivered: 0, read: 0 },
 
   // Dashboard view toggle ('broadcast' | 'whatsapp')
-  activeDashboardTab: 'broadcast',
+  activeDashboardTab: (typeof window !== 'undefined' && localStorage.getItem('broadcast_dashboard_active_tab')) || 'broadcast',
   whatsappConversations: [],
   selectedConversationId: null,
   whatsappMessages: [],
@@ -283,7 +283,33 @@ export const useChatStore = create((set, get) => ({
       }));
     } catch (err) {
       console.error('Error uploading file to Supabase storage:', err);
-      alert('Failed to upload file to Supabase storage. Ensure the whatsapp_broadcast storage bucket exists.');
+      alert(`⚠️ Storage Upload Error: ${err.message || 'Failed to upload'}\n\nPlease ensure you have run the Storage RLS SQL script in Supabase SQL Editor for the whatsapp_broadcast bucket.`);
+    }
+  },
+
+  uploadLiveChatMedia: async (file) => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `live_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('whatsapp_broadcast')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('whatsapp_broadcast')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (err) {
+      console.error('Error uploading live chat file to Supabase storage:', err);
+      alert(`⚠️ File Upload Failed: ${err.message || 'Error'}\n\nPlease ensure the whatsapp_broadcast storage bucket exists and has Public RLS Policies enabled.`);
+      return null;
     }
   },
 
@@ -532,7 +558,12 @@ export const useChatStore = create((set, get) => ({
   // ========================================================
   // WHATSAPP LIVE CONTROL ACTIONS
   // ========================================================
-  setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
+  setActiveDashboardTab: (tab) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('broadcast_dashboard_active_tab', tab);
+    }
+    set({ activeDashboardTab: tab });
+  },
   setWhatsAppSearchQuery: (query) => set({ whatsappSearchQuery: query }),
   setIsNewContactModalOpen: (isOpen) => set({ isNewContactModalOpen: isOpen }),
 
@@ -675,6 +706,7 @@ export const useChatStore = create((set, get) => ({
             to_number: cleanPhone,
             type: mediaUrl ? 'media' : 'text',
             message: mediaUrl ? mediaUrl : text,
+            ...(mediaUrl && text ? { text: text } : {}),
           }),
         });
 

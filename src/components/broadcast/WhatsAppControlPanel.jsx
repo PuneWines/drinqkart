@@ -5,13 +5,17 @@ import {
   Search,
   UserPlus,
   Send,
-  Paperclip,
+  Plus,
+  Smile,
+  FileText,
+  Music,
+  X,
+  Loader2,
   Check,
   CheckCheck,
   MessageSquare,
   Phone,
   MoreVertical,
-  Smile,
   AlertCircle,
   Edit2,
   Image as ImageIcon
@@ -30,14 +34,84 @@ export default function WhatsAppControlPanel() {
     selectWhatsAppConversation,
     fetchWhatsAppMessages,
     sendDirectWhatsAppMessage,
+    uploadLiveChatMedia,
   } = useChatStore()
 
   const [inputText, setInputText] = useState('')
   const [mediaUrlInput, setMediaUrlInput] = useState('')
-  const [showMediaInput, setShowMediaInput] = useState(false)
+  const [attachedFile, setAttachedFile] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState('smileys')
   const [isSending, setIsSending] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+
   const messagesEndRef = useRef(null)
+  const imageInputRef = useRef(null)
+  const docInputRef = useRef(null)
+  const audioInputRef = useRef(null)
+
+  const EMOJI_CATEGORIES = [
+    {
+      id: 'smileys',
+      name: 'Smileys & Emotion',
+      icon: '😊',
+      emojis: [
+        '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥹', '☺️', '😊', '😇',
+        '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛',
+        '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳', '😏', '😒',
+        '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢',
+        '😭', '😮‍💨', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨',
+        '😰', '😥', '😓', '🫣', '🤗', '🫡', '🤔', '🤭', '🤫', '🫠', '🤥', '😶',
+        '😐', '😑', '😬', '🫨', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴'
+      ]
+    },
+    {
+      id: 'gestures',
+      name: 'Gestures & Body',
+      icon: '👍',
+      emojis: [
+        '👍', '👎', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈',
+        '👉', '👆', '🖕', '👇', '☝️', '🫵', '✊', '👊', '🤛', '🤜', '👏', '🙌',
+        '🫶', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦵', '🦶', '👂',
+        '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋'
+      ]
+    },
+    {
+      id: 'business',
+      name: 'Work & Business',
+      icon: '💼',
+      emojis: [
+        '💼', '🏬', '🏪', '🏫', '🏦', '🏨', '🏢', '🏗️', '📦', '📊', '📈', '📉',
+        '📄', '📃', '📑', '📜', '📋', '📅', '📆', '🗓️', '📇', '📱', '📲', '☎️',
+        '📞', '📟', '📠', '🔋', '🔌', '💻', '🖥️', '🖨️', '⌨️', '💰', '💴', '💵',
+        '💶', '💷', '💸', '💳', '🧾', '✉️', '📧', '📨', '📩', '🏷️', '🔖', '📌'
+      ]
+    },
+    {
+      id: 'food',
+      name: 'Food & Drinks',
+      icon: '🍷',
+      emojis: [
+        '🍷', '🍺', '🍻', '🥂', '🍾', '🍹', '🍸', '🥃', '🥤', '🧃', '🧋', '☕',
+        '🍵', '🍼', '🍕', '🍔', '🍟', '🌭', '🍿', '🥓', '🥚', '🍳', '🧇', '🥞',
+        '🧈', '🍞', '🥐', '🥖', '🥨', '🧀', '🥗', '🥣', '🍚', '🍜', '🍝', '🍣',
+        '🍱', '🥟', '🍤', '🍙', '🍘', '🍥', '🍡', '🍢', '🍧', '🍨', '🍦', '🥧'
+      ]
+    },
+    {
+      id: 'alerts',
+      name: 'Alerts & Celebration',
+      icon: '🚨',
+      emojis: [
+        '🚨', '📢', '🔔', '🔕', '🎉', '🎊', '✨', '🔥', '💥', '💯', '⭐️', '🌟',
+        '☀️', '🌈', '⚡️', '💣', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
+        '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '🎁', '🎈',
+        '✅', '❌', '⚠️', '⛔️', '🛑', '⭕️', '❓', '❗', '🅰️', '🅱️', 'ℹ️', '🔝'
+      ]
+    }
+  ]
 
   // 1. Initial Load & Sync on Mount / Select
   useEffect(() => {
@@ -65,6 +139,32 @@ export default function WhatsAppControlPanel() {
   )
   const activeContact = activeConversation?.whatsapp_contacts
 
+  const handleSelectFile = async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const file = files[0]
+    setShowAttachmentMenu(false)
+    setIsUploading(true)
+
+    const publicUrl = await uploadLiveChatMedia(file)
+    setIsUploading(false)
+    e.target.value = ''
+
+    if (publicUrl) {
+      setMediaUrlInput(publicUrl)
+      setAttachedFile({
+        name: file.name,
+        size: `${(file.size / 1024).toFixed(0)} KB`,
+        type: file.type?.startsWith('image/') ? 'Image' : file.type?.startsWith('audio/') ? 'Audio' : 'Document',
+        url: publicUrl
+      })
+    }
+  }
+
+  const handleInsertEmoji = (emoji) => {
+    setInputText((prev) => prev + emoji)
+  }
+
   const handleSendMessage = async (e) => {
     e.preventDefault()
     if (!inputText.trim() && !mediaUrlInput.trim()) return
@@ -73,7 +173,9 @@ export default function WhatsAppControlPanel() {
     await sendDirectWhatsAppMessage(inputText, mediaUrlInput || null)
     setInputText('')
     setMediaUrlInput('')
-    setShowMediaInput(false)
+    setAttachedFile(null)
+    setShowAttachmentMenu(false)
+    setShowEmojiPicker(false)
     setIsSending(false)
   }
 
@@ -99,83 +201,60 @@ export default function WhatsAppControlPanel() {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
   }
 
-  // Helper to render media (Images, Videos/GIFs, Audio, Documents)
+  // Helper to check if string is automated caption
+  const isHumanCaption = (content, mediaUrl) => {
+    if (!content) return false
+    if (content === mediaUrl) return false
+    if (content.startsWith('false_') || content.startsWith('true_')) return false
+    if (/\.(jpeg|jpg|png|gif|mp4|webm|pdf|doc|docx|xls|xlsx)$/i.test(content)) return false
+    return true
+  }
+
+  // Smart Media Renderer (Handles Image, Video, Audio, Document PDF)
   const renderMediaElement = (msg) => {
-    if (!msg.media_url) return null
+    const url = msg.media_url || (msg.message_type === 'media' ? msg.content : null)
+    if (!url) return null
 
-    const url = msg.media_url.toLowerCase()
-    const type = (msg.message_type || '').toLowerCase()
+    const lowerUrl = String(url).toLowerCase()
 
-    const isVideo =
-      type === 'video' ||
-      type === 'gif' ||
-      url.endsWith('.mp4') ||
-      url.endsWith('.webm') ||
-      url.endsWith('.mov') ||
-      url.includes('.mp4?')
-
-    const isAudio =
-      type === 'audio' ||
-      type === 'ptt' ||
-      url.endsWith('.mp3') ||
-      url.endsWith('.wav') ||
-      url.endsWith('.ogg') ||
-      url.endsWith('.m4a')
-
-    const isDoc =
-      type === 'document' ||
-      url.endsWith('.pdf') ||
-      url.endsWith('.doc') ||
-      url.endsWith('.docx')
-
-    if (isVideo) {
+    if (/\.(mp4|webm|mov|ogg)$/i.test(lowerUrl)) {
       return (
-        <div className="mb-2 overflow-hidden rounded-xl bg-black/10">
-          <video
-            src={msg.media_url}
-            controls
-            preload="metadata"
-            className="max-h-64 w-full rounded-xl object-cover"
-          />
+        <div className="mb-1.5 rounded-xl overflow-hidden bg-black/10">
+          <video src={url} controls className="max-w-full max-h-60 rounded-xl" />
         </div>
       )
     }
 
-    if (isAudio) {
+    if (/\.(mp3|wav|m4a|aac|opus)$/i.test(lowerUrl) || msg.message_type === 'audio') {
       return (
-        <div className="mb-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
-          <audio src={msg.media_url} controls className="w-full h-8" />
+        <div className="mb-1.5 p-2 bg-emerald-50/50 rounded-xl border border-emerald-100">
+          <audio src={url} controls className="w-full h-8" />
         </div>
       )
     }
 
-    if (isDoc) {
-      const fileName = msg.media_url.split('/').pop() || 'Document'
+    if (/\.(pdf|doc|docx|xls|xlsx|txt|csv)$/i.test(lowerUrl)) {
+      const fileName = url.split('/').pop().split('?')[0] || 'Document'
       return (
-        <div className="mb-2 p-2.5 bg-gray-100/80 rounded-xl border border-gray-200 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 truncate">
-            <Paperclip className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span className="text-xs font-semibold text-gray-700 truncate">{fileName}</span>
-          </div>
-          <a
-            href={msg.media_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] font-bold text-emerald-600 hover:underline shrink-0"
-          >
-            Download
-          </a>
-        </div>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mb-1.5 p-2.5 bg-gray-50 hover:bg-emerald-50 rounded-xl border border-gray-200 flex items-center gap-2 text-emerald-700 transition-colors block"
+        >
+          <FileText className="w-5 h-5 shrink-0" />
+          <span className="font-semibold truncate text-xs">{fileName}</span>
+        </a>
       )
     }
 
-    // Default to Image
     return (
-      <div className="mb-2 overflow-hidden rounded-xl">
+      <div className="mb-1.5 rounded-xl overflow-hidden bg-gray-100">
         <img
-          src={msg.media_url}
-          alt="Media content"
-          className="max-h-64 w-full object-cover"
+          src={url}
+          alt="WhatsApp Media"
+          className="max-w-full max-h-64 object-cover rounded-xl hover:opacity-95 transition-opacity cursor-pointer"
+          onClick={() => window.open(url, '_blank')}
           onError={(e) => {
             e.target.style.display = 'none'
           }}
@@ -184,119 +263,86 @@ export default function WhatsAppControlPanel() {
     )
   }
 
-  // Helper to check if text content is a real human caption (not internal false_...mp4 string)
-  const isHumanCaption = (content, mediaUrl) => {
-    if (!content || !content.trim()) return false
-    const str = content.trim()
-    if (str === mediaUrl) return false
-    if (str.startsWith('false_') || str.startsWith('true_')) return false
-    return true
-  }
-
-  // Helper to render conversation list preview snippet (Media icon vs text content)
   const renderConversationPreview = (lastText) => {
-    if (!lastText || !lastText.trim()) return 'No messages'
-    const str = lastText.trim()
-
-    const isAutoFilename =
-      str.startsWith('false_') ||
-      str.startsWith('true_') ||
-      (str.match(/\.(jpeg|jpg|png|gif|mp4|webm|pdf|doc)$/i) && !str.includes(' '))
-    const isMediaTag = str.startsWith('[') && str.endsWith(']')
-
-    if (isAutoFilename || isMediaTag || str.toLowerCase() === 'media') {
-      return (
-        <span className="inline-flex items-center gap-1 text-gray-500 font-medium">
-          <ImageIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-          <span>Media</span>
-        </span>
-      )
+    if (!lastText) return <span className="italic text-gray-400">No messages</span>
+    if (isHumanCaption(lastText, null)) {
+      return <span>{lastText}</span>
     }
-
-    return str
+    return <span className="italic text-emerald-600 font-medium">[Media Attachment]</span>
   }
 
   return (
-    <div className="flex-1 h-full bg-white rounded-3xl shadow-sm border border-gray-100 flex overflow-hidden">
+    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row h-[680px] overflow-hidden">
       {/* ======================================================== */}
-      {/* LEFT SIDEBAR: CONVERSATION LIST                          */}
+      {/* LEFT SIDEBAR: CONVERSATIONS LIST                          */}
       {/* ======================================================== */}
-      <div className="w-full md:w-80 lg:w-96 border-r border-gray-100 flex flex-col bg-gray-50/50 shrink-0">
+      <div className="w-full md:w-80 border-r border-gray-100 flex flex-col h-full bg-white shrink-0">
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-gray-100 bg-white">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-emerald-500" />
-              WhatsApp Chats
-            </h2>
-            <button
-              onClick={() => setIsNewContactModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 text-xs font-bold rounded-xl transition-colors"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>New Chat</span>
-            </button>
-          </div>
+        <div className="p-3.5 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <span>💬</span> WhatsApp Live Chats
+          </h2>
 
-          {/* Search Box */}
+          <button
+            onClick={() => setIsNewContactModalOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-[#25D366] hover:bg-green-600 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Start new WhatsApp Chat"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>+ New Chat</span>
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="p-3 border-b border-gray-100 bg-gray-50/50">
           <div className="relative">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-gray-400" />
             <input
               type="text"
               placeholder="Search chat or phone..."
               value={whatsappSearchQuery}
               onChange={(e) => setWhatsAppSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-gray-100 border border-transparent focus:border-emerald-500 focus:bg-white rounded-xl text-xs font-medium outline-none transition-all"
+              className="w-full pl-8 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-emerald-500 transition-colors shadow-2xs"
             />
           </div>
         </div>
 
-        {/* Conversation List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-gray-100/60">
+        {/* Conversations Scroll List */}
+        <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
           {filteredConversations.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">
-              <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-40" />
+            <div className="p-6 text-center text-gray-400">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30 text-emerald-500" />
               <p className="text-xs font-medium">No conversations found</p>
-              <button
-                onClick={() => setIsNewContactModalOpen(true)}
-                className="mt-3 text-xs text-emerald-600 font-bold hover:underline"
-              >
-                + Start a new chat
-              </button>
             </div>
           ) : (
             filteredConversations.map((conv) => {
-              const isSelected = conv.id === selectedConversationId
               const contact = conv.whatsapp_contacts
               const displayName = contact?.name || contact?.phone_number || conv.id.split('@')[0]
+              const isSelected = conv.id === selectedConversationId
               const hasUnread = conv.unread_count > 0
 
               return (
                 <div
                   key={conv.id}
                   onClick={() => selectWhatsAppConversation(conv.id)}
-                  className={`p-3.5 flex items-center gap-3 cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-emerald-50/80 border-l-4 border-emerald-500'
-                      : 'hover:bg-gray-100/60'
+                  className={`p-3 flex items-center gap-3 cursor-pointer transition-all hover:bg-emerald-50/60 ${
+                    isSelected ? 'bg-emerald-50/90 border-l-4 border-[#25D366]' : ''
                   }`}
                 >
                   {/* Avatar */}
-                  <div className="relative shrink-0">
-                    {contact?.avatar_url ? (
-                      <img
-                        src={contact.avatar_url}
-                        alt={displayName}
-                        className="w-11 h-11 rounded-full object-cover shadow-sm"
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white font-bold flex items-center justify-center text-sm shadow-sm">
-                        {displayName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
+                  {contact?.avatar_url ? (
+                    <img
+                      src={contact.avatar_url}
+                      alt={displayName}
+                      className="w-10 h-10 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs shrink-0">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
 
-                  {/* Details */}
+                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <h4 className="text-xs font-bold text-gray-900 truncate">
@@ -435,32 +481,192 @@ export default function WhatsAppControlPanel() {
           </div>
 
           {/* Bottom Message Input Bar */}
-          <div className="p-3 bg-white border-t border-gray-100">
-            {showMediaInput && (
-              <div className="mb-2 p-2 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-gray-400" />
-                <input
-                  type="url"
-                  placeholder="Paste Media/Image URL..."
-                  value={mediaUrlInput}
-                  onChange={(e) => setMediaUrlInput(e.target.value)}
-                  className="w-full bg-transparent text-xs outline-none"
-                />
+          <div className="p-3 bg-white border-t border-gray-100 relative">
+            {/* Attachment Menu Popup */}
+            {showAttachmentMenu && (
+              <div className="absolute bottom-16 left-3 bg-white border border-gray-200 rounded-2xl p-3 shadow-xl flex flex-col gap-2 z-30 animate-in fade-in slide-in-from-bottom-2 min-w-[200px]">
+                <span className="text-[11px] font-bold text-gray-500 px-2 uppercase tracking-wider">Attach File</span>
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-purple-50 text-gray-700 hover:text-purple-700 font-semibold text-xs transition-all cursor-pointer text-left"
+                >
+                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                    <ImageIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="block leading-tight">Photos & Videos</strong>
+                    <span className="text-[10px] text-gray-400 font-normal">Images, Videos, GIFs</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => docInputRef.current?.click()}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-blue-50 text-gray-700 hover:text-blue-700 font-semibold text-xs transition-all cursor-pointer text-left"
+                >
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="block leading-tight">Document</strong>
+                    <span className="text-[10px] text-gray-400 font-normal">PDF, DOC, XLS, TXT</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => audioInputRef.current?.click()}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-amber-50 text-gray-700 hover:text-amber-700 font-semibold text-xs transition-all cursor-pointer text-left"
+                >
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                    <Music className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="block leading-tight">Audio / Voice</strong>
+                    <span className="text-[10px] text-gray-400 font-normal">MP3, WAV, Voice note</span>
+                  </div>
+                </button>
               </div>
             )}
 
-            <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+            {/* Hidden Native File Inputs */}
+            <input
+              type="file"
+              ref={imageInputRef}
+              accept="image/*,video/*"
+              onChange={handleSelectFile}
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={docInputRef}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+              onChange={handleSelectFile}
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={audioInputRef}
+              accept="audio/*"
+              onChange={handleSelectFile}
+              className="hidden"
+            />
+
+            {/* Emoji Picker Popup */}
+            {showEmojiPicker && (
+              <div className="absolute bottom-16 left-12 bg-white border border-gray-200 rounded-2xl p-3 shadow-xl z-30 animate-in fade-in slide-in-from-bottom-2 w-72 sm:w-80 flex flex-col gap-2">
+                <div className="flex justify-between items-center pb-1.5 border-b border-gray-100">
+                  <span className="text-xs font-bold text-gray-800">Select Emoji</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(false)}
+                    className="text-gray-400 hover:text-gray-600 p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Category Tabs */}
+                <div className="flex items-center gap-1 border-b border-gray-100 pb-1 overflow-x-auto">
+                  {EMOJI_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setActiveEmojiCategory(cat.id)}
+                      className={`px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
+                        activeEmojiCategory === cat.id
+                          ? 'bg-emerald-100 text-emerald-800 font-bold'
+                          : 'text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>{cat.icon}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Emoji Grid */}
+                <div className="grid grid-cols-7 gap-1 max-h-36 overflow-y-auto p-1">
+                  {(EMOJI_CATEGORIES.find((c) => c.id === activeEmojiCategory)?.emojis || []).map((emoji, idx) => (
+                    <button
+                      key={`${emoji}-${idx}`}
+                      type="button"
+                      onClick={() => handleInsertEmoji(emoji)}
+                      className="text-lg p-1 rounded-lg hover:bg-emerald-100 hover:scale-125 transition-transform text-center"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Uploading Progress Indicator */}
+            {isUploading && (
+              <div className="mb-2 p-2.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-xs font-semibold flex items-center gap-2 animate-pulse">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                <span>Uploading media to Supabase storage...</span>
+              </div>
+            )}
+
+            {/* Attached File Preview Card */}
+            {attachedFile && !isUploading && (
+              <div className="mb-2 p-2 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-base">📎</span>
+                  <div className="min-w-0">
+                    <strong className="block text-xs text-gray-800 truncate" title={attachedFile.name}>
+                      {attachedFile.name}
+                    </strong>
+                    <span className="text-[10px] text-gray-500">{attachedFile.type} • {attachedFile.size}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachedFile(null)
+                    setMediaUrlInput('')
+                  }}
+                  className="text-gray-400 hover:text-rose-500 p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Input Form Bar */}
+            <form onSubmit={handleSendMessage} className="flex items-center gap-1.5 sm:gap-2">
+              {/* Attachment '+' Button */}
               <button
                 type="button"
-                onClick={() => setShowMediaInput(!showMediaInput)}
-                className={`p-2.5 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors ${
-                  showMediaInput ? 'bg-emerald-50 text-emerald-600' : ''
+                onClick={() => {
+                  setShowAttachmentMenu(!showAttachmentMenu)
+                  setShowEmojiPicker(false)
+                }}
+                className={`p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors ${
+                  showAttachmentMenu ? 'bg-emerald-100 text-emerald-700' : ''
                 }`}
-                title="Attach Media URL"
+                title="Attach Media or File"
               >
-                <Paperclip className="w-4 h-4" />
+                <Plus className="w-5 h-5" />
               </button>
 
+              {/* Emoji Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEmojiPicker(!showEmojiPicker)
+                  setShowAttachmentMenu(false)
+                }}
+                className={`p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors ${
+                  showEmojiPicker ? 'bg-emerald-100 text-emerald-700' : ''
+                }`}
+                title="Add Emoji"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+
+              {/* Message Input Box */}
               <input
                 type="text"
                 placeholder="Type a WhatsApp message..."
@@ -469,10 +675,11 @@ export default function WhatsAppControlPanel() {
                 className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent focus:border-emerald-500 focus:bg-white rounded-xl text-xs font-medium outline-none transition-all"
               />
 
+              {/* Send Button */}
               <button
                 type="submit"
-                disabled={isSending || (!inputText.trim() && !mediaUrlInput.trim())}
-                className="p-2.5 bg-gradient-to-r from-[#25D366] to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl shadow-md shadow-green-500/20 disabled:opacity-40 transition-all flex items-center justify-center"
+                disabled={isSending || isUploading || (!inputText.trim() && !mediaUrlInput.trim())}
+                className="p-2.5 bg-gradient-to-r from-[#25D366] to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl shadow-md shadow-green-500/20 disabled:opacity-40 transition-all flex items-center justify-center cursor-pointer"
               >
                 <Send className="w-4 h-4" />
               </button>
