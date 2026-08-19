@@ -447,11 +447,11 @@ export default function CounterPage({ onClose }: CounterPageProps) {
       {/* ── Summary Cards (Over table) ── */}
       {isModifyAllowed && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {/* Total Retail Scan Card */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 font-sans">
+            {/* 1. Retail Scan Amount */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-gray-500 font-sans">Total Retail Scan</p>
+                <p className="text-xs font-semibold text-gray-500 font-sans">Retail Scan Amount</p>
                 <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                   {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
                 </div>
@@ -461,12 +461,12 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               </div>
             </div>
 
-            {/* Total Wholesale Scan Card */}
+            {/* 2. Wholesale Amount = (Wholesale Amount - Credit Receipt) */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-gray-500 font-sans">Total Wholesale Scan</p>
+                <p className="text-xs font-semibold text-gray-500 font-sans">Wholesale Amount</p>
                 <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0) + (Number(r.raw.ws_credit_receipt) || 0), 0))}
+                  {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0), 0))}
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0 border border-green-100">
@@ -474,33 +474,33 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               </div>
             </div>
 
-            {/* Total Expenses and Others Scan Card */}
+            {/* 3. Credit Receipt */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-gray-500 font-sans">Home Delivery Scan</p>
-                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((s, r) => s + r.totalExpense + (Number(r.raw.home_delivery) || 0) + (Number(r.raw.void_sale) || 0) + (Number(r.raw.expense_gpay_card) || 0), 0))}
+                <p className="text-xs font-semibold text-gray-500 font-sans">Credit Receipt</p>
+                <div className="text-xl font-bold text-teal-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                  {fmt(filtered.reduce((sum, r) => sum + getRowCreditReceipt(r.raw), 0))}
                 </div>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
+              <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
+                <FaCoins className="text-lg" />
+              </div>
+            </div>
+
+            {/* 4. Home Delivery Amount */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 font-sans">Home Delivery Amount</p>
+                <div className="text-xl font-bold text-amber-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                  {fmt(filtered.reduce((sum, r) => sum + getRowHomeDeliveryAmount(r.raw), 0))}
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-100">
                 <FaWallet className="text-lg" />
               </div>
             </div>
 
-            {/* Total Expenses Card */}
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 font-sans">Total Expenses</p>
-                <div className="text-xl font-bold text-rose-600 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
-                </div>
-              </div>
-              <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-                <FaWallet className="text-lg" />
-              </div>
-            </div>
-
-            {/* Net Total Card */}
+            {/* 5. Net Total Card */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Net Total</p>
@@ -514,17 +514,17 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             </div>
           </div>
 
-          {/* ── Secondary Summary Cards (Small cards in single line) ── */}
+          {/* ── Secondary Summary Cards ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 font-sans">
-            {/* Total Cash */}
+            {/* 6. Total Expense */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Cash</span>
-              <div className="text-base font-bold text-emerald-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalCash(r.raw), 0))}
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Expense</span>
+              <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
               </div>
             </div>
 
-            {/* Total GPay */}
+            {/* 7. Total GPay */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total GPay</span>
               <div className="text-base font-bold text-blue-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
@@ -532,7 +532,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               </div>
             </div>
 
-            {/* Total PhonePe */}
+            {/* 8. Total PhonePe */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total PhonePe</span>
               <div className="text-base font-bold text-purple-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
@@ -540,7 +540,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               </div>
             </div>
 
-            {/* Total Paytm */}
+            {/* 9. Total Paytm */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Paytm</span>
               <div className="text-base font-bold text-cyan-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
@@ -548,7 +548,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               </div>
             </div>
 
-            {/* Total Card */}
+            {/* 10. Total Card */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Card</span>
               <div className="text-base font-bold text-indigo-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
@@ -556,27 +556,27 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               </div>
             </div>
 
-            {/* Total Difference */}
+            {/* 11. Total Cash */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Difference</span>
-              <div className="text-base font-bold text-slate-800 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalDiff(r.raw), 0))}
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Cash</span>
+              <div className="text-base font-bold text-emerald-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalCash(r.raw), 0))}
               </div>
             </div>
 
-            {/* Total Credit Receipt */}
+            {/* 12. Total void */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Credit Receipt</span>
-              <div className="text-base font-bold text-teal-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowCreditReceipt(r.raw), 0))}
-              </div>
-            </div>
-
-            {/* Total Void Sale */}
-            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Void Sale</span>
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total void</span>
               <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
                 {fmt(filtered.reduce((sum, r) => sum + getRowVoidSale(r.raw), 0))}
+              </div>
+            </div>
+
+            {/* 13. Total Diff */}
+            <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Diff</span>
+              <div className="text-base font-bold text-slate-800 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                {fmt(filtered.reduce((sum, r) => sum + getRowTotalDiff(r.raw), 0))}
               </div>
             </div>
           </div>
@@ -729,10 +729,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <thead className="bg-[#2a5298] text-white text-left">
                 <tr>
                   {[
-                    '#', 'ID', 'Date', 'Counter', 'Shop', 'User', 'Retail Scan',
-                    'Total Cash', 'Total GPay', 'Total PhonePe', 'Total Paytm', 'Total Card',
-                    'Total Diff', 'Credit Receipt', 'Wholesale Amount', 'Home Delivery Amount',
-                    'Expense', 'Status', 'Actions'
+                    '#', 'Tally ID', 'Date', 'Counter', 'Shop Name', 'User',
+                    'Retail Scan Amount', 'Wholesale Amount', 'Credit Receipt', 'Home Delivery Amount',
+                    'Total Expense', 'Total GPay', 'Total PhonePe', 'Total Paytm', 'Total Card',
+                    'Total Cash', 'Total void', 'Total Diff', 'Status', 'Actions'
                   ].map(h => (
                     <th key={h} className="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -741,7 +741,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={19} className="text-center py-16 text-gray-400">
+                    <td colSpan={20} className="text-center py-16 text-gray-400">
                       <div className="flex flex-col items-center gap-2">
                         <FaFileAlt className="text-4xl text-gray-300" />
                         <p className="font-medium">No records found</p>
@@ -766,17 +766,32 @@ export default function CounterPage({ onClose }: CounterPageProps) {
                       </td>
                       <td className="px-4 py-3 text-gray-700 font-medium whitespace-nowrap">{row.shopName}</td>
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{row.name}</td>
+
+                      {/* 6. Retail Scan Amount */}
                       <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-semibold">{fmt(row.retailScanAmount)}</td>
-                      <td className="px-4 py-3 text-emerald-700 whitespace-nowrap font-semibold">{fmt(getRowTotalCash(row.raw))}</td>
-                      <td className="px-4 py-3 text-blue-700 whitespace-nowrap font-semibold">{fmt(getRowTotalGpay(row.raw))}</td>
-                      <td className="px-4 py-3 text-purple-700 whitespace-nowrap font-semibold">{fmt(getRowTotalPhonePe(row.raw))}</td>
-                      <td className="px-4 py-3 text-cyan-700 whitespace-nowrap font-semibold">{fmt(getRowTotalPaytm(row.raw))}</td>
-                      <td className="px-4 py-3 text-indigo-700 whitespace-nowrap font-semibold">{fmt(getRowTotalCard(row.raw))}</td>
-                      <td className={`px-4 py-3 whitespace-nowrap font-semibold ${totDiff < 0 ? 'text-red-600' : totDiff > 0 ? 'text-amber-600' : 'text-gray-700'}`}>{fmt(totDiff)}</td>
-                      <td className="px-4 py-3 text-teal-700 whitespace-nowrap font-semibold">{fmt(getRowCreditReceipt(row.raw))}</td>
+                      {/* 7. Wholesale Amount */}
                       <td className="px-4 py-3 text-green-700 whitespace-nowrap font-semibold">{fmt(getRowWholesaleAmount(row.raw))}</td>
+                      {/* 8. Credit Receipt */}
+                      <td className="px-4 py-3 text-teal-700 whitespace-nowrap font-semibold">{fmt(getRowCreditReceipt(row.raw))}</td>
+                      {/* 9. Home Delivery Amount */}
                       <td className="px-4 py-3 text-amber-700 whitespace-nowrap font-semibold">{fmt(getRowHomeDeliveryAmount(row.raw))}</td>
+                      {/* 10. Total Expense */}
                       <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
+                      {/* 11. Total GPay */}
+                      <td className="px-4 py-3 text-blue-700 whitespace-nowrap font-semibold">{fmt(getRowTotalGpay(row.raw))}</td>
+                      {/* 12. Total PhonePe */}
+                      <td className="px-4 py-3 text-purple-700 whitespace-nowrap font-semibold">{fmt(getRowTotalPhonePe(row.raw))}</td>
+                      {/* 13. Total Paytm */}
+                      <td className="px-4 py-3 text-cyan-700 whitespace-nowrap font-semibold">{fmt(getRowTotalPaytm(row.raw))}</td>
+                      {/* 14. Total Card */}
+                      <td className="px-4 py-3 text-indigo-700 whitespace-nowrap font-semibold">{fmt(getRowTotalCard(row.raw))}</td>
+                      {/* 15. Total Cash */}
+                      <td className="px-4 py-3 text-emerald-700 whitespace-nowrap font-semibold">{fmt(getRowTotalCash(row.raw))}</td>
+                      {/* 16. Total void */}
+                      <td className="px-4 py-3 text-rose-600 whitespace-nowrap font-semibold">{fmt(getRowVoidSale(row.raw))}</td>
+                      {/* 17. Total Diff */}
+                      <td className={`px-4 py-3 whitespace-nowrap font-semibold ${totDiff < 0 ? 'text-red-600' : totDiff > 0 ? 'text-amber-600' : 'text-gray-700'}`}>{fmt(totDiff)}</td>
+
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                           (row.status || 'pending').toLowerCase() === 'completed'

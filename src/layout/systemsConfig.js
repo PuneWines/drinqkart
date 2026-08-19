@@ -76,6 +76,7 @@ export const systems = [
     subtabs: [
       { label: 'Petty Cash Form Entry', to: '/systems/petty-cash?page=petty-cash' },
       { label: 'Cash Tally Counter', to: '/systems/petty-cash?page=cash-tally-counter' },
+      { label: 'Bank Audit', to: '/systems/petty-cash?page=bank-audit' },
       { label: 'Financial Reports', to: '/systems/petty-cash?page=reports' },
     ]
   },
