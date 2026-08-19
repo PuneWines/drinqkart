@@ -165,7 +165,7 @@ const CalendarPage = () => {
                 .select('user_name, reported_by, profile_image')
                 .eq('status', 'active')
                 .order('user_name', { ascending: true });
-            
+
             if (role === 'HOD' && username) {
                 query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
             }
@@ -222,7 +222,7 @@ const CalendarPage = () => {
                     .select("user_name")
                     .eq("reported_by", username);
                 const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-                
+
                 checklistQuery = checklistQuery.in('name', reportingUsers);
                 maintenanceQuery = maintenanceQuery.in('name', reportingUsers);
                 repairQuery = repairQuery.in('assigned_person', reportingUsers);
@@ -465,14 +465,13 @@ const CalendarPage = () => {
                     {dayTasks.length > 0 && !isHoliday && (
                         <div className="flex gap-0.5">
                             {Array.from(new Set(dayTasks.map(d => d.cat))).map(cat => (
-                                <div key={cat} className={`w-2 h-2 rounded-full ${
-                                    cat === 'CK' ? 'bg-blue-600' :
-                                    cat === 'MT' ? 'bg-orange-600' :
-                                    cat === 'RP' ? 'bg-red-600' :
-                                    cat === 'DL' ? 'bg-purple-600' :
-                                    cat === 'EA' ? 'bg-green-600' :
-                                    cat === 'WK' ? 'bg-indigo-600' :
-                                    'bg-indigo-600'
+                                <div key={cat} className={`w-2 h-2 rounded-full ${cat === 'CK' ? 'bg-blue-600' :
+                                        cat === 'MT' ? 'bg-orange-600' :
+                                            cat === 'RP' ? 'bg-red-600' :
+                                                cat === 'DL' ? 'bg-purple-600' :
+                                                    cat === 'EA' ? 'bg-green-600' :
+                                                        cat === 'WK' ? 'bg-indigo-600' :
+                                                            'bg-indigo-600'
                                     }`} title={cat} />
                             ))}
                         </div>
@@ -668,15 +667,14 @@ const CalendarPage = () => {
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {dayTasksTotal.slice(0, 3).map((task, idx) => (
                                                         <div key={idx} className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded border border-gray-100 max-w-full">
-                                                            <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${
-                                                                task.cat === 'CK' ? 'bg-blue-600' :
-                                                                task.cat === 'MT' ? 'bg-orange-600' :
-                                                                task.cat === 'RP' ? 'bg-red-600' :
-                                                                task.cat === 'DL' ? 'bg-purple-600' :
-                                                                task.cat === 'EA' ? 'bg-green-600' :
-                                                                task.cat === 'WK' ? 'bg-indigo-600' :
-                                                                'bg-gray-400'
-                                                            }`}></div>
+                                                            <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${task.cat === 'CK' ? 'bg-blue-600' :
+                                                                    task.cat === 'MT' ? 'bg-orange-600' :
+                                                                        task.cat === 'RP' ? 'bg-red-600' :
+                                                                            task.cat === 'DL' ? 'bg-purple-600' :
+                                                                                task.cat === 'EA' ? 'bg-green-600' :
+                                                                                    task.cat === 'WK' ? 'bg-indigo-600' :
+                                                                                        'bg-gray-400'
+                                                                }`}></div>
                                                             <span className="text-[10px] font-bold text-gray-600 truncate max-w-[120px] uppercase">{task.title}</span>
                                                         </div>
                                                     ))}
@@ -725,8 +723,8 @@ const CalendarPage = () => {
                                         <Plus size={14} /> Assign Task
                                     </button>
                                 )}
-                                <button 
-                                    onClick={() => setIsModalOpen(false)} 
+                                <button
+                                    onClick={() => setIsModalOpen(false)}
                                     className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all"
                                 >
                                     <X size={20} />
@@ -757,39 +755,37 @@ const CalendarPage = () => {
                                         const isExpanded = expandedTaskId === task.id;
                                         const taskTitle = task.title || '';
                                         const audioUrl = extractAudioUrl(taskTitle);
-                                        const cleanedTitle = typeof taskTitle === 'string' 
+                                        const cleanedTitle = typeof taskTitle === 'string'
                                             ? taskTitle.replace(/Voice Note Link:?\s*/i, '').replace(audioUrl || '', '').trim()
                                             : '';
-                                        
+
                                         return (
                                             <div key={task.id} className={`transition-all ${isExpanded ? 'bg-gray-50/30' : 'hover:bg-gray-50'}`}>
                                                 {/* Compact Row Header */}
-                                                <div 
+                                                <div
                                                     onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
                                                     className="p-4 flex items-center gap-4 cursor-pointer group"
                                                 >
-                                                    <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${
-                                                        task.cat === 'CK' ? 'bg-blue-600' :
-                                                        task.cat === 'MT' ? 'bg-orange-600' :
-                                                        task.cat === 'RP' ? 'bg-red-600' :
-                                                        task.cat === 'DL' ? 'bg-purple-600' :
-                                                        task.cat === 'EA' ? 'bg-green-600' :
-                                                        task.cat === 'WK' ? 'bg-indigo-600' :
-                                                        'bg-gray-400'
-                                                    }`}></div>
-                                                    
+                                                    <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${task.cat === 'CK' ? 'bg-blue-600' :
+                                                            task.cat === 'MT' ? 'bg-orange-600' :
+                                                                task.cat === 'RP' ? 'bg-red-600' :
+                                                                    task.cat === 'DL' ? 'bg-purple-600' :
+                                                                        task.cat === 'EA' ? 'bg-green-600' :
+                                                                            task.cat === 'WK' ? 'bg-indigo-600' :
+                                                                                'bg-gray-400'
+                                                        }`}></div>
+
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2 mb-0.5">
                                                             <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">#{task.id}</span>
-                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${
-                                                                task.type === 'checklist' ? 'bg-blue-50 text-blue-600' :
-                                                                task.type === 'maintenance' ? 'bg-orange-50 text-orange-600' :
-                                                                task.type === 'repair' ? 'bg-red-50 text-red-600' :
-                                                                task.type === 'delegation' ? 'bg-purple-50 text-purple-600' :
-                                                                task.type === 'ea' ? 'bg-green-50 text-green-600' :
-                                                                task.type === 'work' ? 'bg-indigo-50 text-indigo-600' :
-                                                                'bg-gray-50 text-gray-600'
-                                                            }`}>
+                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${task.type === 'checklist' ? 'bg-blue-50 text-blue-600' :
+                                                                    task.type === 'maintenance' ? 'bg-orange-50 text-orange-600' :
+                                                                        task.type === 'repair' ? 'bg-red-50 text-red-600' :
+                                                                            task.type === 'delegation' ? 'bg-purple-50 text-purple-600' :
+                                                                                task.type === 'ea' ? 'bg-green-50 text-green-600' :
+                                                                                    task.type === 'work' ? 'bg-indigo-50 text-indigo-600' :
+                                                                                        'bg-gray-50 text-gray-600'
+                                                                }`}>
                                                                 {task.type}
                                                             </span>
                                                         </div>
@@ -873,9 +869,9 @@ const CalendarPage = () => {
                                                                 if (commonImg && !proofs.some(p => p.url === commonImg)) {
                                                                     proofs.push({ url: commonImg, label: 'Work Evidence' });
                                                                 }
-                                                                
+
                                                                 if (proofs.length === 0) return null;
-                                                                
+
                                                                 return (
                                                                     <div className="space-y-4">
                                                                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
@@ -883,8 +879,8 @@ const CalendarPage = () => {
                                                                         </p>
                                                                         <div className="grid grid-cols-2 xs:grid-cols-3 gap-3">
                                                                             {proofs.map((proof, idx) => (
-                                                                                <div 
-                                                                                    key={idx} 
+                                                                                <div
+                                                                                    key={idx}
                                                                                     onClick={() => setSelectedImage(proof.url)}
                                                                                     className="relative aspect-square rounded-2xl overflow-hidden border border-gray-100 shadow-sm cursor-zoom-in hover:scale-[1.02] transition-all bg-gray-50 group"
                                                                                 >
@@ -906,7 +902,7 @@ const CalendarPage = () => {
                                                                         <ShieldAlert size={12} className="text-orange-500" /> Final Assessment Feedback
                                                                     </p>
                                                                     <p className="text-xs font-bold text-gray-600 italic leading-relaxed">
-                                                                        "{ (task.remark || task.remarks).replace(/Voice Note Link:?\s*/i, '').trim() }"
+                                                                        "{(task.remark || task.remarks).replace(/Voice Note Link:?\s*/i, '').trim()}"
                                                                     </p>
                                                                 </div>
                                                             )}
@@ -942,7 +938,7 @@ const CalendarPage = () => {
                             <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">New Assignment</h3>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Select task protocol for {selectedDate}</p>
                         </div>
-                        
+
                         <div className="space-y-3">
                             <button
                                 onClick={() => handleAssignTask('delegation')}
@@ -988,7 +984,7 @@ const CalendarPage = () => {
                                 </button>
                             )}
 
-                            <button 
+                            <button
                                 onClick={() => setShowAssignTaskTypePopup(false)}
                                 className="w-full mt-4 py-4 text-[10px] font-black text-gray-400 hover:text-gray-900 uppercase tracking-[0.2em] transition-colors"
                             >
@@ -1000,13 +996,13 @@ const CalendarPage = () => {
             )}
             {/* Final Image Preview Modal */}
             {selectedImage && (
-                <div 
+                <div
                     className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300"
                     onClick={() => setSelectedImage(null)}
                 >
                     <div className="relative max-w-4xl w-full h-full flex items-center justify-center">
                         <img src={selectedImage} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt="Evidence" />
-                        <button 
+                        <button
                             className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"
                             onClick={() => setSelectedImage(null)}
                         >

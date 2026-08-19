@@ -56,7 +56,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
     // Deduplicate: prioritize series_id, fallback to task_description + name combo
     const seen = new Set();
     let missingIdCount = 0;
-    
+
     const uniqueRows = (data || []).filter(row => {
       // Track records without series_id for debugging
       if (!row.series_id) missingIdCount++;
@@ -67,7 +67,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
         seen.add(row.series_id);
         return true;
       }
-      
+
       // Fallback key: legacy grouping
       const legacyKey = `${(row.shop || row.shop_name || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
       if (seen.has(legacyKey)) return false;
@@ -437,7 +437,7 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
 
     if (nameFilter) {
       const term = nameFilter.toLowerCase();
-      mapped = mapped.filter(item => 
+      mapped = mapped.filter(item =>
         (item.task_description || '').toLowerCase().includes(term) ||
         (item.name || '').toLowerCase().includes(term) ||
         (item.given_by || '').toLowerCase().includes(term)

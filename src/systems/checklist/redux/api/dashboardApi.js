@@ -15,7 +15,7 @@ const getDateColumn = (dashboardType) => {
 
 const getNameField = (dashboardType) => {
   return dashboardType === 'repair' ? 'assigned_person' :
-         dashboardType === 'ea' ? 'doer_name' : 'name';
+    dashboardType === 'ea' ? 'doer_name' : 'name';
 };
 
 /**
@@ -501,40 +501,41 @@ export const fetchStaffTasksDataApi = async (
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
 
-    // Use selected month or current month as default
-    let year, month;
-    if (selectedMonth) {
-      [year, month] = selectedMonth.split('-').map(Number);
-    } else {
-      const now = new Date();
-      year = now.getFullYear();
-      month = now.getMonth() + 1;
+    let startDate = startDateParam;
+    let endDate = endDateParam;
+
+    if (!startDate && !endDate && selectedMonth) {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const lastDayOfMonth = new Date(year, month, 0).getDate();
+      startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+      endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
     }
 
-    // Calculate start and end dates for the selected month, or use params
-    const startDate = startDateParam || `${year}-${month.toString().padStart(2, '0')}-01`;
-    const lastDayOfMonth = new Date(year, month, 0).getDate();
-    const endDate = endDateParam || `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
+    console.log("🚀 [fetchStaffTasksDataApi] Called with parameters:", {
+      dashboardType,
+      staffFilter,
+      shopFilter,
+      page,
+      limit,
+      selectedMonth,
+      startDateParam,
+      endDateParam,
+      computedStartDate: startDate,
+      computedEndDate: endDate
+    });
 
-    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
     const dateColumn = getDateColumn(dashboardType);
 
-    // Fetch active users first
-    const { data: activeUsers } = await supabase
-      .from('users')
-      .select('user_name')
-      .eq('status', 'active');
+    // Fetch active users and holidays first
+    const [
+      { data: activeUsers },
+      { data: holidaysRes }
+    ] = await Promise.all([
+      supabase.from('users').select('user_name').eq('status', 'active'),
+      supabase.from('holidays').select('holiday_date')
+    ]);
     const activeUserNamesSet = new Set((activeUsers || []).map(u => (u.user_name || "").toLowerCase().trim()).filter(Boolean));
-
-    // console.log('Date range for filtering:', {
-    //   startDate,
-    //   endDate,
-    //   year,
-    //   month,
-    //   lastDayOfMonth,
-    //   selectedMonth
-    // });
+    const holidayDatesSet = new Set((holidaysRes || []).map(h => h.holiday_date));
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
       dashboardType === 'ea' ? 'doer_name' : 'name';
@@ -546,9 +547,14 @@ export const fetchStaffTasksDataApi = async (
           dashboardType === 'ea' ? 'ea_tasks' :
             dashboardType === 'work' ? 'work_task_new' : dashboardType)
       .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime, manager_name)' : '*')
-      .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
-      .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
       .not(nameField, 'is', null);
+
+    if (startDate) {
+      query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`));
+    }
+    if (endDate) {
+      query = query.lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`));
+    }
 
     // Apply role-based filtering
     if (role === 'USER' && username) {
@@ -614,11 +620,30 @@ export const fetchStaffTasksDataApi = async (
       }
     }
 
-    const { data: tasksData, error } = await query;
+    let tasksData = [];
+    let pageIndex = 0;
+    const fetchLimit = 1000;
+    let hasMore = true;
 
-    if (error) {
-      console.error("Error fetching tasks data:", error);
-      throw error;
+    while (hasMore) {
+      let pageQuery = query.range(pageIndex * fetchLimit, (pageIndex + 1) * fetchLimit - 1);
+      const { data: pageData, error } = await pageQuery;
+
+      if (error) {
+        console.error("Error fetching tasks data page:", error);
+        throw error;
+      }
+
+      if (pageData && pageData.length > 0) {
+        tasksData = [...tasksData, ...pageData];
+        if (pageData.length < fetchLimit) {
+          hasMore = false;
+        } else {
+          pageIndex++;
+        }
+      } else {
+        hasMore = false;
+      }
     }
 
     // console.log(`Found ${tasksData.length} tasks in date range ${startDate} to ${endDate}`);
@@ -729,99 +754,11 @@ export const fetchStaffTasksDataApi = async (
           }
         }
       }
-
-      // ── MANAGER SCORING ──
-      if (dashboardType === 'work') {
-        const shopKey = (task.shop_name || "").trim().toLowerCase();
-        const managersSet = shopManagersMap[shopKey];
-        const managers = managersSet ? Array.from(managersSet) : [];
-
-        // Identify the manager(s) responsible for this task:
-        // Either the specific manager who assigned it, or fallback to the shop's active managers
-        let responsibleManagers = [];
-        if (task.task_assignments?.manager_name) {
-          responsibleManagers = [task.task_assignments.manager_name];
-        } else {
-          responsibleManagers = managers;
-        }
-
-        if (!task.submission_date) {
-          // Employee hasn't completed the task -> down-score responsible managers
-          responsibleManagers.forEach(mgrName => {
-            if (!activeUserNamesSet.has(mgrName.toLowerCase())) {
-              return;
-            }
-            const mgrKey = `${shopVal}-${mgrName}`;
-            if (!summary[mgrKey]) {
-              summary[mgrKey] = {
-                shop: shopVal,
-                name: mgrName,
-                total_tasks: 0,
-                total_completed_tasks: 0,
-                total_done_on_time: 0
-              };
-            }
-            summary[mgrKey].total_tasks++;
-          });
-        } else {
-          // Employee has completed/submitted the task
-          if (task.manager_approved_by) {
-            // Manager approved it
-            const mgrName = task.manager_approved_by;
-            if (activeUserNamesSet.has(mgrName.toLowerCase())) {
-              const mgrKey = `${shopVal}-${mgrName}`;
-              if (!summary[mgrKey]) {
-                summary[mgrKey] = {
-                  shop: shopVal,
-                  name: mgrName,
-                  total_tasks: 0,
-                  total_completed_tasks: 0,
-                  total_done_on_time: 0
-                };
-              }
-              summary[mgrKey].total_tasks++;
-              summary[mgrKey].total_completed_tasks++;
-
-              // Manager approved on time only if approved on or before the intended current_date of the work task
-              const approvalDate = new Date(task.manager_approval_date || task.updated_at);
-              const approvalDateOnly = new Date(approvalDate.getFullYear(), approvalDate.getMonth(), approvalDate.getDate());
-              
-              let currentDateOnly = null;
-              if (task.current_date) {
-                const [cYear, cMonth, cDay] = task.current_date.split('-').map(Number);
-                currentDateOnly = new Date(cYear, cMonth - 1, cDay);
-              }
-
-              if (currentDateOnly && approvalDateOnly.getTime() <= currentDateOnly.getTime()) {
-                summary[mgrKey].total_done_on_time++;
-              }
-            }
-          } else {
-            // Completed by employee, but pending manager approval -> down-score responsible managers
-            responsibleManagers.forEach(mgrName => {
-              if (!activeUserNamesSet.has(mgrName.toLowerCase())) {
-                return;
-              }
-              const mgrKey = `${shopVal}-${mgrName}`;
-              if (!summary[mgrKey]) {
-                summary[mgrKey] = {
-                  shop: shopVal,
-                  name: mgrName,
-                  total_tasks: 0,
-                  total_completed_tasks: 0,
-                  total_done_on_time: 0
-                };
-              }
-              summary[mgrKey].total_tasks++;
-            });
-          }
-        }
-      }
     });
 
-    // Fetch user images for the staff and managers found
+    // Fetch user images for staff members found
     const staffNames = tasksData.map(t => t.name || t.assigned_person || t.doer_name).filter(Boolean);
-    const uniqueNames = [...new Set([...staffNames, ...managerNames])];
+    const uniqueNames = [...new Set(staffNames)];
     let userImageMap = {};
 
     if (uniqueNames.length > 0) {
@@ -1039,7 +976,7 @@ export const getStaffTasksCountApi = async (
     data.forEach(item => {
       const shopVal = item.shop || item.shop_name || (dashboardType === 'ea' ? 'EA' : 'No Shop');
       const nameVal = item.name || item.assigned_person || item.doer_name || 'Unnamed Staff';
-      
+
       if (activeUserNamesSet.has(nameVal.toLowerCase())) {
         uniqueStaff.add(`${shopVal}-${nameVal}`);
       }

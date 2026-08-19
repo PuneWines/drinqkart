@@ -116,6 +116,16 @@ export default function StaffTasksTable({
         }
       }
 
+      console.log("🔍 [StaffTaskTable.loadStaffData] Parameters:", {
+        startParam,
+        endParam,
+        monthParam,
+        dashboardType,
+        dashboardStaffFilter,
+        effectiveShopFilter,
+        page
+      });
+
       // Fetch staff data with their task summaries
       const data = await fetchStaffTasksDataApi(
         dashboardType,
@@ -127,6 +137,8 @@ export default function StaffTasksTable({
         startParam,
         endParam
       )
+
+      console.log("📦 [StaffTaskTable.loadStaffData] Response received from fetchStaffTasksDataApi:", data);
 
       // Get total counts for both staff with tasks and total users
       if (page === 1) {

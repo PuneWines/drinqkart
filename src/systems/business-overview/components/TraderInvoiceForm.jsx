@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { FileText, Camera, Edit3, CheckCircle, AlertCircle, QrCode, Upload, Printer, Download } from 'lucide-react';
 import SignaturePadModal from './SignaturePadModal';
-import qrImage from './QR-TRADER-INVOICE-FORM.png';
+import qrImage from './QR-TRADER-INVOICE-FORM.jpeg';
 
 // Helper to convert base64 dataUrl to File object for upload
 function dataURLtoFile(dataurl, filename) {
@@ -173,7 +173,7 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
         if (dbInsertErr) throw dbInsertErr;
         setSuccessMsg('Invoice submitted successfully!');
       }
-      
+
       // Clear Form state if NOT editing
       if (!formData.id) {
         setFormData({
@@ -301,7 +301,7 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
 
   return (
     <div className="bg-white p-5 rounded-2xl w-full max-w-2xl mx-auto space-y-5 font-sans">
-      
+
       {/* Space for QR Code Image at the top */}
       {!isPublic && (
         <div className="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-xs">
@@ -521,7 +521,7 @@ export default function TraderInvoiceForm({ onSuccess, onCancel, isPublic = fals
               Digital Signature <span className="text-red-500">*</span>
             </label>
             <div className="flex flex-col items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl bg-slate-50 hover:bg-slate-100/50 transition-colors relative cursor-pointer min-h-[140px] group"
-                 onClick={() => setIsSigPadOpen(true)}>
+              onClick={() => setIsSigPadOpen(true)}>
               {signatureDataUrl ? (
                 <div className="w-full h-28 relative rounded-lg overflow-hidden bg-white p-1 border border-gray-200 flex items-center justify-center">
                   <img src={signatureDataUrl} alt="Signature preview" className="w-full h-full object-contain" />

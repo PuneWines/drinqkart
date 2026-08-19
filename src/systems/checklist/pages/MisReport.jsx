@@ -7,7 +7,7 @@ import supabase from '../SupabaseClient';
 
 function StaffTasksPage() {
     const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all")
-    
+
     // Set default date range to the previous week (Monday to Sunday)
     const [startDate, setStartDate] = useState(() => {
         const today = new Date()
@@ -27,7 +27,7 @@ function StaffTasksPage() {
         prevSunday.setDate(prevMonday.getDate() + 6)
         return prevSunday.toISOString().split('T')[0]
     })
-    
+
     const [currentPage, setCurrentPage] = useState(1)
     const [staffMembers, setStaffMembers] = useState([])
     const [filteredStaffMembers, setFilteredStaffMembers] = useState([])
@@ -41,7 +41,6 @@ function StaffTasksPage() {
     const [selectedRoleFilter, setSelectedRoleFilter] = useState("all")
     const [selectedShopFilter, setSelectedShopFilter] = useState("all")
     const [userRolesMap, setUserRolesMap] = useState({})
-    const [userReportedByMap, setUserReportedByMap] = useState({})
     const itemsPerPage = 50
 
     const [selectedStaff, setSelectedStaff] = useState(null)
@@ -101,7 +100,7 @@ function StaffTasksPage() {
     // Optimized filter function with debouncing, role, and shop filtering
     useEffect(() => {
         let filtered = staffMembers;
-        
+
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase().trim()
             filtered = filtered.filter(staff =>
@@ -127,21 +126,12 @@ function StaffTasksPage() {
     const processStaffReport = (checklistTasks, delegationTasks, workTasks, maintenanceTasks, repairTasks, eaTasks, dbUsers, holidayDates) => {
         const holidayDatesSet = new Set(holidayDates || []);
 
-        const filterHolidays = (tasks, dateField) => {
-            return (tasks || []).filter(task => {
-                const taskDateStr = task[dateField];
-                if (!taskDateStr) return true;
-                const dateStr = taskDateStr.split('T')[0];
-                return !holidayDatesSet.has(dateStr);
-            });
-        };
-
-        const cleanChecklist = filterHolidays(checklistTasks, 'planned_date');
-        const cleanDelegation = filterHolidays(delegationTasks, 'planned_date');
-        const cleanWork = filterHolidays(workTasks, 'current_date');
-        const cleanMaintenance = filterHolidays(maintenanceTasks, 'planned_date');
-        const cleanRepair = filterHolidays(repairTasks, 'created_at');
-        const cleanEA = filterHolidays(eaTasks, 'planned_date');
+        const cleanChecklist = checklistTasks || [];
+        const cleanDelegation = delegationTasks || [];
+        const cleanWork = workTasks || [];
+        const cleanMaintenance = maintenanceTasks || [];
+        const cleanRepair = repairTasks || [];
+        const cleanEA = eaTasks || [];
 
         const summary = {};
         if (dbUsers) {
@@ -155,7 +145,7 @@ function StaffTasksPage() {
                         reported_by: (u.reported_by || "").toLowerCase().trim(),
                         shop_name: u.shop_name || "No Shop",
                         profile_image: u.profile_image || null,
-                        
+
                         checklistTotal: 0,
                         checklistCompleted: 0,
                         checklistPending: 0,
@@ -219,7 +209,24 @@ function StaffTasksPage() {
             }
         });
 
-        // Distribute Work
+        // Distribute Work with Shop Manager Rollup
+        const shopManagersMap = {};
+        if (dbUsers) {
+            dbUsers.forEach(u => {
+                const uname = (u.user_name || "").trim();
+                const roleLower = (u.role || "").toLowerCase();
+                const accessStr = u.user_access || u.shop_name || "";
+                const shops = accessStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+                if (roleLower === 'manager') {
+                    shops.forEach(shop => {
+                        if (!shopManagersMap[shop]) shopManagersMap[shop] = new Set();
+                        shopManagersMap[shop].add(uname);
+                    });
+                }
+            });
+        }
+
         (cleanWork || []).forEach(task => {
             const name = task.name;
             if (name) {
@@ -228,6 +235,18 @@ function StaffTasksPage() {
                     summary[nameLower].rawWork.push(task);
                 }
             }
+
+            const shopKey = (task.shop_name || "").trim().toLowerCase();
+            const managersSet = shopManagersMap[shopKey];
+            const managers = managersSet ? Array.from(managersSet) : [];
+            let responsibleManagers = task.task_assignments?.manager_name ? [task.task_assignments.manager_name] : managers;
+
+            responsibleManagers.forEach(mgrName => {
+                const mgrLower = mgrName.toLowerCase();
+                if (summary[mgrLower] && mgrLower !== (name || "").toLowerCase()) {
+                    summary[mgrLower].rawWork.push(task);
+                }
+            });
         });
 
         // Distribute Maintenance
@@ -609,11 +628,54 @@ function StaffTasksPage() {
                 holidayDates
             );
 
+            // Populate userRolesMap and availableStaff options directly from dbUsersData (same source as table rows)
+            const rolesMap = {};
+            (dbUsersData || []).forEach(u => {
+                if (u.user_name) {
+                    rolesMap[u.user_name.toLowerCase()] = (u.role || "user").toLowerCase();
+                }
+            });
+            setUserRolesMap(rolesMap);
+
+            let allStaffNames = (dbUsersData || []).map(u => u.user_name).filter(Boolean);
+            if (userRoleLower === "manager" && managerShopUsers.length > 0) {
+                allStaffNames = allStaffNames.filter(name => managerShopUsers.includes(name.toLowerCase()));
+            }
+            const uniqueStaffOptions = [...new Set(allStaffNames)].sort((a, b) => a.localeCompare(b));
+            setAvailableStaff(uniqueStaffOptions);
+
             let filtered = combinedData;
 
             // Apply manager shop filter if logged in as manager
             if (userRoleLower === "manager" && managerShopUsers.length > 0) {
                 filtered = filtered.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
+            }
+
+            // Apply staff filter dropdown
+            if (dashboardStaffFilter && dashboardStaffFilter !== "all") {
+                filtered = filtered.filter(staff => (staff.name || "").toLowerCase() === dashboardStaffFilter.toLowerCase());
+            }
+
+            // Apply role filter dropdown
+            if (selectedRoleFilter && selectedRoleFilter !== "all") {
+                filtered = filtered.filter(staff => {
+                    const role = rolesMap[(staff.name || "").toLowerCase()] || "user";
+                    return role === selectedRoleFilter.toLowerCase();
+                });
+            }
+
+            // Apply shop filter dropdown
+            if (selectedShopFilter && selectedShopFilter !== "all") {
+                filtered = filtered.filter(staff => (staff.shop_name || "").toLowerCase() === selectedShopFilter.toLowerCase());
+            }
+
+            // Apply search query
+            if (searchQuery && searchQuery.trim() !== "") {
+                const query = searchQuery.toLowerCase().trim();
+                filtered = filtered.filter(staff =>
+                    (staff.name || "").toLowerCase().includes(query) ||
+                    (staff.email || "").toLowerCase().includes(query)
+                );
             }
 
             // Sort by completion score descending
@@ -642,11 +704,11 @@ function StaffTasksPage() {
             isLoadingRef.current = false
             setIsLoading(false)
         }
-    }, [dashboardStaffFilter, startDate, endDate])
+    }, [dashboardStaffFilter, selectedRoleFilter, selectedShopFilter, searchQuery, startDate, endDate])
 
     useEffect(() => {
         loadStaffData(1, false)
-    }, [dashboardStaffFilter, startDate, endDate, loadStaffData])
+    }, [dashboardStaffFilter, selectedRoleFilter, selectedShopFilter, searchQuery, startDate, endDate, loadStaffData])
 
     // Function to load more data
     const loadMoreData = () => {
@@ -656,58 +718,6 @@ function StaffTasksPage() {
             loadStaffData(nextPage, true)
         }
     }
-
-    // Optimized available staff fetching based on custom Date Range
-    useEffect(() => {
-        const fetchAvailableStaff = async () => {
-            try {
-                const userRoleLower = (userRole || "").toLowerCase();
-                const currentUsername = (username || "").toLowerCase();
-                let effectiveShopFilter = null;
-
-                if (userRoleLower === "manager" && currentUsername) {
-                    const { data: mgrData } = await supabase
-                        .from("users")
-                        .select("shop_name")
-                        .ilike("user_name", currentUsername)
-                        .maybeSingle();
-                    effectiveShopFilter = mgrData?.shop_name || null;
-                }
-
-                const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", "all", effectiveShopFilter, 1, 100, null, startDate, endDate),
-                    fetchStaffTasksDataApi("delegation", "all", effectiveShopFilter, 1, 100, null, startDate, endDate),
-                    fetchStaffTasksDataApi("work", "all", effectiveShopFilter, 1, 100, null, startDate, endDate)
-                ])
-
-                let combinedData = combineStaffData(checklistData, delegationData, workData)
-                
-                if (userRoleLower === "manager" && effectiveShopFilter) {
-                    const { data: shopUsers } = await supabase
-                        .from("users")
-                        .select("user_name")
-                        .eq("shop_name", effectiveShopFilter)
-                        .eq("status", "active");
-                    const shopUsersList = (shopUsers || []).map(u => u.user_name).filter(Boolean);
-                    setAvailableStaff(shopUsersList.sort((a, b) => a.localeCompare(b)));
-                } else {
-                    const uniqueStaff = [...new Set(combinedData.map(staff => staff.name).filter(Boolean))]
-
-                    if (userRole !== "admin" && username) {
-                        if (!uniqueStaff.some(staff => staff.toLowerCase() === username.toLowerCase())) {
-                            uniqueStaff.push(username)
-                        }
-                    }
-
-                    setAvailableStaff(uniqueStaff.sort((a, b) => a.localeCompare(b)))
-                }
-            } catch (error) {
-                console.error('Error fetching staff:', error)
-            }
-        }
-
-        fetchAvailableStaff()
-    }, [userRole, username, startDate, endDate])
 
     // Helper to format dates for DATE START and DATE END columns
     const formatToShow = (dateStr) => {
@@ -831,18 +841,18 @@ function StaffTasksPage() {
         if (!task) return null;
         const plannedDateStr = task.current_date; // e.g. "2026-06-09"
         const endTimeStr = task.end_time; // e.g. "18:00:00"
-        
+
         if (!plannedDateStr) return null;
         if (!endTimeStr || endTimeStr === "00:00:00" || endTimeStr === "00:00") {
             return new Date(`${plannedDateStr}T23:59:59+05:30`);
         }
-        
+
         // If the endTimeStr already contains timezone or offset information, construct directly,
         // otherwise append "+05:30" (Indian Standard Time offset)
         const reconstructedStr = endTimeStr.includes('+') || endTimeStr.includes('Z')
             ? `${plannedDateStr}T${endTimeStr}`
             : `${plannedDateStr}T${endTimeStr}+05:30`;
-            
+
         const deadlineDate = new Date(reconstructedStr);
         if (isNaN(deadlineDate.getTime())) {
             return new Date(`${plannedDateStr}T23:59:59+05:30`);
@@ -855,11 +865,11 @@ function StaffTasksPage() {
         if (!actual) return null;
         const deadline = getWorkTaskDeadline(task);
         if (!deadline) return null;
-        
+
         const actualDate = new Date(actual);
         const diffMs = actualDate.getTime() - deadline.getTime();
         if (diffMs <= 0) return null; // on time or early
-        
+
         const totalSecs = Math.floor(diffMs / 1000);
         const h = Math.floor(totalSecs / 3600);
         const m = Math.floor((totalSecs % 3600) / 60);
@@ -899,9 +909,9 @@ function StaffTasksPage() {
         if (!actual) return false;
 
         const statusLower = (task.status || "").toLowerCase();
-        const isApproved = (task.manager_approved_by || task.admin_approved_by || 
-                            statusLower.includes("approved") || statusLower.includes("done") || 
-                            statusLower.includes("completed") || task.admin_done === true);
+        const isApproved = (task.manager_approved_by || task.admin_approved_by ||
+            statusLower.includes("approved") || statusLower.includes("done") ||
+            statusLower.includes("completed") || task.admin_done === true);
         if (!isApproved) return false;
 
         const approvalDateStr = task.manager_approval_date || task.admin_approval_date || task.updated_at || task.submission_date;
@@ -992,35 +1002,69 @@ function StaffTasksPage() {
 
             if (!table || !staffName) return;
 
-            // Fetch users list to get roles and reported_by mapping
             const { data: dbUsers } = await supabase
                 .from('users')
-                .select('user_name, role, reported_by')
+                .select('user_name, role, shop_name, user_access')
                 .eq('status', 'active');
-            
+
             const staffNameLower = staffName.toLowerCase();
             const staffRole = dbUsers ? (dbUsers.find(u => u.user_name.toLowerCase() === staffNameLower)?.role || "user").toLowerCase() : "user";
-            
-            let targetNames = [staffName];
-            if (staffRole === "manager" && dbUsers) {
-                dbUsers.forEach(u => {
-                    if (u.reported_by && u.reported_by.toLowerCase() === staffNameLower) {
-                        targetNames.push(u.user_name);
+
+            if (row.id === "work") {
+                const shopManagersMapModal = {};
+                if (dbUsers) {
+                    dbUsers.forEach(u => {
+                        const uname = (u.user_name || "").trim();
+                        const roleLower = (u.role || "").toLowerCase();
+                        const accessStr = u.user_access || u.shop_name || "";
+                        const shops = accessStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+                        if (roleLower === 'manager') {
+                            shops.forEach(shop => {
+                                if (!shopManagersMapModal[shop]) shopManagersMapModal[shop] = new Set();
+                                shopManagersMapModal[shop].add(uname);
+                            });
+                        }
+                    });
+                }
+
+                const { data: allWorkData, error: workErr } = await supabase
+                    .from('work_task_new')
+                    .select('*, task_assignments:assignment_id(manager_name)')
+                    .gte('current_date', startDate)
+                    .lte('current_date', endDate)
+                    .order('current_date', { ascending: true });
+
+                if (workErr) throw workErr;
+
+                const filteredWork = (allWorkData || []).filter(task => {
+                    const nameVal = (task.name || "").toLowerCase();
+                    if (nameVal === staffNameLower) return true;
+
+                    if (staffRole === 'manager') {
+                        const shopKey = (task.shop_name || "").trim().toLowerCase();
+                        const managersSet = shopManagersMapModal[shopKey];
+                        const managers = managersSet ? Array.from(managersSet) : [];
+                        let responsibleManagers = task.task_assignments?.manager_name ? [task.task_assignments.manager_name] : managers;
+                        return responsibleManagers.some(m => m.toLowerCase() === staffNameLower);
                     }
+                    return false;
                 });
+
+                setRawTasks(filteredWork);
+            } else {
+                let targetNames = [staffName];
+                const { data, error } = await supabase
+                    .from(table)
+                    .select("*")
+                    .in(nameField, targetNames)
+                    .gte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? startDate : `${startDate}T00:00:00`)
+                    .lte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? endDate : `${endDate}T23:59:59`)
+                    .order(dateCol, { ascending: true });
+
+                if (error) throw error;
+                setRawTasks(data || []);
             }
-
-            const selectQuery = row.id === "work" ? "*, task_assignments:assignment_id(manager_name)" : "*";
-            const { data, error } = await supabase
-                .from(table)
-                .select(selectQuery)
-                .in(nameField, targetNames)
-                .gte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? startDate : `${startDate}T00:00:00`)
-                .lte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? endDate : `${endDate}T23:59:59`)
-                .order(dateCol, { ascending: true });
-
-            if (error) throw error;
-            setRawTasks(data || []);
         } catch (err) {
             console.error("Error fetching raw tasks:", err);
             setRawTasks([]);
@@ -1044,37 +1088,65 @@ function StaffTasksPage() {
                 { id: "ea", label: "EA", fmsName: "All EA", dept: "EA" }
             ];
 
-            // Fetch users list to get roles and reported_by mapping
+            // Fetch holidays to filter modal data identically
+            const { data: holidaysData } = await supabase.from('holidays').select('holiday_date');
+            const holidayDatesSet = new Set((holidaysData || []).map(h => h.holiday_date));
+
+            // Fetch users list to get roles and shop mapping
             const { data: dbUsers } = await supabase
                 .from('users')
-                .select('user_name, role, reported_by')
+                .select('user_name, role, shop_name, user_access')
                 .eq('status', 'active');
-            
+
             const staffNameLower = staff.name.toLowerCase();
             const staffRole = dbUsers ? (dbUsers.find(u => u.user_name.toLowerCase() === staffNameLower)?.role || "user").toLowerCase() : "user";
-            
+
             let targetNames = [staff.name];
-            if (staffRole === "manager" && dbUsers) {
-                dbUsers.forEach(u => {
-                    if (u.reported_by && u.reported_by.toLowerCase() === staffNameLower) {
-                        targetNames.push(u.user_name);
-                    }
-                });
-            }
 
             const [checklistRes, delegationRes, workRes, maintenanceRes, repairRes, eaRes] = await Promise.all([
                 supabase.from('checklist').select('*').in('name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`),
                 supabase.from('delegation').select('*').in('name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`),
-                supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name)').in('name', targetNames).gte('current_date', startDate).lte('current_date', endDate),
+                supabase.from('work_task_new').select('*, task_assignments:assignment_id(manager_name)').gte('current_date', startDate).lte('current_date', endDate),
                 supabase.from('maintenance_tasks').select('*').in('name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`),
                 supabase.from('repair_tasks').select('*').in('assigned_person', targetNames).gte('created_at', `${startDate}T00:00:00`).lte('created_at', `${endDate}T23:59:59`),
                 supabase.from('ea_tasks').select('*').in('doer_name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`)
             ]);
 
+            const shopManagersMapModal = {};
+            if (dbUsers) {
+                dbUsers.forEach(u => {
+                    const uname = (u.user_name || "").trim();
+                    const roleLower = (u.role || "").toLowerCase();
+                    const accessStr = u.user_access || u.shop_name || "";
+                    const shops = accessStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+                    if (roleLower === 'manager') {
+                        shops.forEach(shop => {
+                            if (!shopManagersMapModal[shop]) shopManagersMapModal[shop] = new Set();
+                            shopManagersMapModal[shop].add(uname);
+                        });
+                    }
+                });
+            }
+
+            const rawWorkTasksModal = (workRes.data || []).filter(task => {
+                const nameVal = (task.name || "").toLowerCase();
+                if (nameVal === staffNameLower) return true;
+
+                if (staffRole === 'manager') {
+                    const shopKey = (task.shop_name || "").trim().toLowerCase();
+                    const managersSet = shopManagersMapModal[shopKey];
+                    const managers = managersSet ? Array.from(managersSet) : [];
+                    let responsibleManagers = task.task_assignments?.manager_name ? [task.task_assignments.manager_name] : managers;
+                    return responsibleManagers.some(m => m.toLowerCase() === staffNameLower);
+                }
+                return false;
+            });
+
             const rawDataMap = {
                 checklist: checklistRes.data || [],
                 delegation: delegationRes.data || [],
-                work: workRes.data || [],
+                work: rawWorkTasksModal,
                 maintenance: maintenanceRes.data || [],
                 repair: repairRes.data || [],
                 ea: eaRes.data || []
@@ -1093,11 +1165,11 @@ function StaffTasksPage() {
                     tasks.forEach(task => {
                         const statusLower = (task.status || "").toLowerCase();
                         const isCompleted = task.submission_date !== null ||
-                                            statusLower === "yes" ||
-                                            statusLower.includes("done") ||
-                                            statusLower.includes("completed") ||
-                                            statusLower.includes("approved") ||
-                                            (mod.id === "delegation" && task.admin_done === true);
+                            statusLower === "yes" ||
+                            statusLower.includes("done") ||
+                            statusLower.includes("completed") ||
+                            statusLower.includes("approved") ||
+                            (mod.id === "delegation" && task.admin_done === true);
 
                         if (isCompleted) {
                             achievement++;
@@ -1166,7 +1238,7 @@ function StaffTasksPage() {
         filteredStaffMembers.forEach(staff => {
             const workNotDone = 100 - staff.progress;
             const workNotDoneOnTime = staff.totalTasks > 0 ? Math.round(((staff.totalTasks - staff.doneOnTime) / staff.totalTasks) * 100) : 0;
-            
+
             let statusText = "N/A";
             if (staff.totalTasks > 0) {
                 if (staff.ontimeScore >= 95) statusText = ">95% PERF";
@@ -1197,7 +1269,7 @@ function StaffTasksPage() {
 
         const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;\uFEFF" });
         const url = URL.createObjectURL(blob);
-        
+
         const link = document.createElement("a");
         link.setAttribute("href", url);
         link.setAttribute("download", `Staff_MIS_Report_${startDate}_to_${endDate}.csv`);
@@ -1448,8 +1520,8 @@ function StaffTasksPage() {
                                                     const workNotDoneOnTime = staff.totalTasks > 0 ? Math.round(((staff.totalTasks - staff.doneOnTime) / staff.totalTasks) * 100) : 0;
 
                                                     return (
-                                                        <tr 
-                                                            key={`${staff.name}-${index}`} 
+                                                        <tr
+                                                            key={`${staff.name}-${index}`}
                                                             className="hover:bg-gray-50 cursor-pointer"
                                                             onClick={() => handleRowClick(staff)}
                                                         >
@@ -1460,14 +1532,13 @@ function StaffTasksPage() {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase border ${
-                                                                    (() => {
-                                                                        const role = userRolesMap[(staff.name || "").toLowerCase()] || "user";
-                                                                        if (role === "admin") return "bg-red-50 text-red-700 border-red-200";
-                                                                        if (role === "manager") return "bg-blue-50 text-blue-700 border-blue-200";
-                                                                        return "bg-gray-50 text-gray-700 border-gray-200";
-                                                                    })()
-                                                                }`}>
+                                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase border ${(() => {
+                                                                    const role = userRolesMap[(staff.name || "").toLowerCase()] || "user";
+                                                                    if (role === "admin") return "bg-red-50 text-red-700 border-red-200";
+                                                                    if (role === "manager") return "bg-blue-50 text-blue-700 border-blue-200";
+                                                                    return "bg-gray-50 text-gray-700 border-gray-200";
+                                                                })()
+                                                                    }`}>
                                                                     {userRolesMap[(staff.name || "").toLowerCase()] || "user"}
                                                                 </span>
                                                             </td>
@@ -1628,12 +1699,11 @@ function StaffTasksPage() {
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 {["FMS Name", "Task Name", "Department", "Target", "Total Achievement", "% Work Not Done", "% Work Not Done On Time", "All Pending Till Date"].map((hdr, idx) => (
-                                                    <th 
-                                                        key={hdr} 
-                                                        scope="col" 
-                                                        className={`px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider ${
-                                                            idx < 3 ? "text-left" : "text-center"
-                                                        }`}
+                                                    <th
+                                                        key={hdr}
+                                                        scope="col"
+                                                        className={`px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider ${idx < 3 ? "text-left" : "text-center"
+                                                            }`}
                                                     >
                                                         {hdr}
                                                     </th>
@@ -1653,11 +1723,10 @@ function StaffTasksPage() {
                                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium text-left">{row.department}</td>
                                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-bold text-center">{row.target}</td>
                                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-center">
-                                                        <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                                                            row.achievement < row.target
-                                                                ? "bg-red-50 text-red-700 border border-red-200"
-                                                                : "bg-green-50 text-green-700 border border-green-200"
-                                                        }`}>
+                                                        <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold ${row.achievement < row.target
+                                                            ? "bg-red-50 text-red-700 border border-red-200"
+                                                            : "bg-green-50 text-green-700 border border-green-200"
+                                                            }`}>
                                                             {row.achievement}
                                                         </span>
                                                     </td>
@@ -1711,17 +1780,16 @@ function StaffTasksPage() {
                                     <button
                                         key={f}
                                         onClick={() => setSubModalFilter(f)}
-                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors border ${
-                                            subModalFilter === f
-                                                ? f === "all"
-                                                    ? "bg-gray-800 text-white border-gray-800"
-                                                    : f === "ontime"
+                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors border ${subModalFilter === f
+                                            ? f === "all"
+                                                ? "bg-gray-800 text-white border-gray-800"
+                                                : f === "ontime"
                                                     ? "bg-green-600 text-white border-green-600"
                                                     : f === "pending"
-                                                    ? "bg-amber-500 text-white border-amber-500"
-                                                    : "bg-orange-500 text-white border-orange-500"
-                                                : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-                                        }`}
+                                                        ? "bg-amber-500 text-white border-amber-500"
+                                                        : "bg-orange-500 text-white border-orange-500"
+                                            : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                                            }`}
                                     >
                                         {f === "all" ? "All" : f === "ontime" ? "On Time" : f === "pending" ? "Pending" : "Delay"}
                                     </button>
@@ -1738,7 +1806,7 @@ function StaffTasksPage() {
                         </div>
 
                         {/* Sub-Modal Body */}
-                        <div className="overflow-y-auto flex-1">
+                        <div className="overflow-x-auto overflow-y-auto flex-1">
                             {isSubModalLoading ? (
                                 <div className="py-16 flex flex-col items-center justify-center gap-3">
                                     <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-blue-600"></div>
@@ -1757,25 +1825,32 @@ function StaffTasksPage() {
                                 });
                                 const labelField = MODULE_TASK_LABEL_FIELD[selectedModule.id] || "task_description";
                                 const plannedField = MODULE_DATE_COL[selectedModule.id] || "planned_date";
+                                const isWorkModule = selectedModule.id === "work";
+
                                 return (
-                                    <table className="min-w-full">
+                                    <table className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-0 z-10">
                                             <tr>
                                                 <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Task Name</th>
+                                                {isWorkModule && (
+                                                    <>
+                                                        <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Employee Name</th>
+                                                        <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Manager Name</th>
+                                                    </>
+                                                )}
                                                 <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Planned</th>
                                                 <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actual</th>
                                                 <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Delay</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-orange-50">
+                                        <tbody className="divide-y divide-orange-50 bg-white">
                                             {filtered.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-400">
+                                                    <td colSpan={isWorkModule ? 6 : 4} className="px-5 py-8 text-center text-sm text-gray-400">
                                                         No tasks match the selected filter.
                                                     </td>
                                                 </tr>
                                             ) : filtered.map((task, idx) => {
-                                                const isWorkModule = selectedModule.id === "work";
                                                 const planned = task[plannedField] || task.planned_date || task.task_start_date;
                                                 const actual = task.submission_date;
                                                 const delay = isWorkModule
@@ -1783,6 +1858,9 @@ function StaffTasksPage() {
                                                     : calcDelay(planned, actual);
                                                 const status = getTaskStatus(task, selectedModule.id, staffRole);
                                                 const taskLabel = task[labelField] || task.task_description || task.issue_description || "(no description)";
+                                                const employeeName = task.name || "—";
+                                                const managerName = task.task_assignments?.manager_name || task.manager_approved_by || "—";
+
                                                 return (
                                                     <tr
                                                         key={task.id || task.task_id || idx}
@@ -1793,6 +1871,20 @@ function StaffTasksPage() {
                                                                 • {taskLabel}
                                                             </span>
                                                         </td>
+                                                        {isWorkModule && (
+                                                            <>
+                                                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                                                    <span className="text-xs font-semibold text-gray-900">
+                                                                        {employeeName}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                                                    <span className="text-xs font-semibold text-purple-700">
+                                                                        {managerName}
+                                                                    </span>
+                                                                </td>
+                                                            </>
+                                                        )}
                                                         <td className="px-5 py-3.5 whitespace-nowrap">
                                                             <span className="text-xs text-gray-700 font-mono">
                                                                 {isWorkModule ? formatDateTime(getWorkTaskDeadline(task)) : formatDateTime(planned)}
@@ -1807,9 +1899,8 @@ function StaffTasksPage() {
                                                         </td>
                                                         <td className="px-5 py-3.5 whitespace-nowrap">
                                                             {delay ? (
-                                                                <span className={`text-xs font-bold font-mono ${
-                                                                    isWorkModule ? "text-red-600" : "text-orange-600"
-                                                                }`}>{delay}</span>
+                                                                <span className={`text-xs font-bold font-mono ${isWorkModule ? "text-red-600" : "text-orange-600"
+                                                                    }`}>{delay}</span>
                                                             ) : status === "pending" ? (
                                                                 <span className="text-xs text-gray-400">—</span>
                                                             ) : (
@@ -1837,9 +1928,10 @@ function StaffTasksPage() {
                     </div>
                 </div>
             )}
-            
+
             {/* Dynamic CSS Print Styles */}
-            <style dangerouslySetInnerHTML={{__html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 @media print {
                     body > * {
                         display: none !important;
