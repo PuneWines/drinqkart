@@ -181,7 +181,15 @@ function StaffTasksPage() {
                         rawWork: [],
                         rawMaintenance: [],
                         rawRepair: [],
-                        rawEA: []
+                        rawEA: [],
+
+                        managerApprovedWork: 0,
+                        adminApprovedChecklist: 0,
+                        adminApprovedDelegation: 0,
+                        adminApprovedWork: 0,
+                        adminApprovedMaintenance: 0,
+                        adminApprovedRepair: 0,
+                        adminApprovedEA: 0
                     };
                 }
             });
@@ -295,6 +303,9 @@ function StaffTasksPage() {
                 } else {
                     staff.checklistPending++;
                 }
+                if (task.admin_done === true) {
+                    staff.adminApprovedChecklist++;
+                }
             });
 
             staff.rawDelegation.forEach(task => {
@@ -307,6 +318,9 @@ function StaffTasksPage() {
                     }
                 } else {
                     staff.delegationPending++;
+                }
+                if (task.admin_done === true) {
+                    staff.adminApprovedDelegation++;
                 }
             });
 
@@ -321,6 +335,13 @@ function StaffTasksPage() {
                 } else {
                     staff.workPending++;
                 }
+
+                if (task.manager_approval_date !== null && task.manager_approval_date !== undefined) {
+                    staff.managerApprovedWork++;
+                }
+                if (task.admin_approval_date !== null && task.admin_approval_date !== undefined) {
+                    staff.adminApprovedWork++;
+                }
             });
 
             staff.rawMaintenance.forEach(task => {
@@ -333,6 +354,9 @@ function StaffTasksPage() {
                     }
                 } else {
                     staff.maintenancePending++;
+                }
+                if (task.admin_done === true) {
+                    staff.adminApprovedMaintenance++;
                 }
             });
 
@@ -347,6 +371,9 @@ function StaffTasksPage() {
                 } else {
                     staff.repairPending++;
                 }
+                if (task.admin_approval_date !== null && task.admin_approval_date !== undefined) {
+                    staff.adminApprovedRepair++;
+                }
             });
 
             staff.rawEA.forEach(task => {
@@ -359,6 +386,9 @@ function StaffTasksPage() {
                     }
                 } else {
                     staff.eaPending++;
+                }
+                if (task.admin_done === true) {
+                    staff.adminApprovedEA++;
                 }
             });
         });
@@ -393,6 +423,14 @@ function StaffTasksPage() {
                 const empEACompleted = employees.reduce((sum, e) => sum + e.eaCompleted, 0);
                 const empEAPending = employees.reduce((sum, e) => sum + e.eaPending, 0);
 
+                const empManagerApprovedWork = employees.reduce((sum, e) => sum + e.managerApprovedWork, 0);
+                const empAdminApprovedChecklist = employees.reduce((sum, e) => sum + e.adminApprovedChecklist, 0);
+                const empAdminApprovedDelegation = employees.reduce((sum, e) => sum + e.adminApprovedDelegation, 0);
+                const empAdminApprovedWork = employees.reduce((sum, e) => sum + e.adminApprovedWork, 0);
+                const empAdminApprovedMaintenance = employees.reduce((sum, e) => sum + e.adminApprovedMaintenance, 0);
+                const empAdminApprovedRepair = employees.reduce((sum, e) => sum + e.adminApprovedRepair, 0);
+                const empAdminApprovedEA = employees.reduce((sum, e) => sum + e.adminApprovedEA, 0);
+
                 staff.checklistTotal += empChecklistTotal;
                 staff.checklistCompleted += empChecklistCompleted;
                 staff.checklistPending += empChecklistPending;
@@ -416,6 +454,14 @@ function StaffTasksPage() {
                 staff.eaTotal += empEATotal;
                 staff.eaCompleted += empEACompleted;
                 staff.eaPending += empEAPending;
+
+                staff.managerApprovedWork += empManagerApprovedWork;
+                staff.adminApprovedChecklist += empAdminApprovedChecklist;
+                staff.adminApprovedDelegation += empAdminApprovedDelegation;
+                staff.adminApprovedWork += empAdminApprovedWork;
+                staff.adminApprovedMaintenance += empAdminApprovedMaintenance;
+                staff.adminApprovedRepair += empAdminApprovedRepair;
+                staff.adminApprovedEA += empAdminApprovedEA;
 
                 // Done on time is based on manager on time approvals
                 let mgrChecklistDoneOnTime = 0;
@@ -495,6 +541,22 @@ function StaffTasksPage() {
             const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
             const ontimeScore = totalTasks > 0 ? Math.round((doneOnTime / totalTasks) * 100) : 0;
 
+            const employeeDone = completedTasks;
+            const employeeNotDone = totalTasks - employeeDone;
+            const pctEmployeeDone = totalTasks > 0 ? Math.round((employeeDone / totalTasks) * 100) : 0;
+            const pctEmployeeNotDone = totalTasks > 0 ? Math.round((employeeNotDone / totalTasks) * 100) : 0;
+
+            const managerApproved = staff.managerApprovedWork;
+            const managerNotApproved = staff.workTotal - managerApproved;
+
+            const adminApproved = staff.adminApprovedChecklist +
+                staff.adminApprovedDelegation +
+                staff.adminApprovedWork +
+                staff.adminApprovedMaintenance +
+                staff.adminApprovedRepair +
+                staff.adminApprovedEA;
+            const adminNotApproved = totalTasks - adminApproved;
+
             return {
                 ...staff,
                 totalTasks,
@@ -502,7 +564,15 @@ function StaffTasksPage() {
                 pendingTasks,
                 doneOnTime,
                 progress,
-                ontimeScore
+                ontimeScore,
+                employeeDone,
+                employeeNotDone,
+                pctEmployeeDone,
+                pctEmployeeNotDone,
+                managerApproved,
+                managerNotApproved: Math.max(0, managerNotApproved),
+                adminApproved,
+                adminNotApproved: Math.max(0, adminNotApproved)
             };
         });
     };
@@ -1473,65 +1543,81 @@ function StaffTasksPage() {
                             ) : (
                                 <>
                                     <div
-                                        className="staff-table-container rounded-md border border-gray-200 overflow-auto"
-                                        style={{ maxHeight: "500px" }}
+                                        className="staff-table-container rounded-md border border-gray-200 overflow-x-auto overflow-y-auto w-full shadow-inner"
+                                        style={{ maxHeight: "550px" }}
                                     >
-                                        <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-gray-50 sticky top-0 z-10">
-                                                <tr>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <table className="min-w-[1550px] w-full divide-y divide-gray-200 border-collapse">
+                                            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                                                <tr className="border-b border-gray-200">
+                                                    <th rowSpan={2} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
                                                         Name
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                    <th rowSpan={2} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
                                                         Role
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                    <th rowSpan={2} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
                                                         Date Start
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                    <th rowSpan={2} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
                                                         Date End
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">
-                                                        Target
+                                                    <th rowSpan={2} className="px-4 py-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wider border-r border-gray-200 bg-gray-100">
+                                                        Total Task
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        Actual Work Done
+                                                    <th colSpan={4} className="px-4 py-2 text-center text-xs font-bold text-blue-800 uppercase tracking-wider border-r border-gray-200 bg-blue-50/70">
+                                                        Employee Status / Submission Date
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        % Work Not Done
+                                                    <th colSpan={2} className="px-4 py-2 text-center text-xs font-bold text-amber-800 uppercase tracking-wider border-r border-gray-200 bg-amber-50/70">
+                                                        Manager Status / Manager Approval Date
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        % Work Not Done On Time
+                                                    <th colSpan={2} className="px-4 py-2 text-center text-xs font-bold text-purple-800 uppercase tracking-wider bg-purple-50/70">
+                                                        Admin Status / Admin Approval Date
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">
-                                                        Total Done
+                                                </tr>
+                                                <tr className="border-b border-gray-200">
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-blue-700 uppercase tracking-wider border-r border-gray-200 bg-blue-50/30">
+                                                        Employee Done
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">
-                                                        Pending
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-blue-700 uppercase tracking-wider border-r border-gray-200 bg-blue-50/30">
+                                                        % Employee Done
                                                     </th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        Status
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-blue-700 uppercase tracking-wider border-r border-gray-200 bg-blue-50/30">
+                                                        Employee Not Done
+                                                    </th>
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-blue-700 uppercase tracking-wider border-r border-gray-200 bg-blue-50/30">
+                                                        % Employee Not Done
+                                                    </th>
+
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-amber-700 uppercase tracking-wider border-r border-gray-200 bg-amber-50/30">
+                                                        Manager Approved
+                                                    </th>
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-amber-700 uppercase tracking-wider border-r border-gray-200 bg-amber-50/30">
+                                                        Manager Not Approved
+                                                    </th>
+
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-purple-700 uppercase tracking-wider border-r border-gray-200 bg-purple-50/30">
+                                                        Admin Approved
+                                                    </th>
+                                                    <th className="px-3 py-2 text-center text-[11px] font-bold text-purple-700 uppercase tracking-wider bg-purple-50/30">
+                                                        Admin Not Approved
                                                     </th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
                                                 {filteredStaffMembers.map((staff, index) => {
-                                                    const workNotDone = 100 - staff.progress;
-                                                    const workNotDoneOnTime = staff.totalTasks > 0 ? Math.round(((staff.totalTasks - staff.doneOnTime) / staff.totalTasks) * 100) : 0;
-
                                                     return (
                                                         <tr
                                                             key={`${staff.name}-${index}`}
-                                                            className="hover:bg-gray-50 cursor-pointer"
+                                                            className="hover:bg-gray-50 cursor-pointer transition-colors"
                                                             onClick={() => handleRowClick(staff)}
                                                         >
-                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                            <td className="px-4 py-3 whitespace-nowrap border-r border-gray-100">
                                                                 <div>
                                                                     <div className="text-sm font-semibold text-gray-900">{staff.name}</div>
                                                                     <div className="text-xs text-gray-500">{staff.email}</div>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                            <td className="px-4 py-3 whitespace-nowrap border-r border-gray-100">
                                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase border ${(() => {
                                                                     const role = userRolesMap[(staff.name || "").toLowerCase()] || "user";
                                                                     if (role === "admin") return "bg-red-50 text-red-700 border-red-200";
@@ -1542,60 +1628,56 @@ function StaffTasksPage() {
                                                                     {userRolesMap[(staff.name || "").toLowerCase()] || "user"}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-medium border-r border-gray-100">
                                                                 {dateStartFormatted}
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-medium border-r border-gray-100">
                                                                 {dateEndFormatted}
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold text-center">
+                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-bold text-center border-r border-gray-100 bg-gray-50/50">
                                                                 {staff.totalTasks}
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-[100px] bg-gray-100 rounded-full h-2">
-                                                                        <div
-                                                                            className="bg-blue-600 h-2 rounded-full"
-                                                                            style={{ width: `${staff.progress}%` }}
-                                                                        ></div>
-                                                                    </div>
-                                                                    <span className="text-sm font-semibold text-gray-700 min-w-[36px] text-right">{staff.progress}%</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-[100px] bg-gray-100 rounded-full h-2">
-                                                                        <div
-                                                                            className="bg-gray-300 h-2 rounded-full"
-                                                                            style={{ width: `${workNotDone}%` }}
-                                                                        ></div>
-                                                                    </div>
-                                                                    <span className="text-sm font-semibold text-gray-700 min-w-[36px] text-right">{workNotDone}%</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-[100px] bg-gray-100 rounded-full h-2">
-                                                                        <div
-                                                                            className="bg-gray-300 h-2 rounded-full"
-                                                                            style={{ width: `${workNotDoneOnTime}%` }}
-                                                                        ></div>
-                                                                    </div>
-                                                                    <span className="text-sm font-semibold text-gray-700 min-w-[36px] text-right">{workNotDoneOnTime}%</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                                <span className="inline-flex items-center justify-center px-4 py-1.5 bg-blue-50 text-blue-600 font-bold rounded-md border border-blue-200 text-sm min-w-[64px]">
-                                                                    {staff.completedTasks}
+
+                                                            {/* Employee Status Columns */}
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center border-r border-gray-100">
+                                                                <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-50 text-blue-700 font-bold rounded border border-blue-200 text-sm">
+                                                                    {staff.employeeDone}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                                <span className="inline-flex items-center justify-center px-4 py-1.5 bg-gray-50 text-gray-600 font-bold rounded-md border border-gray-200 text-sm min-w-[64px]">
-                                                                    {staff.pendingTasks}
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center text-sm font-semibold text-blue-700 border-r border-gray-100">
+                                                                {staff.pctEmployeeDone}%
+                                                            </td>
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center border-r border-gray-100">
+                                                                <span className="inline-flex items-center justify-center px-3 py-1 bg-gray-50 text-gray-700 font-bold rounded border border-gray-200 text-sm">
+                                                                    {staff.employeeNotDone}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                {getStatusBadge(staff.ontimeScore, staff.totalTasks)}
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center text-sm font-semibold text-gray-700 border-r border-gray-100">
+                                                                {staff.pctEmployeeNotDone}%
+                                                            </td>
+
+                                                            {/* Manager Status Columns */}
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center border-r border-gray-100">
+                                                                <span className="inline-flex items-center justify-center px-3 py-1 bg-amber-50 text-amber-700 font-bold rounded border border-amber-200 text-sm">
+                                                                    {staff.managerApproved}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center border-r border-gray-100">
+                                                                <span className="inline-flex items-center justify-center px-3 py-1 bg-gray-50 text-gray-700 font-bold rounded border border-gray-200 text-sm">
+                                                                    {staff.managerNotApproved}
+                                                                </span>
+                                                            </td>
+
+                                                            {/* Admin Status Columns */}
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center border-r border-gray-100">
+                                                                <span className="inline-flex items-center justify-center px-3 py-1 bg-purple-50 text-purple-700 font-bold rounded border border-purple-200 text-sm">
+                                                                    {staff.adminApproved}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                                <span className="inline-flex items-center justify-center px-3 py-1 bg-gray-50 text-gray-700 font-bold rounded border border-gray-200 text-sm">
+                                                                    {staff.adminNotApproved}
+                                                                </span>
                                                             </td>
                                                         </tr>
                                                     );

@@ -353,8 +353,20 @@ export const fetchWorkTaskHistoryApi = async (role, username) => {
  */
 export const approveWorkTaskApi = async (taskId) => {
   try {
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-    const userName = localStorage.getItem("user-name");
+    let role = "";
+    let userName = localStorage.getItem("user-name") || "";
+    try {
+      const currentUserStr = localStorage.getItem("currentUser");
+      if (currentUserStr) {
+        const parsed = JSON.parse(currentUserStr);
+        if (parsed?.role) role = String(parsed.role).toLowerCase();
+        if (parsed?.user_name) userName = parsed.user_name;
+      }
+    } catch (e) {
+      console.error("Error parsing currentUser in approveWorkTaskApi:", e);
+    }
+    if (!role) role = (localStorage.getItem("role") || "").toLowerCase();
+
     const now = new Date().toISOString();
 
     let updateFields = {};
@@ -391,8 +403,20 @@ export const approveWorkTaskApi = async (taskId) => {
  */
 export const rejectWorkTaskApi = async (taskId, reason) => {
   try {
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-    const userName = localStorage.getItem("user-name");
+    let role = "";
+    let userName = localStorage.getItem("user-name") || "";
+    try {
+      const currentUserStr = localStorage.getItem("currentUser");
+      if (currentUserStr) {
+        const parsed = JSON.parse(currentUserStr);
+        if (parsed?.role) role = String(parsed.role).toLowerCase();
+        if (parsed?.user_name) userName = parsed.user_name;
+      }
+    } catch (e) {
+      console.error("Error parsing currentUser in rejectWorkTaskApi:", e);
+    }
+    if (!role) role = (localStorage.getItem("role") || "").toLowerCase();
+
     const now = new Date().toISOString();
 
     let updateFields = {};

@@ -7,7 +7,7 @@ const formatWhatsAppNumber = (rawPhone) => {
   if (!rawPhone) return { cleanPhone: '', cid: '' }
   let str = String(rawPhone).split('@')[0]
   let digits = str.replace(/[^0-9]/g, '')
-  if (!digits || digits.startsWith('120363') || digits.length > 15) return { cleanPhone: '', cid: '' }
+  if (!digits) return { cleanPhone: '', cid: '' }
   if (digits.length === 10 && /^[6-9]/.test(digits)) {
     digits = '91' + digits
   }
