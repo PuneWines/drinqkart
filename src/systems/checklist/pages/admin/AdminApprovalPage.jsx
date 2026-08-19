@@ -97,7 +97,7 @@ const isPastSubmission = (submissionDateStr) => {
 const getWorkTaskDeadline = (task) => {
   if (!task || !task.current_date) return null;
   const plannedDateStr = task.current_date; // YYYY-MM-DD
-  
+
   let timeStr = task.end_time || "";
   if (!timeStr && task.task_assignments?.end_datetime) {
     const parts = task.task_assignments.end_datetime.split("T");
@@ -105,15 +105,15 @@ const getWorkTaskDeadline = (task) => {
       timeStr = parts[1].substring(0, 8); // e.g. "18:00:00"
     }
   }
-  
+
   if (!timeStr || timeStr === "00:00:00" || timeStr === "00:00") {
     timeStr = "23:59:59";
   }
-  
+
   const reconstructedStr = timeStr.includes('+') || timeStr.includes('Z')
-      ? `${plannedDateStr}T${timeStr}`
-      : `${plannedDateStr}T${timeStr}+05:30`;
-      
+    ? `${plannedDateStr}T${timeStr}`
+    : `${plannedDateStr}T${timeStr}+05:30`;
+
   let baseDeadline = new Date(reconstructedStr);
   if (isNaN(baseDeadline.getTime())) {
     baseDeadline = new Date(`${plannedDateStr}T23:59:59+05:30`);
@@ -792,32 +792,32 @@ export default function AdminApprovalPage() {
                           selectedTaskIds.includes(t.id) &&
                           t.status !== "extend",
                       ).length > 0) && (
-                      <motion.button
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        onClick={handleBulkApprove}
-                        disabled={bulkProcessing}
-                        className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-green-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter"
-                      >
-                        {bulkProcessing ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <CheckCircle2
-                            size={12}
-                            className="sm:w-[14px] sm:h-[14px]"
-                          />
-                        )}
-                        <span className="hidden xs:inline">Approve</span> (
-                        {
-                          pendingTasks.filter(
-                            (t) =>
-                              selectedTaskIds.includes(t.id) &&
-                              t.status !== "extend",
-                          ).length
-                        }
-                        )
-                      </motion.button>
-                    )}
+                        <motion.button
+                          initial={{ scale: 0.9, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          onClick={handleBulkApprove}
+                          disabled={bulkProcessing}
+                          className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-green-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter"
+                        >
+                          {bulkProcessing ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <CheckCircle2
+                              size={12}
+                              className="sm:w-[14px] sm:h-[14px]"
+                            />
+                          )}
+                          <span className="hidden xs:inline">Approve</span> (
+                          {
+                            pendingTasks.filter(
+                              (t) =>
+                                selectedTaskIds.includes(t.id) &&
+                                t.status !== "extend",
+                            ).length
+                          }
+                          )
+                        </motion.button>
+                      )}
 
                     {/* Show Remark button for extended tasks in delegation tab */}
                     {activeTab === "delegation" &&
@@ -936,22 +936,20 @@ export default function AdminApprovalPage() {
                 <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
                   <button
                     onClick={() => setViewMode("pending")}
-                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${
-                      viewMode === "pending"
-                        ? "bg-white text-gray-800 shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
+                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "pending"
+                      ? "bg-white text-gray-800 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                      }`}
                   >
                     <Clock size={12} className="sm:w-[14px] sm:h-[14px]" />
                     Pending
                   </button>
                   <button
                     onClick={() => setViewMode("history")}
-                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${
-                      viewMode === "history"
-                        ? "bg-white text-gray-800 shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
+                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "history"
+                      ? "bg-white text-gray-800 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                      }`}
                   >
                     <History size={12} className="sm:w-[14px] sm:h-[14px]" />
                     History
@@ -999,14 +997,14 @@ export default function AdminApprovalPage() {
                   </th>
                   {(activeTab === "checklist" ||
                     activeTab === "delegation") && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Level
-                    </th>
-                  )}
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Level
+                      </th>
+                    )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {activeTab === "delegation" ||
-                    activeTab === "ea" ||
-                    activeTab === "checklist"
+                      activeTab === "ea" ||
+                      activeTab === "checklist"
                       ? "Task Description"
                       : activeTab === "maintenance"
                         ? "Task/Machine"
@@ -1088,12 +1086,12 @@ export default function AdminApprovalPage() {
                       </td>
                       {(activeTab === "checklist" ||
                         activeTab === "delegation") && (
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-600">
-                            {task.task_level || "-"}
-                          </span>
-                        </td>
-                      )}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-600">
+                              {task.task_level || "-"}
+                            </span>
+                          </td>
+                        )}
                       <td className="px-6 py-4">
                         <RenderDescription
                           text={task.task_description || task.issue_description}
@@ -1173,8 +1171,8 @@ export default function AdminApprovalPage() {
                             <span className="text-xs text-gray-500 font-medium">
                               {formatDate(
                                 task.submission_date ||
-                                  task.submission_timestamp ||
-                                  task.created_at,
+                                task.submission_timestamp ||
+                                task.created_at,
                               )}
                             </span>
                             {/* Show manager approval timestamp to admin */}
@@ -1200,8 +1198,8 @@ export default function AdminApprovalPage() {
                               Submitted:{" "}
                               {formatDate(
                                 task.submission_date ||
-                                  task.submission_timestamp ||
-                                  task.created_at,
+                                task.submission_timestamp ||
+                                task.created_at,
                               )}
                             </span>
                             {task.manager_approved_by && (
@@ -1246,8 +1244,8 @@ export default function AdminApprovalPage() {
                             <span className="text-xs text-blue-600 font-medium">
                               {formatDate(
                                 task.admin_approval_date ||
-                                  task.updated_at ||
-                                  task.submission_date,
+                                task.updated_at ||
+                                task.submission_date,
                               )}
                             </span>
                             {activeTab === "work" &&
@@ -1524,11 +1522,11 @@ export default function AdminApprovalPage() {
                         </p>
                         <div className="space-y-1 mt-1">
                           {viewMode === "history" &&
-                          activeTab === "work" &&
-                          isPastDeadline(task) &&
-                          !["approved", "rejected"].includes(
-                            (task.status || "").toLowerCase(),
-                          ) ? (
+                            activeTab === "work" &&
+                            isPastDeadline(task) &&
+                            !["approved", "rejected"].includes(
+                              (task.status || "").toLowerCase(),
+                            ) ? (
                             <>
                               <p className="text-[10px] text-red-500 font-black uppercase tracking-wider flex items-center gap-1">
                                 <Clock size={10} /> Unapproved (Past Date)
@@ -1537,8 +1535,8 @@ export default function AdminApprovalPage() {
                                 Submitted:{" "}
                                 {formatDate(
                                   task.submission_date ||
-                                    task.submission_timestamp ||
-                                    task.created_at,
+                                  task.submission_timestamp ||
+                                  task.created_at,
                                 )}
                               </p>
                               {task.manager_approved_by && (
@@ -1569,11 +1567,11 @@ export default function AdminApprovalPage() {
                                 {formatDate(
                                   viewMode === "pending"
                                     ? task.submission_date ||
-                                        task.submission_timestamp ||
-                                        task.created_at
+                                    task.submission_timestamp ||
+                                    task.created_at
                                     : task.admin_approval_date ||
-                                        task.updated_at ||
-                                        task.submission_date,
+                                    task.updated_at ||
+                                    task.submission_date,
                                 )}
                               </p>
                               {viewMode === "history" && (
@@ -1841,10 +1839,10 @@ export default function AdminApprovalPage() {
                     ) : (
                       <div className="text-center space-y-1">
                         {activeTab === "work" &&
-                        isPastDeadline(task) &&
-                        !["approved", "rejected"].includes(
-                          (task.status || "").toLowerCase(),
-                        ) ? (
+                          isPastDeadline(task) &&
+                          !["approved", "rejected"].includes(
+                            (task.status || "").toLowerCase(),
+                          ) ? (
                           <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">
                             Unable to Approve
                           </span>
@@ -1906,27 +1904,27 @@ export default function AdminApprovalPage() {
                       (t) =>
                         selectedTaskIds.includes(t.id) && t.status !== "extend",
                     ).length > 0) && (
-                    <button
-                      onClick={handleBulkApprove}
-                      disabled={bulkProcessing}
-                      className="px-4 py-2.5 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
-                    >
-                      {bulkProcessing ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <CheckCircle2 size={14} />
-                      )}
-                      Approve (
-                      {
-                        pendingTasks.filter(
-                          (t) =>
-                            selectedTaskIds.includes(t.id) &&
-                            t.status !== "extend",
-                        ).length
-                      }
-                      )
-                    </button>
-                  )}
+                      <button
+                        onClick={handleBulkApprove}
+                        disabled={bulkProcessing}
+                        className="px-4 py-2.5 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+                      >
+                        {bulkProcessing ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={14} />
+                        )}
+                        Approve (
+                        {
+                          pendingTasks.filter(
+                            (t) =>
+                              selectedTaskIds.includes(t.id) &&
+                              t.status !== "extend",
+                          ).length
+                        }
+                        )
+                      </button>
+                    )}
 
                   {/* Remark Button for Delegation */}
                   {activeTab === "delegation" &&

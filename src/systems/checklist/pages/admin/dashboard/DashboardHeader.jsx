@@ -16,12 +16,23 @@ export default function DashboardHeader({
     availableShops,
     isLoadingMore,
     onDateRangeChange, // Add this prop to handle date range selection
-    mainTab
+    mainTab,
+    dateRange
 }) {
     const [totalUsersCount, setTotalUsersCount] = useState(0)
     const [showDateRangePicker, setShowDateRangePicker] = useState(false)
-    const [startDate, setStartDate] = useState("")
-    const [endDate, setEndDate] = useState("")
+    const [startDate, setStartDate] = useState(dateRange?.startDate || "")
+    const [endDate, setEndDate] = useState(dateRange?.endDate || "")
+
+    useEffect(() => {
+        if (dateRange?.startDate && dateRange?.endDate) {
+            setStartDate(dateRange.startDate);
+            setEndDate(dateRange.endDate);
+        } else {
+            setStartDate("");
+            setEndDate("");
+        }
+    }, [dateRange]);
     const normalizedRole = (userRole || "").toLowerCase();
     const isAdmin = normalizedRole === "admin" || normalizedRole === "manager";
     const isHOD = normalizedRole === "hod";

@@ -546,7 +546,7 @@ const WorkTasksTab = ({
 
       if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
         const cleanTerm = debouncedSearchTerm.trim();
-        
+
         let matchingAssignmentIds = [];
         try {
           const { data: matchedAssignments } = await supabase

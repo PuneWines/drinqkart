@@ -1250,11 +1250,18 @@ export default function AdminDashboard() {
     }
     setCurrentPage(1)
     setHasMoreData(true)
-    // Clear date range when dashboard type changes
+    // Maintain date range as filtered previous week when dashboard type changes
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysToSubtract = (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + 7;
+    const prevMonday = new Date(today);
+    prevMonday.setDate(today.getDate() - daysToSubtract);
+    const prevSunday = new Date(prevMonday);
+    prevSunday.setDate(prevMonday.getDate() + 6);
     setDateRange({
-      startDate: "",
-      endDate: "",
-      filtered: false
+      startDate: prevMonday.toISOString().split('T')[0],
+      endDate: prevSunday.toISOString().split('T')[0],
+      filtered: true
     });
   }, [dashboardType])
 
@@ -1442,6 +1449,7 @@ export default function AdminDashboard() {
           availableShops={availableShops}
           isLoadingMore={isLoadingMore}
           onDateRangeChange={handleDateRangeChange}
+          dateRange={dateRange}
         />
 
         {(mainTab === "default" || mainTab === "work") && (
