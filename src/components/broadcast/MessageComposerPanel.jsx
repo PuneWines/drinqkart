@@ -2,7 +2,66 @@ import React, { useState, useRef } from 'react'
 import { useChatStore } from '../../store/useChatStore'
 import { FileText, Smile, Puzzle, Clock, History, Paperclip, Trash2, Send, Plus, X, ChevronDown, Check } from 'lucide-react'
 
-const EMOJI_LIST = ['😊', '👍', '🎉', '📢', '🚨', '📋', '📅', '🍺', '🍷', '🏬', '💼', '✅', '⏰', '📦', '📊', '🔥', '⭐', '🙏', '💡', '🚀', '💰', '💬', '📱', '📞']
+const EMOJI_CATEGORIES = [
+  {
+    id: 'smileys',
+    name: 'Smileys & Emotion',
+    icon: '😊',
+    emojis: [
+      '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥹', '☺️', '😊', '😇',
+      '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛',
+      '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳', '😏', '😒',
+      '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢',
+      '😭', '😮‍💨', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨',
+      '😰', '😥', '😓', '🫣', '🤗', '🫡', '🤔', '🤭', '🤫', '🫠', '🤥', '😶',
+      '😐', '😑', '😬', '🫨', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴'
+    ]
+  },
+  {
+    id: 'gestures',
+    name: 'Gestures & Body',
+    icon: '👍',
+    emojis: [
+      '👍', '👎', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈',
+      '👉', '👆', '🖕', '👇', '☝️', '🫵', '✊', '👊', '🤛', '🤜', '👏', '🙌',
+      '🫶', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦵', '🦶', '👂',
+      '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋'
+    ]
+  },
+  {
+    id: 'business',
+    name: 'Work & Business',
+    icon: '💼',
+    emojis: [
+      '💼', '🏬', '🏪', '🏫', '🏦', '🏨', '🏢', '🏗️', '📦', '📊', '📈', '📉',
+      '📄', '📃', '📑', '📜', '📋', '📅', '📆', '🗓️', '📇', '📱', '📲', '☎️',
+      '📞', '📟', '📠', '🔋', '🔌', '💻', '🖥️', '🖨️', '⌨️', '💰', '💴', '💵',
+      '💶', '💷', '💸', '💳', '🧾', '✉️', '📧', '📨', '📩', '🏷️', '🔖', '📌'
+    ]
+  },
+  {
+    id: 'food',
+    name: 'Food & Drinks',
+    icon: '🍷',
+    emojis: [
+      '🍷', '🍺', '🍻', '🥂', '🍾', '🍹', '🍸', '🥃', '🥤', '🧃', '🧋', '☕',
+      '🍵', '🍼', '🍕', '🍔', '🍟', '🌭', '🍿', '🥓', '🥚', '🍳', '🧇', '🥞',
+      '🧈', '🍞', '🥐', '🥖', '🥨', '🧀', '🥗', '🥣', '🍚', '🍜', '🍝', '🍣',
+      '🍱', '🥟', '🍤', '🍙', '🍘', '🍥', '🍡', '🍢', '🍧', '🍨', '🍦', '🥧'
+    ]
+  },
+  {
+    id: 'alerts',
+    name: 'Alerts & Celebration',
+    icon: '🚨',
+    emojis: [
+      '🚨', '📢', '🔔', '🔕', '🎉', '🎊', '✨', '🔥', '💥', '💯', '⭐️', '🌟',
+      '☀️', '🌈', '⚡️', '💣', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
+      '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '🎁', '🎈',
+      '✅', '❌', '⚠️', '⛔️', '🛑', '⭕️', '❓', '❗', '🅰️', '🅱️', 'ℹ️', '🔝'
+    ]
+  }
+]
 
 export default function MessageComposerPanel() {
   const {
@@ -26,6 +85,7 @@ export default function MessageComposerPanel() {
   } = useChatStore()
 
   const [activePopup, setActivePopup] = useState(null)
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState('smileys')
   const fileInputRef = useRef(null)
 
   const togglePopup = (name) => {
@@ -210,18 +270,40 @@ export default function MessageComposerPanel() {
           <div className="w-full bg-white border border-gray-200 rounded-2xl p-3 shadow-xl flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
             <div className="flex justify-between items-center pb-1.5 border-b border-gray-100">
               <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-                😊 Quick Emoji Picker (Click to insert):
+                😊 Select Emoji (Click to insert):
               </span>
               <button onClick={() => setActivePopup(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex items-center gap-2 flex-wrap max-h-32 overflow-y-auto p-1">
-              {EMOJI_LIST.map((emoji) => (
+
+            {/* Category Tabs */}
+            <div className="flex items-center gap-1 border-b border-gray-100 pb-1 overflow-x-auto">
+              {EMOJI_CATEGORIES.map((cat) => (
                 <button
-                  key={emoji}
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveEmojiCategory(cat.id)}
+                  className={`px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
+                    activeEmojiCategory === cat.id
+                      ? 'bg-emerald-100 text-emerald-800 font-bold'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span className="hidden sm:inline">{cat.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Emoji Grid */}
+            <div className="grid grid-cols-8 sm:grid-cols-12 gap-1 max-h-36 overflow-y-auto p-1">
+              {(EMOJI_CATEGORIES.find((c) => c.id === activeEmojiCategory)?.emojis || []).map((emoji, idx) => (
+                <button
+                  key={`${emoji}-${idx}`}
+                  type="button"
                   onClick={() => handleInsertEmoji(emoji)}
-                  className="text-xl p-1.5 rounded-lg hover:bg-emerald-100 hover:scale-125 transition-transform"
+                  className="text-lg p-1 rounded-lg hover:bg-emerald-100 hover:scale-125 transition-transform text-center"
                 >
                   {emoji}
                 </button>
