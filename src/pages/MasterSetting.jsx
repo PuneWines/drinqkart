@@ -134,12 +134,57 @@ const AVAILABLE_SYSTEMS = [
         pages: ['Feedback', 'Trader Invoices']
       }
     ]
+  },
+  {
+    id: 'master-setting',
+    name: 'Master settings',
+    sections: [
+      {
+        title: 'MASTER SETTINGS ACCESS',
+        pages: ['User & System Access']
+      }
+    ]
   }
 ];
 
 export default function MasterSetting() {
   const { user: currentUserObj, refreshUser } = useAuth();
   const [users, setUsers] = useState([]);
+
+  // Determine if logged-in user has modify access vs view-only access on Master Settings
+  const isMasterSettingModifyAllowed = useMemo(() => {
+    if (!currentUserObj) return false;
+    const userName = (currentUserObj.user_name || currentUserObj.username || '').toLowerCase();
+    if (userName === 'masteradmin') return true;
+
+    let masterAccess = [];
+    const rawVal = currentUserObj.master_user_system_page_access || localStorage.getItem('master_user_system_page_access');
+    let parsed = rawVal;
+    if (typeof rawVal === 'string') {
+      try { parsed = JSON.parse(rawVal); } catch (e) { parsed = []; }
+    }
+    if (Array.isArray(parsed)) {
+      masterAccess = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      masterAccess = Object.keys(parsed);
+    }
+
+    if (masterAccess.length > 0) {
+      return masterAccess.some((item) => {
+        if (typeof item !== 'string') return false;
+        const itemLower = item.toLowerCase().trim();
+        return (
+          itemLower === 'master-setting.user & system access.modify' ||
+          itemLower === 'master-setting.master setting.modify' ||
+          itemLower === 'master_setting.user & system access.modify' ||
+          itemLower === 'master_setting.master setting.modify'
+        );
+      });
+    }
+
+    const role = (currentUserObj.role || '').toLowerCase();
+    return role === 'admin';
+  }, [currentUserObj]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showPassword, setShowPassword] = useState({});
@@ -741,13 +786,19 @@ export default function MasterSetting() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={openAddUserModal}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] rounded-none text-xs font-bold uppercase tracking-widest transition-colors shadow-sm cursor-pointer"
-          >
-            <UserPlus size={14} />
-            <span>Add User</span>
-          </button>
+          {isMasterSettingModifyAllowed ? (
+            <button
+              onClick={openAddUserModal}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] rounded-none text-xs font-bold uppercase tracking-widest transition-colors shadow-sm cursor-pointer"
+            >
+              <UserPlus size={14} />
+              <span>Add User</span>
+            </button>
+          ) : (
+            <span className="px-3.5 py-2 bg-amber-50 text-amber-800 border border-amber-300 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+              <ShieldCheck size={14} className="text-amber-600" /> View Only Mode
+            </span>
+          )}
 
           <button
             onClick={fetchUsers}
@@ -829,16 +880,19 @@ export default function MasterSetting() {
                     <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
                       {/* Column 1: Actions */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleOpenEdit(u)}
-                            className="px-3 py-1 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1 shadow-xs cursor-pointer"
-                          >
-                            <Edit3 size={12} />
-                            <span>Edit</span>
-                          </button>
-
-                        </div>
+                        {isMasterSettingModifyAllowed ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleOpenEdit(u)}
+                              className="px-3 py-1 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1 shadow-xs cursor-pointer"
+                            >
+                              <Edit3 size={12} />
+                              <span>Edit</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-slate-400 italic">View Only</span>
+                        )}
                       </td>
 
                       {/* Column 2: User Name */}
@@ -887,14 +941,16 @@ export default function MasterSetting() {
                               <span className="text-[#1A1A1A]/40 italic text-[11px]">No Shop</span>
                             )}
                           </div>
-                          <button
-                            onClick={() => handleOpenQuickShopEdit(u)}
-                            className="px-2.5 py-1 bg-[#C9A84C]/15 hover:bg-[#C9A84C] text-[#1A1A1A] border border-[#C9A84C]/40 hover:border-[#C9A84C] font-bold text-[10px] uppercase tracking-wider transition-all inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                            title="Edit Shop Name for user"
-                          >
-                            <Edit3 size={11} />
-                            <span>Edit</span>
-                          </button>
+                          {isMasterSettingModifyAllowed && (
+                            <button
+                              onClick={() => handleOpenQuickShopEdit(u)}
+                              className="px-2.5 py-1 bg-[#C9A84C]/15 hover:bg-[#C9A84C] text-[#1A1A1A] border border-[#C9A84C]/40 hover:border-[#C9A84C] font-bold text-[10px] uppercase tracking-wider transition-all inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                              title="Edit Shop Name for user"
+                            >
+                              <Edit3 size={11} />
+                              <span>Edit</span>
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -1350,17 +1406,19 @@ export default function MasterSetting() {
                 onClick={() => setEditingUser(null)}
                 className="px-5 py-2.5 bg-white hover:bg-gray-100 text-[#1A1A1A] border border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider transition-colors"
               >
-                Cancel
+                {isMasterSettingModifyAllowed ? 'Cancel' : 'Close'}
               </button>
-              <button
-                type="button"
-                onClick={handleSaveUser}
-                disabled={saving}
-                className="px-6 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm"
-              >
-                <Save size={14} />
-                <span>{saving ? 'Saving...' : 'Save User Access'}</span>
-              </button>
+              {isMasterSettingModifyAllowed && (
+                <button
+                  type="button"
+                  onClick={handleSaveUser}
+                  disabled={saving}
+                  className="px-6 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm"
+                >
+                  <Save size={14} />
+                  <span>{saving ? 'Saving...' : 'Save User Access'}</span>
+                </button>
+              )}
             </div>
           </motion.div>
         </div>

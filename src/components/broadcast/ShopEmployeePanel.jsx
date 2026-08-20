@@ -47,7 +47,8 @@ export default function ShopEmployeePanel() {
       if (showNamesOnly && !selectedEmployeeIds.includes(emp.id)) {
         return false
       }
-      if (roleFilter === 'Managers' && !emp.role.toLowerCase().includes('manager')) return false
+      if (roleFilter === 'Employees' && !emp.role.toLowerCase().includes('employee')) return false
+      if (roleFilter === 'Managers' && !emp.role.toLowerCase().includes('manager') && !emp.role.toLowerCase().includes('hod')) return false
       if (roleFilter === 'Admins' && !emp.role.toLowerCase().includes('admin')) return false
 
       if (shopSearchQuery.trim()) {
@@ -171,7 +172,7 @@ export default function ShopEmployeePanel() {
         <>
           {/* Filter Row */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-            {['all', 'Managers', 'Admins'].map((role) => {
+            {['all', 'Employees', 'Managers', 'Admins'].map((role) => {
               const isActive = roleFilter === role || (role === 'all' && roleFilter === 'all')
               return (
                 <button
