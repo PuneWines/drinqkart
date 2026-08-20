@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  FaSave, FaSync, FaSearch, FaFileAlt
+  FaSave, FaSync, FaSearch, FaFileAlt, FaFileCsv
 } from "react-icons/fa";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
@@ -385,6 +385,88 @@ export default function BankAudit() {
     });
   };
 
+  // Export CSV Handler
+  const handleExportCSV = () => {
+    if (filtered.length === 0) {
+      showToast("No audit data to export", "error");
+      return;
+    }
+
+    const headers = [
+      "Tally ID",
+      "Date",
+      "Counter(s)",
+      "Shop Name",
+      "User(s)",
+      "Total Cash",
+      "Audit Cash",
+      "Cash Diff",
+      "Bank Cash Date",
+      "Total GPay",
+      "Audit GPay",
+      "GPay Diff",
+      "Bank GPay Date",
+      "Total Paytm",
+      "Audit Paytm",
+      "Paytm Diff",
+      "Bank Paytm Date",
+      "Total PhonePe",
+      "Audit PhonePe",
+      "PhonePe Diff",
+      "Bank PhonePe Date",
+      "Total Diff",
+      "Narration"
+    ];
+
+    const rows = filtered.map((g) => {
+      const draft = draftEdits[g.tally_id] || g.audit;
+      return [
+        g.tally_id,
+        g.date ? new Date(g.date).toLocaleDateString('en-IN') : '',
+        g.counters.join("; "),
+        g.shopNames.join("; "),
+        g.userNames.join("; "),
+        g.totalCash,
+        draft.audit_cash ?? 0,
+        draft.cash_diff_audit ?? 0,
+        draft.bank_cash_date || '',
+        g.totalGpay,
+        draft.audit_gpay ?? 0,
+        draft.gpay_diff ?? 0,
+        draft.bank_gpay_date || '',
+        g.totalPaytm,
+        draft.audit_paytm ?? 0,
+        draft.paytm_diff ?? 0,
+        draft.bank_paytm_date || '',
+        g.totalPhonePe,
+        draft.audit_phonepe ?? 0,
+        draft.phonepay_diff ?? 0,
+        draft.bank_phone_pay_date || '',
+        draft.total_diff ?? 0,
+        draft.narration || ''
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(val => {
+        const str = val === null || val === undefined ? '' : String(val);
+        const escaped = str.replace(/"/g, '""');
+        return escaped.includes(',') || escaped.includes('\n') || escaped.includes('"') ? `"${escaped}"` : escaped;
+      }).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bank_audit_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Exported ${filtered.length} row(s) to CSV`);
+  };
+
   // Single Row Save Action (Upsert to petty_cash_bank_audit)
   const handleSaveSingleRow = async (tallyId: string) => {
     if (!isModifyAllowed) {
@@ -498,20 +580,18 @@ export default function BankAudit() {
           }`}>
           {toastMsg.text}
         </div>
-      )}
-
-      {/* Header & Bulk Save Toolbar */}
+      )}      {/* Header & Bulk Save Toolbar */}
       <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900 font-sans">Bank Audit Table</h2>
           <p className="text-xs text-gray-500 mt-1">Audit and reconcile bank deposits grouped by Tally ID</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={fetchRows}
             disabled={loading}
-            className="px-3.5 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg border border-gray-300 transition-all flex items-center gap-2"
+            className="px-3.5 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg border border-gray-300 transition-all flex items-center gap-2 cursor-pointer"
           >
             <FaSync className={loading ? "animate-spin" : ""} /> Refresh
           </button>
@@ -521,7 +601,7 @@ export default function BankAudit() {
             <button
               onClick={handleBulkSave}
               disabled={bulkSaving}
-              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition-all flex items-center gap-2 ${selectedTallyIds.size > 0
+              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-pointer ${selectedTallyIds.size > 0
                   ? 'bg-[#2a5298] hover:bg-[#1e3c72]'
                   : 'bg-[#2a5298]/90 hover:bg-[#2a5298]'
                 }`}
@@ -615,31 +695,43 @@ export default function BankAudit() {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-sm text-gray-600">
+          {/* Sub-header bar directly above table */}
+          <div className="px-5 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-sm text-gray-600">
             <div className="flex items-center gap-2">
               <FaFileAlt className="text-[#2a5298]" />
-              <span>{filtered.length} Tally Batch{filtered.length !== 1 ? 'es' : ''} found</span>
+              <span className="text-xs font-semibold text-gray-700">{filtered.length} Tally Batch{filtered.length !== 1 ? 'es' : ''} found</span>
             </div>
 
-            <div className="text-xs font-medium text-gray-500">
-              {isModifyAllowed ? (
-                <>Selected: <strong className="text-[#2a5298]">{selectedTallyIds.size}</strong> of {filtered.length}</>
-              ) : (
-                <span className="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 rounded-md border border-amber-200">
-                  View Only Mode
-                </span>
-              )}
+            <div className="flex items-center gap-4">
+              <div className="text-xs font-medium text-gray-500">
+                {isModifyAllowed ? (
+                  <>Selected: <strong className="text-[#2a5298]">{selectedTallyIds.size}</strong> of {filtered.length}</>
+                ) : (
+                  <span className="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 rounded-md border border-amber-200">
+                    View Only Mode
+                  </span>
+                )}
+              </div>
+
+              {/* Export CSV Button at extreme right just above table */}
+              <button
+                onClick={handleExportCSV}
+                className="px-3 py-1.5 text-xs font-bold text-[#2a5298] bg-white hover:bg-blue-50 rounded-lg border border-blue-200 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Export audit data to CSV"
+              >
+                <FaFileCsv className="text-sm text-green-700" /> Export CSV
+              </button>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[2900px] divide-y divide-gray-200 border-collapse">
+            <table className="w-full text-xs min-w-[1950px] divide-y divide-gray-200 border-collapse">
               <thead className="bg-[#2a5298] text-white text-left font-sans sticky top-0 z-10 shadow-sm">
                 <tr>
                   {/* Select Checkbox & Inline Save Column - Only if Modify Allowed */}
                   {isModifyAllowed && (
-                    <th className="px-4 py-3.5 text-center min-w-[110px] border-r border-blue-800 bg-blue-900/90">
-                      <div className="flex items-center justify-center gap-2">
+                    <th className="px-2 py-2 text-center min-w-[70px] border-r border-blue-800 bg-blue-900/90">
+                      <div className="flex flex-col items-center justify-center gap-1">
                         <input
                           type="checkbox"
                           checked={filtered.length > 0 && selectedTallyIds.size === filtered.length}
@@ -647,45 +739,45 @@ export default function BankAudit() {
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                           title="Select All"
                         />
-                        <span className="text-xs font-bold uppercase tracking-wider">Save</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider leading-none">Save</span>
                       </div>
                     </th>
                   )}
 
                   {/* Tally Identifiers */}
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[130px]">Tally ID</th>
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[130px]">Date</th>
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[140px]">Counter(s)</th>
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[180px]">Shop Name</th>
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[180px]">User(s)</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[65px]">Tally<br/>ID</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[75px]">Date</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[90px]">Counter(s)</th>
+                  <th className="px-2 py-2 text-left text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[95px]">Shop<br/>Name</th>
+                  <th className="px-2 py-2 text-left text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[85px]">User(s)</th>
 
                   {/* Cash Section */}
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 text-center min-w-[130px]">Total Cash</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Audit cash</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Cash Diff</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[145px]">Bank cash Date</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 min-w-[85px]">Total<br/>Cash</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[85px]">Audit<br/>Cash</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[80px]">Cash<br/>Diff</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[105px]">Bank Cash<br/>Date</th>
 
                   {/* GPay Section */}
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 text-center min-w-[130px]">Total GPay</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Audit GPay</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Gpay diff</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[145px]">Bank G-pay Date</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 min-w-[85px]">Total<br/>GPay</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[85px]">Audit<br/>GPay</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[80px]">GPay<br/>Diff</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[105px]">Bank G-Pay<br/>Date</th>
 
                   {/* Paytm Section */}
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 text-center min-w-[130px]">Total Paytm</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Audit Paytm</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Paytm Diff</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[145px]">Bank paytm Date</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 min-w-[85px]">Total<br/>Paytm</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[85px]">Audit<br/>Paytm</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[80px]">Paytm<br/>Diff</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[105px]">Bank Paytm<br/>Date</th>
 
                   {/* PhonePe Section */}
-                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 text-center min-w-[130px]">Total PhonePe</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Audit PhonePe</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[130px]">Phonepay diff</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 text-center min-w-[155px]">Bank phone pay Date</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 min-w-[85px]">Total<br/>PhonePe</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[85px]">Audit<br/>PhonePe</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[80px]">PhonePe<br/>Diff</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[105px]">Bank Phone<br/>Pay Date</th>
 
                   {/* Totals & Narration */}
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider border-r border-blue-800 bg-slate-900 text-center min-w-[140px]">Total Diff</th>
-                  <th className="px-4 py-3.5 font-bold uppercase tracking-wider bg-blue-950 text-cyan-300 min-w-[260px]">Narration</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-slate-900 min-w-[85px]">Total<br/>Diff</th>
+                  <th className="px-2 py-2 text-left text-[11px] leading-tight font-bold uppercase tracking-wider bg-blue-950 text-cyan-300 min-w-[160px]">Narration</th>
                 </tr>
               </thead>
 
@@ -713,22 +805,22 @@ export default function BankAudit() {
                     >
                       {/* Checkbox + Inline Save Button Cell - Only if Modify Allowed */}
                       {isModifyAllowed && (
-                        <td className="px-2 py-2 text-center border-r border-gray-200 bg-gray-50/40">
-                          <div className="flex items-center justify-center gap-2">
+                        <td className="px-1 py-1 text-center border-r border-gray-200 bg-gray-50/40">
+                          <div className="flex items-center justify-center gap-1">
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleToggleSelectRow(tId)}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-3.5 h-3.5"
                             />
                             {isChecked && (
                               <button
                                 onClick={() => handleSaveSingleRow(tId)}
                                 disabled={savingTallyId === tId}
-                                className="px-2 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded shadow-xs transition-all flex items-center justify-center gap-1"
+                                className="px-1 py-0.5 text-[9px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded shadow-xs transition-all flex items-center justify-center gap-0.5 cursor-pointer"
                                 title="Save row data to petty_cash_bank_audit"
                               >
-                                <FaSave className="text-xs" />
+                                <FaSave className="text-[9px]" />
                                 {savingTallyId === tId ? "..." : "Save"}
                               </button>
                             )}
@@ -737,20 +829,20 @@ export default function BankAudit() {
                       )}
 
                       {/* Tally ID */}
-                      <td className="px-3 py-2 font-mono font-bold text-[#2a5298] whitespace-nowrap border-r border-gray-200">
+                      <td className="px-2 py-1 text-center font-mono font-bold text-[#2a5298] whitespace-nowrap border-r border-gray-200">
                         {tId}
                       </td>
 
                       {/* Date */}
-                      <td className="px-3 py-2 text-gray-700 whitespace-nowrap border-r border-gray-200 font-medium">
-                        {group.date ? new Date(group.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : "—"}
+                      <td className="px-2 py-1 text-center text-gray-700 whitespace-nowrap border-r border-gray-200 font-medium text-[11px]">
+                        {group.date ? new Date(group.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : "—"}
                       </td>
 
                       {/* Counter(s) */}
-                      <td className="px-3 py-2 text-gray-700 whitespace-nowrap border-r border-gray-200">
-                        <div className="flex flex-wrap gap-1">
+                      <td className="px-1.5 py-1 text-center border-r border-gray-200">
+                        <div className="flex flex-wrap gap-0.5 justify-center">
                           {group.counters.map((c) => (
-                            <span key={c} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 border border-slate-200 font-semibold uppercase">
+                            <span key={c} className="inline-flex items-center px-1 py-0.5 rounded text-[9px] bg-slate-100 text-slate-700 border border-slate-200 font-semibold uppercase">
                               {c}
                             </span>
                           ))}
@@ -758,201 +850,201 @@ export default function BankAudit() {
                       </td>
 
                       {/* Shop Name(s) */}
-                      <td className="px-3 py-2 text-gray-700 font-medium whitespace-nowrap border-r border-gray-200">
+                      <td className="px-2 py-1 text-gray-700 font-medium whitespace-nowrap border-r border-gray-200 text-xs">
                         {group.shopNames.join(", ") || "—"}
                       </td>
 
                       {/* User(s) */}
-                      <td className="px-3 py-2 text-gray-600 whitespace-nowrap border-r border-gray-200">
+                      <td className="px-2 py-1 text-gray-600 whitespace-nowrap border-r border-gray-200 text-xs">
                         {group.userNames.join(", ") || "—"}
                       </td>
 
                       {/* Total Cash (Calculated sum across tally_id rows in petty_cash_tallies) */}
-                      <td className="px-3 py-2 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
+                      <td className="px-1.5 py-1 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
                         {fmt(group.totalCash)}
                       </td>
 
                       {/* Audit Cash (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_cash ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_cash", e.target.value)}
                           placeholder="0"
-                          className="w-full px-2 py-1 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* Cash Diff Audit (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.cash_diff_audit ?? ""}
                           onChange={(e) => handleDraftChange(tId, "cash_diff_audit", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.cash_diff_audit) < 0 ? 'text-red-600' : Number(draft.cash_diff_audit) > 0 ? 'text-blue-600' : 'text-gray-700'
+                          className={`w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.cash_diff_audit) < 0 ? 'text-red-600' : Number(draft.cash_diff_audit) > 0 ? 'text-blue-600' : 'text-gray-700'
                             }`}
                         />
                       </td>
 
                       {/* Bank Cash Date (Editable Date Picker) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-0.5 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_cash_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_cash_date", e.target.value)}
-                          className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-0.5 py-0.5 text-[11px] border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* Total GPay (Calculated sum across tally_id rows in petty_cash_tallies) */}
-                      <td className="px-3 py-2 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
+                      <td className="px-1.5 py-1 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
                         {fmt(group.totalGpay)}
                       </td>
 
                       {/* Audit GPay (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_gpay ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_gpay", e.target.value)}
                           placeholder="0"
-                          className="w-full px-2 py-1 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* GPay Diff (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.gpay_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "gpay_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.gpay_diff) < 0 ? 'text-red-600' : Number(draft.gpay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
+                          className={`w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.gpay_diff) < 0 ? 'text-red-600' : Number(draft.gpay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
                             }`}
                         />
                       </td>
 
                       {/* Bank G-Pay Date (Editable Date Picker) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-0.5 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_gpay_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_gpay_date", e.target.value)}
-                          className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-0.5 py-0.5 text-[11px] border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* Total Paytm (Calculated sum across tally_id rows in petty_cash_tallies) */}
-                      <td className="px-3 py-2 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
+                      <td className="px-1.5 py-1 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
                         {fmt(group.totalPaytm)}
                       </td>
 
                       {/* Audit Paytm (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_paytm ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_paytm", e.target.value)}
                           placeholder="0"
-                          className="w-full px-2 py-1 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* Paytm Diff (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.paytm_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "paytm_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.paytm_diff) < 0 ? 'text-red-600' : Number(draft.paytm_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
+                          className={`w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.paytm_diff) < 0 ? 'text-red-600' : Number(draft.paytm_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
                             }`}
                         />
                       </td>
 
                       {/* Bank Paytm Date (Editable Date Picker) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-0.5 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_paytm_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_paytm_date", e.target.value)}
-                          className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-0.5 py-0.5 text-[11px] border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* Total PhonePe (Calculated sum across tally_id rows in petty_cash_tallies) */}
-                      <td className="px-3 py-2 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
+                      <td className="px-1.5 py-1 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
                         {fmt(group.totalPhonePe)}
                       </td>
 
                       {/* Audit PhonePe (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_phonepe ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_phonepe", e.target.value)}
                           placeholder="0"
-                          className="w-full px-2 py-1 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* PhonePe Diff (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.phonepay_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "phonepay_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.phonepay_diff) < 0 ? 'text-red-600' : Number(draft.phonepay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
+                          className={`w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.phonepay_diff) < 0 ? 'text-red-600' : Number(draft.phonepay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
                             }`}
                         />
                       </td>
 
                       {/* Bank Phone Pay Date (Editable Date Picker) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
+                      <td className="px-0.5 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_phone_pay_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_phone_pay_date", e.target.value)}
-                          className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                          className="w-full px-0.5 py-0.5 text-[11px] border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>
 
                       {/* Total Diff (Editable Input) */}
-                      <td className="px-2 py-1 border-r border-gray-200 bg-slate-50">
+                      <td className="px-1 py-1 border-r border-gray-200 bg-slate-50">
                         <input
                           type="number"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.total_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "total_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-slate-300 rounded font-extrabold focus:outline-none focus:ring-2 focus:ring-slate-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.total_diff) < 0 ? 'text-red-600' : Number(draft.total_diff) > 0 ? 'text-emerald-700' : 'text-gray-800'
+                          className={`w-full px-1 py-0.5 text-xs border border-slate-300 rounded font-extrabold focus:outline-none focus:ring-2 focus:ring-slate-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.total_diff) < 0 ? 'text-red-600' : Number(draft.total_diff) > 0 ? 'text-emerald-700' : 'text-gray-800'
                             }`}
                         />
                       </td>
 
                       {/* Narration (Editable Text) */}
-                      <td className="px-2 py-1 border-r border-gray-200 min-w-[200px]">
+                      <td className="px-2 py-1 border-r border-gray-200 min-w-[160px]">
                         <input
                           type="text"
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.narration || ""}
                           onChange={(e) => handleDraftChange(tId, "narration", e.target.value)}
                           placeholder="Audit narration & remarks..."
-                          className="w-full px-2.5 py-1 text-xs border border-blue-300 rounded text-blue-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-600"
+                          className="w-full px-2 py-1 text-xs border border-blue-300 rounded text-blue-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-600"
                         />
                       </td>
                     </tr>

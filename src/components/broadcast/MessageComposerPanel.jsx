@@ -108,9 +108,19 @@ export default function MessageComposerPanel() {
     insertVariable(emoji)
   }
 
-  const handleSend = () => {
-    sendDashboardBroadcast()
-    alert('🎉 WhatsApp Broadcast Campaign sent successfully!')
+  const [sending, setSending] = useState(false)
+
+  const handleSend = async () => {
+    setSending(true)
+    try {
+      await sendDashboardBroadcast()
+      alert('🎉 WhatsApp Broadcast Campaign sent successfully!')
+    } catch (err) {
+      console.error(err)
+      alert('⚠️ Error sending broadcast: ' + (err.message || 'Unknown error'))
+    } finally {
+      setSending(false)
+    }
   }
 
   const activeShopCount = selectedShopIds.length
@@ -411,11 +421,11 @@ export default function MessageComposerPanel() {
 
         <button
           onClick={handleSend}
-          disabled={activeEmpCount === 0}
+          disabled={activeEmpCount === 0 || (!composerText.trim() && attachmentCount === 0) || sending}
           className="bg-[#25D366] hover:bg-green-600 disabled:opacity-50 text-white font-bold px-3.5 sm:px-4 py-2 rounded-xl text-xs transition-all shadow-md shadow-green-500/20 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 self-stretch sm:self-auto justify-center"
         >
-          <span className="text-sm leading-none">🟢</span>
-          {scheduledCampaign ? 'Set Scheduled Broadcast' : 'Send WhatsApp Broadcast'}
+          <span className="text-sm leading-none">{sending ? '⏳' : '🟢'}</span>
+          {sending ? 'Sending...' : scheduledCampaign ? 'Set Scheduled Broadcast' : 'Send WhatsApp Broadcast'}
         </button>
       </div>
     </div>

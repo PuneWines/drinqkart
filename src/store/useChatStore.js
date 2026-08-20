@@ -146,25 +146,29 @@ export const useChatStore = create((set, get) => ({
 
       if (shopsErr) throw shopsErr;
 
-      // 2. Fetch active users (employees) with a valid phone number from Supabase
-      const { data: usersDb, error: usersErr } = await supabase
-        .from('users')
-        .select('id, user_name, number, role, shop_name, status')
-        .eq('status', 'active')
-        .not('number', 'is', null)
-        .order('user_name', { ascending: true });
+      // 2. Fetch active employees with a valid mobile number from hr_management_employees table
+      const { data: hrEmpsDb, error: hrEmpsErr } = await supabase
+        .from('hr_management_employees')
+        .select('id, name_as_per_aadhar, mobile_no, designation, joining_company_name, status')
+        .not('mobile_no', 'is', null)
+        .order('name_as_per_aadhar', { ascending: true });
 
-      if (usersErr) throw usersErr;
+      if (hrEmpsErr) throw hrEmpsErr;
 
-      // 3. Group and map users to shops
+      // 3. Group and map employees to shops based on joining_company_name
       const mappedShops = (shopsDb || []).map((shop) => {
-        const shopEmployees = (usersDb || [])
-          .filter((u) => u.shop_name === shop.shop_name && u.number && String(u.number).trim() !== '')
-          .map((u) => ({
-            id: u.id.toString(), // Stringified for safe string-comparison in UI checkboxes
-            name: u.user_name || 'Unnamed',
-            role: u.role || 'Staff',
-            phone: String(u.number).trim(),
+        const shopEmployees = (hrEmpsDb || [])
+          .filter((emp) => {
+            const isMatchingShop = emp.joining_company_name === shop.shop_name;
+            const hasMobile = emp.mobile_no && String(emp.mobile_no).trim() !== '';
+            const isActive = !emp.status || ['active', 'Active'].includes(emp.status);
+            return isMatchingShop && hasMobile && isActive;
+          })
+          .map((emp) => ({
+            id: emp.id.toString(), // Stringified for safe string-comparison in UI checkboxes
+            name: emp.name_as_per_aadhar || 'Unnamed',
+            role: emp.designation || 'EMPLOYEE',
+            phone: String(emp.mobile_no).trim(),
             status: 'online',
           }));
 
@@ -382,7 +386,7 @@ export const useChatStore = create((set, get) => ({
   // Broadcast Trigger
   sendDashboardBroadcast: async () => {
     const { composerText, selectedShopIds, selectedEmployeeIds, attachments, scheduledCampaign, shops, templates } = get()
-    if (!composerText.trim() || selectedEmployeeIds.length === 0) return
+    if ((!composerText.trim() && attachments.length === 0) || selectedEmployeeIds.length === 0) return
 
     // 1. Resolve shop target text
     const targetShopNames = shops
@@ -398,7 +402,7 @@ export const useChatStore = create((set, get) => ({
       // 3. Insert record into Supabase whatsapp_history table
       const { data: insertedCampaigns, error } = await supabase.from('whatsapp_history').insert([
         {
-          campaign_title: composerText.split('\n')[0].substring(0, 30) || 'WhatsApp Campaign',
+          campaign_title: composerText.split('\n')[0].substring(0, 30) || (attachments[0]?.name ? `Attachment: ${attachments[0].name}` : 'WhatsApp Campaign'),
           shop_target: shopTarget,
           sent_count: selectedEmployeeIds.length,
           status: scheduledCampaign ? 'Scheduled' : 'Sent',
@@ -426,54 +430,9 @@ export const useChatStore = create((set, get) => ({
         if (!cleanPhone || !cid) continue;
 
         const personalizedMessage = composerText.replace(/\{\{Employee Name\}\}/g, emp.name || '');
-        let messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        let status = 'failed';
-        let errorMessage = null;
-        let errorRawResponse = null;
-
-        if (PRODUCT_ID && PHONE_ID && TOKEN) {
-          try {
-            const pid = String(PRODUCT_ID).trim();
-            const phid = String(PHONE_ID).trim();
-            const tok = String(TOKEN).trim();
-            const url = `https://api.maytapi.com/api/${pid}/${phid}/sendMessage`;
-
-            const response = await fetch(url, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-maytapi-key': tok,
-              },
-              body: JSON.stringify({
-                to_number: cleanPhone,
-                type: 'text',
-                message: personalizedMessage,
-              }),
-            });
-
-            const resData = await response.json();
-            console.log("[WhatsApp Broadcast] Raw response for", cleanPhone, ":", resData);
-
-            if (response.ok && resData.success) {
-              const parsedId = resData.data?.msgId || resData.data?.id || resData.id || resData.messageId;
-              if (parsedId) messageId = String(parsedId);
-              status = 'sent';
-            } else {
-              status = 'failed';
-              errorMessage = resData.message || resData.error || `HTTP ${response.status} ${response.statusText}`;
-              errorRawResponse = resData;
-            }
-          } catch (err) {
-            console.error(`[WhatsApp Broadcast] Network exception for ${cleanPhone}:`, err);
-            status = 'failed';
-            errorMessage = err.message || 'Network exception calling Maytapi API';
-            errorRawResponse = { error: String(err) };
-          }
-        }
-
         const nowIso = new Date().toISOString();
 
-        // 1. Safe Contact Upsert (Preserves authentic WhatsApp name and avatar)
+        // 1. Safe Contact Upsert
         const { data: existingContact } = await supabase
           .from('whatsapp_contacts')
           .select('name, avatar_url')
@@ -492,48 +451,194 @@ export const useChatStore = create((set, get) => ({
 
         await supabase.from('whatsapp_contacts').upsert(contactUpsertData, { onConflict: 'id' });
 
-        // 2. Upsert Conversation preview
-        await supabase.from('whatsapp_conversations').upsert({
-          id: cid,
-          contact_id: cid,
-          phone_id: PHONE_ID || 0,
-          last_message_text: personalizedMessage,
-          last_message_at: nowIso,
-          updated_at: nowIso,
-        }, { onConflict: 'id' });
+        // If attachments exist, send each attachment as a media message
+        if (attachments && attachments.length > 0) {
+          for (let attIdx = 0; attIdx < attachments.length; attIdx++) {
+            const att = attachments[attIdx];
+            if (!att.url) continue;
 
-        // 3. Upsert Message with actual status ('sent' or 'failed')
-        await supabase.from('whatsapp_messages').upsert({
-          id: messageId,
-          conversation_id: cid,
-          contact_id: cid,
-          from_me: true,
-          message_type: 'text',
-          content: personalizedMessage,
-          status: status,
-          ack_code: status === 'sent' ? 1 : 0,
-          timestamp: nowIso,
-        }, { onConflict: 'id' });
+            let messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            let status = 'failed';
+            let errorMessage = null;
+            let errorRawResponse = null;
 
-        // 4. If sending failed, log error in whatsapp_delivery_error_logs
-        if (status === 'failed' && errorMessage) {
-          await supabase.from('whatsapp_delivery_error_logs').insert({
-            message_id: messageId,
+            if (PRODUCT_ID && PHONE_ID && TOKEN) {
+              try {
+                const pid = String(PRODUCT_ID).trim();
+                const phid = String(PHONE_ID).trim();
+                const tok = String(TOKEN).trim();
+                const url = `https://api.maytapi.com/api/${pid}/${phid}/sendMessage`;
+
+                const payload = {
+                  to_number: cleanPhone,
+                  type: 'media',
+                  message: att.url,
+                  ...(attIdx === 0 && personalizedMessage.trim() ? { text: personalizedMessage } : {}),
+                };
+
+                const response = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-maytapi-key': tok,
+                  },
+                  body: JSON.stringify(payload),
+                });
+
+                const resData = await response.json();
+                console.log("[WhatsApp Broadcast Media] Raw response for", cleanPhone, ":", resData);
+
+                if (response.ok && resData.success) {
+                  const parsedId = resData.data?.msgId || resData.data?.id || resData.id || resData.messageId;
+                  if (parsedId) messageId = String(parsedId);
+                  status = 'sent';
+                } else {
+                  status = 'failed';
+                  errorMessage = resData.message || resData.error || `HTTP ${response.status} ${response.statusText}`;
+                  errorRawResponse = resData;
+                }
+              } catch (err) {
+                console.error(`[WhatsApp Broadcast Media] Exception for ${cleanPhone}:`, err);
+                status = 'failed';
+                errorMessage = err.message || 'Network exception calling Maytapi API';
+                errorRawResponse = { error: String(err) };
+              }
+            }
+
+            const mediaContent = (attIdx === 0 && personalizedMessage.trim()) ? personalizedMessage : (att.name || 'Media attachment');
+
+            // Upsert Conversation preview
+            await supabase.from('whatsapp_conversations').upsert({
+              id: cid,
+              contact_id: cid,
+              phone_id: PHONE_ID || 0,
+              last_message_text: `📎 Attachment: ${att.name || 'File'}`,
+              last_message_at: nowIso,
+              updated_at: nowIso,
+            }, { onConflict: 'id' });
+
+            // Upsert Message record
+            await supabase.from('whatsapp_messages').upsert({
+              id: messageId,
+              conversation_id: cid,
+              contact_id: cid,
+              from_me: true,
+              message_type: 'media',
+              content: mediaContent,
+              media_url: att.url,
+              status: status,
+              ack_code: status === 'sent' ? 1 : 0,
+              timestamp: nowIso,
+            }, { onConflict: 'id' });
+
+            if (status === 'failed' && errorMessage) {
+              await supabase.from('whatsapp_delivery_error_logs').insert({
+                message_id: messageId,
+                conversation_id: cid,
+                recipient_phone: cleanPhone,
+                error_code: String(errorRawResponse?.code || 'SEND_FAILED'),
+                error_message: errorMessage,
+                raw_response: errorRawResponse,
+              });
+            }
+
+            logsToInsert.push({
+              campaign_id: campaignId,
+              message_id: messageId,
+              recipient_phone: cleanPhone,
+              recipient_name: emp.name,
+              status: status,
+            });
+          }
+        } else {
+          // Send text-only message
+          let messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          let status = 'failed';
+          let errorMessage = null;
+          let errorRawResponse = null;
+
+          if (PRODUCT_ID && PHONE_ID && TOKEN) {
+            try {
+              const pid = String(PRODUCT_ID).trim();
+              const phid = String(PHONE_ID).trim();
+              const tok = String(TOKEN).trim();
+              const url = `https://api.maytapi.com/api/${pid}/${phid}/sendMessage`;
+
+              const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-maytapi-key': tok,
+                },
+                body: JSON.stringify({
+                  to_number: cleanPhone,
+                  type: 'text',
+                  message: personalizedMessage,
+                }),
+              });
+
+              const resData = await response.json();
+              console.log("[WhatsApp Broadcast Text] Raw response for", cleanPhone, ":", resData);
+
+              if (response.ok && resData.success) {
+                const parsedId = resData.data?.msgId || resData.data?.id || resData.id || resData.messageId;
+                if (parsedId) messageId = String(parsedId);
+                status = 'sent';
+              } else {
+                status = 'failed';
+                errorMessage = resData.message || resData.error || `HTTP ${response.status} ${response.statusText}`;
+                errorRawResponse = resData;
+              }
+            } catch (err) {
+              console.error(`[WhatsApp Broadcast Text] Exception for ${cleanPhone}:`, err);
+              status = 'failed';
+              errorMessage = err.message || 'Network exception calling Maytapi API';
+              errorRawResponse = { error: String(err) };
+            }
+          }
+
+          // Upsert Conversation preview
+          await supabase.from('whatsapp_conversations').upsert({
+            id: cid,
+            contact_id: cid,
+            phone_id: PHONE_ID || 0,
+            last_message_text: personalizedMessage,
+            last_message_at: nowIso,
+            updated_at: nowIso,
+          }, { onConflict: 'id' });
+
+          // Upsert Message record
+          await supabase.from('whatsapp_messages').upsert({
+            id: messageId,
             conversation_id: cid,
+            contact_id: cid,
+            from_me: true,
+            message_type: 'text',
+            content: personalizedMessage,
+            status: status,
+            ack_code: status === 'sent' ? 1 : 0,
+            timestamp: nowIso,
+          }, { onConflict: 'id' });
+
+          if (status === 'failed' && errorMessage) {
+            await supabase.from('whatsapp_delivery_error_logs').insert({
+              message_id: messageId,
+              conversation_id: cid,
+              recipient_phone: cleanPhone,
+              error_code: String(errorRawResponse?.code || 'SEND_FAILED'),
+              error_message: errorMessage,
+              raw_response: errorRawResponse,
+            });
+          }
+
+          logsToInsert.push({
+            campaign_id: campaignId,
+            message_id: messageId,
             recipient_phone: cleanPhone,
-            error_code: String(errorRawResponse?.code || 'SEND_FAILED'),
-            error_message: errorMessage,
-            raw_response: errorRawResponse,
+            recipient_name: emp.name,
+            status: status,
           });
         }
-
-        logsToInsert.push({
-          campaign_id: campaignId,
-          message_id: messageId,
-          recipient_phone: cleanPhone,
-          recipient_name: emp.name,
-          status: status,
-        });
       }
 
       if (logsToInsert.length > 0) {
