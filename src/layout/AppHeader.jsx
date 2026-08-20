@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getVisibleSystems, getActiveSystem } from './systemsConfig';
-import { LogOut } from 'lucide-react';
+import { LogOut, HelpCircle } from 'lucide-react';
+import HelpCenterModal from '../components/help-center/HelpCenterModal';
 
 const AppHeader = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   const visibleSystems = getVisibleSystems(user);
   const activeSystem = getActiveSystem(visibleSystems, location.pathname);
@@ -35,8 +38,18 @@ const AppHeader = () => {
           </div>
         </Link>
 
-        {/* Right Header: Welcome User + Logout */}
+        {/* Right Header: Help Center Button + Welcome User + Logout */}
         <div className="flex items-center gap-4">
+          {/* Help Center Button placed to the left of Welcome */}
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 rounded-full text-xs font-bold transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            title="Open Help Center Support"
+          >
+            <HelpCircle size={15} className="text-white" />
+            <span>Help Center</span>
+          </button>
+
           <div className="flex items-center gap-2.5 text-xs text-[#2C1D11]">
             <span className="text-gray-500 font-sans">Welcome,</span>
             <span className="font-semibold capitalize font-sans">{userName}</span>
@@ -56,6 +69,12 @@ const AppHeader = () => {
           </button>
         </div>
       </div>
+
+      {/* Help Center Interactive Support Modal */}
+      <HelpCenterModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
 
       {/* Main Top Navigation Tabs Bar: Gold Yellow background with Dark Brown text */}
       <nav

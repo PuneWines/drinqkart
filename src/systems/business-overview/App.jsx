@@ -3,6 +3,7 @@ import CustomerFeedback from './pages/CustomerFeedback';
 import AssignedComplaints from './pages/AssignedComplaints';
 import ComplaintResolution from './pages/ComplaintResolution';
 import TraderInvoices from './pages/TraderInvoices';
+import HelpCenterRecords from './pages/HelpCenterRecords';
 import { Toaster } from 'react-hot-toast';
 
 function BusinessOverviewApp() {
@@ -17,6 +18,7 @@ function BusinessOverviewApp() {
             <Route path="feedback/assigned" element={<AssignedComplaints />} />
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
+            <Route path="help-center" element={<HelpCenterRecords />} />
             <Route path="*" element={<Navigate to="feedback/customer" replace />} />
           </Routes>
         </main>
