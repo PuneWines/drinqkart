@@ -30,14 +30,14 @@ export default function BroadcastDashboard() {
   }, [loadShopsAndEmployees, fetchTemplates, fetchBroadcastHistory, fetchMessageStats])
 
   return (
-    <div className="min-h-screen lg:h-screen w-full flex flex-col bg-[#f3f6fb] overflow-y-auto lg:overflow-hidden select-none">
+    <div className="h-screen w-full flex flex-col bg-[#f3f6fb] overflow-hidden select-none">
       {/* Top Navigation Header with View Toggle */}
       <Header />
 
       {/* Main Content Area */}
-      <main className="flex-1 p-3 sm:p-5 overflow-y-auto lg:overflow-hidden flex flex-col">
+      <main className="flex-1 p-2 overflow-hidden flex flex-col min-h-0">
         {activeDashboardTab === 'broadcast' ? (
-          <div className="w-full h-full grid grid-cols-1 lg:grid-cols-[320px_1fr] xl:grid-cols-[340px_1fr_340px] gap-4 sm:gap-5 overflow-y-auto lg:overflow-hidden">
+          <div className="w-full h-full grid grid-cols-1 lg:grid-cols-[270px_1fr] xl:grid-cols-[280px_1fr_270px] gap-2 overflow-hidden min-h-0">
             {/* Left Column: Target Shops & Employees Selector */}
             <ShopEmployeePanel />
 
@@ -45,12 +45,12 @@ export default function BroadcastDashboard() {
             <MessageComposerPanel />
 
             {/* Right Column: Live WhatsApp Smartphone Preview & Campaign Analytics */}
-            <div className="hidden xl:block h-full overflow-hidden">
+            <div className="hidden xl:block h-full overflow-hidden min-h-0">
               <LivePreviewAnalyticsPanel />
             </div>
           </div>
         ) : (
-          <div className="w-full h-full overflow-hidden flex flex-col">
+          <div className="w-full h-full overflow-hidden flex flex-col min-h-0">
             <WhatsAppControlPanel />
           </div>
         )}

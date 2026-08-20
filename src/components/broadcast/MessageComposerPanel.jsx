@@ -118,7 +118,7 @@ export default function MessageComposerPanel() {
   const attachmentCount = attachments.length
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm border border-gray-100 flex flex-col gap-3 sm:gap-4 overflow-hidden h-full">
+    <div className="bg-white rounded-2xl p-2.5 sm:p-3 shadow-xs border border-gray-100 flex flex-col gap-2.5 overflow-hidden h-full min-h-0">
       {/* Toolbar Row */}
       <div className="relative flex justify-between items-center flex-wrap gap-1.5 sm:gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -348,18 +348,18 @@ export default function MessageComposerPanel() {
           value={composerText}
           onChange={(e) => setComposerText(e.target.value)}
           placeholder="Type your WhatsApp broadcast message here..."
-          className="w-full flex-1 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-gray-200 focus:outline-none focus:border-[#25D366] text-xs sm:text-sm text-gray-800 leading-relaxed resize-none bg-[#fcfcfc] min-h-[140px] sm:min-h-[180px] font-sans"
+          className="w-full flex-1 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#25D366] text-xs sm:text-sm text-gray-800 leading-relaxed resize-none bg-[#fcfcfc] min-h-[60px] sm:min-h-[80px] font-sans"
         />
 
         {/* Attachment Section */}
-        <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 border-2 border-dashed border-emerald-100">
-          <div className="flex justify-between items-center mb-2.5">
-            <strong className="text-[11px] sm:text-xs font-bold text-gray-800 flex items-center gap-1.5">
-              <Paperclip className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" /> Attachment ({attachments.length})
+        <div className="bg-gray-50 rounded-xl p-2 sm:p-2.5 border-2 border-dashed border-emerald-100 shrink-0">
+          <div className="flex justify-between items-center mb-1.5">
+            <strong className="text-[10px] sm:text-[11px] font-bold text-gray-800 flex items-center gap-1.5">
+              <Paperclip className="w-3.5 h-3.5 text-emerald-600" /> Attachment ({attachments.length})
             </strong>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="text-[11px] sm:text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1"
+              className="text-[10px] sm:text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" /> Add File
             </button>
@@ -371,25 +371,25 @@ export default function MessageComposerPanel() {
             />
           </div>
 
-          <div className="flex gap-2.5 sm:gap-3 overflow-x-auto pb-1">
+          <div className="flex gap-2 overflow-x-auto pb-0.5">
             {attachments.map((att) => (
               <div
                 key={att.id}
-                className="w-28 sm:w-36 min-w-[112px] sm:min-w-[144px] bg-white rounded-xl p-2.5 sm:p-3 shadow-xs border border-gray-100 flex flex-col justify-between group relative"
+                className="w-20 sm:w-28 min-w-[80px] sm:min-w-[112px] bg-white rounded-xl p-2 shadow-xs border border-gray-100 flex flex-col justify-between group relative shrink-0"
               >
                 <button
                   onClick={() => removeAttachment(att.id)}
-                  className="absolute top-1.5 right-1.5 text-gray-400 hover:text-rose-500 transition-colors p-1"
+                  className="absolute top-1 right-1 text-gray-400 hover:text-rose-500 transition-colors p-0.5"
                   title="Remove attachment"
                 >
-                  <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <Trash2 className="w-3 h-3" />
                 </button>
-                <div className="text-2xl sm:text-3xl mb-1.5">{att.icon}</div>
+                <div className="text-xl sm:text-2xl mb-1">{att.icon}</div>
                 <div>
-                  <strong className="block text-[11px] sm:text-xs font-bold text-gray-800 truncate" title={att.name}>
+                  <strong className="block text-[9px] sm:text-[10px] font-bold text-gray-800 truncate" title={att.name}>
                     {att.name}
                   </strong>
-                  <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5">{att.size}</p>
+                  <p className="text-[8px] sm:text-[9px] text-gray-400 mt-0.5">{att.size}</p>
                 </div>
               </div>
             ))}
@@ -398,13 +398,13 @@ export default function MessageComposerPanel() {
       </div>
 
       {/* Send Bar */}
-      <div className="bg-gray-900 text-white rounded-2xl px-5 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg shrink-0">
+      <div className="bg-gray-900 text-white rounded-xl px-3 sm:px-4 py-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-lg shrink-0">
         <div className="min-w-0 flex-1">
-          <strong className="block text-xs sm:text-sm font-bold tracking-tight text-white truncate">
+          <strong className="block text-xs font-bold tracking-tight text-white truncate">
             {activeShopCount} {activeShopCount === 1 ? 'Shop' : 'Shops'} • {activeEmpCount} {activeEmpCount === 1 ? 'Employee' : 'Employees'} • {attachmentCount} {attachmentCount === 1 ? 'Attachment' : 'Attachments'}
           </strong>
-          <span className="text-[11px] sm:text-xs text-emerald-400 font-medium flex items-center gap-1.5 mt-0.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="text-[9px] sm:text-[10px] text-emerald-400 font-medium flex items-center gap-1.5 mt-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             {scheduledCampaign ? `Scheduled for ${scheduledCampaign.date}` : 'Ready for Broadcast'}
           </span>
         </div>
@@ -412,9 +412,9 @@ export default function MessageComposerPanel() {
         <button
           onClick={handleSend}
           disabled={activeEmpCount === 0}
-          className="bg-[#25D366] hover:bg-green-600 disabled:opacity-50 text-white font-bold px-5 sm:px-6 py-3 rounded-xl text-xs sm:text-sm transition-all shadow-md shadow-green-500/20 flex items-center gap-2 cursor-pointer active:scale-95 shrink-0 self-stretch sm:self-auto justify-center"
+          className="bg-[#25D366] hover:bg-green-600 disabled:opacity-50 text-white font-bold px-3.5 sm:px-4 py-2 rounded-xl text-xs transition-all shadow-md shadow-green-500/20 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 self-stretch sm:self-auto justify-center"
         >
-          <span className="text-base leading-none">🟢</span>
+          <span className="text-sm leading-none">🟢</span>
           {scheduledCampaign ? 'Set Scheduled Broadcast' : 'Send WhatsApp Broadcast'}
         </button>
       </div>

@@ -1,15 +1,6 @@
-import {
-  ClipboardList,
-  Users,
-  Store,
-  Coins,
-  ShoppingCart,
-  ShieldCheck,
-  MessageSquare,
-  BarChart3,
-} from 'lucide-react';
+const ClipboardList = {}; const Users = {}; const Store = {}; const Coins = {}; const ShoppingCart = {}; const ShieldCheck = {}; const MessageSquare = {}; const BarChart3 = {};
 
-export const systems = [
+const systems = [
   {
     id: 'checklist',
     label: 'Checklist Delegation',
@@ -144,7 +135,7 @@ export const systems = [
   }
 ];
 
-export const parseMasterAccessList = (raw) => {
+const parseMasterAccessList = (raw) => {
   if (!raw) return [];
   let current = raw;
   while (typeof current === 'string') {
@@ -167,7 +158,7 @@ export const parseMasterAccessList = (raw) => {
   return [];
 };
 
-export const getVisibleSystems = (user) => {
+const getVisibleSystems = (user) => {
   const userObj = user || {};
   let currentUserStored = null;
   try {
@@ -180,21 +171,16 @@ export const getVisibleSystems = (user) => {
   const isMasterAdmin = (userObj.user_name || userObj.username || currentUserStored?.user_name || currentUserStored?.username || '').toLowerCase() === 'masteradmin';
   const userRole = (userObj.role || currentUserStored?.role || '').toLowerCase();
 
-  const primaryMasterAccess = [
+  const masterAccessList = [
     ...parseMasterAccessList(userObj.master_user_system_page_access),
-    ...parseMasterAccessList(currentUserStored?.master_user_system_page_access),
-    ...parseMasterAccessList(localStorage.getItem('master_user_system_page_access'))
-  ];
-
-  const legacyAccess = [
     ...parseMasterAccessList(userObj.page_access),
     ...parseMasterAccessList(userObj.pages),
+    ...parseMasterAccessList(currentUserStored?.master_user_system_page_access),
     ...parseMasterAccessList(currentUserStored?.page_access),
     ...parseMasterAccessList(currentUserStored?.pages),
+    ...parseMasterAccessList(localStorage.getItem('master_user_system_page_access')),
     ...parseMasterAccessList(localStorage.getItem('page_access'))
   ];
-
-  const masterAccessList = primaryMasterAccess.length > 0 ? primaryMasterAccess : legacyAccess;
 
   console.log('[AccessControl Debug] userRole:', userRole);
   console.log('[AccessControl Debug] masterAccessList:', masterAccessList);
@@ -344,7 +330,9 @@ export const getVisibleSystems = (user) => {
   }).filter((system) => system.subtabs.some((s) => s.type !== 'header'));
 };
 
-export const getActiveSystem = (visibleSystems, pathname) => {
+const getActiveSystem = (visibleSystems, pathname) => {
   if (!visibleSystems || visibleSystems.length === 0) return null;
   return visibleSystems.find((s) => pathname.startsWith(s.base)) || visibleSystems[0];
 };
+
+module.exports = { getVisibleSystems, systems, parseMasterAccessList };

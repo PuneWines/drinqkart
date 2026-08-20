@@ -323,7 +323,7 @@ export const fetchPendingWorkApprovalsApi = async (role) => {
 /**
  * Fetches approved/rejected history for work tasks.
  */
-export const fetchWorkTaskHistoryApi = async (role, username) => {
+export const fetchWorkTaskHistoryApi = async (role, username, selectedShop) => {
   try {
     const userRole = (role || localStorage.getItem("role") || "").toLowerCase();
     const userName = username || localStorage.getItem("user-name");
@@ -337,6 +337,10 @@ export const fetchWorkTaskHistoryApi = async (role, username) => {
       query = query
         .in('work_status', ['APPROVED', 'ADMIN_APPROVED', 'REJECTED', 'MANAGER_APPROVED', 'SUBMITTED', 'Done', 'done', 'COMPLETED', 'completed'])
         .order('submission_date', { ascending: false });
+    }
+
+    if (selectedShop && selectedShop !== 'All' && selectedShop !== 'all') {
+      query = query.eq('shop_name', selectedShop);
     }
 
     const { data, error } = await query;

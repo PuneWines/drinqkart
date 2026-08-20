@@ -591,10 +591,13 @@ export default function QuickTask() {
     });
   };
 
-  // Change your checkbox to store whole row instead of only id
+  const getTaskId = (task) => (task ? (task.id ?? task.task_id ?? task.assignment_id ?? task.original_task_id) : null);
+
   const handleCheckboxChange = (task) => {
-    if (selectedTasks.find(t => t.id === task.id)) {
-      setSelectedTasks(selectedTasks.filter(t => t.id !== task.id));
+    const targetId = getTaskId(task);
+    if (targetId === null || targetId === undefined) return;
+    if (selectedTasks.some(t => getTaskId(t) === targetId)) {
+      setSelectedTasks(selectedTasks.filter(t => getTaskId(t) !== targetId));
     } else {
       setSelectedTasks([...selectedTasks, task]);
     }
@@ -611,7 +614,7 @@ export default function QuickTask() {
     if (selectedTasks.length === currentTasks.length && currentTasks.length > 0) {
       setSelectedTasks([]);
     } else {
-      setSelectedTasks(currentTasks); // store full rows
+      setSelectedTasks(currentTasks);
     }
   };
 
@@ -850,17 +853,6 @@ export default function QuickTask() {
                           : `Showing delegation tasks`}
                   </p>
                 </div>
-                {/* 
-              {selectedTasks.length > 0 && (
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={isDeleting}
-                  className="flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white text-xs font-black rounded-full hover:bg-red-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0"
-                >
-                  <Trash2 size={14} className="stroke-[3]" />
-                  {isDeleting ? 'Deleting...' : `Delete (${selectedTasks.length})`}
-                </button>
-              )} */}
               </div>
 
               <div className="flex bg-gray-100 p-1 rounded-xl shadow-inner w-full sm:w-auto overflow-x-auto no-scrollbar">
@@ -901,48 +893,63 @@ export default function QuickTask() {
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row md:items-center gap-4 mt-2 pl-2">
-              <div className="relative w-full md:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input
-                  type="text"
-                  placeholder="Search by task or name..."
-                  className="w-full pl-10 p-4 py-2 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            {/* Row 2: Filters on left, Delete button on lower right below WORK option */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2 px-2">
+              <div className="flex flex-wrap items-center gap-4 flex-1">
+                <div className="relative w-full md:w-96">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Search by task or name..."
+                    className="w-full pl-10 p-4 py-2 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                {activeTab === 'work' && (
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Shop Name</span>
+                      <select
+                        value={workShopFilter}
+                        onChange={(e) => setWorkShopFilter(e.target.value)}
+                        className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-purple-500 outline-none transition-all cursor-pointer"
+                      >
+                        <option value="All">All Shops</option>
+                        {workShopsList.map(shop => (
+                          <option key={shop} value={shop}>{shop}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Status</span>
+                      <select
+                        value={workStatusFilter}
+                        onChange={(e) => setWorkStatusFilter(e.target.value)}
+                        className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-purple-500 outline-none transition-all cursor-pointer"
+                      >
+                        <option value="All">All Statuses</option>
+                        {workStatusesList.map(status => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {activeTab === 'work' && (
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Shop Name</span>
-                    <select
-                      value={workShopFilter}
-                      onChange={(e) => setWorkShopFilter(e.target.value)}
-                      className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-purple-500 outline-none transition-all cursor-pointer"
-                    >
-                      <option value="All">All Shops</option>
-                      {workShopsList.map(shop => (
-                        <option key={shop} value={shop}>{shop}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Status</span>
-                    <select
-                      value={workStatusFilter}
-                      onChange={(e) => setWorkStatusFilter(e.target.value)}
-                      className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-purple-500 outline-none transition-all cursor-pointer"
-                    >
-                      <option value="All">All Statuses</option>
-                      {workStatusesList.map(status => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+              {/* Fixed Delete Button Position: Lower right corner below WORK option */}
+              {selectedTasks.length > 0 && (
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={isDeleting}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 shrink-0 cursor-pointer self-end md:self-center"
+                >
+                  <Trash2 size={15} className="stroke-[2.5]" />
+                  {isDeleting ? 'Deleting...' : `Delete(${selectedTasks.length})`}
+                </button>
               )}
             </div>
           </div>

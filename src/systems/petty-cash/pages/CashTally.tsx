@@ -46,14 +46,14 @@ const EXPENSE_OPTIONS = [
   { key: "hd500", label: "₹500 (Cash)", isCash: true, denom: 500 },
   { key: "hd200", label: "₹200 (Cash)", isCash: true, denom: 200 },
   { key: "hd100", label: "₹100 (Cash)", isCash: true, denom: 100 },
-  { key: "hd50",  label: "₹50 (Cash)",  isCash: true, denom: 50  },
-  { key: "hd20",  label: "₹20 (Cash)",  isCash: true, denom: 20  },
-  { key: "hd10",  label: "₹10 (Cash)",  isCash: true, denom: 10  },
-  { key: "hd1",   label: "₹1 (Cash)",   isCash: true, denom: 1   },
-  { key: "hdGpay",    label: "GPay/UPI (Digital)",     isCash: false },
-  { key: "hdCard",    label: "Card Payments (Digital)", isCash: false },
-  { key: "hdPhonePe", label: "PhonePe (Digital)",       isCash: false },
-  { key: "hdPaytm",   label: "Paytm (Digital)",         isCash: false },
+  { key: "hd50", label: "₹50 (Cash)", isCash: true, denom: 50 },
+  { key: "hd20", label: "₹20 (Cash)", isCash: true, denom: 20 },
+  { key: "hd10", label: "₹10 (Cash)", isCash: true, denom: 10 },
+  { key: "hd1", label: "₹1 (Cash)", isCash: true, denom: 1 },
+  { key: "hdGpay", label: "GPay/UPI (Digital)", isCash: false },
+  { key: "hdCard", label: "Card Payments (Digital)", isCash: false },
+  { key: "hdPhonePe", label: "PhonePe (Digital)", isCash: false },
+  { key: "hdPaytm", label: "Paytm (Digital)", isCash: false },
 ];
 
 interface CashTallyProps {
@@ -166,7 +166,7 @@ export default function CashTally({
           loggedInName = parsed.user_name || "";
           loggedInShopName = parsed.shop_name || parsed.shopName || parsed.shops || "";
         }
-      } catch (e) {}
+      } catch (e) { }
       if (!loggedInName) {
         loggedInName = user?.name || user?.username || "";
       }
@@ -188,7 +188,7 @@ export default function CashTally({
           .from('users')
           .select('shop_name')
           .or(`user_name.eq."${loggedInName}",username.eq."${loggedInName}"`);
-        
+
         if (!error && data && data.length > 0) {
           const rawShopsStr = data.map((d: any) => d.shop_name).filter(Boolean).join(',');
           foundShops = Array.from(new Set(
@@ -346,7 +346,7 @@ export default function CashTally({
           const parsed = JSON.parse(savedUserStr);
           defaultUser = parsed.user_name || "";
         }
-      } catch (e) {}
+      } catch (e) { }
       if (!defaultUser) {
         defaultUser = user?.name || user?.username || "";
       }
@@ -529,16 +529,16 @@ export default function CashTally({
       (Math.round(parseFloat(formData.hd500)) || 0) * 500,
       (Math.round(parseFloat(formData.hd200)) || 0) * 200,
       (Math.round(parseFloat(formData.hd100)) || 0) * 100,
-      (Math.round(parseFloat(formData.hd50))  || 0) * 50,
-      (Math.round(parseFloat(formData.hd20))  || 0) * 20,
-      (Math.round(parseFloat(formData.hd10))  || 0) * 10,
-      (Math.round(parseFloat(formData.hd1))   || 0) * 1,
+      (Math.round(parseFloat(formData.hd50)) || 0) * 50,
+      (Math.round(parseFloat(formData.hd20)) || 0) * 20,
+      (Math.round(parseFloat(formData.hd10)) || 0) * 10,
+      (Math.round(parseFloat(formData.hd1)) || 0) * 1,
     ].reduce((acc, val) => acc + val, 0);
 
-    const hdGpay    = Math.round(parseFloat(formData.hdGpay))    || 0;
-    const hdCard    = Math.round(parseFloat(formData.hdCard))    || 0;
+    const hdGpay = Math.round(parseFloat(formData.hdGpay)) || 0;
+    const hdCard = Math.round(parseFloat(formData.hdCard)) || 0;
     const hdPhonePe = Math.round(parseFloat(formData.hdPhonePe)) || 0;
-    const hdPaytm   = Math.round(parseFloat(formData.hdPaytm))   || 0;
+    const hdPaytm = Math.round(parseFloat(formData.hdPaytm)) || 0;
 
     const hdDigitalSum = hdGpay + hdCard + hdPhonePe + hdPaytm;
     const expenseTotal = hdCashSum + hdDigitalSum;
@@ -633,15 +633,15 @@ export default function CashTally({
         retail_1500: parseInt(formData.hd500) || 0,
         retail_2200: parseInt(formData.hd200) || 0,
         retail_3100: parseInt(formData.hd100) || 0,
-        retail_450:  parseInt(formData.hd50)  || 0,
-        retail_520:  parseInt(formData.hd20)  || 0,
-        retail_610:  parseInt(formData.hd10)  || 0,
-        retail_71:   parseInt(formData.hd1)   || 0,
+        retail_450: parseInt(formData.hd50) || 0,
+        retail_520: parseInt(formData.hd20) || 0,
+        retail_610: parseInt(formData.hd10) || 0,
+        retail_71: parseInt(formData.hd1) || 0,
         expense_gpay_card: parseFloat(formData.hdGpay) || 0,
-        hd_gpay:    parseFloat(formData.hdGpay)    || 0,
-        hd_card:    parseFloat(formData.hdCard)    || 0,
+        hd_gpay: parseFloat(formData.hdGpay) || 0,
+        hd_card: parseFloat(formData.hdCard) || 0,
         hd_phonepe: parseFloat(formData.hdPhonePe) || 0,
-        hd_paytm:   parseFloat(formData.hdPaytm)   || 0,
+        hd_paytm: parseFloat(formData.hdPaytm) || 0,
         void_sale: parseFloat(formData.voidSale) || 0,
         status: formData.status || "pending",
         retail_diff: retailDiff,
@@ -1307,7 +1307,7 @@ export default function CashTally({
               </div>
             )}
           </div>
-          
+
           {/* Total Amount & Actions */}
           <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4 text-sm">

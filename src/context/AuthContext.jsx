@@ -112,7 +112,7 @@ const syncSubsystemSessions = (userObj) => {
   localStorage.setItem('profile_image', userObj.profile_image || "");
   localStorage.setItem('can_self_assign', userObj.can_self_assign === true ? "true" : "false");
   localStorage.setItem('designation', userObj.designation || userObj.Designation || "");
-  
+
   const allowedPages = parseChecklistAllowedPages(userObj);
   localStorage.setItem('page_access', JSON.stringify(allowedPages));
   const masterAccessVal = userObj.master_user_system_page_access;
@@ -143,7 +143,8 @@ const syncSubsystemSessions = (userObj) => {
     username: userObj.user_name || userObj.username || "",
     name: userObj.user_name || userObj.username || "User",
     role: userObj.role || "user",
-    pages: userObj.page_access || ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports'],
+    master_user_system_page_access: userObj.master_user_system_page_access,
+    pages: userObj.page_access || (userObj.master_user_system_page_access ? [] : ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports']),
     shops: userObj.shop_name || userObj.user_access ? [userObj.shop_name || userObj.user_access] : 'all',
     initials: (userObj.user_name || userObj.username || "U").substring(0, 2).toUpperCase(),
     loginTime: new Date().toISOString()
@@ -183,30 +184,37 @@ export const AuthProvider = ({ children }) => {
     }
   });
 
-  useEffect(() => {
+  const refreshUser = async () => {
     if (user?.id) {
-      supabase
-        .from('users')
-        .select('master_user_system_page_access, shop_name, user_access, counter_access')
-        .eq('id', user.id)
-        .single()
-        .then(({ data }) => {
-          if (data) {
-            const updatedUser = { 
-              ...user, 
-              master_user_system_page_access: data.master_user_system_page_access,
-              shop_name: data.shop_name,
-              user_access: data.user_access,
-              counter_access: data.counter_access
-            };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
-            localStorage.setItem('master_user_system_page_access', typeof data.master_user_system_page_access === 'string' ? data.master_user_system_page_access : JSON.stringify(data.master_user_system_page_access));
-            syncSubsystemSessions(updatedUser);
-            setUser(updatedUser);
-          }
-        })
-        .catch((e) => console.error("Session master access sync error:", e));
+      try {
+        const { data } = await supabase
+          .from('users')
+          .select('master_user_system_page_access, shop_name, user_access, counter_access, role, user_name, username, email_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (data) {
+          const updatedUser = {
+            ...user,
+            ...data,
+            master_user_system_page_access: data.master_user_system_page_access,
+            shop_name: data.shop_name,
+            user_access: data.user_access,
+            counter_access: data.counter_access
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+          localStorage.setItem('master_user_system_page_access', typeof data.master_user_system_page_access === 'string' ? data.master_user_system_page_access : JSON.stringify(data.master_user_system_page_access));
+          syncSubsystemSessions(updatedUser);
+          setUser(updatedUser);
+          return updatedUser;
+        }
+      } catch (e) {
+        console.error("Session master access sync error:", e);
+      }
     }
+  };
+
+  useEffect(() => {
+    refreshUser();
   }, []);
 
   const tryChecklistLogin = async (trimmedInput, password) => {
@@ -227,7 +235,7 @@ export const AuthProvider = ({ children }) => {
           .from('users')
           .select('master_user_system_page_access')
           .eq('id', userObj.id)
-          .single();
+          .maybeSingle();
 
         if (dbUser && dbUser.master_user_system_page_access) {
           userObj.master_user_system_page_access = dbUser.master_user_system_page_access;
@@ -319,7 +327,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser, setUser }}>
       {children}
     </AuthContext.Provider>
   );

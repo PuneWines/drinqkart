@@ -22,6 +22,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import JoiningCompany from '../systems/hr/pages/JoiningCompany';
 import PurchaseSettings from '../systems/purchase/pages/Settings';
 import CounterManagement from './CounterManagement';
@@ -94,7 +95,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'PETTY CASH MODULES',
-        pages: ['Form Entry', 'Cash Tally Counter', 'Financial Reports']
+        pages: ['Form Entry', 'Cash Tally Counter', 'Financial Reports', 'Bank Audit']
       }
     ]
   },
@@ -137,6 +138,7 @@ const AVAILABLE_SYSTEMS = [
 ];
 
 export default function MasterSetting() {
+  const { user: currentUserObj, refreshUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -541,11 +543,21 @@ export default function MasterSetting() {
     if (Array.isArray(parsed)) {
       parsed.forEach((item) => {
         if (typeof item === 'string') {
-          permObj[item] = item;
+          let normalizedItem = item.replace(/^petty_cash\./, 'petty-cash.');
+          if (normalizedItem.includes('.bank audit.')) {
+            normalizedItem = normalizedItem.replace('.bank audit.', '.Bank Audit.');
+          }
+          permObj[normalizedItem] = normalizedItem;
         }
       });
     } else if (parsed && typeof parsed === 'object') {
-      permObj = { ...parsed };
+      Object.keys(parsed).forEach((item) => {
+        let normalizedItem = item.replace(/^petty_cash\./, 'petty-cash.');
+        if (normalizedItem.includes('.bank audit.')) {
+          normalizedItem = normalizedItem.replace('.bank audit.', '.Bank Audit.');
+        }
+        permObj[normalizedItem] = normalizedItem;
+      });
     } else if (Array.isArray(user.page_access)) {
       user.page_access.forEach((p) => {
         const key = `checklist.${p}.modify`;
@@ -650,6 +662,15 @@ export default function MasterSetting() {
         showToast(`Failed to update user: ${error.message}`, 'error');
       } else {
         showToast(`User ${editingUser.user_name || editingUser.username} updated successfully!`, 'success');
+        
+        const isCurrentLoggedIn = currentUserObj && (
+          currentUserObj.id === editingUser.id || 
+          (currentUserObj.user_name || currentUserObj.username) === (editingUser.user_name || editingUser.username)
+        );
+        if (isCurrentLoggedIn && refreshUser) {
+          await refreshUser();
+        }
+
         setEditingUser(null);
         fetchUsers();
       }
