@@ -139,7 +139,8 @@ export const systems = [
           { label: 'Complaint Resolution', to: '/systems/business-overview/feedback/resolution' }
         ]
       },
-      { label: 'Trader Invoices', to: '/systems/business-overview/trader-invoices' }
+      { label: 'Trader Invoices', to: '/systems/business-overview/trader-invoices' },
+      { label: 'Help Center', to: '/systems/business-overview/help-center' }
     ]
   }
 ];
