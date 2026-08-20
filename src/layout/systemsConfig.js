@@ -158,18 +158,43 @@ export const parseMasterAccessList = (raw) => {
   }
   if (Array.isArray(current)) return current;
   if (current && typeof current === 'object') return Object.keys(current);
+  if (typeof current === 'string' && current.trim().length > 0) {
+    if (current.includes(',')) {
+      return current.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return [current.trim()];
+  }
   return [];
 };
 
 export const getVisibleSystems = (user) => {
   const userObj = user || {};
-  const isMasterAdmin = (userObj.user_name || userObj.username || '').toLowerCase() === 'masteradmin';
-  const userRole = (userObj.role || '').toLowerCase();
+  let currentUserStored = null;
+  try {
+    const rawUser = localStorage.getItem('currentUser');
+    if (rawUser) {
+      currentUserStored = JSON.parse(rawUser);
+    }
+  } catch (e) {}
 
-  const masterAccessList = [
+  const isMasterAdmin = (userObj.user_name || userObj.username || currentUserStored?.user_name || currentUserStored?.username || '').toLowerCase() === 'masteradmin';
+  const userRole = (userObj.role || currentUserStored?.role || '').toLowerCase();
+
+  const primaryMasterAccess = [
     ...parseMasterAccessList(userObj.master_user_system_page_access),
+    ...parseMasterAccessList(currentUserStored?.master_user_system_page_access),
     ...parseMasterAccessList(localStorage.getItem('master_user_system_page_access'))
   ];
+
+  const legacyAccess = [
+    ...parseMasterAccessList(userObj.page_access),
+    ...parseMasterAccessList(userObj.pages),
+    ...parseMasterAccessList(currentUserStored?.page_access),
+    ...parseMasterAccessList(currentUserStored?.pages),
+    ...parseMasterAccessList(localStorage.getItem('page_access'))
+  ];
+
+  const masterAccessList = primaryMasterAccess.length > 0 ? primaryMasterAccess : legacyAccess;
 
   console.log('[AccessControl Debug] userRole:', userRole);
   console.log('[AccessControl Debug] masterAccessList:', masterAccessList);
@@ -199,7 +224,10 @@ export const getVisibleSystems = (user) => {
       if (sub.label === 'Work Records') labelsToCheck.push('Work Details');
       if (sub.label === 'Work Details') labelsToCheck.push('Work Records');
       if (sub.label === 'User & System Access') labelsToCheck.push('Master Setting');
-      if (sub.label === 'Petty Cash Form Entry') labelsToCheck.push('Form Entry');
+      if (sub.label === 'Petty Cash Form Entry') labelsToCheck.push('Form Entry', 'Petty Cash Form Entry', 'Petty Cash Form', 'Petty Cash');
+      if (sub.label === 'Bank Audit') labelsToCheck.push('Bank Audit', 'bank audit', 'bank-audit', 'bankaudit');
+      if (sub.label === 'Cash Tally Counter') labelsToCheck.push('Cash Tally Counter', 'Cash Tally', 'Counter', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3');
+      if (sub.label === 'Financial Reports') labelsToCheck.push('Financial Reports', 'Reports', 'financialreports');
       if (systemId === 'business-overview') {
         if (
           sub.label === 'Customer Feedback' ||
@@ -227,9 +255,13 @@ export const getVisibleSystems = (user) => {
       }
 
       const hasMasterPerm = labelsToCheck.some((lbl) => {
+        const sysUnderscore = systemId.replace('-', '_');
         const viewKey = `${systemId}.${lbl}.view`.toLowerCase();
         const modifyKey = `${systemId}.${lbl}.modify`.toLowerCase();
         const directKey = `${systemId}.${lbl}`.toLowerCase();
+        const viewKeyUnderscore = `${sysUnderscore}.${lbl}.view`.toLowerCase();
+        const modifyKeyUnderscore = `${sysUnderscore}.${lbl}.modify`.toLowerCase();
+        const directKeyUnderscore = `${sysUnderscore}.${lbl}`.toLowerCase();
         const delViewKey = `checklist_delegation.${lbl}.view`.toLowerCase();
         const delModifyKey = `checklist_delegation.${lbl}.modify`.toLowerCase();
         const delDirectKey = `checklist_delegation.${lbl}`.toLowerCase();
@@ -240,15 +272,23 @@ export const getVisibleSystems = (user) => {
           const itemLower = item.toLowerCase().trim();
           if (
             itemLower === viewKey || itemLower === modifyKey || itemLower === directKey ||
+            itemLower === viewKeyUnderscore || itemLower === modifyKeyUnderscore || itemLower === directKeyUnderscore ||
             itemLower === delViewKey || itemLower === delModifyKey || itemLower === delDirectKey ||
             itemLower === lblLower
           ) {
             return true;
           }
-          if (itemLower.startsWith(`${systemId}.`) || (systemId === 'checklist' && itemLower.startsWith('checklist_delegation.'))) {
+          if (
+            itemLower.startsWith(`${systemId}.`) ||
+            itemLower.startsWith(`${sysUnderscore}.`) ||
+            (systemId === 'checklist' && itemLower.startsWith('checklist_delegation.'))
+          ) {
             const parts = itemLower.split('.');
-            if (parts.length >= 2 && parts[1].trim() === lblLower) {
-              return true;
+            if (parts.length >= 2) {
+              const subPart = parts[1].toLowerCase().trim();
+              if (subPart === lblLower || subPart.replace(/[-_]/g, ' ') === lblLower.replace(/[-_]/g, ' ')) {
+                return true;
+              }
             }
           }
           return false;

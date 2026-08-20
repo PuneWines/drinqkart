@@ -161,7 +161,27 @@ export default function AdminApprovalPage() {
   const [pendingTasks, setPendingTasks] = useState([]);
   const [mgrStartDate, setMgrStartDate] = useState("");
   const [mgrEndDate, setMgrEndDate] = useState("");
+  const [historyShopFilter, setHistoryShopFilter] = useState("All");
+  const [historyShopsList, setHistoryShopsList] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchShops = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("shop")
+          .select("shop_name")
+          .order("shop_name", { ascending: true });
+        if (!error && data) {
+          const names = data.map((s) => s.shop_name).filter(Boolean);
+          setHistoryShopsList(names);
+        }
+      } catch (e) {
+        console.error("Error fetching shops for history filter:", e);
+      }
+    };
+    fetchShops();
+  }, []);
   const [processingId, setProcessingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [visibleCount, setVisibleCount] = useState(50);
@@ -293,7 +313,7 @@ export default function AdminApprovalPage() {
         else if (activeTab === "checklist")
           data = await fetchChecklistHistory();
         else if (activeTab === "work")
-          data = await fetchWorkTaskHistoryApi(currentUserRole, username);
+          data = await fetchWorkTaskHistoryApi(currentUserRole, username, historyShopFilter);
       }
 
       // Deduplicate data to ensure each task only shows once
@@ -418,7 +438,7 @@ export default function AdminApprovalPage() {
 
     setPendingTasks(filteredData);
     setLoading(false);
-  }, [activeTab, viewMode]);
+  }, [activeTab, viewMode, historyShopFilter]);
 
   useEffect(() => {
     loadTasks();
@@ -905,39 +925,62 @@ export default function AdminApprovalPage() {
               {/* View Mode & Search */}
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
                 {viewMode === "history" &&
-                  !isManager &&
                   activeTab === "work" && (
                     <div className="flex flex-wrap items-center gap-2 border border-purple-100 bg-purple-50/50 rounded-lg p-1.5">
-                      <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap">
-                        Mgr. Approval Range:
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[9px] sm:text-[10px] text-gray-500">
-                          From
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap">
+                          Shop:
                         </span>
-                        <input
-                          type="date"
-                          value={mgrStartDate}
-                          onChange={(e) => setMgrStartDate(e.target.value)}
-                          className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
-                        />
+                        <select
+                          value={historyShopFilter}
+                          onChange={(e) => setHistoryShopFilter(e.target.value)}
+                          className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium cursor-pointer"
+                        >
+                          <option value="All">All Shops</option>
+                          {historyShopsList.map((shopName) => (
+                            <option key={shopName} value={shopName}>
+                              {shopName}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[9px] sm:text-[10px] text-gray-500">
-                          To
-                        </span>
-                        <input
-                          type="date"
-                          value={mgrEndDate}
-                          onChange={(e) => setMgrEndDate(e.target.value)}
-                          className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
-                        />
-                      </div>
-                      {(mgrStartDate || mgrEndDate) && (
+
+                      {!isManager && (
+                        <>
+                          <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap ml-1">
+                            Mgr. Approval Range:
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] sm:text-[10px] text-gray-500">
+                              From
+                            </span>
+                            <input
+                              type="date"
+                              value={mgrStartDate}
+                              onChange={(e) => setMgrStartDate(e.target.value)}
+                              className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] sm:text-[10px] text-gray-500">
+                              To
+                            </span>
+                            <input
+                              type="date"
+                              value={mgrEndDate}
+                              onChange={(e) => setMgrEndDate(e.target.value)}
+                              className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {(mgrStartDate || mgrEndDate || historyShopFilter !== "All") && (
                         <button
                           onClick={() => {
                             setMgrStartDate("");
                             setMgrEndDate("");
+                            setHistoryShopFilter("All");
                           }}
                           className="text-[10px] sm:text-xs text-red-500 hover:underline font-bold px-1"
                         >

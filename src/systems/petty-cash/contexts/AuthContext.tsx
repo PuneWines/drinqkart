@@ -35,6 +35,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // ----- Utilities & Constants -----
 
 const PAGE_ALIASES: Record<string, string[]> = {
+  "bankaudit": ["bankaudit", "bank audit", "bank-audit"],
+  "bank audit": ["bankaudit", "bank audit", "bank-audit"],
   "pettycashform": ["patecashform", "pettycash", "patecash", "formentry", "pettycashformentry"],
   "pettycashformentry": ["patecashform", "pettycash", "patecash", "formentry", "pettycashform"],
   "cashtallycounter1": ["counter1", "cashtally1"],
@@ -56,16 +58,27 @@ export const parsePages = (raw: any): string[] => {
   return str.split(",").map((p: string) => p.trim()).filter((p: string) => p.length > 0);
 };
 
-/** Shops parser: handles both array from Supabase and raw strings */
+/** Shops parser: handles arrays, Postgres braces {}, comma-separated strings, and 'all' */
 export const parseShops = (raw: any): string[] | 'all' => {
-  if (Array.isArray(raw)) {
-    if (raw.length === 1 && raw[0].toLowerCase() === 'all') return 'all';
-    return raw;
-  }
   if (!raw) return 'all';
-  const str = raw.toString().trim();
-  if (str.toLowerCase() === 'all' || !str) return 'all';
-  return str.split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+
+  let strArr: string[] = [];
+  if (Array.isArray(raw)) {
+    strArr = raw.map(v => String(v));
+  } else {
+    strArr = [String(raw)];
+  }
+
+  const items = strArr
+    .flatMap(item => item.replace(/[{}]/g, "").split(","))
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  if (items.length === 0 || items.some(i => i.toLowerCase() === 'all')) {
+    return 'all';
+  }
+
+  return items;
 };
 
 export const parseCounterAccess = (raw: any): string[] => {
@@ -89,7 +102,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             username: userData.user_name || userData.username || userData.name || "User",
             name: userData.user_name || userData.username || userData.name || "User",
             role: userData.role || "user",
-            pages: userData.page_access || ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports'],
+            pages: userData.page_access || (userData.master_user_system_page_access ? [] : ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports']),
             shops: userData.shop_name || userData.user_access ? [userData.shop_name || userData.user_access] : 'all',
             initials: (userData.user_name || userData.username || "U").substring(0, 2).toUpperCase(),
             loginTime: new Date().toISOString()
@@ -314,6 +327,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const getMasterPermissions = (): string[] => {
     try {
+      const currentUserStr = localStorage.getItem("currentUser");
+      if (currentUserStr) {
+        const u = JSON.parse(currentUserStr);
+        const rawAccess = u && (u.master_user_system_page_access || u.pages);
+        if (rawAccess) {
+          if (Array.isArray(rawAccess)) {
+            return rawAccess.map(v => String(v));
+          }
+          if (typeof rawAccess === "string") {
+            try {
+              const parsed = JSON.parse(rawAccess);
+              if (Array.isArray(parsed)) return parsed.map(v => String(v));
+            } catch (e) { }
+          }
+        }
+      }
+    } catch (e) { }
+
+    try {
       const raw = localStorage.getItem("master_user_system_page_access");
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -321,7 +353,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return parsed.map(v => String(v));
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const hrUserStr = localStorage.getItem("hr_user");
@@ -337,7 +369,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     if (user && Array.isArray(user.pages)) {
       return user.pages;
@@ -361,11 +393,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const masterPermissions = getMasterPermissions();
-    
+
     // Parse permission keys if they are structured like "system.page.access"
     const userPages = masterPermissions.map(p => {
       const parts = p.split('.');
-      if (parts.length >= 3) {
+      if (parts.length >= 2) {
         return normalize(parts[1]);
       }
       return normalize(p);
@@ -383,38 +415,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return false;
     if (isAdmin()) return true;
 
-    const roleLower = (user.role || '').toLowerCase().trim();
-    if (roleLower === 'admin' || roleLower === 'manager' || roleLower === 'masteradmin') return true;
-
     const masterPermissions = getMasterPermissions();
-
     const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     const target = normalize(pageName);
 
-    // Dotted permissions check (e.g. system.page.modify)
-    const hasDottedModify = masterPermissions.some(p => {
-      const parts = p.split('.');
-      if (parts.length >= 3) {
-        const pgName = parts[1];
-        const action = parts[2];
-        const normPgName = normalize(pgName);
-        const matchesTarget = normPgName === target || (PAGE_ALIASES[target] && PAGE_ALIASES[target].includes(normPgName));
-        return matchesTarget && action === 'modify';
-      }
-      return false;
-    });
+    // If masterPermissions exist, check for explicit .modify / (Modify) permission
+    if (masterPermissions.length > 0) {
+      const hasDottedModify = masterPermissions.some(p => {
+        const parts = p.split('.');
+        if (parts.length >= 3) {
+          const pgName = parts[1];
+          const action = parts[2];
+          const normPgName = normalize(pgName);
+          const matchesTarget = normPgName === target || (PAGE_ALIASES[target] && PAGE_ALIASES[target].includes(normPgName));
+          return matchesTarget && action.toLowerCase() === 'modify';
+        }
+        const pNorm = normalize(p);
+        const matchesTarget = pNorm.includes(target) || (PAGE_ALIASES[target] && PAGE_ALIASES[target].some(alias => pNorm.includes(alias)));
+        return matchesTarget && (pNorm.includes('modify') || pNorm.includes('edit'));
+      });
+      return hasDottedModify;
+    }
 
-    return hasDottedModify;
+    // Legacy fallback for systems where masterPermissions are not configured
+    const roleLower = (user.role || '').toLowerCase().trim();
+    return roleLower === 'admin' || roleLower === 'manager' || roleLower === 'masteradmin';
   };
 
   const hasShopAccess = (shopName: string): boolean => {
     if (!user) return false;
     if (isAdmin()) return true;
-    if (user.shops === 'all') return true;
+    if (!user.shops || user.shops === 'all') return true;
 
-    const shopList = Array.isArray(user.shops) ? user.shops : [];
+    const rawList = Array.isArray(user.shops) ? user.shops : [user.shops];
+    const shopList = rawList
+      .flatMap(item => String(item).replace(/[{}]/g, "").split(","))
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (shopList.length === 0 || shopList.some(s => s.toLowerCase() === 'all')) {
+      return true;
+    }
+
+    const normShop = shopName?.trim().toLowerCase();
     return shopList.some(
-      (s) => s.trim().toLowerCase() === shopName?.trim().toLowerCase()
+      (s) => s.toLowerCase() === normShop
     );
   };
 
@@ -422,7 +467,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (isAdmin()) return true;
     if (!user) return false;
     const cStr = String(counter).trim().toUpperCase();
-    
+
     let userCounters: string[] = [];
     if (Array.isArray(user.counterAccess)) {
       userCounters = user.counterAccess;
@@ -455,6 +500,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
+    if (userCounters.length === 0 || userCounters.some(c => String(c).trim().toLowerCase() === 'all')) {
+      return true;
+    }
+
     const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     const target = normalize(cStr);
 
@@ -462,13 +511,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getAllowedCounters = (): string[] => {
+    const defaultAll = ["COUNTER-1", "COUNTER-2", "COUNTER-3", "COUNTER-4"];
     if (isAdmin()) {
-      return ["COUNTER-1", "COUNTER-2", "COUNTER-3"];
+      return defaultAll;
     }
-    const counters: string[] = [];
-    if (hasCounterAccess("COUNTER-1")) counters.push("COUNTER-1");
-    if (hasCounterAccess("COUNTER-2")) counters.push("COUNTER-2");
-    if (hasCounterAccess("COUNTER-3")) counters.push("COUNTER-3");
 
     let userCounters: string[] = [];
     if (user && Array.isArray(user.counterAccess)) {
@@ -497,9 +543,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             userCounters = rawAccess.split(",").map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
+    if (userCounters.length === 0 || userCounters.some(c => String(c).trim().toLowerCase() === 'all')) {
+      return defaultAll;
+    }
+
+    const counters: string[] = [];
     userCounters.forEach(c => {
       const normalizedVal = String(c).trim().toUpperCase();
       if (normalizedVal && !counters.includes(normalizedVal)) {
@@ -507,7 +558,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    return counters;
+    return counters.length > 0 ? counters : defaultAll;
   };
 
   return (

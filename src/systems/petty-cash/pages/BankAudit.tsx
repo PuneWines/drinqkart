@@ -98,7 +98,8 @@ const getRowTotalPaytm = (rec: any) => {
 };
 
 export default function BankAudit() {
-  const { user } = useAuth();
+  const { user, isAdmin, getAllowedCounters, hasShopAccess, hasPageModifyAccess } = useAuth();
+  const isModifyAllowed = hasPageModifyAccess("Bank Audit");
   const [groupedTallies, setGroupedTallies] = useState<GroupedTally[]>([]);
   const [shops, setShops] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -279,17 +280,15 @@ export default function BankAudit() {
   // Allowed counters permission check
   const allowedCounters = useMemo(() => {
     if (!user) return [];
-    if (user.role === 'admin' || user.role === 'office_admin') {
+    if (isAdmin() || user.role === 'admin' || user.role === 'office_admin') {
       return ['Counter 1', 'Counter 2', 'Counter 3', 'Counter 4'];
     }
-    const perms = user.permissions || {};
-    return Object.entries(perms)
-      .filter(([_, allowed]) => allowed)
-      .map(([key]) => {
-        const num = key.replace(/[^0-9]/g, '');
-        return `Counter ${num}`;
-      });
-  }, [user]);
+    const ac = getAllowedCounters();
+    if (ac && ac.length > 0) {
+      return ac;
+    }
+    return ['Counter 1', 'Counter 2', 'Counter 3', 'Counter 4'];
+  }, [user, isAdmin, getAllowedCounters]);
 
   const counterOptions = useMemo(() => {
     const defaultCounters = ['Counter 1', 'Counter 2', 'Counter 3', 'Counter 4'];
@@ -308,6 +307,9 @@ export default function BankAudit() {
       );
       if (!hasAllowedCounter) return false;
 
+      const hasAllowedShop = g.shopNames.length === 0 || g.shopNames.some((sName) => hasShopAccess(sName));
+      if (!hasAllowedShop) return false;
+
       const q = search.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -323,7 +325,7 @@ export default function BankAudit() {
 
       return matchesSearch && matchesFromDate && matchesToDate && matchesShop && matchesCounter;
     });
-  }, [groupedTallies, allowedCounters, search, fromDate, toDate, shopFilter, counterFilter]);
+  }, [groupedTallies, allowedCounters, hasShopAccess, search, fromDate, toDate, shopFilter, counterFilter]);
 
   // Checkbox Selection Logic
   const handleToggleSelectRow = (tallyId: string) => {
@@ -385,6 +387,10 @@ export default function BankAudit() {
 
   // Single Row Save Action (Upsert to petty_cash_bank_audit)
   const handleSaveSingleRow = async (tallyId: string) => {
+    if (!isModifyAllowed) {
+      showToast("You have view-only access to this page.", "error");
+      return;
+    }
     const draft = draftEdits[tallyId];
     if (!draft) return;
     setSavingTallyId(tallyId);
@@ -430,6 +436,10 @@ export default function BankAudit() {
 
   // Bulk Save Action (Top Right Button)
   const handleBulkSave = async () => {
+    if (!isModifyAllowed) {
+      showToast("You have view-only access to this page.", "error");
+      return;
+    }
     if (selectedTallyIds.size === 0) {
       showToast("Please select at least one row checkbox to save.", "error");
       return;
@@ -484,9 +494,8 @@ export default function BankAudit() {
     <div className="space-y-5">
       {/* Toast Notification */}
       {toastMsg && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium text-sm transition-all ${
-          toastMsg.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
-        }`}>
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium text-sm transition-all ${toastMsg.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+          }`}>
           {toastMsg.text}
         </div>
       )}
@@ -507,18 +516,19 @@ export default function BankAudit() {
             <FaSync className={loading ? "animate-spin" : ""} /> Refresh
           </button>
 
-          {/* Bulk Save Button Top Right - Always Visible & Interactive */}
-          <button
-            onClick={handleBulkSave}
-            disabled={bulkSaving}
-            className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition-all flex items-center gap-2 ${
-              selectedTallyIds.size > 0 
-                ? 'bg-[#2a5298] hover:bg-[#1e3c72]' 
-                : 'bg-[#2a5298]/90 hover:bg-[#2a5298]'
-            }`}
-          >
-            <FaSave /> {bulkSaving ? "Saving..." : selectedTallyIds.size > 0 ? `Bulk Save (${selectedTallyIds.size})` : "Bulk Save"}
-          </button>
+          {/* Bulk Save Button Top Right - Visible only if user has modify access */}
+          {isModifyAllowed && (
+            <button
+              onClick={handleBulkSave}
+              disabled={bulkSaving}
+              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition-all flex items-center gap-2 ${selectedTallyIds.size > 0
+                  ? 'bg-[#2a5298] hover:bg-[#1e3c72]'
+                  : 'bg-[#2a5298]/90 hover:bg-[#2a5298]'
+                }`}
+            >
+              <FaSave /> {bulkSaving ? "Saving..." : selectedTallyIds.size > 0 ? `Bulk Save (${selectedTallyIds.size})` : "Bulk Save"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -612,7 +622,13 @@ export default function BankAudit() {
             </div>
 
             <div className="text-xs font-medium text-gray-500">
-              Selected: <strong className="text-[#2a5298]">{selectedTallyIds.size}</strong> of {filtered.length}
+              {isModifyAllowed ? (
+                <>Selected: <strong className="text-[#2a5298]">{selectedTallyIds.size}</strong> of {filtered.length}</>
+              ) : (
+                <span className="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 rounded-md border border-amber-200">
+                  View Only Mode
+                </span>
+              )}
             </div>
           </div>
 
@@ -620,19 +636,21 @@ export default function BankAudit() {
             <table className="w-full text-xs min-w-[2900px] divide-y divide-gray-200 border-collapse">
               <thead className="bg-[#2a5298] text-white text-left font-sans sticky top-0 z-10 shadow-sm">
                 <tr>
-                  {/* Select Checkbox & Inline Save Column */}
-                  <th className="px-4 py-3.5 text-center min-w-[110px] border-r border-blue-800 bg-blue-900/90">
-                    <div className="flex items-center justify-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={filtered.length > 0 && selectedTallyIds.size === filtered.length}
-                        onChange={handleToggleSelectAll}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        title="Select All"
-                      />
-                      <span className="text-xs font-bold uppercase tracking-wider">Save</span>
-                    </div>
-                  </th>
+                  {/* Select Checkbox & Inline Save Column - Only if Modify Allowed */}
+                  {isModifyAllowed && (
+                    <th className="px-4 py-3.5 text-center min-w-[110px] border-r border-blue-800 bg-blue-900/90">
+                      <div className="flex items-center justify-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={filtered.length > 0 && selectedTallyIds.size === filtered.length}
+                          onChange={handleToggleSelectAll}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          title="Select All"
+                        />
+                        <span className="text-xs font-bold uppercase tracking-wider">Save</span>
+                      </div>
+                    </th>
+                  )}
 
                   {/* Tally Identifiers */}
                   <th className="px-4 py-3.5 font-semibold uppercase tracking-wider border-r border-blue-800 min-w-[130px]">Tally ID</th>
@@ -674,7 +692,7 @@ export default function BankAudit() {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={24} className="text-center py-16 text-gray-400">
+                    <td colSpan={isModifyAllowed ? 24 : 23} className="text-center py-16 text-gray-400">
                       <div className="flex flex-col items-center gap-2">
                         <FaFileAlt className="text-4xl text-gray-300" />
                         <p className="font-medium">No records found</p>
@@ -693,28 +711,30 @@ export default function BankAudit() {
                       key={tId}
                       className={`transition-colors ${isChecked ? 'bg-amber-50/70' : 'hover:bg-blue-50/30'}`}
                     >
-                      {/* Checkbox + Inline Save Button Cell */}
-                      <td className="px-2 py-2 text-center border-r border-gray-200 bg-gray-50/40">
-                        <div className="flex items-center justify-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => handleToggleSelectRow(tId)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
-                          />
-                          {isChecked && (
-                            <button
-                              onClick={() => handleSaveSingleRow(tId)}
-                              disabled={savingTallyId === tId}
-                              className="px-2 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded shadow-xs transition-all flex items-center justify-center gap-1"
-                              title="Save row data to petty_cash_bank_audit"
-                            >
-                              <FaSave className="text-xs" />
-                              {savingTallyId === tId ? "..." : "Save"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                      {/* Checkbox + Inline Save Button Cell - Only if Modify Allowed */}
+                      {isModifyAllowed && (
+                        <td className="px-2 py-2 text-center border-r border-gray-200 bg-gray-50/40">
+                          <div className="flex items-center justify-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleSelectRow(tId)}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                            />
+                            {isChecked && (
+                              <button
+                                onClick={() => handleSaveSingleRow(tId)}
+                                disabled={savingTallyId === tId}
+                                className="px-2 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded shadow-xs transition-all flex items-center justify-center gap-1"
+                                title="Save row data to petty_cash_bank_audit"
+                              >
+                                <FaSave className="text-xs" />
+                                {savingTallyId === tId ? "..." : "Save"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
 
                       {/* Tally ID */}
                       <td className="px-3 py-2 font-mono font-bold text-[#2a5298] whitespace-nowrap border-r border-gray-200">
@@ -756,7 +776,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_cash ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_cash", e.target.value)}
                           placeholder="0"
@@ -768,13 +788,12 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.cash_diff_audit ?? ""}
                           onChange={(e) => handleDraftChange(tId, "cash_diff_audit", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${
-                            Number(draft.cash_diff_audit) < 0 ? 'text-red-600' : Number(draft.cash_diff_audit) > 0 ? 'text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.cash_diff_audit) < 0 ? 'text-red-600' : Number(draft.cash_diff_audit) > 0 ? 'text-blue-600' : 'text-gray-700'
+                            }`}
                         />
                       </td>
 
@@ -782,7 +801,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_cash_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_cash_date", e.target.value)}
                           className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
@@ -798,7 +817,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_gpay ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_gpay", e.target.value)}
                           placeholder="0"
@@ -810,13 +829,12 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.gpay_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "gpay_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${
-                            Number(draft.gpay_diff) < 0 ? 'text-red-600' : Number(draft.gpay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.gpay_diff) < 0 ? 'text-red-600' : Number(draft.gpay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
+                            }`}
                         />
                       </td>
 
@@ -824,7 +842,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_gpay_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_gpay_date", e.target.value)}
                           className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
@@ -840,7 +858,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_paytm ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_paytm", e.target.value)}
                           placeholder="0"
@@ -852,13 +870,12 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.paytm_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "paytm_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${
-                            Number(draft.paytm_diff) < 0 ? 'text-red-600' : Number(draft.paytm_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.paytm_diff) < 0 ? 'text-red-600' : Number(draft.paytm_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
+                            }`}
                         />
                       </td>
 
@@ -866,7 +883,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_paytm_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_paytm_date", e.target.value)}
                           className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
@@ -882,7 +899,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.audit_phonepe ?? ""}
                           onChange={(e) => handleDraftChange(tId, "audit_phonepe", e.target.value)}
                           placeholder="0"
@@ -894,13 +911,12 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.phonepay_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "phonepay_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${
-                            Number(draft.phonepay_diff) < 0 ? 'text-red-600' : Number(draft.phonepay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-2 py-1 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.phonepay_diff) < 0 ? 'text-red-600' : Number(draft.phonepay_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
+                            }`}
                         />
                       </td>
 
@@ -908,7 +924,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-yellow-50/30">
                         <input
                           type="date"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_phone_pay_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_phone_pay_date", e.target.value)}
                           className="w-full px-1.5 py-1 text-xs border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
@@ -919,13 +935,12 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 bg-slate-50">
                         <input
                           type="number"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.total_diff ?? ""}
                           onChange={(e) => handleDraftChange(tId, "total_diff", e.target.value)}
                           placeholder="0"
-                          className={`w-full px-2 py-1 text-xs border border-slate-300 rounded font-extrabold focus:outline-none focus:ring-2 focus:ring-slate-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${
-                            Number(draft.total_diff) < 0 ? 'text-red-600' : Number(draft.total_diff) > 0 ? 'text-emerald-700' : 'text-gray-800'
-                          }`}
+                          className={`w-full px-2 py-1 text-xs border border-slate-300 rounded font-extrabold focus:outline-none focus:ring-2 focus:ring-slate-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.total_diff) < 0 ? 'text-red-600' : Number(draft.total_diff) > 0 ? 'text-emerald-700' : 'text-gray-800'
+                            }`}
                         />
                       </td>
 
@@ -933,7 +948,7 @@ export default function BankAudit() {
                       <td className="px-2 py-1 border-r border-gray-200 min-w-[200px]">
                         <input
                           type="text"
-                          disabled={!isChecked}
+                          disabled={!isModifyAllowed || !isChecked}
                           value={draft.narration || ""}
                           onChange={(e) => handleDraftChange(tId, "narration", e.target.value)}
                           placeholder="Audit narration & remarks..."

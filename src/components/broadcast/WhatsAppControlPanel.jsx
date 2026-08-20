@@ -272,11 +272,11 @@ export default function WhatsAppControlPanel() {
   }
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row h-[680px] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 flex flex-col md:flex-row h-full min-h-0 overflow-hidden">
       {/* ======================================================== */}
       {/* LEFT SIDEBAR: CONVERSATIONS LIST                          */}
       {/* ======================================================== */}
-      <div className="w-full md:w-80 border-r border-gray-100 flex flex-col h-full bg-white shrink-0">
+      <div className="w-full md:w-72 lg:w-80 border-r border-gray-100 flex flex-col h-full bg-white shrink-0 min-h-0">
         {/* Sidebar Header */}
         <div className="p-3.5 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-bold text-gray-900 tracking-tight flex items-center gap-2">
@@ -374,7 +374,7 @@ export default function WhatsAppControlPanel() {
       {/* RIGHT MAIN VIEW: ACTIVE CHAT FEED & COMPOSER             */}
       {/* ======================================================== */}
       {selectedConversationId ? (
-        <div className="flex-1 flex flex-col h-full bg-[#efeae2]/30 relative">
+        <div className="flex-1 flex flex-col h-full min-h-0 bg-[#efeae2]/30 relative overflow-hidden">
           {/* Chat Header */}
           <div className="p-3.5 bg-white border-b border-gray-100 flex items-center justify-between shadow-xs z-10">
             <div className="flex items-center gap-3">

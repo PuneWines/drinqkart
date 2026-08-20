@@ -190,33 +190,33 @@ export default function ShopEmployeePanel() {
           </div>
 
           {/* Shop Selection Section */}
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2.5 sm:gap-3">
-            <h2 className="text-xs sm:text-sm font-bold text-gray-900 flex items-center gap-1.5">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2 sm:gap-2.5">
+            <h2 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
               <span>🏪</span> Shop Selection
             </h2>
 
-            <div className="flex flex-col gap-2 overflow-y-auto max-h-[160px] sm:max-h-[220px] pr-1">
+            <div className="flex flex-col gap-1.5 overflow-y-auto max-h-[110px] sm:max-h-[140px] pr-1">
               {filteredShops.map((shop) => {
                 const isSelected = selectedShopIds.includes(shop.id)
                 return (
                   <div
                     key={shop.id}
                     onClick={() => toggleShopSelection(shop.id)}
-                    className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer select-none ${
+                    className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none ${
                       isSelected
                         ? 'border-[#25D366] bg-emerald-50/50 shadow-sm'
                         : 'border-transparent bg-gray-50 hover:border-[#25D366]/40 hover:-translate-y-0.5'
                     }`}
                   >
                     <div className="flex justify-between items-center">
-                      <h3 className="text-xs sm:text-sm font-bold text-gray-900">{shop.name}</h3>
+                      <h3 className="text-xs font-bold text-gray-900">{shop.name}</h3>
                       {isSelected && (
-                        <span className="bg-[#25D366] text-white text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        <span className="bg-[#25D366] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                           Selected
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5 font-medium">
+                    <p className="text-[10px] sm:text-[11px] text-gray-500 mt-0.5 font-medium">
                       {shop.totalEmployees} Employees {isSelected ? '• Included in campaign' : ''}
                     </p>
                   </div>
@@ -225,17 +225,17 @@ export default function ShopEmployeePanel() {
             </div>
 
             {/* Employees Section */}
-            <div className="flex flex-col flex-1 min-h-[160px] sm:min-h-0 mt-1">
-              <div className="flex justify-between items-center mb-1.5">
-                <h2 className="text-xs sm:text-sm font-bold text-gray-900 flex items-center gap-1.5">
+            <div className="flex flex-col flex-1 min-h-[120px] sm:min-h-0 mt-0.5">
+              <div className="flex justify-between items-center mb-1">
+                <h2 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                   <span>👥</span> Employees ({activeEmployees.length})
                 </h2>
-                <span className="text-[11px] sm:text-xs text-emerald-600 font-semibold">
+                <span className="text-[10px] sm:text-[11px] text-emerald-600 font-semibold">
                   {activeEmployees.filter((e) => selectedEmployeeIds.includes(e.id)).length} selected
                 </span>
               </div>
 
-              <div className="border border-gray-200 rounded-xl sm:rounded-2xl overflow-hidden flex-1 overflow-y-auto bg-white max-h-[180px] sm:max-h-none">
+              <div className="border border-gray-200 rounded-xl overflow-hidden flex-1 overflow-y-auto bg-white max-h-[140px] sm:max-h-none">
                 <table className="w-full border-collapse text-left text-[11px] sm:text-xs">
                   <thead>
                     <tr className="bg-emerald-50/80 text-emerald-800 font-bold border-b border-emerald-100">

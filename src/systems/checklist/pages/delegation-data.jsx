@@ -373,10 +373,10 @@ function DelegationPage({
               <button
                 onClick={handleDeleteSelected}
                 disabled={isDeleting}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 shadow-sm transition-colors"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 shrink-0 cursor-pointer"
               >
-                <Trash2 size={16} />
-                {isDeleting ? 'Deleting...' : `Delete (${selectedTasks.length})`}
+                <Trash2 size={14} className="stroke-[2.5]" />
+                {isDeleting ? 'Deleting...' : `Delete(${selectedTasks.length})`}
               </button>
             )}
           </div>
