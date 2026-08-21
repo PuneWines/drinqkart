@@ -40,15 +40,23 @@ import PublicTraderInvoiceForm from './systems/business-overview/pages/PublicTra
 // the top navigation header and system sub-sidebar alongside content.
 const ConsoleRoute = ({ children }) => {
   const { user } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   if (!user) return <Navigate to="/login" replace />;
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-100 font-sans">
-      <AppHeader />
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        <AppSidebar />
+      <AppHeader
+        isMobileMenuOpen={isMobileMenuOpen}
+        onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+      />
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        <AppSidebar
+          isMobileMenuOpen={isMobileMenuOpen}
+          onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
+        />
         <main className="flex-1 bg-gray-100 overflow-auto h-full flex flex-col min-w-0">
-          <div className="flex-1 overflow-auto min-h-0 flex flex-col p-2">
+          <div className="flex-1 overflow-auto min-h-0 flex flex-col p-1.5 sm:p-3 md:p-4">
             {children}
           </div>
         </main>

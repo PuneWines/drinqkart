@@ -1237,9 +1237,8 @@ const AllTasks = () => {
   return (
     <AdminLayout>
       <div className="space-y-4 sm:space-y-6">
-        {/* Sticky Header Section */}
-        {/* Sticky Header Section */}
-        <div className="sticky top-0 z-30  py-2 transition-all duration-300">
+        {/* Sticky Header Section - Solid background prevents scrolled details from bleeding through */}
+        <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md border-b border-gray-200/80 shadow-xs py-3 px-2 transition-all duration-300">
           <div className="max-w-7xl mx-auto space-y-2">
             {/* Tab System & Primary Actions */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">

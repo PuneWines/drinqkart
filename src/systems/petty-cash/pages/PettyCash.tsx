@@ -117,6 +117,13 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   const { user, hasPageModifyAccess } = useAuth();
   const isModifyAllowed = hasPageModifyAccess("Petty Cash Form");
 
+  const resetFilters = () => {
+    setSearch('');
+    setFromDate('');
+    setToDate('');
+    setShopFilter('');
+  };
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Expense — fetch / CRUD
   // ─────────────────────────────────────────────────────────────────────────────
@@ -275,6 +282,32 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
+      {/* ── Paytm-Style Mobile Form Action Card (< 768px) ── */}
+      {isModifyAllowed && (
+        <div className="md:hidden bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#2a5298] animate-ping" />
+              Form Action
+            </span>
+            <span className="text-[10px] font-bold text-gray-400">Tap to open form</span>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="bg-[#2a5298]/5 p-3 rounded-2xl border border-[#2a5298]/20 shadow-xs flex flex-col items-center justify-center text-center active:scale-95 transition-all group cursor-pointer w-28 h-28"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-[#2a5298] text-white flex items-center justify-center shadow-md mb-2 group-hover:scale-105 transition-transform">
+                <FaPlus className="text-base" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-800 leading-tight">New Entry</span>
+              <span className="text-[9px] text-[#2a5298] font-semibold mt-0.5">Form</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Summary Cards (Over table) ── */}
       {isModifyAllowed && (
