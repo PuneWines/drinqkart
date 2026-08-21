@@ -218,8 +218,31 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const tryChecklistLogin = async (trimmedInput, password) => {
+    const cleanDigits = trimmedInput.replace(/\D/g, "");
+
+    // 1. Resolve user_name or email_id by matching entered mobile number against 'number' column
+    let loginHandle = trimmedInput;
+    try {
+      const filterCond = cleanDigits
+        ? `number.eq.${trimmedInput},number.eq.${cleanDigits}`
+        : `number.eq.${trimmedInput}`;
+
+      const { data: matchedUsers } = await supabase
+        .from('users')
+        .select('user_name, email_id, number')
+        .or(filterCond)
+        .limit(1);
+
+      if (matchedUsers && matchedUsers.length > 0) {
+        loginHandle = matchedUsers[0].user_name || matchedUsers[0].email_id || trimmedInput;
+      }
+    } catch (err) {
+      console.error("Error matching mobile number in users table:", err);
+    }
+
+    // 2. Pass resolved user handle to secure_login RPC for bcrypt password verification
     const { data: rpcData, error: rpcError } = await supabase.rpc('secure_login', {
-      input_username: trimmedInput,
+      input_username: loginHandle,
       input_password: password
     });
 
@@ -317,7 +340,7 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    return { success: false, message: 'Invalid username/email or password.' };
+    return { success: false, message: 'Invalid mobile number or password' };
   };
 
   const logout = () => {

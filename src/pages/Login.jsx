@@ -129,13 +129,13 @@ const Login = () => {
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-widest text-[#1A1A1A]/60 mb-1 font-bold">Username or Email</label>
+              <label className="block text-[10px] uppercase tracking-widest text-[#1A1A1A]/60 mb-1 font-bold">Mobile Number</label>
               <input
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-[#FAFAFA] border-[0.5px] border-[#1A1A1A]/20 text-[#1A1A1A] p-3 text-sm focus:outline-none focus:border-[#C9A84C] transition-colors shadow-inner font-medium"
-                placeholder="Enter username or email"
+                placeholder="Enter 10-digit mobile number"
               />
             </div>
 

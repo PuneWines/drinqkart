@@ -30,7 +30,8 @@ import {
   Receipt,
   Truck,
   ShieldAlert,
-  UserCheck
+  UserCheck,
+  LogOut
 } from 'lucide-react';
 
 const getSubtabIcon = (label) => {
@@ -283,7 +284,19 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu }) => {
 
             {/* Bottom Footer */}
             <div className="p-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-xs">
-              <span className="text-[#8C6D23] font-semibold">{user?.user_name || user?.username || 'User'}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[#8C6D23] font-semibold">{user?.user_name || user?.username || 'User'}</span>
+                <button
+                  onClick={() => {
+                    logout();
+                    if (onCloseMobileMenu) onCloseMobileMenu();
+                  }}
+                  title="Logout"
+                  className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-100/70 rounded-md transition-colors cursor-pointer flex items-center justify-center"
+                >
+                  <LogOut size={15} />
+                </button>
+              </div>
               <a
                 href="https://www.botivate.in"
                 target="_blank"

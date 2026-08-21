@@ -80,6 +80,15 @@ const Navbar = ({ toggleCart }) => {
     }
   };
 
+  const handleAdminClick = () => {
+    setIsMobileMenuOpen(false);
+    if (user) {
+      navigate('/dashboard/admin');
+    } else {
+      navigate('/login');
+    }
+  };
+
   const homeDropdownItems = [
     { label: 'About Us', id: 'about' },
     { label: 'Our Mission', id: 'mission' },
@@ -208,7 +217,13 @@ const Navbar = ({ toggleCart }) => {
                 </button>
               </div>
 
-              <div className="hidden sm:flex items-center">
+              <div className="hidden sm:flex items-center space-x-4">
+                <button
+                  onClick={handleAdminClick}
+                  className="text-xs text-[#1A1A1A]/80 hover:text-[#C9A84C] transition-colors uppercase tracking-widest font-semibold border border-[#1A1A1A]/20 px-3 py-1 rounded hover:border-[#C9A84C]"
+                >
+                  Admin
+                </button>
                 {user ? (
                   <button
                     onClick={logout}
@@ -307,7 +322,13 @@ const Navbar = ({ toggleCart }) => {
 
 
 
-              <div className="mt-auto border-t-[0.5px] border-[#1A1A1A]/10 pt-8 flex items-center gap-4">
+              <div className="mt-auto border-t-[0.5px] border-[#1A1A1A]/10 pt-8 flex items-center justify-between gap-4">
+                <button
+                  onClick={handleAdminClick}
+                  className="text-xs uppercase tracking-widest text-white bg-[#C9A84C] hover:bg-[#b5953b] px-4 py-2 rounded font-bold shadow-sm"
+                >
+                  Admin
+                </button>
                 {user ? (
                   <button onClick={() => { logout(); setIsMobileMenuOpen(false); }} className="text-sm uppercase tracking-widest text-[#1A1A1A]/60 hover:text-[#1A1A1A]">Logout</button>
                 ) : (
