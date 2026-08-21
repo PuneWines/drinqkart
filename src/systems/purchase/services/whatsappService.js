@@ -2,6 +2,7 @@
 // WhatsApp Notification Service (Maytapi)
 // ============================================================
 import { supabase } from "../lib/supabase";
+import { useChatStore } from "../../../store/useChatStore";
 // Hardcoded recipient number for pharmacy indent approvals.
 // Change APPROVAL_PHONE_NUMBER to the actual WhatsApp number
 // (include country code, no + or spaces, e.g. "919876543210").
@@ -10,175 +11,50 @@ import { supabase } from "../lib/supabase";
 const MAYTAPI_PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
 const MAYTAPI_PHONE_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
 const MAYTAPI_TOKEN = import.meta.env.VITE_MAYTAPI_ACCESS_TOKEN || import.meta.env.VITE_MAYTAPI_TOKEN;
-// ⬇️ Hardcoded recipients – change these numbers as needed
-// Numbers should include country code, no + or spaces (e.g. "919876543210")
-const APPROVAL_PHONE_NUMBERS = [
-  "917089161648",
-  "917000520856",
-  "919340821622",
-  "916267799443",
-];
-
-// ⬇️ Hardcoded recipient for dressing notifications
-// Change DRESSING_PHONE_NUMBER to the actual WhatsApp number
-const DRESSING_PHONE_NUMBER = "916267799443"; // Update this with the specific number for dressing notifications
-
-// ⬇️ Hardcoded recipients for OT notifications
-// Change OT_PHONE_NUMBERS to the actual WhatsApp numbers
-const OT_PHONE_NUMBERS = [
-  "916267799443", // Update with specific numbers for OT notifications
-];
-
-export { DRESSING_PHONE_NUMBER, OT_PHONE_NUMBERS };
 
 /**
- * Build the approval WhatsApp message for a pharmacy indent.
- *
- * @param {Object} indent - The inserted pharmacy record from Supabase
- * @param {Array}  medicines - Array of { name, quantity } objects
- * @param {Object} requestTypes - { medicineSlip, investigation, package, nonPackage }
- * @param {string} approvalUrl - Full URL to the pharmacy approval page
- * @returns {string} Formatted WhatsApp message
- */
-export const buildIndentApprovalMessage = (
-  indent,
-  medicines,
-  requestTypes,
-  approvalUrl,
-) => {
-  const isDepartmental =
-    indent?.indent_scope === "departmental" ||
-    indent?.request_source === "departmental" ||
-    (!!indent?.requested_by &&
-      !indent?.patient_name &&
-      !indent?.admission_number &&
-      !indent?.ipd_number);
-
-  // Determine request type label
-  const requestTypeLabels = [];
-  if (requestTypes?.medicineSlip) requestTypeLabels.push("Medicine Slip");
-  if (requestTypes?.investigation) requestTypeLabels.push("Investigation");
-  if (requestTypes?.package) requestTypeLabels.push("Package");
-  if (requestTypes?.nonPackage) requestTypeLabels.push("Non-Package");
-  const requestTypeStr = requestTypeLabels.join(", ") || "N/A";
-
-  // For medicine slip, list the first medicine (or summarise)
-  let medicineName = "N/A";
-  let medicineQty = "N/A";
-  if (requestTypes?.medicineSlip && medicines?.length > 0) {
-    medicineName = medicines[0].name || "N/A";
-    medicineQty = medicines.map((m) => m.quantity).join(", ") || "N/A";
-    if (medicines.length > 1) {
-      medicineName = medicines.map((m) => m.name).join(", ");
-    }
-  }
-
-  const serialNo = indent.id || "N/A";
-
-  const message = `⚡ Approval Request – Medicine
-
-🆔 Indent No.: ${indent.indent_no || "N/A"}
-🔢 Serial No.: ${serialNo}
-🏥 Admission No.: ${indent.admission_number || "N/A"}
-👨‍💼 Requested By: ${indent.staff_name || "N/A"}
-👨‍⚕️ Consultant: ${indent.consultant_name || "N/A"}
-🧑‍🦱 Patient: ${indent.patient_name || "N/A"}
-📂 Category: ${indent.category || "N/A"}
-🛏️ Ward Location: ${indent.ward_location || "N/A"}
-🚻 Gender: ${indent.gender || "N/A"}
-🩺 Diagnosis: ${indent.diagnosis || "N/A"}
-
-📑 Request Type: ${requestTypeStr}
-💊 Medicine: ${medicineName}
-🔢 Quantity: ${medicineQty}
-
-👉 Please review & approve:
-✅ ${approvalUrl}
-
-✍️ NIKHIL KUMAR URANW
-TEAM MAMTA HOSPITAL`;
-
-  return message;
-};
-
-/**
- * Send a WhatsApp message via Maytapi.
+ * Send a WhatsApp text message via unified useChatStore system.
+ * Automatically saves contact, conversation thread, and message row in Supabase DB.
  *
  * @param {string} toNumber - Recipient phone number (with country code, no +)
  * @param {string} message  - Text message to send
+ * @param {string} [contactName] - Optional name of recipient (e.g. Vendor, Transporter, Receiver)
  * @returns {Promise<boolean>} true on success, false on failure
  */
-export const sendWhatsAppMessage = async (toNumber, message) => {
-  if (!MAYTAPI_PHONE_ID) {
-    console.warn("[WhatsApp] Maytapi phone ID is not configured in .env");
-    return false;
-  }
-
+export const sendWhatsAppMessage = async (toNumber, message, contactName = null) => {
   try {
-    const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
-      body: {
-        phone_id: MAYTAPI_PHONE_ID,
-        to_number: toNumber,
-        message: message,
-        message_type: "text",
-      },
+    const res = await useChatStore.getState().sendSystemWhatsAppMessage({
+      phone: toNumber,
+      text: message,
+      contactName: contactName,
     });
-
-    if (error || !data?.success) {
-      console.error("[WhatsApp] Failed to send text message via Edge Function:", error || data);
-      return false;
-    }
-
-    console.log(`[WhatsApp] Message sent successfully to ${toNumber}:`, data);
-    return true;
+    return !!res?.success;
   } catch (error) {
-    console.error("[WhatsApp] Error sending message:", error);
+    console.error("[WhatsApp] Error sending message via useChatStore:", error);
     return false;
   }
 };
 
 /**
- * Send a WhatsApp media message (like a PDF document or image) via Maytapi.
+ * Send a WhatsApp media message via unified useChatStore system.
  *
  * @param {string} toNumber - Recipient phone number (with country code, no +)
  * @param {string} mediaUrl  - Public URL of the media file (PDF, PNG, etc.)
  * @param {string} caption  - Caption text for the media message
+ * @param {string} [contactName] - Optional name of recipient
  * @returns {Promise<boolean>} true on success, false on failure
  */
-export const sendWhatsAppMediaMessage = async (toNumber, mediaUrl, caption) => {
-  if (!MAYTAPI_PRODUCT_ID || !MAYTAPI_PHONE_ID || !MAYTAPI_TOKEN) {
-    console.warn("[WhatsApp] Maytapi credentials are not configured in .env");
-    return false;
-  }
-
-  const url = `https://api.maytapi.com/api/${MAYTAPI_PRODUCT_ID}/${MAYTAPI_PHONE_ID}/sendMessage`;
-
+export const sendWhatsAppMediaMessage = async (toNumber, mediaUrl, caption, contactName = null) => {
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-maytapi-key": MAYTAPI_TOKEN,
-      },
-      body: JSON.stringify({
-        to_number: toNumber,
-        type: "media",
-        message: mediaUrl,
-        text: caption,
-      }),
+    const res = await useChatStore.getState().sendSystemWhatsAppMessage({
+      phone: toNumber,
+      text: caption,
+      mediaUrl: mediaUrl,
+      contactName: contactName,
     });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      console.error("[WhatsApp] Failed to send media message:", data);
-      return false;
-    }
-
-    console.log(`[WhatsApp] Media message sent successfully to ${toNumber}:`, data);
-    return true;
+    return !!res?.success;
   } catch (error) {
-    console.error("[WhatsApp] Error sending media message:", error);
+    console.error("[WhatsApp] Error sending media message via useChatStore:", error);
     return false;
   }
 };
@@ -596,7 +472,7 @@ export const sendPOConfirmationMessage = async (phoneNumber, vendorName, poNumbe
 
 Please click on above link to see orders`;
 
-    const success = await sendWhatsAppMessage(phoneNumber, message);
+    const success = await sendWhatsAppMessage(phoneNumber, message, vendorName);
 
     if (success) {
       console.log("[WhatsApp] PO confirmation sent to", phoneNumber);
@@ -642,7 +518,7 @@ You have a new pick-up request from *${finalShopName}*.
 Please click on above link to see details
 `;
 
-    const success = await sendWhatsAppMessage(phoneNumber, message);
+    const success = await sendWhatsAppMessage(phoneNumber, message, transporterName);
 
     if (success) {
       console.log("[WhatsApp] Transporter confirmation sent to", phoneNumber);
@@ -686,7 +562,7 @@ A new delivery from *${vendorName}* is on its way to *${finalShopName}*.
 
 Please click on above link to see details`;
 
-    const success = await sendWhatsAppMessage(phoneNumber, message);
+    const success = await sendWhatsAppMessage(phoneNumber, message, receiverName);
 
     if (success) {
       console.log("[WhatsApp] Receiver confirmation sent to", phoneNumber);
