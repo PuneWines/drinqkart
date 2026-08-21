@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -163,9 +164,9 @@ export default function HelpCenterModal({ isOpen, onClose }) {
       ].filter(Boolean)
     : [];
 
-  return (
+  return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 bg-[#1C120C]/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 select-none">
+      <div className="fixed inset-0 z-[99999] bg-[#1C120C]/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 select-none">
         <motion.div
           initial={{ opacity: 0, scale: 0.96, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -459,6 +460,7 @@ export default function HelpCenterModal({ isOpen, onClose }) {
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
