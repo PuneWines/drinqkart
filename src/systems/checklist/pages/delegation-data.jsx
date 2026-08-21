@@ -381,6 +381,63 @@ function DelegationPage({
             )}
           </div>
 
+          {/* ── Paytm-Style Mobile Quick Action Form Cards Grid (< 768px) ── */}
+          <div className="md:hidden p-4 bg-white border-b border-gray-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
+                Delegation Form Actions
+              </span>
+              <span className="text-[10px] font-bold text-gray-400">Tap action</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              {/* Card 1: Create Delegation Task */}
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(null)}
+                  className="bg-purple-50 p-3 rounded-2xl border border-purple-100 shadow-xs flex flex-col items-center justify-center text-center active:scale-95 transition-all group cursor-pointer"
+                >
+                  <div className="w-11 h-11 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md mb-1.5 group-hover:scale-105 transition-transform">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-800 leading-tight">Create Task</span>
+                  <span className="text-[9px] text-purple-600 font-semibold mt-0.5">Form</span>
+                </button>
+              )}
+
+              {/* Card 2: Select All */}
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="bg-blue-50 p-3 rounded-2xl border border-blue-100 shadow-xs flex flex-col items-center justify-center text-center active:scale-95 transition-all group cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md mb-1.5 group-hover:scale-105 transition-transform">
+                  <Play size={18} />
+                </div>
+                <span className="text-[11px] font-bold text-slate-800 leading-tight">
+                  {selectedTasks.length === filteredTasks.length ? "Deselect All" : "Select All"}
+                </span>
+                <span className="text-[9px] text-blue-600 font-semibold mt-0.5">Action</span>
+              </button>
+
+              {/* Card 3: Delete Selected */}
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={selectedTasks.length === 0 || isDeleting}
+                className="bg-red-50 p-3 rounded-2xl border border-red-100 shadow-xs flex flex-col items-center justify-center text-center active:scale-95 transition-all disabled:opacity-50 group cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-red-600 text-white flex items-center justify-center shadow-md mb-1.5 group-hover:scale-105 transition-transform">
+                  <Trash2 size={18} />
+                </div>
+                <span className="text-[11px] font-bold text-slate-800 leading-tight">Delete</span>
+                <span className="text-[9px] text-red-600 font-semibold mt-0.5">Selected</span>
+              </button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             {/* Desktop View */}
             <table className="hidden md:table min-w-full divide-y divide-gray-200">

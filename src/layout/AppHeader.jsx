@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getVisibleSystems, getActiveSystem } from './systemsConfig';
-import { LogOut, HelpCircle } from 'lucide-react';
+import { LogOut, HelpCircle, Menu, X, ChevronDown } from 'lucide-react';
 import HelpCenterModal from '../components/help-center/HelpCenterModal';
 
-const AppHeader = () => {
+const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,8 +24,51 @@ const AppHeader = () => {
 
   return (
     <header className="w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20">
-      {/* Upper bar: Logo + User Profile & Logout */}
-      <div className="bg-white px-6 py-2.5 flex items-center justify-between">
+      {/* Mobile Top Header (< 768px): Upper left hamburger button opens sidebar drawer */}
+      <div className="md:hidden bg-white px-3 py-2 flex items-center justify-between border-b border-gray-200 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          {/* Upper Left Hamburger Icon */}
+          <button
+            onClick={onToggleMobileMenu}
+            className="p-2 rounded-lg bg-gray-50 border border-gray-200 text-[#2C1D11] hover:bg-[#C9A84C]/15 active:scale-95 transition-all cursor-pointer flex items-center justify-center shadow-2xs"
+            aria-label="Open Sidebar Menu"
+            title="Open Menu"
+          >
+            {isMobileMenuOpen ? <X size={22} className="text-[#8C6D23]" /> : <Menu size={22} className="text-[#2C1D11]" />}
+          </button>
+
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/logo-clean.png" alt="Drinqkart Logo" className="h-7 w-auto shrink-0" />
+            <span className="text-xs font-serif font-bold tracking-wider text-[#C9A84C]">
+              DRINQKART
+            </span>
+          </Link>
+        </div>
+
+        {/* Right Header: Active System Indicator Pill + Help & Profile */}
+        <div className="flex items-center gap-2">
+          {activeSystem && (
+            <div className="px-2.5 py-1 bg-[#2C1D11] text-[#C9A84C] rounded-full text-[11px] font-bold shadow-xs">
+              <span className="truncate max-w-[100px] block">{activeSystem.label}</span>
+            </div>
+          )}
+
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="p-1.5 bg-rose-600 text-white rounded-full transition-transform active:scale-95 cursor-pointer"
+            title="Help Center"
+          >
+            <HelpCircle size={16} />
+          </button>
+
+          <div className="w-7 h-7 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-[10px] uppercase border border-[#C9A84C]/40">
+            {userName.slice(0, 2)}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Upper Bar (>= 768px): Unchanged desktop view */}
+      <div className="hidden md:flex bg-white px-6 py-2.5 items-center justify-between">
         <Link to="/" className="flex items-center gap-3 group">
           <img src="/logo-clean.png" alt="Drinqkart Logo" className="h-9 w-auto shrink-0 transition-transform group-hover:scale-105" />
           <div className="flex flex-col">
@@ -40,7 +83,6 @@ const AppHeader = () => {
 
         {/* Right Header: Help Center Button + Welcome User + Logout */}
         <div className="flex items-center gap-4">
-          {/* Help Center Button placed to the left of Welcome */}
           <button
             onClick={() => setIsHelpModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 rounded-full text-xs font-bold transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
@@ -76,10 +118,10 @@ const AppHeader = () => {
         onClose={() => setIsHelpModalOpen(false)}
       />
 
-      {/* Main Top Navigation Tabs Bar: Gold Yellow background with Dark Brown text */}
+      {/* Desktop Main Top Navigation Tabs Bar (>= 768px): Unchanged desktop navigation bar */}
       <nav
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        className="bg-[#C9A84C] text-[#1c120c] px-2 flex items-center shadow-inner border-t border-[#8C6D23]/30 overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0"
+        className="hidden md:flex bg-[#C9A84C] text-[#1c120c] px-2 items-center shadow-inner border-t border-[#8C6D23]/30 overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0"
       >
         {/* System Module Tabs */}
         <div

@@ -254,66 +254,126 @@ const MasterWorkBulkImport = () => {
               </button>
             </div>
             
-            <div className="overflow-visible p-4 sm:p-6 pb-40">
-              <table className="w-full text-left min-w-[600px] border-separate border-spacing-y-2">
-                <thead className="bg-transparent">
-                  <tr>
-                    <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Shop Name(s) *</th>
-                    <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-2/5">Task Description *</th>
-                    <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Department</th>
-                    <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-16 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-transparent">
-                  <AnimatePresence>
-                    {rows.map((row) => (
-                      <motion.tr 
-                        key={row.id}
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="group"
-                      >
-                        <td className="px-2 py-1 align-top">
-                          <MultiSelectDropdown 
-                            options={shops}
-                            selectedValues={row.shop_ids}
-                            onChange={(vals) => handleRowChange(row.id, 'shop_ids', vals)}
-                          />
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <input
-                            type="text"
-                            placeholder="Enter task description"
-                            value={row.task_name}
-                            onChange={(e) => handleRowChange(row.id, 'task_name', e.target.value)}
-                            className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                          />
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <input
-                            type="text"
-                            placeholder="Optional (e.g., RETAIL)"
-                            value={row.department}
-                            onChange={(e) => handleRowChange(row.id, 'department', e.target.value)}
-                            className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                          />
-                        </td>
-                        <td className="px-2 py-1 text-center align-top pt-2">
-                          <button
-                            onClick={() => removeRow(row.id)}
-                            disabled={rows.length === 1}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            title="Remove Row"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                </tbody>
-              </table>
+            <div className="p-4 sm:p-6 pb-40">
+              {/* Mobile View (< 768px): Stacked input cards preventing overflow */}
+              <div className="md:hidden space-y-4">
+                <AnimatePresence>
+                  {rows.map((row, idx) => (
+                    <motion.div 
+                      key={row.id}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                        <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">Task Row #{idx + 1}</span>
+                        <button
+                          onClick={() => removeRow(row.id)}
+                          disabled={rows.length === 1}
+                          className="p-1 text-slate-400 hover:text-red-500 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Remove Row"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Shop Name(s) *</label>
+                        <MultiSelectDropdown 
+                          options={shops}
+                          selectedValues={row.shop_ids}
+                          onChange={(vals) => handleRowChange(row.id, 'shop_ids', vals)}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Task Description *</label>
+                        <textarea
+                          placeholder="Enter task description"
+                          value={row.task_name}
+                          onChange={(e) => handleRowChange(row.id, 'task_name', e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 min-h-[60px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all resize-none box-border"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Department</label>
+                        <input
+                          type="text"
+                          placeholder="Optional (e.g., RETAIL)"
+                          value={row.department}
+                          onChange={(e) => handleRowChange(row.id, 'department', e.target.value)}
+                          className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all box-border"
+                        />
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {/* Desktop View (>= 768px): 100% Unchanged Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left min-w-[600px] border-separate border-spacing-y-2">
+                  <thead className="bg-transparent">
+                    <tr>
+                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Shop Name(s) *</th>
+                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-2/5">Task Description *</th>
+                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Department</th>
+                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-16 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-transparent">
+                    <AnimatePresence>
+                      {rows.map((row) => (
+                        <motion.tr 
+                          key={row.id}
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className="group"
+                        >
+                          <td className="px-2 py-1 align-top">
+                            <MultiSelectDropdown 
+                              options={shops}
+                              selectedValues={row.shop_ids}
+                              onChange={(vals) => handleRowChange(row.id, 'shop_ids', vals)}
+                            />
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <input
+                              type="text"
+                              placeholder="Enter task description"
+                              value={row.task_name}
+                              onChange={(e) => handleRowChange(row.id, 'task_name', e.target.value)}
+                              className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                            />
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <input
+                              type="text"
+                              placeholder="Optional (e.g., RETAIL)"
+                              value={row.department}
+                              onChange={(e) => handleRowChange(row.id, 'department', e.target.value)}
+                              className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                            />
+                          </td>
+                          <td className="px-2 py-1 text-center align-top pt-2">
+                            <button
+                              onClick={() => removeRow(row.id)}
+                              disabled={rows.length === 1}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Remove Row"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </AnimatePresence>
+                  </tbody>
+                </table>
+              </div>
             </div>
             {rows.length === 0 && (
               <div className="p-10 text-center text-slate-400 text-sm font-medium">

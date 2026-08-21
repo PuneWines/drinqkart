@@ -906,14 +906,41 @@ export default function WorkDetails() {
           </div>
         </div>
 
+        {/* ── Paytm-Style Mobile Form Action Card (< 768px) ── */}
+        {isAdmin && (
+          <div className="md:hidden p-4 bg-white border-x border-b border-gray-100 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
+                Form Action
+              </span>
+              <span className="text-[10px] font-bold text-gray-400">Tap to open form</span>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/work-records/bulk-import')}
+                className="bg-purple-50 p-3 rounded-2xl border border-purple-100 shadow-xs flex flex-col items-center justify-center text-center active:scale-95 transition-all group cursor-pointer w-28 h-28"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md mb-2 group-hover:scale-105 transition-transform">
+                  <Upload size={20} />
+                </div>
+                <span className="text-[11px] font-bold text-slate-800 leading-tight">Add Tasks</span>
+                <span className="text-[9px] text-purple-600 font-semibold mt-0.5">Form</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Toggle Filters Button for Mobile View */}
-        <div className="block md:hidden px-4 py-2.5 bg-white border-x border-gray-100">
+        <div className="block md:hidden px-4 py-2 bg-white border-x border-gray-100">
           <button
             onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="w-full flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all border border-blue-100 shadow-sm active:scale-95"
+            className="w-full flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-all border border-blue-100 shadow-sm active:scale-95"
           >
             <LayoutGrid size={14} />
-            {showMobileFilters ? "Hide Filters & Actions ✖" : "Show Filters & Actions ⚙️"}
+            {showMobileFilters ? "Hide Filters ✖" : "Show Filters ⚙️"}
           </button>
         </div>
 
@@ -1415,8 +1442,8 @@ export default function WorkDetails() {
                 </div>
 
                 {/* Task Description */}
-                <div className="space-y-1.5">
-                  <h4 className="text-xs font-bold text-gray-800 leading-snug">
+                <div className="space-y-1.5 min-w-0">
+                  <h4 className="text-xs font-bold text-gray-800 leading-snug break-words overflow-hidden max-w-full">
                     {item.task_name}
                   </h4>
                   {item.next_start_datetime && (

@@ -670,10 +670,10 @@ export default function Inventory({ currentUser }) {
       <div className="max-w-10xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-none overflow-hidden mb-10">
 
         {/* ── Banner with Open Form Button ─────────────────────────────── */}
-        <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50/55 relative overflow-hidden">
+        <div className="p-4 md:p-8 border-b border-slate-200 bg-slate-50/55 relative overflow-hidden">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="text-center md:text-left">
-              <div className="inline-flex items-center justify-center p-3.5 bg-amber-500 rounded-2xl ring-1 ring-amber-400/20 mb-4 md:mb-0">
+              <div className="inline-flex items-center justify-center p-3.5 bg-amber-500 rounded-2xl ring-1 ring-amber-400/20 mb-2 md:mb-0">
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
@@ -686,16 +686,43 @@ export default function Inventory({ currentUser }) {
               </div>
             </div>
 
-            {/* Open Form Button */}
+            {/* Desktop Open Form Button */}
             <button
               onClick={() => setIsFormOpen(true)}
-              className="inline-flex items-center justify-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg active:scale-95"
+              className="hidden md:inline-flex items-center justify-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
             >
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Open Entry Form
             </button>
+          </div>
+
+          {/* ── Paytm-Style Mobile Form Action Card (< 768px) ── */}
+          <div className="md:hidden mt-4 pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
+                Form Action
+              </span>
+              <span className="text-[10px] font-bold text-slate-400">Tap to open form</span>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(true)}
+                className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100 shadow-xs flex flex-col items-center justify-center text-center active:scale-95 transition-all group cursor-pointer w-28 h-28"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md mb-2 group-hover:scale-105 transition-transform">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <span className="text-[11px] font-bold text-slate-800 leading-tight">Entry Form</span>
+                <span className="text-[9px] text-indigo-600 font-semibold mt-0.5">Form</span>
+              </button>
+            </div>
           </div>
 
           {(isLoadingItems || isLoadingLedger) && (
