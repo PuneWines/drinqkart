@@ -233,7 +233,7 @@ export const excludeIndentItems = async (ids, reason) => {
     const chunk = ids.slice(i, i + chunkSize);
     const { data, error } = await supabase
       .from("purchase_approved_indent_items")
-      .update({ po_status: "excluded", exclusion_reason: reason })
+      .update({ po_status: "excluded", exclusion_reason: reason, updated_at: new Date().toISOString() })
       .in("id", chunk)
       .select();
 
@@ -256,7 +256,7 @@ export const markApprovedItemsAsOrdered = async (uniqueIndentId, vendorName, poI
 
   const { error } = await supabase
     .from("purchase_approved_indent_items")
-    .update({ po_status: "ordered", po_id: poId })
+    .update({ po_status: "ordered", po_id: poId, updated_at: new Date().toISOString() })
     .eq("unique_indent_id", uniqueIndentId)
     .eq("party_name", vendorName);
 

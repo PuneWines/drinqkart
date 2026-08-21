@@ -956,4 +956,125 @@ export const useChatStore = create((set, get) => ({
       throw err;
     }
   },
+
+  sendSystemWhatsAppMessage: async ({ phone, text, mediaUrl = null, contactName = null }) => {
+    if (!phone || (!text && !mediaUrl)) return { success: false, error: 'Phone and content required' };
+
+    const { cleanPhone, cid } = formatWhatsAppNumber(phone);
+    if (!cleanPhone || !cid) return { success: false, error: 'Invalid phone number format' };
+
+    const PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
+    const PHONE_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
+    const TOKEN = import.meta.env.VITE_MAYTAPI_ACCESS_TOKEN || import.meta.env.VITE_MAYTAPI_TOKEN;
+
+    const nowIso = new Date().toISOString();
+    let messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    let status = 'failed';
+    let errorMessage = null;
+    let errorRawResponse = null;
+
+    try {
+      if (PRODUCT_ID && PHONE_ID && TOKEN) {
+        const pid = String(PRODUCT_ID).trim();
+        const phid = String(PHONE_ID).trim();
+        const tok = String(TOKEN).trim();
+        const url = `https://api.maytapi.com/api/${pid}/${phid}/sendMessage`;
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-maytapi-key': tok,
+          },
+          body: JSON.stringify({
+            to_number: cleanPhone,
+            type: mediaUrl ? 'media' : 'text',
+            message: mediaUrl ? mediaUrl : text,
+            ...(mediaUrl && text ? { text: text } : {}),
+          }),
+        });
+
+        const resData = await response.json();
+        console.log(`[WhatsApp System Send] Response for ${cleanPhone}:`, resData);
+
+        if (response.ok && resData.success) {
+          const parsedId = resData.data?.msgId || resData.data?.id || resData.id || resData.messageId;
+          if (parsedId) messageId = String(parsedId);
+          status = 'sent';
+        } else {
+          status = 'failed';
+          errorMessage = resData.message || resData.error || `HTTP ${response.status} ${response.statusText}`;
+          errorRawResponse = resData;
+        }
+      } else {
+        errorMessage = 'Maytapi API credentials not configured in .env';
+      }
+
+      // 1. Safe Contact Upsert - preserve existing name if already present in DB
+      const { data: existingContact } = await supabase
+        .from('whatsapp_contacts')
+        .select('name')
+        .eq('id', cid)
+        .maybeSingle();
+
+      const contactUpsertData = {
+        id: cid,
+        phone_number: cleanPhone,
+        updated_at: nowIso,
+      };
+
+      // Only set name if contact does not exist yet or has no saved name
+      if (!existingContact?.name) {
+        contactUpsertData.name = contactName || cleanPhone;
+      }
+
+      await supabase.from('whatsapp_contacts').upsert(contactUpsertData, { onConflict: 'id' });
+
+      // 2. Upsert Conversation Thread
+      await supabase.from('whatsapp_conversations').upsert({
+        id: cid,
+        contact_id: cid,
+        phone_id: PHONE_ID || 0,
+        last_message_text: text || '[Media]',
+        last_message_at: nowIso,
+        updated_at: nowIso,
+      }, { onConflict: 'id' });
+
+      // 3. Upsert Message Record
+      const newMessageRow = {
+        id: messageId,
+        conversation_id: cid,
+        contact_id: cid,
+        from_me: true,
+        message_type: mediaUrl ? 'media' : 'text',
+        content: text || mediaUrl,
+        media_url: mediaUrl || null,
+        status: status,
+        ack_code: status === 'sent' ? 1 : 0,
+        timestamp: nowIso,
+      };
+
+      await supabase.from('whatsapp_messages').upsert(newMessageRow, { onConflict: 'id' });
+
+      // 4. Log Error if failed
+      if (status === 'failed' && errorMessage) {
+        await supabase.from('whatsapp_delivery_error_logs').insert({
+          message_id: messageId,
+          conversation_id: cid,
+          recipient_phone: cleanPhone,
+          error_code: String(errorRawResponse?.code || 'SEND_FAILED'),
+          error_message: errorMessage,
+          raw_response: errorRawResponse,
+        });
+      }
+
+      // Refresh conversations list UI in live dashboard
+      await get().fetchWhatsAppConversations();
+
+      return { success: status === 'sent', error: errorMessage };
+    } catch (err) {
+      console.error('Failed in sendSystemWhatsAppMessage:', err);
+      return { success: false, error: err.message };
+    }
+  },
 }))
