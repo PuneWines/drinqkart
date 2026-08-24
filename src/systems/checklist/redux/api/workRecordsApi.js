@@ -685,3 +685,40 @@ export const fetchPaginatedScheduledWorkTasksApi = async ({ page, limit, searchT
     throw error;
   }
 };
+
+/**
+ * Soft deletes (deactivates) a single task from master_work_tasks.
+ */
+export const deactivateMasterTaskApi = async (taskId) => {
+  try {
+    const { error } = await supabase
+      .from('master_work_tasks')
+      .update({ is_active: false })
+      .eq('id', taskId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Error deactivating master task:", error);
+    throw error;
+  }
+};
+
+/**
+ * Soft deletes (deactivates) multiple tasks from master_work_tasks in bulk.
+ */
+export const deactivateMasterTasksBulkApi = async (taskIds) => {
+  try {
+    const { error } = await supabase
+      .from('master_work_tasks')
+      .update({ is_active: false })
+      .in('id', taskIds);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Error deactivating master tasks in bulk:", error);
+    throw error;
+  }
+};
+

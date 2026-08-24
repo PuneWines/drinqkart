@@ -5,6 +5,7 @@ import "../styles/Pages.css";
 
 import Toast, { useToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
+import useShopStore from "../store/useShopStore";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
 const AccordionItem = ({ item, calcs, handleInlineChange }) => {
@@ -392,7 +393,12 @@ const Indent = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStep, setUploadStep] = useState(1); // 1: Select Shop, 2: Upload File
 
-  const shops = ["FRIENDS", "The Liquor Story - Vishal - Hinjewadi", "MADHURA", "KUNAL", "BALAJI"];
+  const { shops, fetchShops } = useShopStore();
+
+  useEffect(() => {
+    fetchShops();
+  }, [fetchShops]);
+
   const fileInputRef = useRef(null);
 
   // Calculate statistics

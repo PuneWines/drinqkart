@@ -13,7 +13,8 @@ import {
   Loader2,
   AlertCircle,
   Upload,
-  Download
+  Download,
+  Trash2
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -22,7 +23,7 @@ import AdminLayout from "../components/layout/AdminLayout";
 import { fetchWorkRecords, saveAssignments } from "../redux/slice/workRecordsSlice";
 import { userDetails } from "../redux/slice/settingSlice";
 import { useMagicToast } from "../context/MagicToastContext";
-import { generateWorkTasksApi, resetWorkTasksApi, checkAndPromoteAssignmentsApi, fetchPaginatedWorkRecordsApi } from "../redux/api/workRecordsApi";
+import { generateWorkTasksApi, resetWorkTasksApi, checkAndPromoteAssignmentsApi, fetchPaginatedWorkRecordsApi, deactivateMasterTaskApi, deactivateMasterTasksBulkApi } from "../redux/api/workRecordsApi";
 import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../services/whatsappService";
 
 const isAssignmentExpired = (item) => {
@@ -820,6 +821,39 @@ export default function WorkDetails() {
     }
   };
 
+  const handleSingleDelete = async (item) => {
+    if (!item?.taskId) return;
+
+    if (!window.confirm(`Are you sure you want to delete task "${item.task_name}"?`)) return;
+
+    try {
+      await deactivateMasterTaskApi(item.taskId);
+      showToast(`Task "${item.task_name}" deleted successfully`, "success");
+      dispatch(fetchWorkRecords());
+    } catch (err) {
+      showToast("Failed to delete task", "error");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const selectedTaskIds = Array.from(selectedRows);
+    if (selectedTaskIds.length === 0) {
+      showToast("No tasks selected for deletion", "error");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${selectedTaskIds.length} selected task(s)?`)) return;
+
+    try {
+      await deactivateMasterTasksBulkApi(selectedTaskIds);
+      showToast(`${selectedTaskIds.length} task(s) deleted successfully`, "success");
+      setSelectedRows(new Set());
+      dispatch(fetchWorkRecords());
+    } catch (err) {
+      showToast("Bulk delete failed", "error");
+    }
+  };
+
   const selectUser = (taskId, field, user) => {
     handleFieldChange(taskId, field, user.user_name);
     setSearchDropdown({ type: null, id: null, term: "" });
@@ -1063,6 +1097,15 @@ export default function WorkDetails() {
             >
               <Download size={14} /> Export to CSV
             </button>
+
+            {selectedRows.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-rose-200 active:scale-95 cursor-pointer animate-in fade-in duration-200"
+              >
+                <Trash2 size={14} /> Bulk Delete ({selectedRows.size})
+              </button>
+            )}
           </div>
         </motion.div>
 
@@ -1098,6 +1141,7 @@ export default function WorkDetails() {
                 <th className="px-2 py-4">End Time</th>
                 <th className="px-2 py-4">Manager</th>
                 <th className="px-2 py-4">Employee</th>
+                <th className="px-2 py-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -1360,6 +1404,19 @@ export default function WorkDetails() {
                           )}
                         </div>
                       </td>
+                      <td className="px-2 py-3 text-center">
+                        {item.isAvailable ? (
+                          <button
+                            onClick={() => handleSingleDelete(item)}
+                            className="p-1.5 hover:bg-rose-50 text-rose-500 hover:text-rose-700 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Task"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
                     </tr>
 
                   </Fragment>
@@ -1432,10 +1489,21 @@ export default function WorkDetails() {
                     {(() => {
                       const statusInfo = getTaskStatusInfo(item, isModified);
                       return (
-                        <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider mt-1 w-fit ${statusInfo.className}`}>
-                          <span className={`w-1 h-1 rounded-full ${statusInfo.dotClass}`} />
-                          {statusInfo.text}
-                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${statusInfo.className}`}>
+                            <span className={`w-1 h-1 rounded-full ${statusInfo.dotClass}`} />
+                            {statusInfo.text}
+                          </span>
+                          {item.isAvailable && (
+                            <button
+                              onClick={() => handleSingleDelete(item)}
+                              className="p-1 text-rose-500 hover:bg-rose-50 rounded"
+                              title="Delete Task"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
                       );
                     })()}
                   </div>
