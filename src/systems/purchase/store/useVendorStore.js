@@ -3,11 +3,13 @@ import { supabase } from "../lib/supabase";
 
 const ALLOWED_VENDOR_COLUMNS = [
   'party_name',
-  'contact_number',
+  'contact',
+  'contact_name',
   'email',
   'address',
   'gstin',
-  'portal_link'
+  'portal_link',
+  'terms'
 ];
 
 const sanitizeVendorData = (data) => {
@@ -17,7 +19,20 @@ const sanitizeVendorData = (data) => {
       sanitized[col] = data[col];
     }
   });
+  if (data.contact_number !== undefined && sanitized.contact === undefined) {
+    sanitized.contact = data.contact_number;
+  }
   return sanitized;
+};
+
+const mapVendorFields = (vendor) => {
+  if (!vendor) return vendor;
+  const contactVal = vendor.contact !== undefined ? vendor.contact : (vendor.contact_number || "");
+  return {
+    ...vendor,
+    contact: contactVal,
+    contact_number: contactVal
+  };
 };
 
 const useVendorStore = create((set, get) => ({
@@ -28,7 +43,7 @@ const useVendorStore = create((set, get) => ({
     set({ loading: true });
     const { data, error } = await supabase.from('purchase_vendors').select('*');
     if (!error && data) {
-      set({ vendors: data });
+      set({ vendors: data.map(mapVendorFields) });
     }
     set({ loading: false });
   },
@@ -42,8 +57,9 @@ const useVendorStore = create((set, get) => ({
       
     if (!error) {
       const { vendors } = get();
+      const mappedPayload = mapVendorFields({ ...payload, contact_number: payload.contact });
       set({
-        vendors: vendors.map((v) => (v.id === vendorId ? { ...v, ...payload } : v)),
+        vendors: vendors.map((v) => (v.id === vendorId ? { ...v, ...mappedPayload } : v)),
       });
       return { success: true };
     }
@@ -60,8 +76,9 @@ const useVendorStore = create((set, get) => ({
       
     if (!error && data) {
       const { vendors } = get();
-      set({ vendors: [...vendors, data] });
-      return { success: true, data };
+      const mappedData = mapVendorFields(data);
+      set({ vendors: [...vendors, mappedData] });
+      return { success: true, data: mappedData };
     }
     return { success: false, error: error?.message || 'Error creating vendor' };
   },
@@ -78,3 +95,4 @@ const useVendorStore = create((set, get) => ({
 }));
 
 export default useVendorStore;
+
