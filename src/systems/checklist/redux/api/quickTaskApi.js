@@ -1,4 +1,5 @@
 import supabase from "../../SupabaseClient";
+import { deleteUnsubmittedFutureWorkTasks } from "./workRecordsApi";
 
 // Helper to parse JSON strings if accidentally stored as such
 const parseJsonIfNeeded = (val) => {
@@ -538,21 +539,23 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
     }
 
     if (datesChanged || employeesChanged) {
-      const { error: deleteError } = await supabase
-        .from('work_task_new')
-        .delete()
-        .eq('assignment_id', targetAsgnId || updatedTask.id)
-        .is('submission_date', null);
-      if (deleteError) throw deleteError;
+      const asgnIdToDelete = targetAsgnId || updatedTask?.id || updatedTask?.assignment_id;
+      if (asgnIdToDelete) {
+        await deleteUnsubmittedFutureWorkTasks(asgnIdToDelete);
+      }
     } else {
-      const { error: syncError } = await supabase
-        .from('work_task_new')
-        .update({
-          task_description: updatedTask.task_description
-        })
-        .eq('assignment_id', targetAsgnId || updatedTask.id)
-        .is('submission_date', null);
-      if (syncError) throw syncError;
+      const asgnIdToUpdate = targetAsgnId || updatedTask?.id || updatedTask?.assignment_id;
+      if (asgnIdToUpdate) {
+        const { error: syncError } = await supabase
+          .from('work_task_new')
+          .update({
+            task_description: updatedTask.task_description,
+            manager_name: updatedTask.given_by
+          })
+          .eq('assignment_id', asgnIdToUpdate)
+          .is('submission_date', null);
+        if (syncError) throw syncError;
+      }
     }
 
     return [updatedAsgn];
@@ -562,20 +565,25 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
   }
 };
 
-// Delete work task assignment and generated work tasks
+// Delete work task assignment and generated work tasks (Individual or Bulk)
 export const deleteWorkTaskAssignmentApi = async (tasks) => {
-  for (const task of tasks) {
-    const { error: taskError } = await supabase
-      .from('work_task_new')
-      .delete()
-      .eq('assignment_id', task.id);
-    if (taskError) throw taskError;
+  const taskArray = Array.isArray(tasks) ? tasks : [tasks];
+  for (const task of taskArray) {
+    const targetId = typeof task === 'object' && task !== null
+      ? (task.id ?? task.assignment_id ?? task.task_id)
+      : task;
 
-    const { error: assignError } = await supabase
-      .from('task_assignments')
-      .delete()
-      .eq('id', task.id);
-    if (assignError) throw assignError;
+    if (targetId) {
+      // 1. Delete matching unsubmitted active/future tasks (protects past & today's expired 'Not Done' tasks)
+      await deleteUnsubmittedFutureWorkTasks(targetId);
+
+      // 2. Delete parent task assignment
+      const { error: assignError } = await supabase
+        .from('task_assignments')
+        .delete()
+        .eq('id', targetId);
+      if (assignError) throw assignError;
+    }
   }
   return tasks;
 };

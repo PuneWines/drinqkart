@@ -32,7 +32,7 @@ const getWorkTaskTimeBounds = (task) => {
   const [year, month, day] = task.current_date.split('-').map(Number);
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
   const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
-  const duration = task.duration || task.estimated_minutes || 0; // minutes
+  const duration = (task.duration || task.estimated_minutes || 0) + (task.extra_time || task.extraTime || 0); // minutes
   const taskEnd = new Date(baseEnd.getTime() + duration * 60 * 1000);
   return { taskStart, baseEnd, taskEnd };
 };

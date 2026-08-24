@@ -60,7 +60,7 @@ const getWorkTaskTimeBounds = (task) => {
   }
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
 
-  const estimatedMins = task.duration || task.estimated_minutes || 0;
+  const estimatedMins = (task.duration || task.estimated_minutes || 0) + (task.extra_time || task.extraTime || 0);
   const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
   const taskEnd = new Date(baseEnd.getTime() + estimatedMins * 60 * 1000);
   const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
@@ -454,11 +454,11 @@ const WorkTasksTab = ({
       }
 
       const tableName = "work_task_new";
-      let selectStr = "*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)";
-      if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
-        selectStr = "*, task_assignments:assignment_id!inner(start_datetime, end_datetime, manager_name)";
-      }
+      let selectStr = "*";
       let query = supabase.from(tableName).select(selectStr);
+      if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
+        query = query.eq('manager_name', historyManagerFilter);
+      }
 
       // Apply pagination limit/range in database (100 per page)
       const limit = 100;
@@ -549,30 +549,12 @@ const WorkTasksTab = ({
 
       if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
         const cleanTerm = debouncedSearchTerm.trim();
-
-        let matchingAssignmentIds = [];
-        try {
-          const { data: matchedAssignments } = await supabase
-            .from('task_assignments')
-            .select('id')
-            .ilike('manager_name', `%${cleanTerm}%`);
-          if (matchedAssignments && matchedAssignments.length > 0) {
-            matchingAssignmentIds = matchedAssignments.map(a => a.id).filter(Boolean);
-          }
-        } catch (e) {
-          console.error("Error searching task_assignments for manager_name:", e);
-        }
-
         const orQueryParts = [
           `task_description.ilike.%${cleanTerm}%`,
           `shop_name.ilike.%${cleanTerm}%`,
-          `name.ilike.%${cleanTerm}%`
+          `name.ilike.%${cleanTerm}%`,
+          `manager_name.ilike.%${cleanTerm}%`
         ];
-
-        if (matchingAssignmentIds.length > 0) {
-          orQueryParts.push(`assignment_id.in.(${matchingAssignmentIds.join(',')})`);
-        }
-
         query = query.or(orQueryParts.join(','));
       }
 
@@ -1017,7 +999,7 @@ const WorkTasksTab = ({
       while (hasMoreExportData) {
         let pageQuery = supabase
           .from(tableName)
-          .select("*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)")
+          .select("*")
           .range(exportPage * exportLimit, (exportPage + 1) * exportLimit - 1);
 
         if (applyNameFilter) {
@@ -1069,7 +1051,7 @@ const WorkTasksTab = ({
           id: item.id || item.task_id,
           _table: item._table || tableName,
           shop: item.shop || item.shop_name || "-",
-          manager_name: item.task_assignments?.manager_name || "—"
+          manager_name: item.manager_name || item.task_assignments?.manager_name || "—"
         };
 
         if (mapped.status === "REJECTED") {
@@ -1403,7 +1385,7 @@ const WorkTasksTab = ({
                                     <div className="flex flex-col">
                                       <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
                                       <span className="text-[11px] text-gray-400">
-                                        {task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : ""}
+                                        {task.start_time ? formatTimeOnly(task.start_time) : task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : ""}
                                       </span>
                                     </div>
                                   ) : header.id === "id" ? (
