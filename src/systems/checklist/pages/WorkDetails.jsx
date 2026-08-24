@@ -1098,7 +1098,7 @@ export default function WorkDetails() {
               <Download size={14} /> Export to CSV
             </button>
 
-            {selectedRows.size > 0 && (
+            {selectedRows.size > 0 && isAdmin && (
               <button
                 onClick={handleBulkDelete}
                 className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-rose-200 active:scale-95 cursor-pointer animate-in fade-in duration-200"
@@ -1405,7 +1405,7 @@ export default function WorkDetails() {
                         </div>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        {item.isAvailable ? (
+                        {item.isAvailable && isAdmin ? (
                           <button
                             onClick={() => handleSingleDelete(item)}
                             className="p-1.5 hover:bg-rose-50 text-rose-500 hover:text-rose-700 rounded-lg transition-colors cursor-pointer"
@@ -1494,7 +1494,7 @@ export default function WorkDetails() {
                             <span className={`w-1 h-1 rounded-full ${statusInfo.dotClass}`} />
                             {statusInfo.text}
                           </span>
-                          {item.isAvailable && (
+                          {item.isAvailable && isAdmin && (
                             <button
                               onClick={() => handleSingleDelete(item)}
                               className="p-1 text-rose-500 hover:bg-rose-50 rounded"

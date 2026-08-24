@@ -182,10 +182,12 @@ export const generateWorkTasksApi = async (assignments) => {
               task_id: asgn.task_id,
               assignment_id: asgn.assignmentId || asgn.id,
               name: empName,
+              manager_name: asgn.manager_name || asgn.givenBy || asgn.next_manager_name || "Admin",
               task_description: asgn.task_name,
               shop_name: asgn.shopName,
               department: asgn.department,
-              duration: asgn.estimated_minutes,
+              duration: asgn.estimated_minutes || asgn.duration || 0,
+              extra_time: asgn.extra_time || asgn.extraTime || asgn.extra_minutes || 0,
               "current_date": dateStr,
               start_time: extractTimeFromDatetime(asgn.start_datetime),
               end_time: extractTimeFromDatetime(asgn.end_datetime),
@@ -222,17 +224,77 @@ export const generateWorkTasksApi = async (assignments) => {
 };
 
 /**
- * Resets task assignments and deletes generated work_task_new records.
+ * Helper to delete ONLY unsubmitted future or currently active tasks for given assignment IDs.
+ * Preserves past tasks and today's expired 'Not Done' tasks in history.
  */
-export const resetWorkTasksApi = async (assignmentIds) => {
-  try {
-    // 1. Delete from work_task_new
+export const deleteUnsubmittedFutureWorkTasks = async (assignmentIds) => {
+  const ids = Array.isArray(assignmentIds)
+    ? assignmentIds.filter(Boolean)
+    : [assignmentIds].filter(Boolean);
+  if (ids.length === 0) return;
+
+  const getLocalDateStr = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const now = new Date();
+  const todayStr = getLocalDateStr(now);
+
+  // 1. Fetch candidate unsubmitted tasks for today or later
+  const { data: candidates, error: fetchErr } = await supabase
+    .from('work_task_new')
+    .select('id, current_date, start_time, end_time, duration, extra_time')
+    .in('assignment_id', ids)
+    .is('submission_date', null)
+    .gte('current_date', todayStr);
+
+  if (fetchErr || !candidates || candidates.length === 0) return;
+
+  // 2. Filter IDs to ONLY those whose deadline has NOT passed yet!
+  const deletableIds = candidates.filter(task => {
+    if (task.current_date > todayStr) return true; // Future date -> Deletable
+
+    // Calculate taskEnd for today's tasks
+    let endHour = 23;
+    let endMin = 59;
+    if (task.end_time) {
+      const timePart = task.end_time.includes('T') ? task.end_time.split('T')[1] : task.end_time;
+      const timeParts = timePart.split(':');
+      endHour = parseInt(timeParts[0], 10) || 0;
+      endMin = parseInt(timeParts[1], 10) || 0;
+    }
+
+    const [year, month, day] = task.current_date.split('-').map(Number);
+    const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
+    const totalMins = (task.duration || 0) + (task.extra_time || 0);
+    const taskEnd = new Date(baseEnd.getTime() + totalMins * 60 * 1000);
+
+    return now <= taskEnd; // Deletable ONLY if deadline has NOT passed yet today!
+  }).map(t => t.id);
+
+  // 3. Delete ONLY the filtered deletable IDs
+  if (deletableIds.length > 0) {
     const { error: deleteError } = await supabase
       .from('work_task_new')
       .delete()
-      .in('assignment_id', assignmentIds);
+      .in('id', deletableIds);
 
     if (deleteError) throw deleteError;
+  }
+};
+
+/**
+ * Resets task assignments and deletes generated work_task_new records.
+ */
+export const resetWorkTasksApi = async (assignmentIds) => {
+  if (!assignmentIds || assignmentIds.length === 0) return { success: true };
+
+  try {
+    // 1. Delete matching unsubmitted active/future tasks (protects past & today's expired 'Not Done' tasks)
+    await deleteUnsubmittedFutureWorkTasks(assignmentIds);
 
     // 2. Update task_assignments status back to 'ACTIVE'
     const { error: updateError } = await supabase
@@ -520,6 +582,7 @@ export const checkAndPromoteAssignmentsApi = async () => {
         shopName: masterTask.shop?.shop_name || "N/A",
         department: masterTask.department || "N/A",
         estimated_minutes: masterTask.estimated_minutes || 0,
+        extra_time: masterTask.extra_time || asgn.extra_time || asgn.extraTime || 0,
         start_datetime: asgn.next_start_datetime,
         end_datetime: asgn.next_end_datetime,
         employee_name: asgn.next_employee_name,
