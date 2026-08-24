@@ -112,11 +112,13 @@ export default function QuickTask() {
         try {
           const { data: assignmentsData, error: err } = await supabase
             .from('task_assignments')
-            .select('status, master_work_tasks(shop(shop_name))');
+            .select('status, master_work_tasks!inner(is_active, shop(shop_name))')
+            .eq('master_work_tasks.is_active', true);
 
           if (!err && assignmentsData) {
-            const uniqueShops = [...new Set(assignmentsData.map(item => item.master_work_tasks?.shop?.shop_name).filter(Boolean))].sort();
-            const uniqueStatuses = [...new Set(assignmentsData.map(item => item.status).filter(Boolean))].sort();
+            const activeAssignments = assignmentsData.filter(item => item.master_work_tasks && item.master_work_tasks.is_active !== false);
+            const uniqueShops = [...new Set(activeAssignments.map(item => item.master_work_tasks?.shop?.shop_name).filter(Boolean))].sort();
+            const uniqueStatuses = [...new Set(activeAssignments.map(item => item.status).filter(Boolean))].sort();
             setWorkShopsList(uniqueShops);
             setWorkStatusesList(uniqueStatuses);
           }

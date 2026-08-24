@@ -400,7 +400,8 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
 
     let query = supabase
       .from('task_assignments')
-      .select('*, master_work_tasks(*, shop(shop_name))')
+      .select('*, master_work_tasks!inner(*, shop(shop_name))')
+      .eq('master_work_tasks.is_active', true)
       .limit(FETCH_LIMIT);
 
     if (role === 'user' && username) {
@@ -415,7 +416,9 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
     }
 
     // Map to a common format expected by the frontend
-    let mapped = (data || []).map(row => {
+    let mapped = (data || [])
+      .filter(row => row.master_work_tasks && row.master_work_tasks.is_active !== false)
+      .map(row => {
       const master = row.master_work_tasks || {};
       const shopName = master.shop?.shop_name || "N/A";
       return {
