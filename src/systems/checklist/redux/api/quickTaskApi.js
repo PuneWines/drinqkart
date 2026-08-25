@@ -613,3 +613,61 @@ export const deleteWorkTaskAssignmentApi = async (tasks) => {
   }
   return tasks;
 };
+
+// Bulk reset work task assignments: resets manager/employee to null, sets status to ACTIVE, date parts to '2000-01-01', and clears unsubmitted live tasks
+export const bulkResetWorkTasksApi = async (selectedTasksList) => {
+  const taskArray = Array.isArray(selectedTasksList) ? selectedTasksList : [selectedTasksList];
+  
+  const assignmentIds = taskArray
+    .map(t => (typeof t === 'object' && t !== null) ? (t.id ?? t.assignment_id ?? t.assignmentId) : t)
+    .filter(Boolean);
+
+  if (assignmentIds.length === 0) return { success: true };
+
+  // 1. Clear unsubmitted live tasks from work_task_new
+  await deleteUnsubmittedFutureWorkTasks(assignmentIds);
+
+  // 2. Reset each assignment in task_assignments
+  for (const task of taskArray) {
+    const asgnId = typeof task === 'object' && task !== null
+      ? (task.id ?? task.assignment_id ?? task.assignmentId)
+      : task;
+
+    if (!asgnId) continue;
+
+    const rawStart = typeof task === 'object' ? (task.task_start_date || task.start_datetime) : null;
+    const rawEnd = typeof task === 'object' ? task.end_datetime : null;
+
+    const extractTime = (val, fallback) => {
+      if (!val) return fallback;
+      if (typeof val === 'string') {
+        if (val.includes('T')) return val.split('T')[1].substring(0, 5);
+        if (val.includes(' ')) return val.split(' ')[1].substring(0, 5);
+        if (val.includes(':')) return val.substring(0, 5);
+      }
+      return fallback;
+    };
+
+    const sTime = extractTime(rawStart, "09:00");
+    const eTime = extractTime(rawEnd, "18:00");
+
+    const resetStartDatetime = `2000-01-01T${sTime}:00`;
+    const resetEndDatetime = `2000-01-01T${eTime}:00`;
+
+    const { error } = await supabase
+      .from('task_assignments')
+      .update({
+        manager_name: null,
+        employee_name: null,
+        start_datetime: resetStartDatetime,
+        end_datetime: resetEndDatetime,
+        status: 'ACTIVE',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', asgnId);
+
+    if (error) throw error;
+  }
+
+  return { success: true };
+};

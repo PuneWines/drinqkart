@@ -9,8 +9,20 @@ import {
   updateDelegationTaskApi,
   fetchWorkTaskData,
   updateWorkTaskAssignmentApi,
-  deleteWorkTaskAssignmentApi
+  deleteWorkTaskAssignmentApi,
+  bulkResetWorkTasksApi
 } from "../api/quickTaskApi";
+
+export const bulkResetWorkTasks = createAsyncThunk(
+  'reset/workTask',
+  async (selectedTasks, { rejectWithValue }) => {
+    try {
+      return await bulkResetWorkTasksApi(selectedTasks);
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
 
 
 export const fetchUsers = createAsyncThunk(

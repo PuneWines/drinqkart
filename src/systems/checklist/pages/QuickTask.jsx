@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from 'date-fns';
-import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square, Loader2, Plus } from "lucide-react";
+import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square, Loader2, Plus, RotateCcw } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
@@ -19,6 +19,7 @@ import {
   uniqueWorkTaskData,
   updateWorkTaskAssignment,
   deleteWorkTaskAssignment,
+  bulkResetWorkTasks,
   resetWorkPagination
 } from "../redux/slice/quickTaskSlice";
 import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
@@ -667,6 +668,14 @@ export default function QuickTask() {
   const handleDeleteSelected = async () => {
     if (selectedTasks.length === 0) return;
 
+    if (activeTab === 'work') {
+      const hasGeneratedTask = selectedTasks.some(task => task.status === 'GENERATED');
+      if (hasGeneratedTask) {
+        showToast("This task is generated and running. kindly reset the task before deleting it", "error");
+        return;
+      }
+    }
+
     setIsDeleting(true);
     try {
       console.log("Deleting rows:", selectedTasks);
@@ -688,6 +697,29 @@ export default function QuickTask() {
       showToast("Failed to delete tasks", "error");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleBulkResetWork = async () => {
+    if (selectedTasks.length === 0) return;
+
+    if (!window.confirm(`Are you sure you want to reset assignment details for ${selectedTasks.length} selected task(s)? Manager & Employee will be cleared, status set to ACTIVE, and live unsubmitted tasks will be cleared.`)) {
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      await dispatch(bulkResetWorkTasks(selectedTasks)).unwrap();
+      showToast(`Successfully reset ${selectedTasks.length} task assignment(s)`, "success");
+      setSelectedTasks([]);
+      dispatch(uniqueWorkTaskData({ page: 0, append: false }));
+    } catch (err) {
+      console.error("Bulk reset error:", err);
+      showToast(err?.message || "Failed to reset tasks", "error");
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -1463,12 +1495,24 @@ export default function QuickTask() {
               </div>
             ) : activeTab === 'work' ? (
               <div className="mt-4 rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden animate-in fade-in duration-200">
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4">
-                  <h2 className="text-purple-700 font-medium">Work Tasks</h2>
-                  <div className="flex items-center gap-2">
-                    {loading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-purple-600"></div>}
-                    <p className="text-purple-600 text-sm">Showing unique active work task assignments</p>
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-purple-700 font-medium">Work Tasks</h2>
+                    <div className="flex items-center gap-2">
+                      {loading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-purple-600"></div>}
+                      <p className="text-purple-600 text-sm">Showing unique active work task assignments</p>
+                    </div>
                   </div>
+                  {selectedTasks.length > 0 && isAdmin && (
+                    <button
+                      onClick={handleBulkResetWork}
+                      disabled={isResetting}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-xs font-black rounded-xl transition-all shadow-md active:scale-95 cursor-pointer uppercase tracking-wider shrink-0"
+                    >
+                      <RotateCcw size={14} className="stroke-[2.5]" />
+                      {isResetting ? 'Resetting...' : `BULK RESET (${selectedTasks.length})`}
+                    </button>
+                  )}
                 </div>
                 <div className="overflow-auto max-h-[calc(100vh-280px)] custom-scrollbar" ref={tableContainerRef}>
                   {/* Desktop View */}
