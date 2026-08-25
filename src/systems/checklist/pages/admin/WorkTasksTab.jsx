@@ -454,7 +454,7 @@ const WorkTasksTab = ({
       }
 
       const tableName = "work_task_new";
-      let selectStr = "*";
+      let selectStr = "*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required))";
       let query = supabase.from(tableName).select(selectStr);
       if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
         query = query.eq('manager_name', historyManagerFilter);
@@ -872,7 +872,10 @@ const WorkTasksTab = ({
           task.require_attachment === true ||
           String(task.require_attachment).toLowerCase() === "yes" ||
           String(task.require_attachment).toLowerCase() === "true" ||
-          task.attachment === true;
+          task.attachment === true ||
+          task.proof_required === true ||
+          task.task_assignments?.master_work_tasks?.proof_required === true ||
+          task.master_work_tasks?.proof_required === true;
 
         const currentStatus = statusData[id] || "Done";
         const isMarkedDone = ["done", "yes", "completed"].includes(currentStatus.toLowerCase());
@@ -1465,7 +1468,11 @@ const WorkTasksTab = ({
                                       <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
                                         <Camera className="h-3.5 w-3.5" />
                                         <span>
-                                          {uploadedImages[task.id] ? "Retake Photo" : (task.require_attachment || task.attachment) ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span> : "Take Photo"}
+                                          {uploadedImages[task.id]
+                                            ? "Retake Photo"
+                                            : (task.proof_required || task.task_assignments?.master_work_tasks?.proof_required || task.master_work_tasks?.proof_required || task.require_attachment || task.attachment)
+                                            ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span>
+                                            : "Take Photo"}
                                         </span>
                                         <input
                                           type="file"
@@ -1734,7 +1741,13 @@ const WorkTasksTab = ({
                                   <div className="flex gap-2">
                                     <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
                                       <Camera className="h-3.5 w-3.5" />
-                                      <span>{uploadedImages[task.id] ? "Retake" : "Photo"}</span>
+                                      <span>
+                                         {uploadedImages[task.id]
+                                           ? "Retake"
+                                           : (task.proof_required || task.task_assignments?.master_work_tasks?.proof_required || task.master_work_tasks?.proof_required || task.require_attachment || task.attachment)
+                                           ? <span>Photo <span className="text-red-500 font-bold">*</span></span>
+                                           : "Photo"}
+                                      </span>
                                       <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
                                     </label>
                                   </div>
