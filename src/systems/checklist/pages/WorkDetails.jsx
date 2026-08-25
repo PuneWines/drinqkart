@@ -97,7 +97,9 @@ const formatDateTime = (value) => {
 const getDatePart = (value) => {
   if (!value) return "";
   const str = String(value).trim();
-  return str.split(/[T ]/)[0] || "";
+  const datePart = str.split(/[T ]/)[0] || "";
+  if (datePart === "2000-01-01" || datePart.startsWith("0000") || datePart.startsWith("1970")) return "";
+  return datePart;
 };
 
 const getTimePart = (value) => {
@@ -493,7 +495,8 @@ export default function WorkDetails() {
     const existingVal = modifiedRows[item.taskId]?.[field] !== undefined 
       ? modifiedRows[item.taskId][field] 
       : currentTask[field];
-    const time = getTimePart(existingVal);
+    const defaultTime = field === "start_datetime" ? "09:00" : "18:00";
+    const time = getTimePart(existingVal) || defaultTime;
     const newCombined = combineDateAndTime(newDate, time);
     handleFieldChange(item.taskId, field, newCombined);
   };
@@ -1097,15 +1100,6 @@ export default function WorkDetails() {
             >
               <Download size={14} /> Export to CSV
             </button>
-
-            {selectedRows.size > 0 && isAdmin && (
-              <button
-                onClick={handleBulkDelete}
-                className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-rose-200 active:scale-95 cursor-pointer animate-in fade-in duration-200"
-              >
-                <Trash2 size={14} /> Bulk Delete ({selectedRows.size})
-              </button>
-            )}
           </div>
         </motion.div>
 
@@ -1195,24 +1189,9 @@ export default function WorkDetails() {
                         </span>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Clock size={10} className="text-orange-500 shrink-0" />
-                          <input
-                            type="number"
-                            min="0"
-                            placeholder="Mins"
-                            className={`w-16 px-1.5 py-1 border rounded text-[10px] font-bold outline-none text-center transition-all ${
-                              isModified && modifiedRows[item.taskId]?.estimated_minutes !== undefined
-                                ? 'border-amber-300 bg-amber-50/50'
-                                : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
-                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                  : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                            }`}
-                            value={modifiedRows[item.taskId]?.estimated_minutes !== undefined ? modifiedRows[item.taskId].estimated_minutes : (item.estimated_minutes || "")}
-                            onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
-                            disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
-                          />
-                        </div>
+                        <span className="px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded text-[9px] font-black border border-orange-100 uppercase tracking-tight">
+                          +{item.estimated_minutes || 0}m
+                        </span>
                       </td>
                       <td className="px-2 py-3">
                         <div className="flex items-center gap-1">
@@ -1251,34 +1230,14 @@ export default function WorkDetails() {
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <input
-                          type="time"
-                          className={`w-24 px-1.5 py-1 border rounded text-[10px] font-bold outline-none transition-all ${
-                            isModified && modifiedRows[item.taskId]?.start_datetime !== undefined
-                              ? 'border-amber-300 bg-amber-50/50'
-                              : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
-                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
-                          value={getTimePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
-                          onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                          disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
-                        />
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-[10px] font-bold border border-gray-200 font-mono">
+                          {getTimePart(item.start_datetime) || "09:00"}
+                        </span>
                       </td>
                       <td className="px-2 py-3">
-                        <input
-                          type="time"
-                          className={`w-24 px-1.5 py-1 border rounded text-[10px] font-bold outline-none transition-all ${
-                            isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
-                              ? 'border-amber-300 bg-amber-50/50'
-                              : (item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin
-                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
-                          value={getTimePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
-                          onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                          disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
-                        />
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-[10px] font-bold border border-gray-200 font-mono">
+                          {getTimePart(item.end_datetime) || "18:00"}
+                        </span>
                       </td>
                       <td className="px-2 py-3 relative">
                         <div className="relative dropdown-container">
@@ -1405,17 +1364,7 @@ export default function WorkDetails() {
                         </div>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        {item.isAvailable && isAdmin ? (
-                          <button
-                            onClick={() => handleSingleDelete(item)}
-                            className="p-1.5 hover:bg-rose-50 text-rose-500 hover:text-rose-700 rounded-lg transition-colors cursor-pointer"
-                            title="Delete Task"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
+                        <span className="text-gray-300">—</span>
                       </td>
                     </tr>
 
@@ -1494,15 +1443,6 @@ export default function WorkDetails() {
                             <span className={`w-1 h-1 rounded-full ${statusInfo.dotClass}`} />
                             {statusInfo.text}
                           </span>
-                          {item.isAvailable && isAdmin && (
-                            <button
-                              onClick={() => handleSingleDelete(item)}
-                              className="p-1 text-rose-500 hover:bg-rose-50 rounded"
-                              title="Delete Task"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
                         </div>
                       );
                     })()}

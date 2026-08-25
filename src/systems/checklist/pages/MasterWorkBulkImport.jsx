@@ -122,7 +122,7 @@ const MultiSelectDropdown = ({ options, selectedValues, onChange }) => {
 const MasterWorkBulkImport = () => {
   const [shops, setShops] = useState([]);
   const [rows, setRows] = useState([
-    { id: Date.now(), shop_ids: [], task_name: '', department: '' }
+    { id: Date.now(), shop_ids: [], task_name: '', department: '', estimated_minutes: 0, start_time: '09:00', end_time: '18:00', proof_required: false }
   ]);
   const [isSaving, setIsSaving] = useState(false);
   const { showToast } = useMagicToast();
@@ -139,7 +139,7 @@ const MasterWorkBulkImport = () => {
   }, []);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), shop_ids: [], task_name: '', department: '' }]);
+    setRows([...rows, { id: Date.now(), shop_ids: [], task_name: '', department: '', estimated_minutes: 0, start_time: '09:00', end_time: '18:00', proof_required: false }]);
   };
 
   const removeRow = (id) => {
@@ -168,33 +168,52 @@ const MasterWorkBulkImport = () => {
     setIsSaving(true);
 
     try {
-      const allPreparedData = [];
-      
-      validRows.forEach(row => {
-        row.shop_ids.forEach(shop_id => {
-          allPreparedData.push({
-            shop_id: shop_id,
-            task_name: row.task_name.trim(),
-            department: row.department.trim() || "RETAIL",
-            estimated_minutes: 0,
-            is_active: true
-          });
-        });
-      });
-
-      const CHUNK_SIZE = 50;
       let successCount = 0;
       let failedCount = 0;
 
-      for (let i = 0; i < allPreparedData.length; i += CHUNK_SIZE) {
-        const chunk = allPreparedData.slice(i, i + CHUNK_SIZE);
-        const { error } = await supabase.from('master_work_tasks').insert(chunk);
+      for (const row of validRows) {
+        for (const shop_id of row.shop_ids) {
+          // 1. Insert into master_work_tasks
+          const { data: insertedMaster, error: masterErr } = await supabase
+            .from('master_work_tasks')
+            .insert([{
+              shop_id: shop_id,
+              task_name: row.task_name.trim(),
+              department: row.department.trim() || "RETAIL",
+              estimated_minutes: parseInt(row.estimated_minutes, 10) || 0,
+              proof_required: Boolean(row.proof_required),
+              is_active: true
+            }])
+            .select('id')
+            .single();
 
-        if (error) {
-          failedCount += chunk.length;
-          console.error("Insert error:", error);
-        } else {
-          successCount += chunk.length;
+          if (masterErr || !insertedMaster?.id) {
+            console.error("Master insert error:", masterErr);
+            failedCount++;
+            continue;
+          }
+
+          // 2. Insert corresponding task_assignments row with default time formatted with dummy ISO date (2000-01-01)
+          const sTime = row.start_time || '09:00';
+          const eTime = row.end_time || '18:00';
+          const dummyStart = `2000-01-01T${sTime}:00`;
+          const dummyEnd = `2000-01-01T${eTime}:00`;
+
+          const { error: asgnErr } = await supabase
+            .from('task_assignments')
+            .insert([{
+              task_id: insertedMaster.id,
+              start_datetime: dummyStart,
+              end_datetime: dummyEnd,
+              status: 'ACTIVE',
+              manager_name: null,
+              employee_name: null
+            }]);
+
+          if (asgnErr) {
+            console.error("Task assignment insert error:", asgnErr);
+          }
+          successCount++;
         }
       }
 
@@ -202,7 +221,7 @@ const MasterWorkBulkImport = () => {
         showToast(`Saved ${successCount} tasks. ${failedCount} failed.`, "warning");
       } else {
         showToast(`Successfully saved ${successCount} tasks across selected shops.`, "success");
-        setTimeout(() => navigate('/dashboard/work-details'), 2000);
+        setTimeout(() => navigate('/dashboard/work-details'), 1500);
       }
     } catch (err) {
       console.error(err);
@@ -215,7 +234,7 @@ const MasterWorkBulkImport = () => {
   return (
     <AdminLayout>
       <div className="min-h-screen bg-slate-50/50 p-4 sm:p-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
             <div className="flex items-center gap-5">
@@ -255,7 +274,7 @@ const MasterWorkBulkImport = () => {
             </div>
             
             <div className="p-4 sm:p-6 pb-40">
-              {/* Mobile View (< 768px): Stacked input cards preventing overflow */}
+              {/* Mobile View (< 768px): Stacked input cards */}
               <div className="md:hidden space-y-4">
                 <AnimatePresence>
                   {rows.map((row, idx) => (
@@ -297,30 +316,82 @@ const MasterWorkBulkImport = () => {
                         />
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Department</label>
-                        <input
-                          type="text"
-                          placeholder="Optional (e.g., RETAIL)"
-                          value={row.department}
-                          onChange={(e) => handleRowChange(row.id, 'department', e.target.value)}
-                          className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all box-border"
-                        />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Department</label>
+                          <input
+                            type="text"
+                            placeholder="Optional (e.g., RETAIL)"
+                            value={row.department}
+                            onChange={(e) => handleRowChange(row.id, 'department', e.target.value)}
+                            className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all box-border"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Extra Time (Mins)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Mins"
+                            value={row.estimated_minutes}
+                            onChange={(e) => handleRowChange(row.id, 'estimated_minutes', parseInt(e.target.value) || 0)}
+                            className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all box-border"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Start Time</label>
+                          <input
+                            type="time"
+                            value={row.start_time}
+                            onChange={(e) => handleRowChange(row.id, 'start_time', e.target.value)}
+                            className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all box-border"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">End Time</label>
+                          <input
+                            type="time"
+                            value={row.end_time}
+                            onChange={(e) => handleRowChange(row.id, 'end_time', e.target.value)}
+                            className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all box-border"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-600">Proof Required?</label>
+                        <select
+                          value={row.proof_required ? 'yes' : 'no'}
+                          onChange={(e) => handleRowChange(row.id, 'proof_required', e.target.value === 'yes')}
+                          className="text-xs font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-xl outline-none"
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
                       </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
               </div>
 
-              {/* Desktop View (>= 768px): 100% Unchanged Table */}
+              {/* Desktop View (>= 768px): Table */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left min-w-[600px] border-separate border-spacing-y-2">
+                <table className="w-full text-left min-w-[900px] border-separate border-spacing-y-2">
                   <thead className="bg-transparent">
                     <tr>
-                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Shop Name(s) *</th>
-                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-2/5">Task Description *</th>
-                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Department</th>
-                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-16 text-center">Action</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/5">Shop Name(s) *</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Task Description *</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Dept</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-24">Extra (Mins)</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-28">Start Time</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-28">End Time</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-28">Req. Proof</th>
+                      <th className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 w-12 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-transparent">
@@ -352,11 +423,47 @@ const MasterWorkBulkImport = () => {
                           <td className="px-2 py-1 align-top">
                             <input
                               type="text"
-                              placeholder="Optional (e.g., RETAIL)"
+                              placeholder="RETAIL"
                               value={row.department}
                               onChange={(e) => handleRowChange(row.id, 'department', e.target.value)}
                               className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
                             />
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder="0"
+                              value={row.estimated_minutes}
+                              onChange={(e) => handleRowChange(row.id, 'estimated_minutes', parseInt(e.target.value) || 0)}
+                              className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-center"
+                            />
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <input
+                              type="time"
+                              value={row.start_time}
+                              onChange={(e) => handleRowChange(row.id, 'start_time', e.target.value)}
+                              className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                            />
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <input
+                              type="time"
+                              value={row.end_time}
+                              onChange={(e) => handleRowChange(row.id, 'end_time', e.target.value)}
+                              className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                            />
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <select
+                              value={row.proof_required ? 'yes' : 'no'}
+                              onChange={(e) => handleRowChange(row.id, 'proof_required', e.target.value === 'yes')}
+                              className="w-full text-xs font-bold p-2 min-h-[42px] bg-white border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                            >
+                              <option value="no">No</option>
+                              <option value="yes">Yes</option>
+                            </select>
                           </td>
                           <td className="px-2 py-1 text-center align-top pt-2">
                             <button

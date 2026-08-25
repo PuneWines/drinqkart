@@ -403,6 +403,7 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
       .from('task_assignments')
       .select('*, master_work_tasks!inner(*, shop(shop_name))')
       .eq('master_work_tasks.is_active', true)
+      .neq('is_active', false)
       .limit(FETCH_LIMIT);
 
     if (role === 'user' && username) {
@@ -418,7 +419,7 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
 
     // Map to a common format expected by the frontend
     let mapped = (data || [])
-      .filter(row => row.master_work_tasks && row.master_work_tasks.is_active !== false)
+      .filter(row => row.is_active !== false && row.master_work_tasks && row.master_work_tasks.is_active !== false)
       .map(row => {
       const master = row.master_work_tasks || {};
       const shopName = master.shop?.shop_name || "N/A";
@@ -487,9 +488,23 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
     const resolvedStartDatetime = updatedTask.start_datetime || updatedTask.task_start_date;
     const resolvedEndDatetime = updatedTask.end_datetime;
 
+    // Combine dates with updated times if start_time / end_time provided
+    let finalStartDatetime = resolvedStartDatetime;
+    let finalEndDatetime = resolvedEndDatetime;
+
+    const startDatePart = resolvedStartDatetime ? (resolvedStartDatetime.split('T')[0] || "2000-01-01") : "2000-01-01";
+    const endDatePart = resolvedEndDatetime ? (resolvedEndDatetime.split('T')[0] || "2000-01-01") : "2000-01-01";
+
+    if (updatedTask.start_time) {
+      finalStartDatetime = `${startDatePart}T${updatedTask.start_time}:00`;
+    }
+    if (updatedTask.end_time) {
+      finalEndDatetime = `${endDatePart}T${updatedTask.end_time}:00`;
+    }
+
     const datesChanged = originalTask && (
-      originalTask.start_datetime !== resolvedStartDatetime ||
-      originalTask.end_datetime !== resolvedEndDatetime
+      originalTask.start_datetime !== finalStartDatetime ||
+      originalTask.end_datetime !== finalEndDatetime
     );
 
     const employeesChanged = originalTask && originalTask.name !== updatedTask.name;
@@ -502,8 +517,8 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
       .update({
         employee_name: updatedTask.name,
         manager_name: updatedTask.given_by,
-        start_datetime: resolvedStartDatetime,
-        end_datetime: resolvedEndDatetime,
+        start_datetime: finalStartDatetime,
+        end_datetime: finalEndDatetime,
         status: (datesChanged || employeesChanged) ? 'LOCKED' : updatedTask.status,
         updated_at: new Date().toISOString()
       });
@@ -519,22 +534,19 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
     if (asgnError) throw asgnError;
     const updatedAsgn = updatedAsgnList?.[0] || null;
 
-    if (originalTask && originalTask.task_description !== updatedTask.task_description) {
+    // Update master_work_tasks legacy template fields
+    const masterUpdates = {};
+    if (updatedTask.task_description !== undefined) masterUpdates.task_name = updatedTask.task_description;
+    if (updatedTask.department !== undefined) masterUpdates.department = updatedTask.department;
+    if (updatedTask.shop_id !== undefined) masterUpdates.shop_id = updatedTask.shop_id;
+    if (durationMinutes !== null) masterUpdates.estimated_minutes = durationMinutes;
+    if (updatedTask.proof_required !== undefined) masterUpdates.proof_required = Boolean(updatedTask.proof_required);
+
+    if (Object.keys(masterUpdates).length > 0 && targetTaskId) {
       const { error: masterError } = await supabase
         .from('master_work_tasks')
-        .update({
-          task_name: updatedTask.task_description,
-          estimated_minutes: durationMinutes
-        })
-        .eq('id', updatedTask.task_id);
-      if (masterError) throw masterError;
-    } else if (durationMinutes !== null) {
-      const { error: masterError } = await supabase
-        .from('master_work_tasks')
-        .update({
-          estimated_minutes: durationMinutes
-        })
-        .eq('id', updatedTask.task_id);
+        .update(masterUpdates)
+        .eq('id', targetTaskId);
       if (masterError) throw masterError;
     }
 
@@ -565,24 +577,38 @@ export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => 
   }
 };
 
-// Delete work task assignment and generated work tasks (Individual or Bulk)
+// Soft-delete work task assignment, master work task, and clean up generated unsubmitted tasks (Individual or Bulk)
 export const deleteWorkTaskAssignmentApi = async (tasks) => {
   const taskArray = Array.isArray(tasks) ? tasks : [tasks];
   for (const task of taskArray) {
-    const targetId = typeof task === 'object' && task !== null
-      ? (task.id ?? task.assignment_id ?? task.task_id)
+    const targetAsgnId = typeof task === 'object' && task !== null
+      ? (task.id ?? task.assignment_id)
       : task;
+    const targetTaskId = typeof task === 'object' && task !== null
+      ? (task.task_id ?? task.taskId)
+      : null;
 
-    if (targetId) {
+    if (targetAsgnId) {
       // 1. Delete matching unsubmitted active/future tasks (protects past & today's expired 'Not Done' tasks)
-      await deleteUnsubmittedFutureWorkTasks(targetId);
+      await deleteUnsubmittedFutureWorkTasks(targetAsgnId);
 
-      // 2. Delete parent task assignment
-      const { error: assignError } = await supabase
+      // 2. Soft-delete parent task assignment
+      const { data: updatedAsgns, error: assignError } = await supabase
         .from('task_assignments')
-        .delete()
-        .eq('id', targetId);
+        .update({ is_active: false })
+        .eq('id', targetAsgnId)
+        .select('task_id');
       if (assignError) throw assignError;
+
+      // 3. Soft-delete linked master_work_task
+      const masterIdToDeactivate = targetTaskId || updatedAsgns?.[0]?.task_id;
+      if (masterIdToDeactivate) {
+        const { error: masterError } = await supabase
+          .from('master_work_tasks')
+          .update({ is_active: false })
+          .eq('id', masterIdToDeactivate);
+        if (masterError) throw masterError;
+      }
     }
   }
   return tasks;

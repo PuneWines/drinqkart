@@ -14,7 +14,22 @@ export const fetchMasterWorkTasksApi = async () => {
       .order('id', { ascending: true });
 
     if (error) throw error;
-    return data || [];
+
+    // Filter task_assignments to only include active assignments (is_active !== false)
+    const cleaned = (data || []).map(task => {
+      let asgns = task.task_assignments;
+      if (Array.isArray(asgns)) {
+        asgns = asgns.filter(a => a.is_active !== false);
+      } else if (asgns && asgns.is_active === false) {
+        asgns = null;
+      }
+      return {
+        ...task,
+        task_assignments: asgns
+      };
+    });
+
+    return cleaned;
   } catch (error) {
     console.error("❌ Error fetching master work tasks:", error);
     throw error;
@@ -28,7 +43,8 @@ export const fetchTaskAssignmentsApi = async () => {
   try {
     const { data, error } = await supabase
       .from('task_assignments')
-      .select('*');
+      .select('*')
+      .neq('is_active', false);
 
     if (error) throw error;
     return data || [];
