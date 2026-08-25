@@ -40,6 +40,31 @@ const isAudioUrl = (url) => {
   );
 };
 
+const getTimePart = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  if (str.includes("T")) {
+    const timePart = str.split("T")[1];
+    return timePart ? timePart.substring(0, 5) : "";
+  }
+  if (str.includes(" ")) {
+    const timePart = str.split(" ")[1];
+    return timePart ? timePart.substring(0, 5) : "";
+  }
+  if (str.match(/^\d{2}:\d{2}/)) {
+    return str.substring(0, 5);
+  }
+  return "";
+};
+
+const getDatePart = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  const datePart = str.split(/[T ]/)[0] || "";
+  if (datePart === "2000-01-01" || datePart.startsWith("0000") || datePart.startsWith("1970")) return "";
+  return datePart;
+};
+
 const getTimeStatus = (dateString, taskStatus) => {
   if (!dateString) return "—";
   const date = new Date(dateString);
@@ -105,6 +130,15 @@ export default function QuickTask() {
   const [workStatusesList, setWorkStatusesList] = useState([]);
   const [workShopFilter, setWorkShopFilter] = useState('All');
   const [workStatusFilter, setWorkStatusFilter] = useState('All');
+  const [allShopsData, setAllShopsData] = useState([]);
+
+  useEffect(() => {
+    const fetchShopsData = async () => {
+      const { data } = await supabase.from('shop').select('id, shop_name');
+      if (data) setAllShopsData(data);
+    };
+    fetchShopsData();
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'work') {
@@ -160,6 +194,8 @@ export default function QuickTask() {
     currentPage: maintenancePage
   } = useSelector((state) => state.maintenance);
   const dispatch = useDispatch();
+  const userRole = (localStorage.getItem("role") || "").toLowerCase();
+  const isAdmin = userRole === "admin";
 
   // HOD Access Restriction
   useEffect(() => {
@@ -332,18 +368,25 @@ export default function QuickTask() {
         originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
       });
     } else if (activeTab === 'work') {
+      const sTime = getTimePart(task.task_start_date || task.start_datetime) || '09:00';
+      const eTime = getTimePart(task.end_datetime) || '18:00';
       setEditFormData({
         id: task.id,
         assignment_id: task.id,
-        task_id: task.task_id,
+        task_id: task.task_id || task.id,
         shop: task.shop || task.shop_name || '',
-        given_by: task.given_by || '',
-        name: task.name || '',
-        task_description: task.task_description || '',
+        shop_id: task.shop_id || task.master_work_tasks?.shop_id || '',
+        department: task.department || task.master_work_tasks?.department || '',
+        given_by: task.given_by || task.manager_name || '',
+        name: task.name || task.employee_name || '',
+        task_description: task.task_description || task.master_work_tasks?.task_name || '',
         audio_url: task.audio_url || null,
-        task_start_date: task.task_start_date || '',
+        task_start_date: task.task_start_date || task.start_datetime || '',
         end_datetime: task.end_datetime || '',
-        duration: task.duration || '',
+        start_time: sTime,
+        end_time: eTime,
+        duration: task.duration !== undefined ? task.duration : (task.estimated_minutes !== undefined ? task.estimated_minutes : 0),
+        proof_required: Boolean(task.proof_required || task.master_work_tasks?.proof_required),
         status: task.status || '',
         instruction_attachment_url: instructionUrls,
         instruction_attachment_type: instructionTypes,
@@ -943,7 +986,7 @@ export default function QuickTask() {
               </div>
 
               {/* Fixed Delete Button Position: Lower right corner below WORK option */}
-              {selectedTasks.length > 0 && (
+              {selectedTasks.length > 0 && (activeTab !== 'work' || isAdmin) && (
                 <button
                   onClick={handleDeleteSelected}
                   disabled={isDeleting}
@@ -1470,17 +1513,22 @@ export default function QuickTask() {
                                 type="checkbox"
                                 checked={!!selectedTasks.find(t => t.id === task.id)}
                                 onChange={() => handleCheckboxChange(task)}
-                                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                disabled={!isAdmin}
+                                className={`rounded border-gray-300 text-purple-600 focus:ring-purple-500 ${!isAdmin ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                               />
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">
-                              <button
-                                onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700"
-                              >
-                                <Edit size={13} />
-                                Edit
-                              </button>
+                              {isAdmin ? (
+                                <button
+                                  onClick={() => handleEditClick(task)}
+                                  className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 cursor-pointer"
+                                >
+                                  <Edit size={13} />
+                                  Edit
+                                </button>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">
                               {task.task_id}
@@ -1543,7 +1591,8 @@ export default function QuickTask() {
                               type="checkbox"
                               checked={!!selectedTasks.find(t => t.id === task.id)}
                               onChange={() => handleCheckboxChange(task)}
-                              className="mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                              disabled={!isAdmin}
+                              className={`mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500 ${!isAdmin ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                             />
                             <div className="flex-grow min-w-0">
                               <div className="flex justify-between items-center mb-1">
@@ -1582,12 +1631,14 @@ export default function QuickTask() {
                                 </div>
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleEditClick(task)}
-                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
-                            >
-                              <Edit size={16} />
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleEditClick(task)}
+                                className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95 cursor-pointer"
+                              >
+                                <Edit size={16} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))
@@ -1794,66 +1845,61 @@ export default function QuickTask() {
                     </>
                   ) : activeTab === 'work' ? (
                     <>
-                      <div className="space-y-1.5 text-gray-400">
-                        <label className="text-[10px] font-bold uppercase tracking-wider">Shop Name (Read-only)</label>
+                      {/* Shop Name (Editable Dropdown) */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Shop Name</label>
+                        <select
+                          value={editFormData.shop || ''}
+                          onChange={(e) => {
+                            const selectedShopName = e.target.value;
+                            const foundShop = allShopsData.find(s => s.shop_name === selectedShopName);
+                            handleInputChange('shop', selectedShopName);
+                            if (foundShop) {
+                              handleInputChange('shop_id', foundShop.id);
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="">Select Shop</option>
+                          {allShopsData.length > 0
+                            ? allShopsData.map(s => <option key={s.id} value={s.shop_name}>{s.shop_name}</option>)
+                            : workShopsList.map(s => <option key={s} value={s}>{s}</option>)
+                          }
+                        </select>
+                      </div>
+
+                      {/* Department (Editable Input) */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Department</label>
                         <input
                           type="text"
-                          value={editFormData.shop || ''}
+                          value={editFormData.department || ''}
+                          onChange={(e) => handleInputChange('department', e.target.value)}
+                          placeholder="e.g. RETAIL"
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        />
+                      </div>
+
+                      {/* Manager (Read-only) */}
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">Manager (Read-only)</label>
+                        <input
+                          type="text"
+                          value={editFormData.given_by || 'Unassigned'}
                           className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
                           disabled
                         />
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Manager</label>
-                        <select
-                          value={editFormData.given_by || ''}
-                          onChange={(e) => handleInputChange('given_by', e.target.value)}
-                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
-                        >
-                          <option value="">Select Manager</option>
-                          {managersForShop.map(m => <option key={m.user_name} value={m.user_name}>{m.user_name}</option>)}
-                        </select>
-                      </div>
 
-                      {/* Multi-employee selection dropdown */}
-                      <div className="space-y-1.5 relative">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assignee (Doers)</label>
-                        <button
-                          type="button"
-                          onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
-                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium text-left focus:border-purple-400 outline-none flex justify-between items-center"
-                        >
-                          <span className="truncate">{editFormData.name || "Select Doers"}</span>
-                          <ChevronDown size={16} />
-                        </button>
-                        {isEmployeeDropdownOpen && (
-                          <div className="absolute z-[99999] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto p-2 space-y-1">
-                            {users.map(u => {
-                              const empName = u.user_name;
-                              const currentEmps = editFormData.name ? editFormData.name.split(',').map(e => e.trim()).filter(Boolean) : [];
-                              const isChecked = currentEmps.includes(empName);
-                              return (
-                                <label key={empName} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm font-medium">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => {
-                                      let nextEmps;
-                                      if (isChecked) {
-                                        nextEmps = currentEmps.filter(e => e !== empName);
-                                      } else {
-                                        nextEmps = [...currentEmps, empName];
-                                      }
-                                      handleInputChange('name', nextEmps.join(', '));
-                                    }}
-                                    className="rounded text-purple-600 focus:ring-purple-500"
-                                  />
-                                  {empName}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
+                      {/* Assignee / Doer (Read-only) */}
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">Assignee / Doer (Read-only)</label>
+                        <input
+                          type="text"
+                          value={editFormData.name || 'Unassigned'}
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
+                        />
                       </div>
 
                       {/* Start Date & Time */}
@@ -1871,12 +1917,8 @@ export default function QuickTask() {
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Start Time</label>
                           <input
                             type="time"
-                            value={editFormData.task_start_date && editFormData.task_start_date.includes('T') ? editFormData.task_start_date.split('T')[1].substring(0, 5) : '00:00'}
-                            onChange={(e) => {
-                              const newTime = e.target.value;
-                              const date = editFormData.task_start_date ? editFormData.task_start_date.split('T')[0] : new Date().toISOString().split('T')[0];
-                              handleInputChange('task_start_date', `${date}T${newTime}`);
-                            }}
+                            value={editFormData.start_time || '09:00'}
+                            onChange={(e) => handleInputChange('start_time', e.target.value)}
                             className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
                           />
                         </div>
@@ -1897,33 +1939,44 @@ export default function QuickTask() {
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">End Time</label>
                           <input
                             type="time"
-                            value={editFormData.end_datetime && editFormData.end_datetime.includes('T') ? editFormData.end_datetime.split('T')[1].substring(0, 5) : '23:59'}
-                            onChange={(e) => {
-                              const newTime = e.target.value;
-                              const date = editFormData.end_datetime ? editFormData.end_datetime.split('T')[0] : new Date().toISOString().split('T')[0];
-                              handleInputChange('end_datetime', `${date}T${newTime}`);
-                            }}
+                            value={editFormData.end_time || '18:00'}
+                            onChange={(e) => handleInputChange('end_time', e.target.value)}
                             className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
                           />
                         </div>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Extra Time (HH:MM)</label>
-                        <input
-                          type="text"
-                          value={editFormData.duration || ''}
-                          onChange={(e) => handleInputChange('duration', e.target.value)}
-                          placeholder="e.g., 01:30"
-                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
-                        />
+                      {/* Extra Time & Proof Required */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Extra Time (Mins)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={editFormData.duration !== undefined ? editFormData.duration : 0}
+                            onChange={(e) => handleInputChange('duration', e.target.value)}
+                            placeholder="0"
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Req. Proof</label>
+                          <select
+                            value={editFormData.proof_required ? 'yes' : 'no'}
+                            onChange={(e) => handleInputChange('proof_required', e.target.value === 'yes')}
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-xs font-semibold outline-none"
+                          >
+                            <option value="no">No</option>
+                            <option value="yes">Yes</option>
+                          </select>
+                        </div>
                       </div>
 
+                      {/* Status (Read-only) */}
                       <div className="space-y-1.5 text-gray-400">
                         <label className="text-[10px] font-bold uppercase tracking-wider">Status (Read-only)</label>
                         <select
                           value={editFormData.status || ''}
-                          onChange={(e) => handleInputChange('status', e.target.value)}
                           className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
                           disabled
                         >
@@ -2007,7 +2060,7 @@ export default function QuickTask() {
                           <select
                             value={editFormData.require_attachment || ''}
                             onChange={(e) => handleInputChange('require_attachment', e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-xs font-semibold"
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-xs font-semibold outline-none"
                           >
                             <option value="yes">Yes</option>
                             <option value="no">No</option>
@@ -2018,83 +2071,85 @@ export default function QuickTask() {
                   )}
                 </div>
 
-                {/* References / Attachments Section */}
-                <div className="pt-4 border-t border-gray-100 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Additional References</h4>
-                    <button
-                      type="button"
-                      onClick={addAttachment}
-                      className="px-3 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-gray-50 transition-all flex items-center gap-1.5"
-                    >
-                      <Plus size={10} /> Add Reference
-                    </button>
-                  </div>
+                {/* References / Attachments Section (Hidden for Work Tab) */}
+                {activeTab !== 'work' && (
+                  <div className="pt-4 border-t border-gray-100 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Additional References</h4>
+                      <button
+                        type="button"
+                        onClick={addAttachment}
+                        className="px-3 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-gray-50 transition-all flex items-center gap-1.5"
+                      >
+                        <Plus size={10} /> Add Reference
+                      </button>
+                    </div>
 
-                  <div className="space-y-2">
-                    {(editFormData.instruction_attachment_url || []).map((url, idx) => (
-                      <div key={idx} className="flex gap-2 items-center bg-gray-50/50 p-2 rounded-xl border border-gray-200">
-                        <select
-                          value={editFormData.instruction_attachment_type?.[idx] || 'link'}
-                          onChange={(e) => handleAttachmentChange(idx, 'type', e.target.value)}
-                          className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold uppercase outline-none w-20"
-                        >
-                          <option value="link">Link</option>
-                          <option value="video">Video</option>
-                          <option value="image">Image</option>
-                          <option value="pdf">PDF</option>
-                        </select>
-                        {editFormData.instruction_attachment_type?.[idx] === 'image' ? (
-                          <div className="flex-grow flex items-center gap-2">
+                    <div className="space-y-2">
+                      {(editFormData.instruction_attachment_url || []).map((url, idx) => (
+                        <div key={idx} className="flex gap-2 items-center bg-gray-50/50 p-2 rounded-xl border border-gray-200">
+                          <select
+                            value={editFormData.instruction_attachment_type?.[idx] || 'link'}
+                            onChange={(e) => handleAttachmentChange(idx, 'type', e.target.value)}
+                            className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold uppercase outline-none w-20"
+                          >
+                            <option value="link">Link</option>
+                            <option value="video">Video</option>
+                            <option value="image">Image</option>
+                            <option value="pdf">PDF</option>
+                          </select>
+                          {editFormData.instruction_attachment_type?.[idx] === 'image' ? (
+                            <div className="flex-grow flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={url instanceof File ? `📄 ${url.name}` : (url || '')}
+                                readOnly
+                                placeholder="Choose an image..."
+                                className="flex-grow px-3 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-medium outline-none truncate"
+                              />
+                              <input
+                                type="file"
+                                id={`ref-file-${idx}`}
+                                accept="image/*"
+                                hidden
+                                onChange={(e) => {
+                                  const file = e.target.files[0];
+                                  if (file) handleAttachmentChange(idx, 'url', file);
+                                }}
+                              />
+                              <label
+                                htmlFor={`ref-file-${idx}`}
+                                className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-bold uppercase cursor-pointer hover:bg-purple-600 hover:text-white transition-all whitespace-nowrap"
+                              >
+                                Choose
+                              </label>
+                            </div>
+                          ) : (
                             <input
                               type="text"
-                              value={url instanceof File ? `📄 ${url.name}` : (url || '')}
-                              readOnly
-                              placeholder="Choose an image..."
-                              className="flex-grow px-3 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-medium outline-none truncate"
+                              value={url instanceof File ? '' : (url || '')}
+                              onChange={(e) => handleAttachmentChange(idx, 'url', e.target.value)}
+                              placeholder="https://..."
+                              className="flex-grow px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-medium outline-none focus:ring-4 focus:ring-purple-50"
                             />
-                            <input
-                              type="file"
-                              id={`ref-file-${idx}`}
-                              accept="image/*"
-                              hidden
-                              onChange={(e) => {
-                                const file = e.target.files[0];
-                                if (file) handleAttachmentChange(idx, 'url', file);
-                              }}
-                            />
-                            <label
-                              htmlFor={`ref-file-${idx}`}
-                              className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-bold uppercase cursor-pointer hover:bg-purple-600 hover:text-white transition-all whitespace-nowrap"
-                            >
-                              Choose
-                            </label>
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            value={url instanceof File ? '' : (url || '')}
-                            onChange={(e) => handleAttachmentChange(idx, 'url', e.target.value)}
-                            placeholder="https://..."
-                            className="flex-grow px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-medium outline-none focus:ring-4 focus:ring-purple-50"
-                          />
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removeAttachment(idx)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                    {(!editFormData.instruction_attachment_url || editFormData.instruction_attachment_url.length === 0) && (
-                      <div className="text-center py-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">No additional references</p>
-                      </div>
-                    )}
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(idx)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      {(!editFormData.instruction_attachment_url || editFormData.instruction_attachment_url.length === 0) && (
+                        <div className="text-center py-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">No additional references</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Modal Footer */}
