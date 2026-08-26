@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Hash, Plus, ShieldAlert, CheckCircle, Search, Trash2, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-export default function CounterManagement() {
+export default function CounterManagement({ readOnly = false }) {
   const [counters, setCounters] = useState([]);
   const [newCounterName, setNewCounterName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -130,24 +130,27 @@ export default function CounterManagement() {
                   type="text"
                   value={newCounterName}
                   onChange={(e) => setNewCounterName(e.target.value)}
-                  placeholder="e.g. COUNTER-4"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:outline-none focus:border-[#C9A84C] rounded-none font-mono"
+                  disabled={readOnly}
+                  placeholder={readOnly ? "Read-only mode" : "e.g. COUNTER-4"}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:outline-none focus:border-[#C9A84C] rounded-none font-mono disabled:bg-slate-100 disabled:cursor-not-allowed"
                   required
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={saving || !newCounterName.trim()}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors disabled:cursor-not-allowed shadow-sm cursor-pointer rounded-none"
-              >
-                {saving ? (
-                  <div className="w-4 h-4 border-2 border-[#1A1A1A] border-t-transparent animate-spin"></div>
-                ) : (
-                  <Plus size={16} />
-                )}
-                Add Counter
-              </button>
+              {!readOnly && (
+                <button
+                  type="submit"
+                  disabled={saving || !newCounterName.trim()}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors disabled:cursor-not-allowed shadow-sm cursor-pointer rounded-none"
+                >
+                  {saving ? (
+                    <div className="w-4 h-4 border-2 border-[#1A1A1A] border-t-transparent animate-spin"></div>
+                  ) : (
+                    <Plus size={16} />
+                  )}
+                  Add Counter
+                </button>
+              )}
             </form>
           </div>
         </div>
@@ -188,7 +191,7 @@ export default function CounterManagement() {
                       <th className="py-3 px-4"># ID</th>
                       <th className="py-3 px-4">Counter Name</th>
                       <th className="py-3 px-4">Created At</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                      {!readOnly && <th className="py-3 px-4 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
@@ -213,17 +216,19 @@ export default function CounterManagement() {
                               {formattedDate}
                             </span>
                           </td>
-                          <td className="py-3.5 px-4 text-right">
-                            <button
-                              onClick={() => handleDeleteCounter(counter.id, counter.name)}
-                              disabled={deletingId === counter.id}
-                              className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] uppercase tracking-wider border border-red-200 transition-colors cursor-pointer inline-flex items-center gap-1"
-                              title="Delete Counter"
-                            >
-                              <Trash2 size={12} />
-                              <span>{deletingId === counter.id ? 'Deleting...' : 'Delete'}</span>
-                            </button>
-                          </td>
+                          {!readOnly && (
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                onClick={() => handleDeleteCounter(counter.id, counter.name)}
+                                disabled={deletingId === counter.id}
+                                className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] uppercase tracking-wider border border-red-200 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                title="Delete Counter"
+                              >
+                                <Trash2 size={12} />
+                                <span>{deletingId === counter.id ? 'Deleting...' : 'Delete'}</span>
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

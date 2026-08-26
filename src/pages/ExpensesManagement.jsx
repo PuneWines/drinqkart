@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Plus, ShieldAlert, CheckCircle, Search, Trash2, Calendar, Edit3, Save, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-export default function ExpensesManagement() {
+export default function ExpensesManagement({ readOnly = false }) {
   const [expenses, setExpenses] = useState([]);
   const [newExpenseName, setNewExpenseName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -44,65 +44,57 @@ export default function ExpensesManagement() {
 
   const handleAddExpense = async (e) => {
     e.preventDefault();
-    const trimmedName = newExpenseName.trim();
-    if (!trimmedName) return;
+    if (readOnly) return;
+    if (!newExpenseName.trim()) return;
 
-    setSaving(true);
     try {
-      const { data, error } = await supabase
+      setSaving(true);
+      const { error } = await supabase
         .from('master_expenses')
-        .insert([{ name: trimmedName }])
-        .select();
+        .insert([{ name: newExpenseName.trim() }]);
 
-      if (error) {
-        if (error.code === '23505') { // Unique constraint violation
-          throw new Error('This expense option already exists.');
-        }
-        throw error;
-      }
+      if (error) throw error;
 
-      setExpenses((prev) => [...prev, ...data].sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+      showAlert('success', `Expense option "${newExpenseName.trim()}" created!`);
       setNewExpenseName('');
-      showAlert('success', 'Expense option added successfully!');
+      fetchExpenses();
     } catch (err) {
-      showAlert('error', err.message);
+      showAlert('error', 'Failed to create expense option: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
 
   const handleUpdateExpense = async (id) => {
-    const trimmedName = editingName.trim();
-    if (!trimmedName) return;
+    if (readOnly) return;
+    if (!editingName.trim()) return;
 
-    setUpdating(true);
     try {
+      setUpdating(true);
       const { error } = await supabase
         .from('master_expenses')
-        .update({ name: trimmedName })
+        .update({ name: editingName.trim() })
         .eq('id', id);
 
-      if (error) {
-        if (error.code === '23505') {
-          throw new Error('This expense option already exists.');
-        }
-        throw error;
-      }
+      if (error) throw error;
 
-      showAlert('success', 'Expense option updated successfully!');
+      showAlert('success', 'Expense option updated!');
       setEditingId(null);
+      setEditingName('');
       fetchExpenses();
     } catch (err) {
-      showAlert('error', 'Failed to update: ' + err.message);
+      showAlert('error', 'Failed to update expense option: ' + err.message);
     } finally {
       setUpdating(false);
     }
   };
 
   const handleDeleteExpense = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete expense "${name}"?`)) return;
-    setDeletingId(id);
+    if (readOnly) return;
+    if (!window.confirm(`Are you sure you want to delete expense option "${name}"?`)) return;
+
     try {
+      setDeletingId(id);
       const { error } = await supabase
         .from('master_expenses')
         .delete()
@@ -110,16 +102,17 @@ export default function ExpensesManagement() {
 
       if (error) throw error;
 
-      showAlert('success', `Expense "${name}" deleted successfully!`);
+      showAlert('success', `Expense option "${name}" deleted!`);
       fetchExpenses();
     } catch (err) {
-      showAlert('error', 'Failed to delete: ' + err.message);
+      showAlert('error', 'Failed to delete expense option: ' + err.message);
     } finally {
       setDeletingId(null);
     }
   };
 
   const startEditing = (expense) => {
+    if (readOnly) return;
     setEditingId(expense.id);
     setEditingName(expense.name || '');
   };
@@ -173,24 +166,27 @@ export default function ExpensesManagement() {
                   type="text"
                   value={newExpenseName}
                   onChange={(e) => setNewExpenseName(e.target.value)}
-                  placeholder="e.g. Custom Expense Name"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:outline-none focus:border-[#C9A84C] rounded-none font-medium"
+                  disabled={readOnly}
+                  placeholder={readOnly ? "Read-only mode" : "e.g. Custom Expense Name"}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:outline-none focus:border-[#C9A84C] rounded-none font-medium disabled:bg-slate-100 disabled:cursor-not-allowed"
                   required
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={saving || !newExpenseName.trim()}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors disabled:cursor-not-allowed shadow-sm cursor-pointer rounded-none"
-              >
-                {saving ? (
-                  <div className="w-4 h-4 border-2 border-[#1A1A1A] border-t-transparent animate-spin"></div>
-                ) : (
-                  <Plus size={16} />
-                )}
-                Add Expense Option
-              </button>
+              {!readOnly && (
+                <button
+                  type="submit"
+                  disabled={saving || !newExpenseName.trim()}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors disabled:cursor-not-allowed shadow-sm cursor-pointer rounded-none"
+                >
+                  {saving ? (
+                    <div className="w-4 h-4 border-2 border-[#1A1A1A] border-t-transparent animate-spin"></div>
+                  ) : (
+                    <Plus size={16} />
+                  )}
+                  Add Expense Option
+                </button>
+              )}
             </form>
           </div>
         </div>
@@ -231,7 +227,7 @@ export default function ExpensesManagement() {
                       <th className="py-3 px-4 w-16">Sr No.</th>
                       <th className="py-3 px-4">Expense Category Name</th>
                       <th className="py-3 px-4 w-36">Created On</th>
-                      <th className="py-3 px-4 w-28 text-right">Actions</th>
+                      {!readOnly && <th className="py-3 px-4 w-28 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -265,45 +261,47 @@ export default function ExpensesManagement() {
                                 : '—'}
                             </span>
                           </td>
-                          <td className="py-3.5 px-4 text-right">
-                            {isEditing ? (
-                              <div className="flex justify-end gap-1.5">
-                                <button
-                                  onClick={() => handleUpdateExpense(expense.id)}
-                                  disabled={updating || !editingName.trim()}
-                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50"
-                                  title="Save Change"
-                                >
-                                  <Save size={14} />
-                                </button>
-                                <button
-                                  onClick={cancelEditing}
-                                  className="p-1.5 text-rose-600 hover:bg-rose-50 transition-colors"
-                                  title="Cancel"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex justify-end gap-1.5">
-                                <button
-                                  onClick={() => startEditing(expense)}
-                                  className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                                  title="Edit Name"
-                                >
-                                  <Edit3 size={14} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteExpense(expense.id, expense.name)}
-                                  disabled={deletingId === expense.id}
-                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50"
-                                  title="Delete Option"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            )}
-                          </td>
+                          {!readOnly && (
+                            <td className="py-3.5 px-4 text-right">
+                              {isEditing ? (
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleUpdateExpense(expense.id)}
+                                    disabled={updating || !editingName.trim()}
+                                    className="p-1.5 text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                                    title="Save Change"
+                                  >
+                                    <Save size={14} />
+                                  </button>
+                                  <button
+                                    onClick={cancelEditing}
+                                    className="p-1.5 text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Cancel"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    onClick={() => startEditing(expense)}
+                                    className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                                    title="Edit Name"
+                                  >
+                                    <Edit3 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteExpense(expense.id, expense.name)}
+                                    disabled={deletingId === expense.id}
+                                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                                    title="Delete Option"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

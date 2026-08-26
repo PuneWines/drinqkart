@@ -254,6 +254,20 @@ export const getVisibleSystems = (user) => {
           labelsToCheck.push('Stock Ledger', 'Table View', 'Reports & Charts', 'Purchase Items', 'Sales History', 'Current Stock Details', 'Manager Report');
         }
       }
+      if (systemId === 'master-setting' || systemId === 'master_setting') {
+        if (sub.label === 'Shop') {
+          labelsToCheck.push('Shop', 'Shops', 'Joining shop');
+        }
+        if (sub.label === 'Counter') {
+          labelsToCheck.push('Counter', 'Counters');
+        }
+        if (sub.label === 'Expenses') {
+          labelsToCheck.push('Expenses', 'Expense Categories');
+        }
+        if (sub.label === 'User & System Access') {
+          labelsToCheck.push('User & System Access', 'Master Setting', 'User Access');
+        }
+      }
 
       const hasMasterPerm = labelsToCheck.some((lbl) => {
         const sysUnderscore = systemId.replace('-', '_');

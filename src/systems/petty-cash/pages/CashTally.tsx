@@ -308,11 +308,15 @@ export default function CashTally({
         const userStr = localStorage.getItem("currentUser");
         if (userStr) {
           const u = JSON.parse(userStr);
-          if (u && Array.isArray(u.counter_access)) {
-            return u.counter_access.map((c: any) => String(c).trim().toUpperCase());
+          if (u && Array.isArray(u.counter_access) && u.counter_access.length > 0) {
+            const arr = u.counter_access.map((c: any) => String(c).trim().toUpperCase());
+            console.log('[Counter Access Debug] CashTally modal allowedCounters state from currentUser.counter_access:', arr);
+            return arr;
           }
-          if (u && Array.isArray(u.counterAccess)) {
-            return u.counterAccess.map((c: any) => String(c).trim().toUpperCase());
+          if (u && Array.isArray(u.counterAccess) && u.counterAccess.length > 0) {
+            const arr = u.counterAccess.map((c: any) => String(c).trim().toUpperCase());
+            console.log('[Counter Access Debug] CashTally modal allowedCounters state from currentUser.counterAccess:', arr);
+            return arr;
           }
         }
       } catch (e) {
@@ -323,15 +327,19 @@ export default function CashTally({
         const hrUserStr = localStorage.getItem("hr_user");
         if (hrUserStr) {
           const hr = JSON.parse(hrUserStr);
-          if (hr && Array.isArray(hr.counter_access)) {
-            return hr.counter_access.map((c: any) => String(c).trim().toUpperCase());
+          if (hr && Array.isArray(hr.counter_access) && hr.counter_access.length > 0) {
+            const arr = hr.counter_access.map((c: any) => String(c).trim().toUpperCase());
+            console.log('[Counter Access Debug] CashTally modal allowedCounters state from hr_user:', arr);
+            return arr;
           }
         }
       } catch (e) {
         console.error("[CashTally] Error parsing hr_user:", e);
       }
 
-      return getAllowedCounters();
+      const parsed = getAllowedCounters();
+      console.log('[Counter Access Debug] CashTally modal allowedCounters state from getAllowedCounters():', parsed);
+      return parsed;
     };
 
     setAllowedCounters(parseAllowedCounters());

@@ -144,6 +144,8 @@ const syncSubsystemSessions = (userObj) => {
     name: userObj.user_name || userObj.username || "User",
     role: userObj.role || "user",
     master_user_system_page_access: userObj.master_user_system_page_access,
+    counter_access: userObj.counter_access || [],
+    counterAccess: userObj.counter_access || [],
     pages: userObj.page_access || (userObj.master_user_system_page_access ? [] : ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports']),
     shops: userObj.shop_name || userObj.user_access ? [userObj.shop_name || userObj.user_access] : 'all',
     initials: (userObj.user_name || userObj.username || "U").substring(0, 2).toUpperCase(),
@@ -259,11 +261,11 @@ export const AuthProvider = ({ children }) => {
         return { success: false, isInactive: true };
       }
 
-      // Fetch latest master_user_system_page_access & status directly from users table
+      // Fetch latest master_user_system_page_access, counter_access & status directly from users table
       try {
         const { data: dbUser } = await supabase
           .from('users')
-          .select('master_user_system_page_access, status')
+          .select('master_user_system_page_access, status, counter_access')
           .eq('id', userObj.id)
           .maybeSingle();
 
@@ -274,6 +276,9 @@ export const AuthProvider = ({ children }) => {
           }
           if (dbUser.master_user_system_page_access) {
             userObj.master_user_system_page_access = dbUser.master_user_system_page_access;
+          }
+          if (dbUser.counter_access) {
+            userObj.counter_access = dbUser.counter_access;
           }
         }
       } catch (e) {

@@ -144,7 +144,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'MASTER SETTINGS ACCESS',
-        pages: ['User & System Access']
+        pages: ['User & System Access', 'Shop', 'Counter', 'Expenses', 'Purchase Settings']
       }
     ]
   }
@@ -655,23 +655,78 @@ export default function MasterSetting() {
 
   // Permission Key Helpers
   const getPageLevel = (systemId, pageName) => {
-    if (accessPermissions[`${systemId}.${pageName}.modify`]) return 'modify';
-    if (accessPermissions[`${systemId}.${pageName}.view`]) return 'view';
-    return 'none';
+    const sysIdLower = systemId.toLowerCase();
+    const pageLower = pageName.toLowerCase();
+    const keys = Object.keys(accessPermissions);
+
+    const aliases = [pageLower];
+    if (pageLower === 'shop') aliases.push('shops', 'joining shop');
+    if (pageLower === 'counter') aliases.push('counters');
+    if (pageLower === 'expenses') aliases.push('expense categories');
+    if (pageLower === 'user & system access') aliases.push('master setting', 'user access');
+
+    let level = 'none';
+    keys.forEach((key) => {
+      if (typeof key !== 'string') return;
+      const kLower = key.toLowerCase().trim();
+      aliases.forEach((alias) => {
+        const sysDash = sysIdLower;
+        const sysUnder = sysIdLower.replace('-', '_');
+        if (
+          kLower === `${sysDash}.${alias}.modify` ||
+          kLower === `${sysUnder}.${alias}.modify` ||
+          kLower === `${sysDash}.${alias}` ||
+          kLower === `${sysUnder}.${alias}`
+        ) {
+          level = 'modify';
+        } else if (
+          (kLower === `${sysDash}.${alias}.view` || kLower === `${sysUnder}.${alias}.view`) &&
+          level !== 'modify'
+        ) {
+          level = 'view';
+        }
+      });
+    });
+
+    return level;
   };
 
   const setPageLevel = (systemId, pageName, level) => {
-    const viewKey = `${systemId}.${pageName}.view`;
-    const modifyKey = `${systemId}.${pageName}.modify`;
+    const sysIdLower = systemId.toLowerCase();
+    const pageLower = pageName.toLowerCase();
+
+    const aliases = [pageName];
+    if (pageLower === 'shop') aliases.push('Shops', 'Joining shop');
+    if (pageLower === 'counter') aliases.push('Counters');
+    if (pageLower === 'expenses') aliases.push('Expense Categories');
+    if (pageLower === 'user & system access') aliases.push('User Access', 'Master Setting');
+
     const updated = { ...accessPermissions };
 
-    delete updated[viewKey];
-    delete updated[modifyKey];
+    Object.keys(updated).forEach((key) => {
+      const kLower = key.toLowerCase().trim();
+      aliases.forEach((alias) => {
+        const aLower = alias.toLowerCase();
+        const sysDash = sysIdLower;
+        const sysUnder = sysIdLower.replace('-', '_');
+        if (
+          kLower === `${sysDash}.${aLower}.view` ||
+          kLower === `${sysDash}.${aLower}.modify` ||
+          kLower === `${sysDash}.${aLower}` ||
+          kLower === `${sysUnder}.${aLower}.view` ||
+          kLower === `${sysUnder}.${aLower}.modify` ||
+          kLower === `${sysUnder}.${aLower}`
+        ) {
+          delete updated[key];
+        }
+      });
+    });
 
+    const targetKey = `${systemId}.${pageName}`;
     if (level === 'view') {
-      updated[viewKey] = viewKey;
+      updated[`${targetKey}.view`] = `${targetKey}.view`;
     } else if (level === 'modify') {
-      updated[modifyKey] = modifyKey;
+      updated[`${targetKey}.modify`] = `${targetKey}.modify`;
     }
 
     setAccessPermissions(updated);
@@ -732,7 +787,6 @@ export default function MasterSetting() {
         .update({
           status: userStatusInput,
           password: passwordInput,
-          shop_name: shopVal,
           user_access: shopVal,
           can_self_assign: Boolean(editingUser.can_self_assign),
           master_user_system_page_access: finalAccess,
@@ -785,7 +839,73 @@ export default function MasterSetting() {
     return name.includes(searchTerm.toLowerCase());
   });
 
+  // Helper to check permission level for a given Master Setting module: returns 'modify' | 'view' | 'none'
+  const getMasterSettingPagePermission = (pageLabel) => {
+    if (!currentUserObj) return 'none';
+    const userName = (currentUserObj.user_name || currentUserObj.username || '').toLowerCase().trim();
+    if (userName === 'masteradmin') return 'modify';
+
+    const role = (currentUserObj.role || '').toLowerCase().trim();
+
+    let masterAccess = [];
+    const rawVal = currentUserObj.master_user_system_page_access || localStorage.getItem('master_user_system_page_access');
+    let parsed = rawVal;
+    if (typeof rawVal === 'string') {
+      try { parsed = JSON.parse(rawVal); } catch (e) { parsed = []; }
+    }
+    if (Array.isArray(parsed)) {
+      masterAccess = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      masterAccess = Object.keys(parsed);
+    }
+
+    if (masterAccess.length > 0) {
+      const labelsToCheck = [pageLabel];
+      if (pageLabel.toLowerCase() === 'shop') labelsToCheck.push('shops', 'joining shop');
+      if (pageLabel.toLowerCase() === 'counter') labelsToCheck.push('counters');
+      if (pageLabel.toLowerCase() === 'expenses') labelsToCheck.push('expense categories');
+      if (pageLabel.toLowerCase() === 'user & system access') labelsToCheck.push('master setting', 'user access');
+
+      let hasModify = false;
+      let hasView = false;
+
+      masterAccess.forEach((item) => {
+        if (typeof item !== 'string') return;
+        const itemLower = item.toLowerCase().trim();
+        labelsToCheck.forEach((lbl) => {
+          const lblLower = lbl.toLowerCase().trim();
+          if (
+            itemLower === `master-setting.${lblLower}.modify` ||
+            itemLower === `master_setting.${lblLower}.modify` ||
+            itemLower === `master-setting.${lblLower}` ||
+            itemLower === `master_setting.${lblLower}`
+          ) {
+            hasModify = true;
+          } else if (
+            itemLower === `master-setting.${lblLower}.view` ||
+            itemLower === `master_setting.${lblLower}.view`
+          ) {
+            hasView = true;
+          }
+        });
+      });
+
+      if (hasModify) return 'modify';
+      if (hasView) return 'view';
+      if (role === 'admin') return 'modify';
+      return 'none';
+    }
+
+    if (role === 'admin') return 'modify';
+    return 'none';
+  };
+
   const location = useLocation();
+
+  const purchaseSettingsPerm = getMasterSettingPagePermission('Purchase Settings');
+  const shopPerm = getMasterSettingPagePermission('Shop');
+  const counterPerm = getMasterSettingPagePermission('Counter');
+  const expensesPerm = getMasterSettingPagePermission('Expenses');
 
   // Sub-route: Purchase Settings
   if (
@@ -793,22 +913,22 @@ export default function MasterSetting() {
     location.pathname.includes('/purchase-setting') ||
     location.pathname.endsWith('/settings')
   ) {
-    return <PurchaseSettings />;
+    return <PurchaseSettings readOnly={purchaseSettingsPerm === 'view'} />;
   }
 
   // Sub-route: Shop (Joining Company)
   if (location.pathname.includes('/Shop') || location.pathname.toLowerCase().includes('/shop')) {
-    return <JoiningCompany />;
+    return <JoiningCompany readOnly={shopPerm === 'view'} />;
   }
 
   // Sub-route: Counter
   if (location.pathname.includes('/Counter') || location.pathname.toLowerCase().includes('/counter')) {
-    return <CounterManagement />;
+    return <CounterManagement readOnly={counterPerm === 'view'} />;
   }
 
   // Sub-route: Expenses
   if (location.pathname.includes('/Expenses') || location.pathname.toLowerCase().includes('/expenses')) {
-    return <ExpensesManagement />;
+    return <ExpensesManagement readOnly={expensesPerm === 'view'} />;
   }
 
   return (
