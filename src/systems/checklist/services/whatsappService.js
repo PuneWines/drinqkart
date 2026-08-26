@@ -216,7 +216,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
         const message = `${header}\n\n` +
             body +
             `\n📌 Please take immediate action and update once completed.\n` +
-            `🔗 App Link: https://checklist-delegation-five.vercel.app/login`;
+            `🔗 App Link: https://drinqkart.com/login`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -294,7 +294,7 @@ export const sendMaintenanceTaskNotification = async (taskDetails) => {
             `🗓️ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Given By: ${givenBy}\n\n` +
-            `✅ Link:https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Link: https://drinqkart.com/login\n` +
             `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
@@ -333,7 +333,7 @@ export const sendRepairTaskNotification = async (taskDetails) => {
             `🗓️ Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Filled By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Link: https://drinqkart.com/login\n` +
             `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
@@ -371,7 +371,7 @@ export const sendEATaskNotification = async (taskDetails) => {
             `⏳ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Requested By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Link: https://drinqkart.com/login\n` +
             `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
@@ -410,7 +410,7 @@ export const sendDelegationTaskNotification = async (taskDetails) => {
             `⏳ Deadline: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Allocated By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Link: https://drinqkart.com/login\n` +
             `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
@@ -452,7 +452,7 @@ export const sendTaskExtensionNotification = async (taskDetails) => {
             `🧑💼 Allocated By: ${givenBy}\n` +
             `📝 Task Description: ${displayDescription}\n\n\n` +
             `⏳ Updated Deadline: ${nextExtendDate}\n` +
-            `✅ Closure Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Closure Link: https://drinqkart.com/login\n` +
             `Please ensure the task is completed within the new timeline. If you require any support, feel free to contact the concerned person.\n\n` +
             `Best regards,\n` +
             `Drinqkart.`;
@@ -497,7 +497,7 @@ export const sendWorkTaskNotification = async (taskDetails) => {
             `📝 Task: ${description || 'N/A'}\n` +
             `⏱️ Duration: ${duration || '0'} Mins\n` +
             `⏳ Target Completion: ${formattedEnd}\n\n` +
-            `✅ Closure Link: https://checklist-delegation-five.vercel.app/login\n\n` +
+            `✅ Closure Link: https://drinqkart.com/login\n\n` +
             `You may still submit the task after the target time; overdue submissions are recorded as Not Done in history.\n` +
             `Best regards,\nDrinqkart.`;
 
@@ -557,7 +557,7 @@ export const sendTaskAssignmentNotification = async (taskDetails) => {
                     `🧑 Allocated By: ${givenBy}\n` +
                     `📝 Task Description: ${displayDescription}\n\n\n` +
                     `⏳ Deadline: ${startDate}\n` +
-                    `✅ Closure Link:https://checklist-delegation-five.vercel.app/login\n` +
+                    `✅ Closure Link: https://drinqkart.com/login\n` +
                     `Please make sure the task is completed before the deadline. For any assistance, feel free to reach out.\n\n` +
                     `Best regards,\n` +
                     `Drinqkart.`;
@@ -676,7 +676,7 @@ export const sendTaskRejectionNotification = async (taskDetails) => {
             `📝 Task: ${description || 'N/A'}\n` +
             (reason ? `❓ Reason: ${reason}\n` : '') +
             `\n⚠️ The task has been moved back to your pending list. Please review the issues and resubmit.\n\n` +
-            `🔗 App Link: https://checklist-delegation-five.vercel.app/login\n\n` +
+            `🔗 App Link: https://drinqkart.com/login\n\n` +
             `Best regards,\nDrinqkart.`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
@@ -721,7 +721,7 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
             `📝 Task: ${displayDescription}\n` +
             `⏳ Date: ${startDate}\n` +
             `🧑 Originally Given By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Link: https://drinqkart.com/login\n` +
             `Please ensure this task is completed on time.\n\n` +
             `Best regards,\nDrinqkart.`;
 
@@ -751,7 +751,7 @@ export const sendMasterTaskAssignmentNotification = async (taskDetails) => {
             `You have received ${totalTasks || ''} new tasks of *Level: ${taskLevel || 'N/A'}* for *Shop: ${shopName || 'N/A'}*.\n\n` +
             `🧑 Assigned By: ${givenBy || 'Admin'}\n\n` +
             `📌 Please check the application to view and complete your tasks.\n\n` +
-            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Link: https://drinqkart.com/login\n` +
             `Best regards,\nDrinqkart.`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
@@ -799,7 +799,7 @@ export const sendAdminExtensionRemarkNotification = async (taskDetails) => {
             `📌 Task ID: ${taskId}\n` +
             `📋 Task: ${description || 'N/A'}\n` +
             `💬 Remark: *${remark}*\n\n` +
-            `🔗 App Link: https://checklist-delegation-five.vercel.app/login\n\n` +
+            `🔗 App Link: https://drinqkart.com/login\n\n` +
             `Best regards,\nDrinqkart.`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
@@ -825,7 +825,7 @@ export const sendMultipleWorkTasksNotification = async (doerName, tasks) => {
             `You have been assigned *${count} new Master Work tasks* at once.\n\n` +
             `🧑 Assigned By: ${givenBy}\n\n` +
             `✅ To check and start your tasks, please click here:\n` +
-            `https://checklist-delegation-five.vercel.app/login\n\n` +
+            `https://drinqkart.com/login\n\n` +
             `Please ensure all tasks are completed on time.\n` +
             `Best regards,\nDrinqkart.`;
 
