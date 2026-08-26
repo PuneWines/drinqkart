@@ -1,20 +1,12 @@
 import supabase from "../SupabaseClient";
+import { useChatStore } from "../../../store/useChatStore";
 
 /**
  * WhatsApp Messaging Service
  * Sends task notifications to users via WhatsApp
  */
 
-
-// WhatsApp API Configuration
-// WhatsApp API Configuration
-// WhatsApp API Configuration (Maytapi)
-const WHATSAPP_API_URL = 'https://api.maytapi.com/api';
-const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID;
-const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
-const WHATSAPP_PRODUCT_ID = import.meta.env.VITE_WHATSAPP_PRODUCT_ID;
 const WHATSAPP_ENABLED = true;
-
 
 /**
  * Format phone number to international format
@@ -67,12 +59,13 @@ const getUserPhoneNumber = async (username) => {
 };
 
 /**
- * Send WhatsApp message using Maytapi API
+ * Send WhatsApp text message using centralized useChatStore system
  * @param {string} phoneNumber - Recipient phone number
  * @param {string} message - Message text
+ * @param {string} [contactName] - Recipient user/doer name
  * @returns {Promise<boolean>} - Success status
  */
-const sendWhatsAppMessage = async (phoneNumber, message) => {
+const sendWhatsAppMessage = async (phoneNumber, message, contactName = null) => {
     if (!WHATSAPP_ENABLED) {
         console.log('🚫 WhatsApp sending is currently disabled.');
         return true;
@@ -84,53 +77,27 @@ const sendWhatsAppMessage = async (phoneNumber, message) => {
             return false;
         }
 
-        // If API credentials are not configured, log to console instead
-        if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_PRODUCT_ID) {
-            console.log('📱 WhatsApp Message (API not configured):');
-            console.log(`To: +${formattedPhone}`);
-            console.log(`Message: ${message}`);
-            console.log('---');
-            return true; // Return true for development
-        }
-
-        const url = `${WHATSAPP_API_URL}/${WHATSAPP_PRODUCT_ID}/${WHATSAPP_PHONE_NUMBER_ID}/sendMessage`;
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'x-maytapi-key': WHATSAPP_ACCESS_TOKEN,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                to_number: formattedPhone,
-                type: 'text',
-                message: message
-            })
+        const res = await useChatStore.getState().sendSystemWhatsAppMessage({
+            phone: formattedPhone,
+            text: message,
+            contactName: contactName || phoneNumber,
         });
 
-        const result = await response.json();
-
-        if (!response.ok) {
-            console.error('Maytapi API Error:', response.status, response.statusText);
-            console.error('Maytapi API Error Response:', JSON.stringify(result, null, 2));
-            return false;
-        }
-
-        console.log('✅ WhatsApp message sent successfully via Maytapi:', result);
-        return true;
+        return !!res?.success;
     } catch (error) {
-        console.error('Error sending WhatsApp message:', error);
+        console.error('Error sending WhatsApp message via useChatStore:', error);
         return false;
     }
 };
 
 /**
- * Send WhatsApp voice message (PTT/Audio) using Maytapi API
+ * Send WhatsApp voice message using centralized useChatStore system
  * @param {string} phoneNumber - Recipient phone number
  * @param {string} audioUrl - Public URL of the audio file
+ * @param {string} [contactName] - Recipient user/doer name
  * @returns {Promise<boolean>} - Success status
  */
-const sendWhatsAppVoiceMessage = async (phoneNumber, audioUrl) => {
+const sendWhatsAppVoiceMessage = async (phoneNumber, audioUrl, contactName = null) => {
     if (!WHATSAPP_ENABLED) {
         return true;
     }
@@ -142,40 +109,16 @@ const sendWhatsAppVoiceMessage = async (phoneNumber, audioUrl) => {
             return false;
         }
 
-        // Development fallback
-        if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_PRODUCT_ID) {
-            console.log('🎤 WhatsApp Voice Message (API not configured):');
-            console.log(`To: +${formattedPhone}`);
-            console.log(`Audio URL: ${audioUrl}`);
-            return true;
-        }
-
-        const url = `${WHATSAPP_API_URL}/${WHATSAPP_PRODUCT_ID}/${WHATSAPP_PHONE_NUMBER_ID}/sendMessage`;
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'x-maytapi-key': WHATSAPP_ACCESS_TOKEN,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                to_number: formattedPhone,
-                type: 'audio', // Changed to 'audio' for better compatibility with .webm files
-                message: audioUrl // The URL string itself
-            })
+        const res = await useChatStore.getState().sendSystemWhatsAppMessage({
+            phone: formattedPhone,
+            text: "🎤 Task Voice Note",
+            mediaUrl: audioUrl,
+            contactName: contactName || phoneNumber,
         });
 
-        const result = await response.json();
-
-        if (!response.ok) {
-            console.error('Maytapi Voice API Error:', response.status, response.statusText);
-            return false;
-        }
-
-        console.log('✅ WhatsApp voice message sent successfully:', result);
-        return true;
+        return !!res?.success;
     } catch (error) {
-        console.error('Error sending WhatsApp voice message:', error);
+        console.error('Error sending WhatsApp voice message via useChatStore:', error);
         return false;
     }
 };
@@ -311,7 +254,7 @@ export const sendChecklistTaskNotification = async (taskDetails) => {
             `⏳ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Given By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `✅ Link: https://drinqkart.com/login\n` +
             `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);

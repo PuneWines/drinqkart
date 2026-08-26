@@ -30,36 +30,24 @@ export const fetchUniqueShopDataApi = async () => {
 
 export const fetchUniqueGivenByDataApi = async () => {
   try {
-    // console.log("🔍 API: Fetching 'Assign From' list from database...");
-
     const { data, error } = await supabase
-      .from('assign_from')
-      .select('*')
-      .order('id', { ascending: true });
+      .from('users')
+      .select('user_name')
+      .ilike('shop_name', 'OFFICE')
+      .eq('status', 'active')
+      .order('user_name', { ascending: true });
 
     if (error) {
-      console.error("❌ API ERROR (assign_from):", error.message);
+      console.error("❌ API ERROR (fetchUniqueGivenByDataApi):", error.message);
       return [];
     }
 
     if (!data || data.length === 0) {
-      console.warn("⚠️ API: 'assign_from' table is empty. Add names in Settings.");
+      console.warn("⚠️ API: No active users found with shop_name = OFFICE.");
       return [];
     }
 
-    const extractedNames = data.map(item => {
-      let val = item.name || item.given_by || item.value || (typeof item === 'string' ? item : null);
-      if (typeof val === 'string' && val.trim().startsWith('{')) {
-        try {
-          const parsed = JSON.parse(val);
-          return parsed.given_by || parsed.name || val;
-        } catch (e) { }
-      }
-      return val;
-    }).filter(val => val && val.toString().trim() !== "");
-
-    const uniqueNames = [...new Set(extractedNames)].sort();
-    // console.log("✅ API: Loaded Assigners:", uniqueNames);
+    const uniqueNames = [...new Set(data.map(u => u.user_name).filter(Boolean))].sort();
     return uniqueNames;
   } catch (error) {
     console.error("❌ API: Unexpected failure fetching assigners:", error);
