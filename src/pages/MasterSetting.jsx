@@ -20,6 +20,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Lock,
+  Columns,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -185,6 +188,27 @@ export default function MasterSetting() {
     const role = (currentUserObj.role || '').toLowerCase();
     return role === 'admin';
   }, [currentUserObj]);
+  const COLUMN_DEFINITIONS = [
+    { key: 'employee_id', label: 'Employee ID' },
+    { key: 'user_name', label: 'User Name' },
+    { key: 'role', label: 'Role' },
+    { key: 'shop_name', label: 'Shop Name' },
+    { key: 'number', label: 'Mobile Number' },
+    { key: 'password', label: 'Password' },
+    { key: 'page_access', label: 'Master System Page Access' },
+    { key: 'counter_access', label: 'Master System Counter Access' },
+  ];
+
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState([
+    'user_name',
+    'role',
+    'shop_name',
+    'password',
+    'page_access',
+    'counter_access'
+  ]);
+
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showPassword, setShowPassword] = useState({});
@@ -194,6 +218,7 @@ export default function MasterSetting() {
 
   // Modal / Editing state
   const [editingUser, setEditingUser] = useState(null);
+  const [userStatusInput, setUserStatusInput] = useState('active');
   const [passwordInput, setPasswordInput] = useState('');
   const [shopNameInput, setShopNameInput] = useState('');
   const [counterAccessInput, setCounterAccessInput] = useState([]);
@@ -362,9 +387,14 @@ export default function MasterSetting() {
         shopName: foundEmp.joining_company_name || ''
       }));
     } else {
-      setEmpStatus('not_found');
+      setEmpStatus('ready_manual');
       setSelectedEmployee(null);
       setExistingUserInfo(null);
+      setNewUserForm((prev) => ({
+        ...prev,
+        employee_id: idToTest,
+        username: prev.username || idToTest,
+      }));
     }
   };
 
@@ -408,37 +438,42 @@ export default function MasterSetting() {
       const payload = {
         employee_id: targetEmpId,
         user_name: newUserForm.username.trim(),
-        username: newUserForm.username.trim(),
         password: newUserForm.password.trim(),
         role: newUserForm.role || 'user',
         email_id: newUserForm.email.trim() || selectedEmployee?.candidate_email || null,
-        number: selectedEmployee?.mobile_no ? parseInt(selectedEmployee.mobile_no) : null,
-        Designation: selectedEmployee?.designation || null,
         shop_name: targetShop,
         user_access: targetShop,
         can_self_assign: Boolean(newUserForm.can_self_assign),
         status: 'active',
         master_user_system_page_access: initialPerms,
-        counter_access: newUserForm.counterAccess || [],
-        HR_SYSTEM_employee_details: selectedEmployee || null
+        counter_access: newUserForm.counterAccess || []
       };
+
+      if (selectedEmployee?.mobile_no) {
+        const mobStr = String(selectedEmployee.mobile_no).trim();
+        if (mobStr) {
+          payload.number = mobStr;
+        }
+      }
+
+      console.log('Inserting user with payload:', payload);
 
       const { data, error } = await supabase
         .from('users')
         .insert([payload])
-        .select()
-        .single();
+        .select();
 
       if (error) {
-        showToast(`Failed to create user: ${error.message}`, 'error');
+        console.error('Supabase user creation error details:', error);
+        showToast(`Failed to create user: ${error.message}${error.details ? ` - ${error.details}` : ''}`, 'error');
       } else {
         showToast(`User ${newUserForm.username} created successfully!`, 'success');
         setShowAddModal(false);
         fetchUsers();
       }
     } catch (err) {
-      console.error('Create user error:', err);
-      showToast('Unexpected error during user creation', 'error');
+      console.error('Create user exception:', err);
+      showToast(`Unexpected error during user creation: ${err.message || err}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -568,6 +603,7 @@ export default function MasterSetting() {
       ...user,
       can_self_assign: Boolean(user.can_self_assign)
     });
+    setUserStatusInput((user.status || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active');
     setPasswordInput(user.password || '');
     setShopNameInput(user.shop_name || '');
     setCounterAccessInput(user.counter_access || []);
@@ -688,12 +724,13 @@ export default function MasterSetting() {
     setSaving(true);
 
     const finalAccess = Object.keys(accessPermissions);
-
     const shopVal = shopNameInput.trim() || null;
+
     try {
       const { error } = await supabase
         .from('users')
         .update({
+          status: userStatusInput,
           password: passwordInput,
           shop_name: shopVal,
           user_access: shopVal,
@@ -706,6 +743,22 @@ export default function MasterSetting() {
       if (error) {
         showToast(`Failed to update user: ${error.message}`, 'error');
       } else {
+        // Sync status to hr_management_employees table if employee_id exists
+        if (editingUser.employee_id) {
+          const empIdStr = editingUser.employee_id.toString().trim();
+          if (empIdStr) {
+            const hrStatusVal = userStatusInput === 'active' ? 'Active' : 'Inactive';
+            const { error: hrErr } = await supabase
+              .from('hr_management_employees')
+              .update({ status: hrStatusVal })
+              .eq('employee_id', empIdStr);
+
+            if (hrErr) {
+              console.warn('Could not sync status to hr_management_employees:', hrErr);
+            }
+          }
+        }
+
         showToast(`User ${editingUser.user_name || editingUser.username} updated successfully!`, 'success');
         
         const isCurrentLoggedIn = currentUserObj && (
@@ -811,18 +864,65 @@ export default function MasterSetting() {
         </div>
       </div>
 
-      {/* Search Filter & Count Summary */}
+      {/* Search Filter & Column Selector */}
       <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
-        <div className="relative max-w-md flex-1 min-w-[240px]">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by username..."
-            className="w-full pl-10 pr-4 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs text-[#1A1A1A] placeholder-[#1A1A1A]/40 focus:outline-none focus:border-[#C9A84C] transition-colors shadow-inner font-medium"
-          />
+        <div className="flex items-center gap-2 flex-1 max-w-xl min-w-[280px]">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by username..."
+              className="w-full pl-10 pr-4 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs text-[#1A1A1A] placeholder-[#1A1A1A]/40 focus:outline-none focus:border-[#C9A84C] transition-colors shadow-inner font-medium"
+            />
+          </div>
+
+          {/* Select Columns Dropdown */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+              className="flex items-center gap-2 px-3.5 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider text-[#1A1A1A] hover:bg-[#FAFAFA] transition-colors cursor-pointer shadow-xs"
+            >
+              <Columns size={15} className="text-[#C9A84C]" />
+              <span>Select Columns</span>
+              <ChevronDown size={14} className={`text-slate-400 transition-transform ${showColumnDropdown ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showColumnDropdown && (
+              <div className="absolute right-0 mt-1 w-64 bg-white border border-[#1A1A1A]/20 shadow-2xl z-30 p-2.5 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/50 px-2 py-1 border-b border-[#1A1A1A]/10 mb-1">
+                  Toggle Visible Columns
+                </div>
+                {COLUMN_DEFINITIONS.map(col => {
+                  const isChecked = visibleColumns.includes(col.key);
+                  return (
+                    <label
+                      key={col.key}
+                      className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-slate-50 cursor-pointer rounded text-xs font-medium text-[#1A1A1A]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          setVisibleColumns(prev =>
+                            prev.includes(col.key)
+                              ? prev.filter(k => k !== col.key)
+                              : [...prev, col.key]
+                          );
+                        }}
+                        className="w-4 h-4 text-[#C9A84C] accent-[#C9A84C] rounded"
+                      />
+                      <span>{col.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
+
         <div className="text-xs font-bold text-[#1A1A1A]/70 px-1 font-mono">
           Showing <span className="text-[#C9A84C] font-extrabold">{filteredUsers.length}</span> of <span className="text-[#1A1A1A] font-extrabold">{users.length}</span> users
         </div>
@@ -835,25 +935,27 @@ export default function MasterSetting() {
             <thead className="sticky top-0 z-10 bg-[#1A1A1A]">
               <tr className="bg-[#1A1A1A] border-b border-[#1A1A1A] uppercase font-serif text-[#C9A84C] tracking-[0.15em] text-[10.5px]">
                 <th className="py-4 px-4 w-28">Actions</th>
-                <th className="py-4 px-4">User Name</th>
-                <th className="py-4 px-4">Role</th>
-                <th className="py-4 px-4">Shop Name</th>
-                <th className="py-4 px-4">Password</th>
-                <th className="py-4 px-4">Master System Page Access</th>
-                <th className="py-4 px-4">MASTER SYSTEM COUNTER ACCESS</th>
+                {visibleColumns.includes('employee_id') && <th className="py-4 px-4">Employee ID</th>}
+                {visibleColumns.includes('user_name') && <th className="py-4 px-4">User Name</th>}
+                {visibleColumns.includes('role') && <th className="py-4 px-4">Role</th>}
+                {visibleColumns.includes('shop_name') && <th className="py-4 px-4">Shop Name</th>}
+                {visibleColumns.includes('number') && <th className="py-4 px-4">Mobile Number</th>}
+                {visibleColumns.includes('password') && <th className="py-4 px-4">Password</th>}
+                {visibleColumns.includes('page_access') && <th className="py-4 px-4">Master System Page Access</th>}
+                {visibleColumns.includes('counter_access') && <th className="py-4 px-4">MASTER SYSTEM COUNTER ACCESS</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1A1A1A]/10">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-[#1A1A1A]/50">
+                  <td colSpan={1 + visibleColumns.length} className="py-16 text-center text-[#1A1A1A]/50">
                     <RefreshCw size={24} className="animate-spin mx-auto mb-3 text-[#C9A84C]" />
                     <span className="uppercase tracking-widest text-xs font-bold">Loading User Directory...</span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
+                  <td colSpan={1 + visibleColumns.length} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
                     No users found matching your search term.
                   </td>
                 </tr>
@@ -878,7 +980,7 @@ export default function MasterSetting() {
 
                   return (
                     <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
-                      {/* Column 1: Actions */}
+                      {/* Actions (Extreme Left Column) */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {isMasterSettingModifyAllowed ? (
                           <div className="flex items-center gap-2">
@@ -895,38 +997,49 @@ export default function MasterSetting() {
                         )}
                       </td>
 
-                      {/* Column 2: User Name */}
-                      <td className="py-3.5 px-4 font-semibold text-[#1A1A1A]">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-[#1A1A1A] text-[#C9A84C] border border-[#C9A84C]/30 flex items-center justify-center font-bold text-[10px] uppercase">
-                            {name.slice(0, 2)}
+                      {/* Employee ID Column */}
+                      {visibleColumns.includes('employee_id') && (
+                        <td className="py-3.5 px-4 font-mono font-bold text-[#1A1A1A]/80 text-xs">
+                          {u.employee_id || '—'}
+                        </td>
+                      )}
+
+                      {/* User Name Column */}
+                      {visibleColumns.includes('user_name') && (
+                        <td className="py-3.5 px-4 font-semibold text-[#1A1A1A]">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-[#1A1A1A] text-[#C9A84C] border border-[#C9A84C]/30 flex items-center justify-center font-bold text-[10px] uppercase">
+                              {name.slice(0, 2)}
+                            </div>
+                            <span className="font-serif text-sm">{name}</span>
                           </div>
-                          <span className="font-serif text-sm">{name}</span>
-                        </div>
-                      </td>
+                        </td>
+                      )}
 
-                      {/* Column 3: Role & Self-Assign Status */}
-                      <td className="py-3.5 px-4 capitalize font-medium text-[#1A1A1A]/70">
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className="px-2.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[10px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                            {u.role || 'user'}
-                          </span>
-                          {u.can_self_assign ? (
-                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[9px] font-bold uppercase tracking-wider">
-                              Self Assign: Enabled
+                      {/* Role Column */}
+                      {visibleColumns.includes('role') && (
+                        <td className="py-3.5 px-4 capitalize font-medium text-[#1A1A1A]/70">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="px-2.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[10px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                              {u.role || 'user'}
                             </span>
-                          ) : (
-                            <span className="px-2 py-0.5 bg-slate-50 text-slate-400 border border-slate-200 rounded text-[9px] font-bold uppercase tracking-wider">
-                              Self Assign: Disabled
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                            {u.can_self_assign ? (
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[9px] font-bold uppercase tracking-wider">
+                                Self Assign: Enabled
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-slate-50 text-slate-400 border border-slate-200 rounded text-[9px] font-bold uppercase tracking-wider">
+                                Self Assign: Disabled
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      )}
 
-                      {/* Column 4: Shop Name with Edit Button */}
-                      <td className="py-3.5 px-4 font-sans text-xs">
-                        <div className="flex items-center justify-between gap-2 min-w-[180px] max-w-[240px]">
-                          <div className="flex flex-wrap gap-1 max-w-[170px]">
+                      {/* Shop Name Column (Single Edit Button Removed) */}
+                      {visibleColumns.includes('shop_name') && (
+                        <td className="py-3.5 px-4 font-sans text-xs">
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
                             {u.shop_name ? (
                               u.shop_name.split(',').map((s, i) => (
                                 <span
@@ -941,81 +1054,82 @@ export default function MasterSetting() {
                               <span className="text-[#1A1A1A]/40 italic text-[11px]">No Shop</span>
                             )}
                           </div>
-                          {isMasterSettingModifyAllowed && (
+                        </td>
+                      )}
+
+                      {/* Mobile Number Column */}
+                      {visibleColumns.includes('number') && (
+                        <td className="py-3.5 px-4 font-mono text-xs text-[#1A1A1A]">
+                          {u.number || '—'}
+                        </td>
+                      )}
+
+                      {/* Password Column */}
+                      {visibleColumns.includes('password') && (
+                        <td className="py-3.5 px-4 font-mono">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#1A1A1A] font-medium">
+                              {isPassVisible ? u.password : '••••••••'}
+                            </span>
                             <button
-                              onClick={() => handleOpenQuickShopEdit(u)}
-                              className="px-2.5 py-1 bg-[#C9A84C]/15 hover:bg-[#C9A84C] text-[#1A1A1A] border border-[#C9A84C]/40 hover:border-[#C9A84C] font-bold text-[10px] uppercase tracking-wider transition-all inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                              title="Edit Shop Name for user"
+                              onClick={() => togglePasswordVisibility(u.id)}
+                              className="text-[#1A1A1A]/40 hover:text-[#C9A84C] p-1 transition-colors"
+                              title={isPassVisible ? 'Hide Password' : 'Show Password'}
                             >
-                              <Edit3 size={11} />
-                              <span>Edit</span>
+                              {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
                             </button>
-                          )}
-                        </div>
-                      </td>
-
-
-
-                      {/* Column 5: Password */}
-                      <td className="py-3.5 px-4 font-mono">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[#1A1A1A] font-medium">
-                            {isPassVisible ? u.password : '••••••••'}
-                          </span>
-                          <button
-                            onClick={() => togglePasswordVisibility(u.id)}
-                            className="text-[#1A1A1A]/40 hover:text-[#C9A84C] p-1 transition-colors"
-                            title={isPassVisible ? 'Hide Password' : 'Show Password'}
-                          >
-                            {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* Column 6: Master System Page Access */}
-                      <td className="py-3.5 px-4 max-w-md">
-                        {accessKeys.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto custom-scrollbar">
-                            {accessKeys.map((key) => {
-                              const isModify = key.endsWith('.modify');
-                              return (
-                                <span
-                                  key={key}
-                                  className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${isModify
-                                    ? 'bg-[#C9A84C]/15 text-[#1A1A1A] border-[#C9A84C]/40 font-bold'
-                                    : 'bg-[#1A1A1A]/5 text-[#1A1A1A] border-[#1A1A1A]/10'
-                                    }`}
-                                >
-                                  {key}
-                                </span>
-                              );
-                            })}
                           </div>
-                        ) : (
-                          <span className="text-[#1A1A1A]/40 italic text-[11px]">
-                            No permissions configured
-                          </span>
-                        )}
-                      </td>
+                        </td>
+                      )}
 
-                      {/* Column 7: Master System Counter Access */}
-                      <td className="py-3.5 px-4 font-sans text-xs">
-                        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">
-                          {u.counter_access && Array.isArray(u.counter_access) && u.counter_access.length > 0 ? (
-                            u.counter_access.map((counter, i) => (
-                              <span
-                                key={i}
-                                className="px-2 py-0.5 bg-[#C9A84C]/15 text-[#1A1A1A] border border-[#C9A84C]/45 rounded text-[10px] font-semibold tracking-wider font-sans truncate"
-                                title={counter}
-                              >
-                                {counter}
-                              </span>
-                            ))
+                      {/* Master System Page Access Column */}
+                      {visibleColumns.includes('page_access') && (
+                        <td className="py-3.5 px-4 max-w-md">
+                          {accessKeys.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto custom-scrollbar">
+                              {accessKeys.map((key) => {
+                                const isModify = key.endsWith('.modify');
+                                return (
+                                  <span
+                                    key={key}
+                                    className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${isModify
+                                      ? 'bg-[#C9A84C]/15 text-[#1A1A1A] border-[#C9A84C]/40 font-bold'
+                                      : 'bg-[#1A1A1A]/5 text-[#1A1A1A] border-[#1A1A1A]/10'
+                                      }`}
+                                  >
+                                    {key}
+                                  </span>
+                                );
+                              })}
+                            </div>
                           ) : (
-                            <span className="text-[#1A1A1A]/40 italic text-[11px]">No Counter Access</span>
+                            <span className="text-[#1A1A1A]/40 italic text-[11px]">
+                              No permissions configured
+                            </span>
                           )}
-                        </div>
-                      </td>
+                        </td>
+                      )}
+
+                      {/* Master System Counter Access Column */}
+                      {visibleColumns.includes('counter_access') && (
+                        <td className="py-3.5 px-4 font-sans text-xs">
+                          <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">
+                            {u.counter_access && Array.isArray(u.counter_access) && u.counter_access.length > 0 ? (
+                              u.counter_access.map((counter, i) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 bg-[#C9A84C]/15 text-[#1A1A1A] border border-[#C9A84C]/45 rounded text-[10px] font-semibold tracking-wider font-sans truncate"
+                                  title={counter}
+                                >
+                                  {counter}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[#1A1A1A]/40 italic text-[11px]">No Counter Access</span>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -1055,6 +1169,42 @@ export default function MasterSetting() {
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+              {/* User Status Toggle */}
+              <div className="bg-[#1A1A1A]/5 p-4 border border-[#1A1A1A]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A] block">
+                    Set User Status
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-normal">
+                    Active users can log in and access assigned modules. Setting to Inactive disables user account and syncs status to HR Employee profile.
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/20 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setUserStatusInput('active')}
+                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      userStatusInput === 'active'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUserStatusInput('inactive')}
+                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      userStatusInput === 'inactive'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Inactive
+                  </button>
+                </div>
+              </div>
+
               {/* Credentials Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#FAFAFA] p-5 rounded-none border border-[#1A1A1A]/10">
                 <div>
@@ -1614,7 +1764,7 @@ export default function MasterSetting() {
               )}
 
               {/* Step 2: Set User Password & Credentials */}
-              <div className={`space-y-4 ${empStatus === 'ready' ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+              <div className={`space-y-4 ${(empStatus === 'ready' || empStatus === 'ready_manual') ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                 <div className="border-t border-[#1A1A1A]/10 pt-4">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A] block mb-3">
                     2. User Account & Password Credentials
@@ -1815,8 +1965,8 @@ export default function MasterSetting() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || empStatus !== 'ready'}
-                  className={`px-5 py-2 text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm ${empStatus === 'ready'
+                  disabled={saving || (empStatus !== 'ready' && empStatus !== 'ready_manual')}
+                  className={`px-5 py-2 text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm ${(empStatus === 'ready' || empStatus === 'ready_manual')
                       ? 'bg-[#C9A84C] hover:bg-[#b8973b] cursor-pointer'
                       : 'bg-slate-300 opacity-60 cursor-not-allowed text-slate-600'
                     }`}

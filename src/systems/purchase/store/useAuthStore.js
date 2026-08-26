@@ -76,6 +76,11 @@ const useAuthStore = create((set, get) => ({
         return { success: false, error: 'Invalid username or password' };
       }
 
+      if (data.status && data.status.toLowerCase().trim() !== 'active') {
+        set({ loading: false });
+        return { success: false, error: 'Account Inactive: Your user account is set to inactive. Access denied. Please contact admin.' };
+      }
+
       localStorage.setItem('currentUser', JSON.stringify(data));
       set({ currentUser: data, loading: false });
       return { success: true };
@@ -120,7 +125,6 @@ const useAuthStore = create((set, get) => ({
 
     const payload = {
       user_name: updatedData.username,
-      username: updatedData.username,
       password: updatedData.password,
       role: updatedData.role,
       email_id: updatedData.email || null,
@@ -152,7 +156,6 @@ const useAuthStore = create((set, get) => ({
     const masterAccess = buildMasterAccessFromPurchasePerms([], userData.permissions || []);
     const payload = {
       user_name: userData.username,
-      username: userData.username,
       password: userData.password,
       role: userData.role || 'user',
       email_id: userData.email || null,

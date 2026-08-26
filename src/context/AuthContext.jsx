@@ -229,12 +229,17 @@ export const AuthProvider = ({ children }) => {
 
       const { data: matchedUsers } = await supabase
         .from('users')
-        .select('user_name, email_id, number')
+        .select('user_name, email_id, number, status')
         .or(filterCond)
         .limit(1);
 
       if (matchedUsers && matchedUsers.length > 0) {
-        loginHandle = matchedUsers[0].user_name || matchedUsers[0].email_id || trimmedInput;
+        const foundUser = matchedUsers[0];
+        const currentStatus = (foundUser.status || 'active').toLowerCase().trim();
+        if (currentStatus !== 'active') {
+          return { success: false, isInactive: true };
+        }
+        loginHandle = foundUser.user_name || foundUser.email_id || trimmedInput;
       }
     } catch (err) {
       console.error("Error matching mobile number in users table:", err);
@@ -248,20 +253,28 @@ export const AuthProvider = ({ children }) => {
 
     if (!rpcError && rpcData && (Array.isArray(rpcData) ? rpcData.length > 0 : rpcData)) {
       let userObj = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-      if (userObj.status === 'inactive') {
+      
+      const userStatus = (userObj.status || 'active').toLowerCase().trim();
+      if (userStatus !== 'active') {
         return { success: false, isInactive: true };
       }
 
-      // Fetch latest master_user_system_page_access directly from users table
+      // Fetch latest master_user_system_page_access & status directly from users table
       try {
         const { data: dbUser } = await supabase
           .from('users')
-          .select('master_user_system_page_access')
+          .select('master_user_system_page_access, status')
           .eq('id', userObj.id)
           .maybeSingle();
 
-        if (dbUser && dbUser.master_user_system_page_access) {
-          userObj.master_user_system_page_access = dbUser.master_user_system_page_access;
+        if (dbUser) {
+          const latestStatus = (dbUser.status || 'active').toLowerCase().trim();
+          if (latestStatus !== 'active') {
+            return { success: false, isInactive: true };
+          }
+          if (dbUser.master_user_system_page_access) {
+            userObj.master_user_system_page_access = dbUser.master_user_system_page_access;
+          }
         }
       } catch (e) {
         console.error("Master access fetch error:", e);
@@ -305,7 +318,7 @@ export const AuthProvider = ({ children }) => {
       setUser(userObj);
       return { success: true, redirect: '/dashboard/admin' };
     } else if (checklistRes.isInactive) {
-      return { success: false, message: 'Your account is inactive. Please contact admin.' };
+      return { success: false, message: 'Account Inactive: Your user account is set to inactive. Access denied. Please contact admin.' };
     }
 
     if (!trimmedInput.includes('@')) {
@@ -337,6 +350,8 @@ export const AuthProvider = ({ children }) => {
         syncSubsystemSessions(userObj);
         setUser(userObj);
         return { success: true, redirect: '/dashboard/admin' };
+      } else if (fallbackChecklistRes && fallbackChecklistRes.isInactive) {
+        return { success: false, message: 'Account Inactive: Your user account is set to inactive. Access denied. Please contact admin.' };
       }
     }
 
