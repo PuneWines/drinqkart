@@ -129,7 +129,7 @@ export const runDailyReminders = async () => {
                 const message = `☀️ *Daily Task Reminder*\n\n` +
                     `Hi ${name},\n` +
                     `You have *${pendingCount} pending task(s)* today.\n\n` +
-                    `🔗 View tasks: https://checklist-delegation-five.vercel.app/login\n\n` +
+                    `🔗 View tasks: https://drinqkart.com/login\n\n` +
                     `_Drinqkart_`;
 
                 await sendWhatsAppMessage(user.number, message);
