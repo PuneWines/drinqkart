@@ -464,7 +464,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const hasCounterAccess = (counter: string | number): boolean => {
-    if (isAdmin()) return true;
     if (!user) return false;
     const cStr = String(counter).trim().toUpperCase();
 
@@ -512,12 +511,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const getAllowedCounters = (): string[] => {
     const defaultAll = ["COUNTER-1", "COUNTER-2", "COUNTER-3", "COUNTER-4"];
-    if (isAdmin()) {
-      return defaultAll;
-    }
 
     let userCounters: string[] = [];
-    if (user && Array.isArray(user.counterAccess)) {
+    if (user && Array.isArray(user.counterAccess) && user.counterAccess.length > 0) {
       userCounters = user.counterAccess;
     }
 
@@ -546,19 +542,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (e) { }
     }
 
-    if (userCounters.length === 0 || userCounters.some(c => String(c).trim().toLowerCase() === 'all')) {
-      return defaultAll;
+    if (userCounters.length > 0 && !userCounters.some(c => String(c).trim().toLowerCase() === 'all')) {
+      const counters: string[] = [];
+      userCounters.forEach(c => {
+        const normalizedVal = String(c).trim().toUpperCase();
+        if (normalizedVal && !counters.includes(normalizedVal)) {
+          counters.push(normalizedVal);
+        }
+      });
+      if (counters.length > 0) {
+        console.log('[Counter Access Debug] Frontend allowedCounters state from assigned user permissions:', counters);
+        return counters;
+      }
     }
 
-    const counters: string[] = [];
-    userCounters.forEach(c => {
-      const normalizedVal = String(c).trim().toUpperCase();
-      if (normalizedVal && !counters.includes(normalizedVal)) {
-        counters.push(normalizedVal);
-      }
-    });
-
-    return counters.length > 0 ? counters : defaultAll;
+    console.log('[Counter Access Debug] Frontend allowedCounters fallback to defaultAll:', defaultAll);
+    return defaultAll;
   };
 
   return (

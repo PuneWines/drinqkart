@@ -9,7 +9,7 @@ import {
 import { supabase } from "../lib/supabase";
 import "../styles/Settings.css";
 
-const Settings = () => {
+const Settings = ({ readOnly = false }) => {
   const { users, fetchUsers, updateUser, createUser, deleteUser, currentUser } = useAuthStore();
   const { vendors, fetchVendors, updateVendor, createVendor, deleteVendor } = useVendorStore();
   const { 

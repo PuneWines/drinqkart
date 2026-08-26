@@ -269,7 +269,27 @@ export default function CounterPage({ onClose }: CounterPageProps) {
   useEffect(() => {
     fetchRows();
     fetchShops();
-  }, [fetchRows, fetchShops]);
+
+    const debugFetchDbCounterAccess = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('user_name, username, counter_access')
+          .or('user_name.eq.masteradmin,username.eq.masteradmin');
+
+        if (!error && data) {
+          console.log('[Counter Access Debug] Database record for user_name=masteradmin from users table:', data);
+        } else if (error) {
+          console.error('[Counter Access Debug] Error querying users table:', error);
+        }
+      } catch (err) {
+        console.error('[Counter Access Debug] Exception:', err);
+      }
+    };
+
+    console.log('[Counter Access Debug] Frontend allowedCounters state rendered in Counter dropdown:', allowedCounters);
+    debugFetchDbCounterAccess();
+  }, [fetchRows, fetchShops, allowedCounters]);
 
   const handleOpenAddModal = (cVal: string) => {
     setActiveModalCounter(cVal);

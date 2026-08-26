@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Trash2, Calendar, User, QrCode, Copy, Printer, ExternalLink } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-export default function JoiningCompany() {
+export default function JoiningCompany({ readOnly = false }) {
   const [companies, setCompanies] = useState([])
   const [newCompanyName, setNewCompanyName] = useState('')
   const [givenByInput, setGivenByInput] = useState('')
@@ -46,34 +46,27 @@ export default function JoiningCompany() {
 
   const handleAddCompany = async (e) => {
     e.preventDefault()
-    const trimmedName = newCompanyName.trim()
-    if (!trimmedName) return
+    if (readOnly) return
+    if (!newCompanyName.trim()) return
 
-    setSaving(true)
     try {
-      const payload = {
-        shop_name: trimmedName,
-        given_by: givenByInput.trim() || null
-      }
-
+      setSaving(true)
       const { data, error } = await supabase
         .from('shop')
-        .insert([payload])
+        .insert([{
+          shop_name: newCompanyName.trim(),
+          given_by: givenByInput.trim() || null
+        }])
         .select()
 
-      if (error) {
-        if (error.code === '23505') { // Unique constraint violation on departments_name_key (shop_name)
-          throw new Error('This shop name already exists.')
-        }
-        throw error
-      }
+      if (error) throw error
 
-      setCompanies(prev => [...prev, ...data].sort((a, b) => (a.shop_name || '').localeCompare(b.shop_name || '')))
+      setCompanies((prev) => [...prev, ...data].sort((a, b) => (a.shop_name || '').localeCompare(b.shop_name || '')))
       setNewCompanyName('')
       setGivenByInput('')
       showAlert('success', 'Shop added successfully!')
     } catch (err) {
-      showAlert('error', err.message)
+      showAlert('error', 'Failed to add shop: ' + err.message)
     } finally {
       setSaving(false)
     }
@@ -167,24 +160,27 @@ export default function JoiningCompany() {
                   type="text"
                   value={newCompanyName}
                   onChange={(e) => setNewCompanyName(e.target.value)}
-                  placeholder="e.g. Balaji Wines"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded"
+                  disabled={readOnly}
+                  placeholder={readOnly ? "Read-only mode" : "e.g. Balaji Wines"}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded disabled:bg-slate-100 disabled:cursor-not-allowed"
                   required
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={saving || !newCompanyName.trim()}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#d4b457] hover:bg-[#c3a346] text-slate-900 text-sm font-semibold transition-colors disabled:cursor-not-allowed shadow-md cursor-pointer rounded"
-              >
-                {saving ? (
-                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent animate-spin"></div>
-                ) : (
-                  <Plus size={16} />
-                )}
-                Add Shop
-              </button>
+              {!readOnly && (
+                <button
+                  type="submit"
+                  disabled={saving || !newCompanyName.trim()}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#d4b457] hover:bg-[#c3a346] text-slate-900 text-sm font-semibold transition-colors disabled:cursor-not-allowed shadow-md cursor-pointer rounded"
+                >
+                  {saving ? (
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Plus size={16} />
+                  )}
+                  Add Shop
+                </button>
+              )}
             </form>
           </div>
         </div>
