@@ -520,8 +520,9 @@ const PurchaseOrder = () => {
     }
 
     const isKunalShop = poMode === "manual"
-      ? selectedShop.toUpperCase() === "KUNAL"
-      : itemsForActiveParty.some(item => item.shopName?.toUpperCase() === "KUNAL" || item.shop_name?.toUpperCase() === "KUNAL");
+      ? (selectedShop || "").toUpperCase().includes("KUNAL")
+      : (selectedShop || "").toUpperCase().includes("KUNAL") ||
+        itemsForActiveParty.some(item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL"));
 
     if (isKunalShop) {
       if (!selectedReceiver) {
@@ -611,23 +612,27 @@ const PurchaseOrder = () => {
       let totalPoBox = 0;
 
       itemsForActiveParty.forEach((item) => {
-        const itemOrderBox = item.orderBox || 0;
-        const itemOrderQty = item.orderQty || 0;
-        const itemApprovedBox = item.approvedBox !== undefined && item.approvedBox !== null ? item.approvedBox : itemOrderBox;
-        const itemApprovedQty = item.approvedQty !== undefined && item.approvedQty !== null ? item.approvedQty : itemOrderQty;
-        const itemPoBox = item.poBox !== undefined && item.poBox !== null ? item.poBox : itemApprovedBox;
-        const itemPoQty = item.poQty !== undefined && item.poQty !== null ? item.poQty : itemApprovedQty;
+        const itemOrderBox = parseFloat(item.orderBox) || 0;
+        const itemOrderQty = parseFloat(item.orderQty) || 0;
+        const itemApprovedBox = item.approvedBox !== undefined && item.approvedBox !== null ? parseFloat(item.approvedBox) || 0 : itemOrderBox;
+        const itemApprovedQty = item.approvedQty !== undefined && item.approvedQty !== null ? parseFloat(item.approvedQty) || 0 : itemOrderQty;
+        const itemPoBox = item.poBox !== undefined && item.poBox !== null ? parseFloat(item.poBox) || 0 : itemApprovedBox;
+        const itemPoQty = item.poQty !== undefined && item.poQty !== null ? parseFloat(item.poQty) || 0 : itemApprovedQty;
 
-        if (item.qtyType === "Box") {
-          totalOrderBox += Math.round(itemOrderBox);
-          totalApprovedBox += Math.round(itemApprovedBox);
-          totalPoBox += Math.round(itemPoBox);
-        } else {
-          totalOrderQty += Math.ceil(itemOrderQty);
-          totalApprovedQty += Math.ceil(itemApprovedQty);
-          totalPoQty += Math.ceil(itemPoQty);
-        }
+        totalOrderBox += itemOrderBox;
+        totalOrderQty += itemOrderQty;
+        totalApprovedBox += itemApprovedBox;
+        totalApprovedQty += itemApprovedQty;
+        totalPoBox += itemPoBox;
+        totalPoQty += itemPoQty;
       });
+
+      totalOrderBox = Math.round(totalOrderBox);
+      totalOrderQty = Math.round(totalOrderQty);
+      totalApprovedBox = Math.round(totalApprovedBox);
+      totalApprovedQty = Math.round(totalApprovedQty);
+      totalPoBox = Math.round(totalPoBox);
+      totalPoQty = Math.round(totalPoQty);
 
       const insertedData = await insertPurchaseOrder({
         po_number: nextPoNumber,

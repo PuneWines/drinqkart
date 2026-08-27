@@ -18,16 +18,18 @@ const inputCellStyle = {
 const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdateItem, headerActions }) => {
   const orderQtyRows = items;
 
-  const totalPoBoxes = orderQtyRows
-    .filter((r) => r.qtyType === "Box")
-    .reduce((s, r) => s + (parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0), 0);
+  const totalPoBoxes = orderQtyRows.reduce(
+    (s, r) => s + (parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0),
+    0
+  );
 
-  const totalPoBottles = orderQtyRows
-    .filter((r) => r.qtyType === "Bottles")
-    .reduce((s, r) => s + (parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0), 0);
+  const totalPoBottles = orderQtyRows.reduce(
+    (s, r) => s + (parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0),
+    0
+  );
 
-  const displayTotalBoxes = totalPoBoxes % 1 === 0 ? totalPoBoxes.toString() : totalPoBoxes.toFixed(2);
-  const displayTotalBottles = Math.ceil(totalPoBottles).toLocaleString("en-IN");
+  const displayTotalBoxes = Math.round(totalPoBoxes).toLocaleString("en-IN");
+  const displayTotalBottles = Math.round(totalPoBottles).toLocaleString("en-IN");
 
   return (
     <div>
