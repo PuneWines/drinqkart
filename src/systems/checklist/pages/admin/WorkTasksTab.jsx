@@ -453,19 +453,6 @@ const WorkTasksTab = ({
         setHistoryData([]);
       }
 
-      const tableName = "work_task_new";
-      let selectStr = "*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required))";
-      let query = supabase.from(tableName).select(selectStr);
-      if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
-        query = query.eq('manager_name', historyManagerFilter);
-      }
-
-      // Apply pagination limit/range in database (100 per page)
-      const limit = 100;
-      const from = pageNumber * limit;
-      const to = from + limit - 1;
-      query = query.range(from, to);
-
       let currentUsername = (username || localStorage.getItem("user-name") || "").trim();
       let currentUserRole = (userRole || localStorage.getItem("role") || "").toLowerCase().trim();
 
@@ -510,6 +497,10 @@ const WorkTasksTab = ({
         applyNameFilter = false;
       }
 
+      const tableName = "work_task_new";
+      let selectStr = "*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required))";
+      let query = supabase.from(tableName).select(selectStr);
+
       if (applyNameFilter && reportingUsers.length > 0) {
         query = query.in("name", reportingUsers);
       }
@@ -547,6 +538,11 @@ const WorkTasksTab = ({
           .order('start_time', { ascending: true });
       }
 
+      if (filterByShop && allowedShops.length > 0) {
+        const shopOrConds = allowedShops.map(s => `shop_name.ilike.%${s}%`).join(',');
+        query = query.or(shopOrConds);
+      }
+
       if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
         const cleanTerm = debouncedSearchTerm.trim();
         const orQueryParts = [
@@ -559,7 +555,8 @@ const WorkTasksTab = ({
       }
 
       if (workEmployeeFilter && workEmployeeFilter !== "all") {
-        query = query.eq('name', workEmployeeFilter);
+        const cleanFilter = workEmployeeFilter.trim();
+        query = query.or(`name.ilike.%${cleanFilter}%,manager_name.ilike.%${cleanFilter}%`);
       }
 
       if (showHistory && historyShopFilter && historyShopFilter !== "all") {
@@ -569,6 +566,12 @@ const WorkTasksTab = ({
       if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
         query = query.eq('task_assignments.manager_name', historyManagerFilter);
       }
+
+      // Apply pagination limit/range in database (100 per page) AFTER filters are set
+      const limit = 100;
+      const from = pageNumber * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
 
       const { data, error: fetchError } = await query;
       if (fetchError) {
@@ -582,7 +585,7 @@ const WorkTasksTab = ({
           id: item.id || item.task_id,
           _table: item._table || tableName,
           shop: item.shop || item.shop_name || "-",
-          manager_name: item.task_assignments?.manager_name || item.given_by || item.manager_name || "—"
+          manager_name: item.manager_name || item.task_assignments?.manager_name || item.given_by || "—"
         };
 
         if (mapped.status === "REJECTED") {
@@ -606,13 +609,18 @@ const WorkTasksTab = ({
         const mgrLower = (currentUsername || "").toLowerCase().trim();
         filteredWorkTasks = filteredWorkTasks.filter(item => {
           const itemDoer = (item.name || "").toLowerCase().trim();
-          const itemMgrList = (item.manager_name || item.task_assignments?.manager_name || item.given_by || "")
+          const rawMgrStr = item.manager_name || item.task_assignments?.manager_name || item.given_by || "";
+          const itemMgrList = rawMgrStr
             .toLowerCase()
             .split(',')
             .map(m => m.trim())
             .filter(Boolean);
 
-          const isDirectUserMatch = itemDoer === mgrLower || itemMgrList.includes(mgrLower);
+          const isDirectUserMatch = 
+            itemDoer === mgrLower || 
+            (itemDoer && mgrLower.includes(itemDoer)) ||
+            itemMgrList.some(m => m === mgrLower || mgrLower.includes(m) || m.includes(mgrLower));
+
           return isDirectUserMatch;
         });
       }

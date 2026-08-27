@@ -191,7 +191,7 @@ export const AuthProvider = ({ children }) => {
       try {
         const { data } = await supabase
           .from('users')
-          .select('master_user_system_page_access, shop_name, user_access, counter_access, role, user_name, username, email_id')
+          .select('master_user_system_page_access, shop_name, user_access, counter_access, role, user_name, email_id')
           .eq('id', user.id)
           .maybeSingle();
         if (data) {
