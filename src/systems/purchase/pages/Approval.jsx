@@ -216,10 +216,10 @@ const Approval = () => {
 
         const bcs = parseFloat(item.bcs) || 0;
         if (bcs > 0) {
-          if (field === 'order_box' && numVal !== null) {
-            item.order_qty = parseFloat((numVal * bcs).toFixed(2));
-          } else if (field === 'order_qty' && numVal !== null) {
-            item.order_box = parseFloat((numVal / bcs).toFixed(2));
+          if ((field === 'approved_box' || field === 'order_box') && numVal !== null) {
+            item.approved_qty = parseFloat((numVal * bcs).toFixed(2));
+          } else if ((field === 'approved_qty' || field === 'order_qty') && numVal !== null) {
+            item.approved_box = parseFloat((numVal / bcs).toFixed(2));
           }
         }
         currentItems[itemIndex] = item;
@@ -261,6 +261,7 @@ const Approval = () => {
             .from("purchase_indent_items")
             .select("*, purchase_indents!inner(shop_name)")
             .eq("purchase_indents.shop_name", selectedShop)
+            .or('approval_status.eq.pending,approval_status.is.null')
             .order("created_at", { ascending: false })
             .order("id", { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -268,6 +269,7 @@ const Approval = () => {
           return supabase
             .from("purchase_indent_items")
             .select("*, purchase_indents(shop_name)")
+            .or('approval_status.eq.pending,approval_status.is.null')
             .order("created_at", { ascending: false })
             .order("id", { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -381,21 +383,24 @@ const Approval = () => {
       }
 
       const approvedItemsPayload = [];
-      const idsToDelete = [];
+      const approvedIdsToDelete = [];
+      const rejectedIdsToUpdate = [];
       let parentIndentId = null;
       let hasAnyApproved = false;
 
       currentItems.forEach(item => {
-        idsToDelete.push(item.id);
         if (!parentIndentId && item.indent_id) {
           parentIndentId = item.indent_id;
         }
 
         const status = indentStatuses[item.id] || 'pending';
-        let processedBox = parseFloat(item.order_box) || 0;
-        let processedQty = parseFloat(item.order_qty) || 0;
+        let autoBox = parseFloat(item.order_box) || 0;
+        let autoQty = parseFloat(item.order_qty) || 0;
+        let processedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : autoBox;
+        let processedQty = item.approved_qty !== undefined && item.approved_qty !== null ? parseFloat(item.approved_qty) : autoQty;
 
         if (status === 'approved' && !item.is_excluded) {
+          approvedIdsToDelete.push(item.id);
           hasAnyApproved = true;
           if (processedBox >= 0.90) {
             if (processedBox < 1.0) {
@@ -423,11 +428,16 @@ const Approval = () => {
             per_day_sale_last_month: item.per_day_sale_last_month,
             threshold_sale: item.threshold_sale,
             closing_qty_box: item.closing_qty_box,
-            order_box: processedBox,
-            order_qty: processedQty,
+            order_box: autoBox,
+            order_qty: autoQty,
+            approved_box: processedBox,
+            approved_qty: processedQty,
             unique_indent_id: selectedIndentId,
             po_status: 'pending'
           });
+        } else if (!item.is_excluded) {
+          // Any non-approved non-excluded item in submitted batch is marked as rejected
+          rejectedIdsToUpdate.push(item.id);
         }
       });
 
@@ -452,16 +462,29 @@ const Approval = () => {
         if (indentErr) throw indentErr;
       }
 
-      // 3. Delete all items in this batch from purchase_indent_items in chunks of 50 to prevent URL length limit errors
-      if (idsToDelete.length > 0) {
+      // 3. Delete approved items from purchase_indent_items
+      if (approvedIdsToDelete.length > 0) {
         const chunkSize = 50;
-        for (let i = 0; i < idsToDelete.length; i += chunkSize) {
-          const chunk = idsToDelete.slice(i, i + chunkSize);
+        for (let i = 0; i < approvedIdsToDelete.length; i += chunkSize) {
+          const chunk = approvedIdsToDelete.slice(i, i + chunkSize);
           const { error: deleteErr } = await supabase
             .from("purchase_indent_items")
             .delete()
             .in("id", chunk);
           if (deleteErr) throw deleteErr;
+        }
+      }
+
+      // 4. Update rejected items in purchase_indent_items to approval_status = 'rejected'
+      if (rejectedIdsToUpdate.length > 0) {
+        const chunkSize = 50;
+        for (let i = 0; i < rejectedIdsToUpdate.length; i += chunkSize) {
+          const chunk = rejectedIdsToUpdate.slice(i, i + chunkSize);
+          const { error: updateErr } = await supabase
+            .from("purchase_indent_items")
+            .update({ approval_status: "rejected" })
+            .in("id", chunk);
+          if (updateErr) throw updateErr;
         }
       }
 
@@ -999,6 +1022,8 @@ const Approval = () => {
                       <th style={{ ...thStyle, textAlign: 'right' }}>Per Day Sale</th>
                       <th style={{ ...thStyle, textAlign: 'right' }}>Order Box</th>
                       <th style={{ ...thStyle, textAlign: 'right' }}>Order Qty</th>
+                      <th style={{ ...thStyle, textAlign: 'right', color: '#4338ca' }}>Approved Box</th>
+                      <th style={{ ...thStyle, textAlign: 'right', color: '#4338ca' }}>Approved Qty</th>
                       <th style={{ ...thStyle, textAlign: 'right' }}>Closing Qty</th>
                       <th style={{ ...thStyle, textAlign: 'right' }}>B/Cs</th>
                       <th style={thStyle}>Mls</th>
@@ -1054,29 +1079,39 @@ const Approval = () => {
                         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>
                           {item.per_day_sale_last_month !== null && item.per_day_sale_last_month !== undefined ? item.per_day_sale_last_month : "—"}
                         </td>
+                        {/* Order Box (Read-only System Auto-Calculated) */}
+                        <td style={{ ...tdStyle, textAlign: 'right', color: '#64748b', fontWeight: '600' }}>
+                          {item.order_box !== undefined && item.order_box !== null ? item.order_box : "—"}
+                        </td>
+                        {/* Order Qty (Read-only System Auto-Calculated) */}
+                        <td style={{ ...tdStyle, textAlign: 'right', color: '#64748b', fontWeight: '600' }}>
+                          {item.order_qty !== undefined && item.order_qty !== null ? item.order_qty : "—"}
+                        </td>
+                        {/* Approved Box (Editable input pre-filled with approved_box or order_box) */}
                         <td style={{ ...tdStyle, padding: activeTab === 'history' ? '12px 16px' : '4px 8px' }}>
                           {activeTab === 'history' ? (
-                            <span style={{ fontWeight: '700', color: '#4338ca' }}>{item.order_box || "-"}</span>
+                            <span style={{ fontWeight: '700', color: '#4338ca' }}>{item.approved_box ?? item.order_box ?? "-"}</span>
                           ) : (
                             <input
                               type="number"
                               step="any"
-                              value={item.order_box !== undefined && item.order_box !== null ? item.order_box : ""}
-                              onChange={(e) => handleInlineChange(item.id, 'order_box', e.target.value)}
+                              value={item.approved_box !== undefined && item.approved_box !== null ? item.approved_box : (item.order_box ?? "")}
+                              onChange={(e) => handleInlineChange(item.id, 'approved_box', e.target.value)}
                               style={inlineInputStyle}
                               placeholder="-"
                             />
                           )}
                         </td>
+                        {/* Approved Qty (Editable input pre-filled with approved_qty or order_qty) */}
                         <td style={{ ...tdStyle, padding: activeTab === 'history' ? '12px 16px' : '4px 8px' }}>
                           {activeTab === 'history' ? (
-                            <span style={{ fontWeight: '700', color: '#4338ca' }}>{item.order_qty || "-"}</span>
+                            <span style={{ fontWeight: '700', color: '#4338ca' }}>{item.approved_qty ?? item.order_qty ?? "-"}</span>
                           ) : (
                             <input
                               type="number"
                               step="any"
-                              value={item.order_qty !== undefined && item.order_qty !== null ? item.order_qty : ""}
-                              onChange={(e) => handleInlineChange(item.id, 'order_qty', e.target.value)}
+                              value={item.approved_qty !== undefined && item.approved_qty !== null ? item.approved_qty : (item.order_qty ?? "")}
+                              onChange={(e) => handleInlineChange(item.id, 'approved_qty', e.target.value)}
                               style={inlineInputStyle}
                               placeholder="-"
                             />

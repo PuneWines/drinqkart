@@ -15,6 +15,7 @@ const getInitialShop = (shops = []) => {
 
 const useShopStore = create((set, get) => ({
   shops: [],
+  shopsDetails: [],
   loading: false,
   selectedShop: "All",
   fetchShops: async () => {
@@ -22,7 +23,7 @@ const useShopStore = create((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('shop')
-        .select('shop_name')
+        .select('id, shop_name, full_name, gstin, contact, email, address')
         .order('shop_name', { ascending: true });
 
       if (!error && data) {
@@ -31,6 +32,7 @@ const useShopStore = create((set, get) => ({
         const initial = getInitialShop(shopNames);
         set({
           shops: shopNames,
+          shopsDetails: data || [],
           loading: false,
           selectedShop: shopNames.includes(currentSelected) || currentSelected === "All" ? currentSelected : initial
         });
@@ -41,6 +43,17 @@ const useShopStore = create((set, get) => ({
       console.error("Failed to fetch shops from global shop table:", e);
       set({ loading: false });
     }
+  },
+  getShopRecord: (shopName) => {
+    if (!shopName || shopName === "All") return null;
+    const details = get().shopsDetails || [];
+    return details.find(
+      s => (s.shop_name || "").trim().toUpperCase() === shopName.trim().toUpperCase()
+    ) || null;
+  },
+  getShopFullName: (shopName) => {
+    const rec = get().getShopRecord(shopName);
+    return rec?.full_name || shopName;
   },
   setSelectedShop: (shop) => {
     try {

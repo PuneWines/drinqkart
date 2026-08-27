@@ -36,7 +36,8 @@ const PurchaseOrderPreview = ({
   onBoxQtyChange,
   newItemQty,
   onBottleQtyChange,
-  onAddItem
+  onAddItem,
+  headerActions
 }) => {
   const isKunalShop = items.some(
     item => item.shopName?.toUpperCase() === "KUNAL" || item.shop_name?.toUpperCase() === "KUNAL"
@@ -68,6 +69,7 @@ const PurchaseOrderPreview = ({
         isReceiver={false}
         onRemoveItem={onRemoveItem}
         onUpdateItem={onUpdateItem}
+        headerActions={headerActions}
       />
 
       {poMode === "manual" && partyName && (

@@ -198,10 +198,23 @@ const POHistory = () => {
 
   /* ── Stats ────────────────────────────────────────────────── */
   const stats = useMemo(() => {
-    const totalQty = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_order_qty) || 0), 0);
-    const totalBox = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_order_box) || 0), 0);
+    const totalOrderQty = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_order_qty) || 0), 0);
+    const totalOrderBox = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_order_box) || 0), 0);
+    
+    const totalApprovedQty = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_approved_qty ?? o.total_order_qty) || 0), 0);
+    const totalApprovedBox = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_approved_box ?? o.total_order_box) || 0), 0);
+
+    const totalPoQty = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_po_qty ?? o.total_approved_qty ?? o.total_order_qty) || 0), 0);
+    const totalPoBox = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_po_box ?? o.total_approved_box ?? o.total_order_box) || 0), 0);
+
     const vendors = new Set(shopFilteredOrders.map((o) => o.vendor_name).filter(Boolean)).size;
-    return { totalPos: shopFilteredOrders.length, totalQty, totalBox, vendors };
+    return { 
+      totalPos: shopFilteredOrders.length, 
+      vendors,
+      totalOrderQty, totalOrderBox,
+      totalApprovedQty, totalApprovedBox,
+      totalPoQty, totalPoBox
+    };
   }, [shopFilteredOrders]);
 
   /* ── Sort handler ─────────────────────────────────────────── */
@@ -288,19 +301,19 @@ const POHistory = () => {
             <div className="poh-stat-sub">Purchase orders issued</div>
           </div>
           <div className="poh-stat-card">
-            <div className="poh-stat-label">Vendors</div>
-            <div className="poh-stat-value">{stats.vendors}</div>
-            <div className="poh-stat-sub">Unique vendors</div>
+            <div className="poh-stat-label">Auto Order</div>
+            <div className="poh-stat-value">{stats.totalOrderBox.toLocaleString()} bx</div>
+            <div className="poh-stat-sub">{stats.totalOrderQty.toLocaleString()} units auto-calculated</div>
           </div>
           <div className="poh-stat-card">
-            <div className="poh-stat-label">Total Qty</div>
-            <div className="poh-stat-value">{stats.totalQty.toLocaleString()}</div>
-            <div className="poh-stat-sub">Units ordered</div>
+            <div className="poh-stat-label">Approved</div>
+            <div className="poh-stat-value">{stats.totalApprovedBox.toLocaleString()} bx</div>
+            <div className="poh-stat-sub">{stats.totalApprovedQty.toLocaleString()} units approved</div>
           </div>
           <div className="poh-stat-card">
-            <div className="poh-stat-label">Total Boxes</div>
-            <div className="poh-stat-value">{stats.totalBox.toLocaleString()}</div>
-            <div className="poh-stat-sub">Boxes ordered</div>
+            <div className="poh-stat-label">PO Issued</div>
+            <div className="poh-stat-value">{stats.totalPoBox.toLocaleString()} bx</div>
+            <div className="poh-stat-sub">{stats.totalPoQty.toLocaleString()} units ordered</div>
           </div>
         </div>
       )}
@@ -474,20 +487,16 @@ const POHistory = () => {
                         </div>
                       </td>
                       <td>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          {hasQty && (
-                            <span className="poh-qty-badge">
-                              <ShoppingBag size={10} />
-                              {Number(order.total_order_qty).toLocaleString()} units
-                            </span>
-                          )}
-                          {hasBox && (
-                            <span className="poh-qty-badge box">
-                              <Package size={10} />
-                              {Number(order.total_order_box).toLocaleString()} boxes
-                            </span>
-                          )}
-                          {!hasQty && !hasBox && <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>—</span>}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: "0.75rem" }}>
+                          <span style={{ color: "#64748b" }} title="Auto-Calculated Order">
+                            <strong>Auto:</strong> {Number(order.total_order_box || 0)} bx / {Number(order.total_order_qty || 0)} un
+                          </span>
+                          <span style={{ color: "#0f172a" }} title="Approved Order">
+                            <strong>Appr:</strong> {Number(order.total_approved_box ?? order.total_order_box ?? 0)} bx / {Number(order.total_approved_qty ?? order.total_order_qty ?? 0)} un
+                          </span>
+                          <span style={{ color: "#4338ca", fontWeight: "700" }} title="Final PO Issued">
+                            <strong>PO:</strong> {Number(order.total_po_box ?? order.total_approved_box ?? order.total_order_box ?? 0)} bx / {Number(order.total_po_qty ?? order.total_approved_qty ?? order.total_order_qty ?? 0)} un
+                          </span>
                         </div>
                       </td>
                       <td style={{ fontSize: "0.825rem" }}>
