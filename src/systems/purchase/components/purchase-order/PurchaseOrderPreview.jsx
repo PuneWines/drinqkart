@@ -40,8 +40,8 @@ const PurchaseOrderPreview = ({
   headerActions
 }) => {
   const isKunalShop = items.some(
-    item => item.shopName?.toUpperCase() === "KUNAL" || item.shop_name?.toUpperCase() === "KUNAL"
-  );
+    item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL")
+  ) || (companyInfo?.name || "").toUpperCase().includes("KUNAL");
 
   return (
     <div className="po-document" id={id}>

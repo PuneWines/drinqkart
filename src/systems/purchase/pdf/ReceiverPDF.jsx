@@ -236,16 +236,18 @@ const ReceiverPDF = ({
   vendorDetails,
   companyInfo
 }) => {
-  const totalBoxes = items
-    .filter((r) => r.qtyType === "Box")
-    .reduce((s, r) => s + (parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0), 0);
+  const totalBoxes = items.reduce(
+    (s, r) => s + (parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0),
+    0
+  );
 
-  const totalBottles = items
-    .filter((r) => r.qtyType === "Bottles")
-    .reduce((s, r) => s + (parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0), 0);
+  const totalBottles = items.reduce(
+    (s, r) => s + (parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0),
+    0
+  );
 
-  const displayTotalBoxes = totalBoxes % 1 === 0 ? totalBoxes.toString() : totalBoxes.toFixed(2);
-  const displayTotalBottles = Math.ceil(totalBottles).toLocaleString("en-IN");
+  const displayTotalBoxes = Math.round(totalBoxes).toLocaleString("en-IN");
+  const displayTotalBottles = Math.round(totalBottles).toLocaleString("en-IN");
 
   const rawTerms = vendorDetails?.terms;
   const termsToDisplay = Array.isArray(rawTerms)

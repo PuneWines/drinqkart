@@ -31,12 +31,15 @@ const POShippingDetails = ({
           </strong>
           <select 
             className="shipping-select" 
-            value={selectedTransporter} 
+            value={isKunalShop ? "" : selectedTransporter} 
+            disabled={isKunalShop}
             onChange={(e) => {
+              if (isKunalShop) return;
               setSelectedTransporter?.(e.target.value);
               const el = document.getElementById(`shipping-details-${id}`);
               if (el) el.classList.remove('highlight-error');
             }}
+            style={isKunalShop ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#94a3b8' } : {}}
           >
             <option value="">
               {isKunalShop ? "Transporter Not Required" : "Select Transporter"}
