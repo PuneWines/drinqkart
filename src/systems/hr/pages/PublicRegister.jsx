@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { Upload, Image, User, CreditCard, BookOpen, FileText, X, CheckCircle, ArrowRight, Crop } from 'lucide-react'
 
-const STORAGE_BUCKET = 'employee_documents'
+const STORAGE_BUCKET = 'HR_System_employee_documents'
 
 const CropperModal = ({ isOpen, imageSrc, aspectRatio, onClose, onCrop, onSkip }) => {
   const [scale, setScale] = useState(1);
