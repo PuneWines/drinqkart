@@ -235,11 +235,11 @@ const TraderPDF = ({
 }) => {
   const totalBoxes = items
     .filter((r) => r.qtyType === "Box")
-    .reduce((s, r) => s + (r.orderBox || 0), 0);
+    .reduce((s, r) => s + (parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0), 0);
 
   const totalBottles = items
     .filter((r) => r.qtyType === "Bottles")
-    .reduce((s, r) => s + (r.orderQty || 0), 0);
+    .reduce((s, r) => s + (parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0), 0);
 
   const displayTotalBoxes = totalBoxes % 1 === 0 ? totalBoxes.toString() : totalBoxes.toFixed(2);
   const displayTotalBottles = Math.ceil(totalBottles).toLocaleString("en-IN");
@@ -356,6 +356,11 @@ const TraderPDF = ({
           {items.map((item, index) => {
             const isAlternate = index % 2 !== 0;
             const rowStyle = isAlternate ? styles.tableRowAlternate : styles.tableRow;
+            const currentBoxVal = item.poBox !== undefined && item.poBox !== null ? item.poBox : (item.approvedBox ?? item.orderBox);
+            const currentQtyVal = item.poQty !== undefined && item.poQty !== null ? item.poQty : (item.approvedQty ?? item.orderQty);
+            const displayBox = currentBoxVal !== null && currentBoxVal !== undefined && currentBoxVal !== "" ? (Math.round(currentBoxVal) === currentBoxVal ? currentBoxVal : currentBoxVal.toFixed(2)) : "—";
+            const displayQty = currentQtyVal !== null && currentQtyVal !== undefined && currentQtyVal !== "" ? Math.ceil(currentQtyVal) : "—";
+
             return (
               <View key={item.id || index} style={rowStyle}>
                 <Text style={[styles.tableCell, styles.colSNo]}>{index + 1}</Text>
@@ -366,10 +371,10 @@ const TraderPDF = ({
                   {item.itemName || "—"}
                 </Text>
                 <Text style={[styles.tableCell, styles.colBoxes, item.qtyType === "Box" ? styles.tableCellBold : {}]}>
-                  {item.qtyType === "Box" ? item.displayQty : "—"}
+                  {item.qtyType === "Box" ? (item.displayQty || displayBox) : "—"}
                 </Text>
                 <Text style={[styles.tableCell, styles.colBottles, item.qtyType === "Bottles" ? styles.tableCellBold : {}]}>
-                  {item.qtyType === "Bottles" ? item.displayQty : "—"}
+                  {item.qtyType === "Bottles" ? (item.displayQty || displayQty) : "—"}
                 </Text>
               </View>
             );

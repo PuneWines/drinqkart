@@ -126,6 +126,10 @@ const ALLOWED_PO_COLUMNS = [
   'vendor_name',
   'total_order_qty',
   'total_order_box',
+  'total_approved_qty',
+  'total_approved_box',
+  'total_po_qty',
+  'total_po_box',
   'trader_status',
   'trader_remarks',
   'dispatch_date',
@@ -249,18 +253,37 @@ export const excludeIndentItems = async (ids, reason) => {
 };
 
 /**
- * Mark approved items as ordered in approved_indent_items table.
+ * Mark approved items as ordered in approved_indent_items table, and save final po_box and po_qty.
  */
-export const markApprovedItemsAsOrdered = async (uniqueIndentId, vendorName, poId) => {
+export const markApprovedItemsAsOrdered = async (uniqueIndentId, vendorName, poId, itemsList = []) => {
   if (!uniqueIndentId || !vendorName || !poId) return;
 
-  const { error } = await supabase
-    .from("purchase_approved_indent_items")
-    .update({ po_status: "ordered", po_id: poId, updated_at: new Date().toISOString() })
-    .eq("unique_indent_id", uniqueIndentId)
-    .eq("party_name", vendorName);
+  if (itemsList && itemsList.length > 0) {
+    for (const item of itemsList) {
+      const updatePayload = {
+        po_status: "ordered",
+        po_id: poId,
+        updated_at: new Date().toISOString(),
+        po_box: item.poBox !== undefined && item.poBox !== null ? parseFloat(item.poBox) : (item.approvedBox ?? item.orderBox),
+        po_qty: item.poQty !== undefined && item.poQty !== null ? parseFloat(item.poQty) : (item.approvedQty ?? item.orderQty)
+      };
 
-  if (error) throw error;
+      if (item.id) {
+        await supabase
+          .from("purchase_approved_indent_items")
+          .update(updatePayload)
+          .eq("id", item.id);
+      }
+    }
+  } else {
+    const { error } = await supabase
+      .from("purchase_approved_indent_items")
+      .update({ po_status: "ordered", po_id: poId, updated_at: new Date().toISOString() })
+      .eq("unique_indent_id", uniqueIndentId)
+      .eq("party_name", vendorName);
+
+    if (error) throw error;
+  }
 };
 
 /**

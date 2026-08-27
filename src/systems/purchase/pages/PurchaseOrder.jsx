@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer, ShoppingCart, FileText, Trash2 } from "lucide-react";
+import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle } from "lucide-react";
 import useCompanyStore from "../store/useCompanyStore";
 import useShopStore from "../store/useShopStore";
 import "../styles/PurchaseOrder.css";
 
 // Components
 import PurchaseOrderPreview from "../components/purchase-order/PurchaseOrderPreview";
+import AddExcludedModal from "../components/purchase-order/AddExcludedModal";
 import Toast, { useToast } from "../components/Toast";
 
 // PDF Templates
@@ -38,11 +39,14 @@ import { COMPANY } from "../utils/constants";
 
 const PurchaseOrder = () => {
   const { companies, companySettings, fetchCompanySettings } = useCompanyStore();
-  const { selectedShop } = useShopStore();
+  const { selectedShop, getShopFullName, getShopRecord } = useShopStore();
   const [selectedCompanyId, setSelectedCompanyId] = useState("none");
   const [approvedItems, setApprovedItems] = useState([]);
   const [vendorsList, setVendorsList] = useState([]);
   const [activeParty, setActiveParty] = useState("");
+  const [isExcludedModalOpen, setIsExcludedModalOpen] = useState(false);
+  const [isRejectedModalOpen, setIsRejectedModalOpen] = useState(false);
+  const [addedExcludedItems, setAddedExcludedItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [nextPoNumber, setNextPoNumber] = useState("");
@@ -97,18 +101,18 @@ const PurchaseOrder = () => {
   // Reset states when active vendor changes or PO mode changes
   useEffect(() => {
     setRemovedItemIds(new Set());
+    setAddedExcludedItems([]);
     setNewItemName("");
     setNewItemBox("");
     setNewItemQty("");
     setSelectedItem(null);
     setItemOverrides({});
-  }, [activeParty, poMode]);
+  }, [activeParty, poMode, selectedShop]);
 
   const queryClient = useQueryClient();
 
   // ── Supabase Realtime: auto-invalidate cache on DB changes ──
   useRealtimeSync();
-
 
   const { data: pageDataResponse, isLoading: isPageDataLoading } = useQuery({
     queryKey: ["purchaseOrderPageData"],
@@ -199,13 +203,23 @@ const PurchaseOrder = () => {
     }
   }, [selectedShop, dbParties, activeParty]);
 
+  const handleAddExcludedItems = (newItems) => {
+    setAddedExcludedItems(prev => {
+      const existingIds = new Set(prev.map(i => i.id));
+      const toAdd = newItems.filter(i => !existingIds.has(i.id));
+      return [...prev, ...toAdd];
+    });
+    addToast(`Added ${newItems.length} excluded item(s) to Purchase Order.`, "info");
+  };
+
   const itemsForActiveParty = useMemo(() => {
     let list = [];
     if (poMode === "manual") {
       list = [...manualItems];
     } else {
       const rawItems = transformActivePartyItems(filteredApprovedItems, activeParty);
-      list = rawItems.filter(item => !removedItemIds.has(item.id));
+      const combined = [...rawItems, ...addedExcludedItems];
+      list = combined.filter(item => !removedItemIds.has(item.id));
     }
 
     list = list.map(item => normalizePoItem({
@@ -224,7 +238,11 @@ const PurchaseOrder = () => {
       const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
       return mlA - mlB;
     });
-  }, [filteredApprovedItems, activeParty, removedItemIds, poMode, manualItems, itemOverrides]);
+  }, [filteredApprovedItems, activeParty, removedItemIds, poMode, manualItems, addedExcludedItems, itemOverrides]);
+
+  const alreadyAddedIds = useMemo(() => {
+    return itemsForActiveParty.map(i => i.id);
+  }, [itemsForActiveParty]);
 
   const handleUpdatePoItem = (itemId, field, value) => {
     const currentItem = itemsForActiveParty.find(item => item.id === itemId);
@@ -239,19 +257,19 @@ const PurchaseOrder = () => {
 
     const bcs = parseFloat(nextItem.bcs ?? nextItem.bc_s) || 0;
 
-    if (field === "orderBox") {
+    if (field === "poBox" || field === "orderBox") {
       const parsedBox = value === "" ? "" : parseFloat(value) || 0;
-      nextItem.orderBox = parsedBox;
+      nextItem.poBox = parsedBox;
       if (bcs) {
-        nextItem.orderQty = value === "" ? "" : Math.round((parseFloat(value) || 0) * bcs);
+        nextItem.poQty = value === "" ? "" : Math.round((parseFloat(value) || 0) * bcs);
       }
     }
 
-    if (field === "orderQty") {
+    if (field === "poQty" || field === "orderQty") {
       const parsedQty = value === "" ? "" : parseFloat(value) || 0;
-      nextItem.orderQty = parsedQty;
+      nextItem.poQty = parsedQty;
       if (bcs) {
-        nextItem.orderBox = value === "" ? "" : parseFloat((parsedQty / bcs).toFixed(4));
+        nextItem.poBox = value === "" ? "" : parseFloat((parsedQty / bcs).toFixed(4));
       }
     }
 
@@ -262,8 +280,8 @@ const PurchaseOrder = () => {
       [itemId]: {
         ...prev[itemId],
         closingQty: normalizedItem.closingQty,
-        orderBox: normalizedItem.orderBox,
-        orderQty: normalizedItem.orderQty,
+        poBox: normalizedItem.poBox,
+        poQty: normalizedItem.poQty,
         qtyType: normalizedItem.qtyType,
         displayQty: normalizedItem.displayQty
       }
@@ -438,12 +456,36 @@ const PurchaseOrder = () => {
     }
   }, [activeParty, itemsForActiveParty, companies, poMode, selectedShop]);
 
-  const activeCompany = useMemo(() => {
-    if (selectedCompanyId === "none" || !selectedCompanyId) {
-      return null;
+  const activeShopRecord = useMemo(() => {
+    let targetShop = "";
+    if (selectedShop && selectedShop !== "All") {
+      targetShop = selectedShop;
+    } else if (itemsForActiveParty.length > 0) {
+      targetShop = itemsForActiveParty[0]?.shopName || itemsForActiveParty[0]?.shop_name || "";
     }
-    return companies.find(c => c.id === selectedCompanyId) || null;
-  }, [selectedCompanyId, companies]);
+    if (!targetShop) return null;
+    return getShopRecord(targetShop) || { shop_name: targetShop, full_name: targetShop };
+  }, [selectedShop, itemsForActiveParty, getShopRecord]);
+
+  const activeCompany = useMemo(() => {
+    let baseCompany = null;
+    if (selectedCompanyId !== "none" && selectedCompanyId) {
+      baseCompany = companies.find(c => c.id === selectedCompanyId) || null;
+    }
+
+    if (activeShopRecord) {
+      const resolvedName = activeShopRecord.full_name || activeShopRecord.shop_name;
+      return {
+        ...(baseCompany || {}),
+        name: resolvedName,
+        address: activeShopRecord.address || baseCompany?.address || "",
+        gstin: activeShopRecord.gstin || baseCompany?.gstin || "",
+        contact: activeShopRecord.contact || baseCompany?.contact || "",
+        email: activeShopRecord.email || baseCompany?.email || ""
+      };
+    }
+    return baseCompany;
+  }, [selectedCompanyId, companies, activeShopRecord]);
 
   const activeVendorDetails = useMemo(() => {
     if (!activeParty || !vendorsList.length) return null;
@@ -563,12 +605,27 @@ const PurchaseOrder = () => {
 
       let totalOrderQty = 0;
       let totalOrderBox = 0;
+      let totalApprovedQty = 0;
+      let totalApprovedBox = 0;
+      let totalPoQty = 0;
+      let totalPoBox = 0;
 
       itemsForActiveParty.forEach((item) => {
+        const itemOrderBox = item.orderBox || 0;
+        const itemOrderQty = item.orderQty || 0;
+        const itemApprovedBox = item.approvedBox !== undefined && item.approvedBox !== null ? item.approvedBox : itemOrderBox;
+        const itemApprovedQty = item.approvedQty !== undefined && item.approvedQty !== null ? item.approvedQty : itemOrderQty;
+        const itemPoBox = item.poBox !== undefined && item.poBox !== null ? item.poBox : itemApprovedBox;
+        const itemPoQty = item.poQty !== undefined && item.poQty !== null ? item.poQty : itemApprovedQty;
+
         if (item.qtyType === "Box") {
-          totalOrderBox += Math.round(item.orderBox || 0);
+          totalOrderBox += Math.round(itemOrderBox);
+          totalApprovedBox += Math.round(itemApprovedBox);
+          totalPoBox += Math.round(itemPoBox);
         } else {
-          totalOrderQty += Math.ceil(item.orderQty || 0);
+          totalOrderQty += Math.ceil(itemOrderQty);
+          totalApprovedQty += Math.ceil(itemApprovedQty);
+          totalPoQty += Math.ceil(itemPoQty);
         }
       });
 
@@ -582,6 +639,10 @@ const PurchaseOrder = () => {
         shop_name: currentShopName,
         total_order_qty: totalOrderQty,
         total_order_box: totalOrderBox,
+        total_approved_qty: totalApprovedQty,
+        total_approved_box: totalApprovedBox,
+        total_po_qty: totalPoQty,
+        total_po_box: totalPoBox,
         transporter_number: selectedTransporter || null,
         receiver_number: selectedReceiver || null
       });
@@ -591,7 +652,7 @@ const PurchaseOrder = () => {
       // --- Mark approved items as ordered in approved_indent_items now that PO is created ---
       if (poMode !== "manual" && currentIndentId && insertedPoId) {
         try {
-          await markApprovedItemsAsOrdered(currentIndentId, activeParty, insertedPoId);
+          await markApprovedItemsAsOrdered(currentIndentId, activeParty, insertedPoId, itemsForActiveParty);
           console.log("✅ Approved items marked as ordered after PO creation:", currentIndentId);
         } catch (statusError) {
           console.error("⚠️ PO created but failed to update status of approved items:", statusError);
@@ -636,6 +697,13 @@ const PurchaseOrder = () => {
       // --- Send WhatsApp Messages ---
       const whatsappPromises = [];
 
+      // Format final PO total for WhatsApp message
+      const formattedPoTotal = totalPoBox > 0 && totalPoQty > 0
+        ? `${totalPoBox} Boxes, ${totalPoQty} Units`
+        : totalPoBox > 0
+          ? `${totalPoBox} Boxes`
+          : `${totalPoQty} Units`;
+
       // 1. Send PO Confirmation to Trader/Vendor via their permanent portal
       if (activeVendorDetails?.contact && insertedPoId && vendorPortalLink) {
         let formattedPhone = activeVendorDetails.contact.replace(/\D/g, "");
@@ -648,7 +716,7 @@ const PurchaseOrder = () => {
             nextPoNumber,
             vendorPortalLink,
             activeCompany?.name || COMPANY.name,
-            totalOrderQty,
+            formattedPoTotal,
             traderUrl
           ).then(res => ({ role: "Trader", success: res.success, error: res.error }))
         );
@@ -771,9 +839,74 @@ const PurchaseOrder = () => {
 
   const poDate = today();
 
+  const headerActions = activeParty && poMode !== "manual" ? (
+    <div style={{ display: 'flex', gap: '8px' }}>
+      <button
+        type="button"
+        onClick={() => setIsRejectedModalOpen(true)}
+        style={{
+          padding: '7px 14px',
+          borderRadius: '8px',
+          border: '1px solid #fecaca',
+          backgroundColor: '#fef2f2',
+          color: '#dc2626',
+          fontSize: '13px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        }}
+      >
+        <XCircle size={15} /> + Add Rejected
+      </button>
+      <button
+        type="button"
+        onClick={() => setIsExcludedModalOpen(true)}
+        style={{
+          padding: '7px 14px',
+          borderRadius: '8px',
+          border: '1px solid #fde68a',
+          backgroundColor: '#fffbeb',
+          color: '#b45309',
+          fontSize: '13px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        }}
+      >
+        <AlertTriangle size={15} /> + Add Excluded
+      </button>
+    </div>
+  ) : null;
+
   return (
     <div className="po-page">
       <Toast toasts={toasts} removeToast={removeToast} />
+
+      <AddExcludedModal
+        isOpen={isExcludedModalOpen}
+        onClose={() => setIsExcludedModalOpen(false)}
+        mode="excluded"
+        vendorName={activeParty}
+        shopName={selectedShop}
+        onAddItems={handleAddExcludedItems}
+        alreadyAddedIds={alreadyAddedIds}
+      />
+
+      <AddExcludedModal
+        isOpen={isRejectedModalOpen}
+        onClose={() => setIsRejectedModalOpen(false)}
+        mode="rejected"
+        vendorName={activeParty}
+        shopName={selectedShop}
+        onAddItems={handleAddExcludedItems}
+        alreadyAddedIds={alreadyAddedIds}
+      />
 
       {/* Top bar */}
       <div className="po-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
@@ -905,6 +1038,7 @@ const PurchaseOrder = () => {
               newItemQty={newItemQty}
               onBottleQtyChange={handleBottleQtyChange}
               onAddItem={handleManualAddItem}
+              headerActions={headerActions}
             />
           </div>
         )}
