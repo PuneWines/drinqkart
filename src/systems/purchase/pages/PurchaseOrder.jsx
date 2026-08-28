@@ -606,7 +606,8 @@ const PurchaseOrder = () => {
       const currentVendorId = await generateVendorId(activeParty);
 
       // --- Insert Database Record ---
-      const currentIndentId = poMode === "manual" ? null : (itemsForActiveParty.length > 0 ? itemsForActiveParty[0].unique_indent_id : null);
+      const validIndentItem = itemsForActiveParty.find(item => item.unique_indent_id || item.indent_id);
+      const currentIndentId = poMode === "manual" ? null : (validIndentItem ? (validIndentItem.unique_indent_id || validIndentItem.indent_id) : null);
       const firstBrandName = itemsForActiveParty.length > 0 ? itemsForActiveParty[0].brandName : null;
       // Capture shop name at creation time so it survives indent_items deletion
       const currentShopName = poMode === "manual"

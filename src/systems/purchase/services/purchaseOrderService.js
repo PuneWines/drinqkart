@@ -269,10 +269,24 @@ export const markApprovedItemsAsOrdered = async (uniqueIndentId, vendorName, poI
       };
 
       if (item.id) {
-        await supabase
+        const { data } = await supabase
           .from("purchase_approved_indent_items")
           .update(updatePayload)
-          .eq("id", item.id);
+          .eq("id", item.id)
+          .select();
+
+        // If item was not in purchase_approved_indent_items (e.g. excluded item from purchase_indent_items)
+        if (!data || data.length === 0) {
+          await supabase
+            .from("purchase_indent_items")
+            .update({
+              po_status: "ordered",
+              po_id: poId,
+              is_excluded: false,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", item.id);
+        }
       }
     }
   } else {
