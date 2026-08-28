@@ -233,15 +233,18 @@ const TraderPDF = ({
   vendorDetails,
   companyInfo
 }) => {
-  const totalBoxes = items.reduce(
-    (s, r) => s + (parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0),
-    0
-  );
+  const totalBoxes = items.reduce((s, r) => {
+    const boxVal = parseFloat(r.poBox !== undefined && r.poBox !== null && r.poBox !== "" ? r.poBox : (r.orderBox ?? 0)) || 0;
+    const type = r.qtyType || ((boxVal > 0 && boxVal % 1 === 0) ? "Box" : "Bottles");
+    return type === "Box" ? s + boxVal : s;
+  }, 0);
 
-  const totalBottles = items.reduce(
-    (s, r) => s + (parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0),
-    0
-  );
+  const totalBottles = items.reduce((s, r) => {
+    const boxVal = parseFloat(r.poBox !== undefined && r.poBox !== null && r.poBox !== "" ? r.poBox : (r.orderBox ?? 0)) || 0;
+    const qtyVal = parseFloat(r.poQty !== undefined && r.poQty !== null && r.poQty !== "" ? r.poQty : (r.orderQty ?? 0)) || 0;
+    const type = r.qtyType || ((boxVal > 0 && boxVal % 1 === 0) ? "Box" : "Bottles");
+    return type === "Bottles" ? s + qtyVal : s;
+  }, 0);
 
   const displayTotalBoxes = Math.round(totalBoxes).toLocaleString("en-IN");
   const displayTotalBottles = Math.round(totalBottles).toLocaleString("en-IN");
@@ -358,10 +361,11 @@ const TraderPDF = ({
           {items.map((item, index) => {
             const isAlternate = index % 2 !== 0;
             const rowStyle = isAlternate ? styles.tableRowAlternate : styles.tableRow;
-            const currentBoxVal = item.poBox !== undefined && item.poBox !== null ? item.poBox : (item.approvedBox ?? item.orderBox);
-            const currentQtyVal = item.poQty !== undefined && item.poQty !== null ? item.poQty : (item.approvedQty ?? item.orderQty);
-            const displayBox = currentBoxVal !== null && currentBoxVal !== undefined && currentBoxVal !== "" ? (Math.round(currentBoxVal) === currentBoxVal ? currentBoxVal : currentBoxVal.toFixed(2)) : "—";
-            const displayQty = currentQtyVal !== null && currentQtyVal !== undefined && currentQtyVal !== "" ? Math.ceil(currentQtyVal) : "—";
+            const currentBoxVal = item.poBox !== undefined && item.poBox !== null && item.poBox !== "" ? parseFloat(item.poBox) || 0 : (item.approvedBox ?? item.orderBox ?? 0);
+            const currentQtyVal = item.poQty !== undefined && item.poQty !== null && item.poQty !== "" ? parseFloat(item.poQty) || 0 : (item.approvedQty ?? item.orderQty ?? 0);
+            const effectiveQtyType = item.qtyType || ((currentBoxVal > 0 && currentBoxVal % 1 === 0) ? "Box" : "Bottles");
+            const displayBox = currentBoxVal !== null && currentBoxVal !== undefined && currentBoxVal !== "" ? (Math.round(currentBoxVal) === currentBoxVal ? currentBoxVal.toString() : currentBoxVal.toFixed(2)) : "—";
+            const displayQty = currentQtyVal !== null && currentQtyVal !== undefined && currentQtyVal !== "" ? Math.ceil(currentQtyVal).toString() : "—";
 
             return (
               <View key={item.id || index} style={rowStyle}>
@@ -372,11 +376,11 @@ const TraderPDF = ({
                 <Text style={[styles.tableCell, styles.colItemName, styles.tableCellBold]}>
                   {item.itemName || "—"}
                 </Text>
-                <Text style={[styles.tableCell, styles.colBoxes, item.qtyType === "Box" ? styles.tableCellBold : {}]}>
-                  {item.qtyType === "Box" ? (item.displayQty || displayBox) : "—"}
+                <Text style={[styles.tableCell, styles.colBoxes, effectiveQtyType === "Box" ? styles.tableCellBold : {}]}>
+                  {effectiveQtyType === "Box" ? (item.displayQty || displayBox) : "—"}
                 </Text>
-                <Text style={[styles.tableCell, styles.colBottles, item.qtyType === "Bottles" ? styles.tableCellBold : {}]}>
-                  {item.qtyType === "Bottles" ? (item.displayQty || displayQty) : "—"}
+                <Text style={[styles.tableCell, styles.colBottles, effectiveQtyType === "Bottles" ? styles.tableCellBold : {}]}>
+                  {effectiveQtyType === "Bottles" ? (item.displayQty || displayQty) : "—"}
                 </Text>
               </View>
             );
