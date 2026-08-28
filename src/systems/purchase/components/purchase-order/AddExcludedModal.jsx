@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { X, CheckSquare, Square, Plus, Search, AlertTriangle, XCircle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
+import { roundPoBox } from "../../utils/poTransformer";
+
 const AddExcludedModal = ({
   isOpen,
   onClose,
@@ -68,16 +70,41 @@ const AddExcludedModal = ({
           : row.purchase_indents?.shop_name;
         const shopNameVal = row.shop_name || parentShop || "Unknown";
 
+        const hasApprovedInDb = row.approved_box !== null && row.approved_box !== undefined;
+        const orderBox = row.order_box ? parseFloat(row.order_box) : 0;
+        const orderQty = row.order_qty ? parseFloat(row.order_qty) : 0;
+        const approvedBox = hasApprovedInDb ? parseFloat(row.approved_box) : 0;
+        const approvedQty = row.approved_qty !== null && row.approved_qty !== undefined ? parseFloat(row.approved_qty) : 0;
+        const bcs = row.bcs ? parseFloat(row.bcs) : null;
+
+        const rawBaseBox = row.po_box !== null && row.po_box !== undefined
+          ? parseFloat(row.po_box)
+          : (hasApprovedInDb ? approvedBox : orderBox);
+
+        const poBox = roundPoBox(rawBaseBox);
+
+        const poQty = row.po_qty !== null && row.po_qty !== undefined
+          ? parseFloat(row.po_qty)
+          : (bcs ? Math.round(poBox * bcs) : (hasApprovedInDb ? approvedQty : orderQty));
+
+        const qtyType = (poBox > 0 && poBox % 1 === 0) ? "Box" : "Bottles";
+        const displayQty = qtyType === "Box"
+          ? poBox.toString()
+          : Math.ceil(poQty).toString();
+
         return {
           ...row,
+          hasApprovedInDb,
           shopName: shopNameVal,
-          orderBox: row.order_box ? parseFloat(row.order_box) : 0,
-          orderQty: row.order_qty ? parseFloat(row.order_qty) : 0,
-          approvedBox: row.approved_box !== null && row.approved_box !== undefined ? parseFloat(row.approved_box) : parseFloat(row.order_box || 0),
-          approvedQty: row.approved_qty !== null && row.approved_qty !== undefined ? parseFloat(row.approved_qty) : parseFloat(row.order_qty || 0),
-          poBox: row.po_box !== null && row.po_box !== undefined ? parseFloat(row.po_box) : (row.approved_box !== null && row.approved_box !== undefined ? parseFloat(row.approved_box) : parseFloat(row.order_box || 0)),
-          poQty: row.po_qty !== null && row.po_qty !== undefined ? parseFloat(row.po_qty) : (row.approved_qty !== null && row.approved_qty !== undefined ? parseFloat(row.approved_qty) : parseFloat(row.order_qty || 0)),
-          bcs: row.bcs ? parseFloat(row.bcs) : null,
+          orderBox,
+          orderQty,
+          approvedBox,
+          approvedQty,
+          poBox,
+          poQty,
+          qtyType,
+          displayQty,
+          bcs,
           itemName: row.item_name,
           brandName: row.brand_name,
           liquorType: row.liquor_type,

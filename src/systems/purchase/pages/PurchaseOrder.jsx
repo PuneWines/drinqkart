@@ -33,7 +33,7 @@ import { sendPOConfirmationMessage, sendTransporterConfirmationMessage, sendRece
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 
 // Utilities
-import { transformActivePartyItems } from "../utils/poTransformer";
+import { transformActivePartyItems, roundPoBox } from "../utils/poTransformer";
 import { today } from "../utils/poHelpers";
 import { COMPANY } from "../utils/constants";
 
@@ -75,24 +75,33 @@ const PurchaseOrder = () => {
     const closingQty = item.closingQty != null && item.closingQty !== ""
       ? parseFloat(item.closingQty) || 0
       : item.closingQty;
-    const rawOrderBox = item.orderBox != null && item.orderBox !== ""
-      ? parseFloat(item.orderBox) || 0
-      : 0;
-    const rawOrderQty = item.orderQty != null && item.orderQty !== ""
-      ? parseFloat(item.orderQty) || 0
-      : 0;
-    const qtyType = rawOrderBox >= 0.9 ? "Box" : "Bottles";
-    const orderBox = rawOrderBox;
-    const orderQty = rawOrderQty;
+
+    const hasApprovedBox = item.approvedBox !== undefined && item.approvedBox !== null && item.hasApprovedInDb;
+    const hasApprovedQty = item.approvedQty !== undefined && item.approvedQty !== null && item.hasApprovedInDb;
+    const bcs = parseFloat(item.bcs ?? item.bc_s) || 0;
+
+    const rawBaseBox = item.poBox !== undefined && item.poBox !== null && item.poBox !== ""
+      ? parseFloat(item.poBox) || 0
+      : (hasApprovedBox ? (parseFloat(item.approvedBox) || 0) : (parseFloat(item.orderBox) || 0));
+
+    const poBox = roundPoBox(rawBaseBox);
+
+    const poQty = item.poQty !== undefined && item.poQty !== null && item.poQty !== ""
+      ? parseFloat(item.poQty) || 0
+      : (bcs ? Math.round(poBox * bcs) : (hasApprovedQty ? (parseFloat(item.approvedQty) || 0) : (parseFloat(item.orderQty) || 0)));
+
+    const qtyType = (poBox > 0 && poBox % 1 === 0) ? "Box" : "Bottles";
     const displayQty = qtyType === "Box"
-      ? Math.round(orderBox).toString()
-      : Math.ceil(orderQty).toString();
+      ? poBox.toString()
+      : Math.ceil(poQty).toString();
 
     return {
       ...item,
       closingQty,
-      orderBox,
-      orderQty,
+      poBox: item.poBox !== undefined ? item.poBox : poBox,
+      poQty: item.poQty !== undefined ? item.poQty : poQty,
+      orderBox: item.orderBox,
+      orderQty: item.orderQty,
       qtyType,
       displayQty
     };
@@ -370,9 +379,9 @@ const PurchaseOrder = () => {
       return;
     }
 
-    // Determine the qtyType and displayQty based on quantities
-    const qtyType = boxQty >= 0.90 ? "Box" : "Bottles";
-    const displayQty = qtyType === "Box" ? Math.round(boxQty).toString() : Math.ceil(bottleQty).toString();
+    const roundedBox = roundPoBox(boxQty);
+    const qtyType = (roundedBox > 0 && roundedBox % 1 === 0) ? "Box" : "Bottles";
+    const displayQty = qtyType === "Box" ? roundedBox.toString() : Math.ceil(bottleQty).toString();
 
     const newItemObj = {
       id: `manual-${Date.now()}-${Math.random()}`,
@@ -380,8 +389,10 @@ const PurchaseOrder = () => {
       brandName: trimmedName,
       bc_s: selectedItem ? selectedItem["bc_s"] : null,
       ml_s: selectedItem ? selectedItem["ml_s"] : null,
-      orderBox: boxQty,
+      orderBox: roundedBox,
       orderQty: bottleQty,
+      poBox: roundedBox,
+      poQty: bottleQty,
       qtyType,
       displayQty,
       shopName: selectedShop
@@ -522,7 +533,7 @@ const PurchaseOrder = () => {
     const isKunalShop = poMode === "manual"
       ? (selectedShop || "").toUpperCase().includes("KUNAL")
       : (selectedShop || "").toUpperCase().includes("KUNAL") ||
-        itemsForActiveParty.some(item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL"));
+      itemsForActiveParty.some(item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL"));
 
     if (isKunalShop) {
       if (!selectedReceiver) {
@@ -614,17 +625,22 @@ const PurchaseOrder = () => {
       itemsForActiveParty.forEach((item) => {
         const itemOrderBox = parseFloat(item.orderBox) || 0;
         const itemOrderQty = parseFloat(item.orderQty) || 0;
-        const itemApprovedBox = item.approvedBox !== undefined && item.approvedBox !== null ? parseFloat(item.approvedBox) || 0 : itemOrderBox;
-        const itemApprovedQty = item.approvedQty !== undefined && item.approvedQty !== null ? parseFloat(item.approvedQty) || 0 : itemOrderQty;
-        const itemPoBox = item.poBox !== undefined && item.poBox !== null ? parseFloat(item.poBox) || 0 : itemApprovedBox;
-        const itemPoQty = item.poQty !== undefined && item.poQty !== null ? parseFloat(item.poQty) || 0 : itemApprovedQty;
+        const itemApprovedBox = item.hasApprovedInDb && item.approvedBox !== undefined && item.approvedBox !== null ? parseFloat(item.approvedBox) || 0 : 0;
+        const itemApprovedQty = item.hasApprovedInDb && item.approvedQty !== undefined && item.approvedQty !== null ? parseFloat(item.approvedQty) || 0 : 0;
+        const itemPoBox = item.poBox !== undefined && item.poBox !== null ? parseFloat(item.poBox) || 0 : (item.hasApprovedInDb ? itemApprovedBox : itemOrderBox);
+        const itemPoQty = item.poQty !== undefined && item.poQty !== null ? parseFloat(item.poQty) || 0 : (item.hasApprovedInDb ? itemApprovedQty : itemOrderQty);
+        const itemQtyType = item.qtyType || ((itemPoBox > 0 && itemPoBox % 1 === 0) ? "Box" : "Bottles");
 
         totalOrderBox += itemOrderBox;
         totalOrderQty += itemOrderQty;
         totalApprovedBox += itemApprovedBox;
         totalApprovedQty += itemApprovedQty;
-        totalPoBox += itemPoBox;
-        totalPoQty += itemPoQty;
+
+        if (itemQtyType === "Box") {
+          totalPoBox += itemPoBox;
+        } else {
+          totalPoQty += itemPoQty;
+        }
       });
 
       totalOrderBox = Math.round(totalOrderBox);

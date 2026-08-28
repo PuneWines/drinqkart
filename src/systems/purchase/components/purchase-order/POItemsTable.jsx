@@ -18,15 +18,18 @@ const inputCellStyle = {
 const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdateItem, headerActions }) => {
   const orderQtyRows = items;
 
-  const totalPoBoxes = orderQtyRows.reduce(
-    (s, r) => s + (parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0),
-    0
-  );
+  const totalPoBoxes = orderQtyRows.reduce((s, r) => {
+    const boxVal = parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0;
+    const type = r.qtyType || ((boxVal > 0 && boxVal % 1 === 0) ? "Box" : "Bottles");
+    return type === "Box" ? s + boxVal : s;
+  }, 0);
 
-  const totalPoBottles = orderQtyRows.reduce(
-    (s, r) => s + (parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0),
-    0
-  );
+  const totalPoBottles = orderQtyRows.reduce((s, r) => {
+    const boxVal = parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0;
+    const qtyVal = parseFloat(r.poQty !== undefined && r.poQty !== null ? r.poQty : (r.approvedQty ?? r.orderQty)) || 0;
+    const type = r.qtyType || ((boxVal > 0 && boxVal % 1 === 0) ? "Box" : "Bottles");
+    return type === "Bottles" ? s + qtyVal : s;
+  }, 0);
 
   const displayTotalBoxes = Math.round(totalPoBoxes).toLocaleString("en-IN");
   const displayTotalBottles = Math.round(totalPoBottles).toLocaleString("en-IN");
@@ -60,8 +63,8 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdat
           {partyName ? (
             <>
               {orderQtyRows.map((item, i) => {
-                const currentPoBox = item.poBox !== undefined && item.poBox !== null ? item.poBox : (item.approvedBox ?? item.orderBox);
-                const currentPoQty = item.poQty !== undefined && item.poQty !== null ? item.poQty : (item.approvedQty ?? item.orderQty);
+                const currentPoBox = item.poBox !== undefined && item.poBox !== null ? item.poBox : (item.hasApprovedInDb ? item.approvedBox : item.orderBox);
+                const currentPoQty = item.poQty !== undefined && item.poQty !== null ? item.poQty : (item.hasApprovedInDb ? item.approvedQty : item.orderQty);
                 const perDaySaleVal = item.per_day_sale_last_month ?? item.perDaySale ?? "—";
                 return (
                 <tr key={item.id || i}>
@@ -115,10 +118,10 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdat
                 </td>
                 {/* Approved Box & Qty (Read-only Approved) */}
                 <td className="po-text-center" style={{ color: "#0f172a", fontWeight: "500" }}>
-                  {item.approvedBox != null && item.approvedBox !== "" ? item.approvedBox : (item.orderBox ?? "—")}
+                  {item.approvedBox != null && item.approvedBox !== "" ? item.approvedBox : 0}
                 </td>
                 <td className="po-text-center" style={{ color: "#0f172a", fontWeight: "500" }}>
-                  {item.approvedQty != null && item.approvedQty !== "" ? item.approvedQty : (item.orderQty ?? "—")}
+                  {item.approvedQty != null && item.approvedQty !== "" ? item.approvedQty : 0}
                 </td>
                 {/* PO Box (Editable input pre-filled with approved/order) */}
                 <td className="po-text-center" style={item.qtyType === "Box" ? { fontWeight: "600" } : {}}>
