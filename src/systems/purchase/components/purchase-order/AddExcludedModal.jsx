@@ -94,6 +94,8 @@ const AddExcludedModal = ({
 
         return {
           ...row,
+          unique_indent_id: row.unique_indent_id || row.indent_id,
+          indent_id: row.indent_id || row.unique_indent_id,
           hasApprovedInDb,
           shopName: shopNameVal,
           orderBox,
