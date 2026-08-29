@@ -157,36 +157,46 @@ const TransporterPortal = () => {
     try {
       setLoadingItems(prev => ({ ...prev, [po.id]: true }));
 
-      // Fetch from approved_indent_items and indent_items
-      const [approvedRes, indentRes] = await Promise.all([
-        supabase
-          .from("purchase_approved_indent_items")
-          .select("*")
-          .or(`po_id.eq.${po.id},unique_indent_id.eq.${po.indent_id}`)
-          .neq("po_status", "excluded"),
-        supabase
-          .from("purchase_indent_items")
-          .select("*")
-          .eq("po_id", po.id)
-          .neq("po_status", "excluded")
-      ]);
+      const hasValidIndentId = po.indent_id && String(po.indent_id).trim() !== "" && String(po.indent_id).trim() !== "null" && String(po.indent_id).trim() !== "undefined";
+      
+      const approvedQuery = hasValidIndentId
+        ? supabase.from("purchase_approved_indent_items").select("*").or(`po_id.eq.${po.id},unique_indent_id.eq.${po.indent_id}`).neq("po_status", "excluded")
+        : supabase.from("purchase_approved_indent_items").select("*").eq("po_id", po.id).neq("po_status", "excluded");
 
-      if (approvedRes.error) throw approvedRes.error;
-      if (indentRes.error) throw indentRes.error;
+      const indentQuery = supabase
+        .from("purchase_indent_items")
+        .select("*")
+        .eq("po_id", po.id)
+        .neq("po_status", "excluded");
+
+      const [approvedRes, indentRes] = await Promise.all([approvedQuery, indentQuery]);
+
+      if (approvedRes.error) console.error("Error fetching approved items:", approvedRes.error);
+      if (indentRes.error) console.error("Error fetching indent items:", indentRes.error);
 
       const items = [...(approvedRes.data || []), ...(indentRes.data || [])];
 
-      // Filter in-memory case-insensitively by vendor name and positive quantity
-      const filtered = (items || []).filter(
-        item => 
-          item.party_name?.trim().toLowerCase() === po.vendor_name?.trim().toLowerCase() &&
-          (parseFloat(item.order_qty) || 0) > 0
-      );
+      // Filter in-memory by po_id or vendor_name and positive quantity/box
+      const filtered = (items || []).filter(item => {
+        const isPoMatch = item.po_id && String(item.po_id) === String(po.id);
+        const isVendorMatch = item.party_name && po.vendor_name && item.party_name.trim().toLowerCase() === po.vendor_name.trim().toLowerCase();
+        
+        const box = parseFloat(item.po_box ?? item.approved_box ?? item.order_box ?? 0) || 0;
+        const qty = parseFloat(item.po_qty ?? item.approved_qty ?? item.order_qty ?? 0) || 0;
+
+        return (isPoMatch || isVendorMatch) && (box > 0 || qty > 0);
+      });
 
       // Process items to standard shape
       const processed = filtered.map(row => {
-        const orderBox = row.order_box !== null ? parseFloat(row.order_box) : 0;
-        const orderQty = row.order_qty !== null ? parseFloat(row.order_qty) : 0;
+        const orderBox = parseFloat(row.po_box ?? row.approved_box ?? row.order_box ?? 0) || 0;
+        let orderQty = parseFloat(row.po_qty ?? row.approved_qty ?? row.order_qty ?? 0) || 0;
+        const bcs = parseFloat(row.bcs) || 0;
+        
+        if (orderQty === 0 && orderBox > 0 && bcs > 0) {
+          orderQty = orderBox * bcs;
+        }
+
         const qtyType = orderBox >= 0.90 ? "Box" : "Bottles";
         const displayQty = qtyType === "Box" 
           ? Math.round(orderBox).toString() 

@@ -149,7 +149,8 @@ const ALLOWED_PO_COLUMNS = [
   'created_at',
   'updated_at',
   'first_brand_name',
-  'receiver_pdf_url'
+  'receiver_pdf_url',
+  'po_items'
 ];
 
 const sanitizePoPayload = (data) => {

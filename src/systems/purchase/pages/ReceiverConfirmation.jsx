@@ -40,44 +40,53 @@ const ReceiverConfirmation = () => {
           }
         }
 
-        // Fetch Order Items from approved_indent_items
-        if (po.indent_id && po.vendor_name) {
-          const { data: itemsData, error: itemsErr } = await supabase
-            .from("purchase_approved_indent_items")
-            .select("*")
-            .or(`po_id.eq.${po.id},unique_indent_id.eq.${po.indent_id}`)
-            .neq("po_status", "excluded");
+        // Fetch Order Items from approved_indent_items and indent_items
+        const hasValidIndentId = po.indent_id && String(po.indent_id).trim() !== "" && String(po.indent_id).trim() !== "null" && String(po.indent_id).trim() !== "undefined";
+        
+        const approvedQuery = hasValidIndentId
+          ? supabase.from("purchase_approved_indent_items").select("*").or(`po_id.eq.${po.id},unique_indent_id.eq.${po.indent_id}`).neq("po_status", "excluded")
+          : supabase.from("purchase_approved_indent_items").select("*").eq("po_id", po.id).neq("po_status", "excluded");
 
-          if (!itemsErr && itemsData) {
-            const filtered = itemsData
-              .filter(item => 
-                item.party_name?.toLowerCase() === po.vendor_name?.toLowerCase() &&
-                parseFloat(item.order_qty) > 0
-              )
-              .map(item => {
-                const orderQty = parseFloat(item.order_qty) || 0;
-                const bcs = item.bcs ? parseFloat(item.bcs) : null;
-                const orderBox = (orderQty && bcs) ? orderQty / bcs : null;
-                return {
-                  id: item.id,
-                  itemName: item.item_name,
-                  brandName: item.brand_name,
-                  orderQty: orderQty,
-                  bcs: bcs,
-                  orderBox: orderBox,
-                  closingQty: item.closing_qty != null ? item.closing_qty : "—"
-                };
-              });
-            setOrderItems(filtered);
+        const indentQuery = supabase
+          .from("purchase_indent_items")
+          .select("*")
+          .eq("po_id", po.id)
+          .neq("po_status", "excluded");
 
-            // Initialize receivedQtys with 0 if not already submitted
-            if (!po.receiver_status) {
-              const initQtys = {};
-              filtered.forEach(item => {
-                initQtys[item.id] = 0; // Default to 0
-              });
-              setReceivedQtys(initQtys);
-            }
+        const [approvedRes, indentRes] = await Promise.all([approvedQuery, indentQuery]);
+        const combinedData = [...(approvedRes.data || []), ...(indentRes.data || [])];
+
+        if (combinedData.length > 0) {
+          const filtered = combinedData
+            .filter(item => {
+              const isPoMatch = item.po_id && String(item.po_id) === String(po.id);
+              const isVendorMatch = item.party_name && po.vendor_name && item.party_name.trim().toLowerCase() === po.vendor_name.trim().toLowerCase();
+              const itemQty = parseFloat(item.po_qty ?? item.approved_qty ?? item.order_qty ?? item.po_box ?? item.approved_box ?? item.order_box ?? 0);
+              return (isPoMatch || isVendorMatch) && itemQty > 0;
+            })
+            .map(item => {
+              const orderQty = parseFloat(item.po_qty ?? item.approved_qty ?? item.order_qty) || 0;
+              const bcs = item.bcs ? parseFloat(item.bcs) : null;
+              const orderBox = item.po_box !== null && item.po_box !== undefined ? parseFloat(item.po_box) : (item.approved_box !== null && item.approved_box !== undefined ? parseFloat(item.approved_box) : ((orderQty && bcs) ? orderQty / bcs : null));
+              return {
+                id: item.id,
+                itemName: item.item_name,
+                brandName: item.brand_name,
+                orderQty: orderQty,
+                bcs: bcs,
+                orderBox: orderBox,
+                closingQty: item.closing_qty != null ? item.closing_qty : "—"
+              };
+            });
+          setOrderItems(filtered);
+
+          // Initialize receivedQtys with 0 if not already submitted
+          if (!po.receiver_status) {
+            const initQtys = {};
+            filtered.forEach(item => {
+              initQtys[item.id] = 0; // Default to 0
+            });
+            setReceivedQtys(initQtys);
           }
         }
 
