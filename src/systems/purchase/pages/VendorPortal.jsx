@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
 import { 
   FileText, CheckCircle2, Loader2, AlertCircle, 
   ChevronDown, ChevronUp, Check, X, Calendar, 
@@ -340,6 +341,13 @@ const VendorPortal = () => {
         .eq("id", poId);
 
       if (dbError) throw dbError;
+
+      if (allRejected) {
+        const itemNames = items.map(i => i.itemName).filter(Boolean);
+        if (po.shop_name && itemNames.length > 0) {
+          await deleteSupersededLifecycleItems(po.shop_name, itemNames);
+        }
+      }
 
       // 3. Regenerate and Re-upload PDF
       let finalTraderPdfUrl = po.trader_pdf_url;

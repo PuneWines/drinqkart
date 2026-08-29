@@ -5,6 +5,7 @@ import "../styles/Pages.css";
 import { supabase } from "../lib/supabase";
 import { Loader2, Archive, X, Eye, Search, Trash2 } from "lucide-react";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
+import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
 
 const formatDateTime = (isoString) => {
   if (!isoString) return "—";
@@ -26,6 +27,8 @@ const Approval = () => {
   const [activeTab, setActiveTab] = useState("pending");
   const { selectedShop } = useShopStore();
   const [showExcludedModal, setShowExcludedModal] = useState(false);
+  const [showInProcessModal, setShowInProcessModal] = useState(false);
+  const [inProcessSearchQuery, setInProcessSearchQuery] = useState("");
   const [excludedSearchQuery, setExcludedSearchQuery] = useState("");
   const [originalIndentItems, setOriginalIndentItems] = useState([]);
   const [originalStatuses, setOriginalStatuses] = useState(null);
@@ -42,6 +45,8 @@ const Approval = () => {
   useEffect(() => {
     if (!selectedIndentId) {
       setShowExcludedModal(false);
+      setShowInProcessModal(false);
+      setInProcessSearchQuery("");
       setExcludedSearchQuery("");
     }
   }, [selectedIndentId]);
@@ -388,6 +393,8 @@ const Approval = () => {
       let parentIndentId = null;
       let hasAnyApproved = false;
 
+      const rejectedItemNames = [];
+
       currentItems.forEach(item => {
         if (!parentIndentId && item.indent_id) {
           parentIndentId = item.indent_id;
@@ -399,7 +406,7 @@ const Approval = () => {
         let processedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : autoBox;
         let processedQty = item.approved_qty !== undefined && item.approved_qty !== null ? parseFloat(item.approved_qty) : autoQty;
 
-        if (status === 'approved' && !item.is_excluded) {
+        if (status === 'approved' && !item.is_excluded && !item.already_in_lifecycle) {
           approvedIdsToDelete.push(item.id);
           hasAnyApproved = true;
           if (processedBox >= 0.90) {
@@ -435,9 +442,10 @@ const Approval = () => {
             unique_indent_id: selectedIndentId,
             po_status: 'pending'
           });
-        } else if (!item.is_excluded) {
-          // Any non-approved non-excluded item in submitted batch is marked as rejected
+        } else if (!item.is_excluded && !item.already_in_lifecycle) {
+          // Any non-approved non-excluded non-held item in submitted batch is marked as rejected
           rejectedIdsToUpdate.push(item.id);
+          if (item.item_name) rejectedItemNames.push(item.item_name);
         }
       });
 
@@ -485,6 +493,12 @@ const Approval = () => {
             .update({ approval_status: "rejected" })
             .in("id", chunk);
           if (updateErr) throw updateErr;
+        }
+
+        // Clean up superseded held rows in purchase_indent_items for these rejected item names
+        const shopName = currentItems[0]?.shop_name;
+        if (shopName) {
+          await deleteSupersededLifecycleItems(shopName, rejectedItemNames);
         }
       }
 
@@ -966,6 +980,30 @@ const Approval = () => {
                     {isLoading ? 'Submitting...' : 'Submit'}
                   </button>
                 )}
+                {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => item.already_in_lifecycle) && (
+                  <button
+                    onClick={() => setShowInProcessModal(true)}
+                    style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '8px 20px',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+                  >
+                    View In-Process ({groupedApprovals[selectedIndentId]?.filter(item => item.already_in_lifecycle).length})
+                  </button>
+                )}
                 {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => item.is_excluded) && (
                   <button
                     onClick={() => setShowExcludedModal(true)}
@@ -1031,7 +1069,7 @@ const Approval = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {groupedApprovals[selectedIndentId]?.filter(item => !item.is_excluded).map((item, index) => {
+                    {groupedApprovals[selectedIndentId]?.filter(item => !item.is_excluded && !item.already_in_lifecycle).map((item, index) => {
                       // Use nullish coalescing so a falsy but valid id (e.g. 0) is never
                       // replaced by the loop index, which would cause status key collisions.
                       const itemId = item.id ?? `fallback-${selectedIndentId}-${index}`;
@@ -1304,6 +1342,173 @@ const Approval = () => {
                                   </tr>
                                 );
                               });
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* In-Process Items Modal Overlay */}
+              {showInProcessModal && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                  backdropFilter: 'blur(4px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 10005,
+                  padding: '20px'
+                }}>
+                  <div style={{
+                    backgroundColor: '#ffffff',
+                    borderRadius: '16px',
+                    width: '100%',
+                    maxWidth: '1000px',
+                    maxHeight: '85vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)'
+                  }}>
+                    <div style={{
+                      padding: '20px 24px',
+                      borderBottom: '1px solid #e2e8f0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#1d4ed8' }}>
+                          In-Process Items for {selectedIndentId?.includes('::') ? selectedIndentId.split('::')[1] : selectedIndentId}
+                        </h2>
+                        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+                          These items are currently active in the order-delivery lifecycle for this shop. Approving them is disabled to prevent duplicate orders.
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => { setShowInProcessModal(false); setInProcessSearchQuery(""); }}
+                        style={{
+                          background: '#f1f5f9',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '36px', height: '36px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#64748b',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    {/* Search Field */}
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <input
+                          type="text"
+                          placeholder="Search in-process items by item name or brand..."
+                          value={inProcessSearchQuery}
+                          onChange={(e) => setInProcessSearchQuery(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px 8px 36px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '14px',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Table of In-Process Items */}
+                    <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+                      <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#eff6ff' }}>
+                              <th style={{ ...thStyle, textAlign: 'center', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Status / Action</th>
+                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Indent ID</th>
+                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Shop Name</th>
+                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Item Name</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order Box</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order Qty</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Closing Qty</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>B/Cs</th>
+                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Mls</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(() => {
+                              const query = (inProcessSearchQuery || "").trim().toLowerCase();
+                              const currentItems = groupedApprovals[selectedIndentId] || [];
+                              const filteredInProcess = currentItems.filter(item => 
+                                item.already_in_lifecycle &&
+                                (!query || (item.item_name || "").toLowerCase().includes(query) || (item.brand_name || "").toLowerCase().includes(query))
+                              );
+
+                              if (filteredInProcess.length === 0) {
+                                return (
+                                  <tr>
+                                    <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
+                                      No in-process items found.
+                                    </td>
+                                  </tr>
+                                );
+                              }
+
+                              return filteredInProcess.map((item, index) => (
+                                <tr key={item.id || index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                                  <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{
+                                        display: 'inline-block',
+                                        padding: '4px 10px',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: '700',
+                                        backgroundColor: '#dbeafe',
+                                        color: '#1e40af'
+                                      }}>
+                                        Active in Lifecycle
+                                      </span>
+                                      <button
+                                        onClick={() => handleDeleteItem(item.id, item.item_name)}
+                                        style={{
+                                          background: '#fee2e2',
+                                          border: 'none',
+                                          color: '#dc2626',
+                                          cursor: 'pointer',
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          fontSize: '12px',
+                                          fontWeight: '600'
+                                        }}
+                                        title="Delete held item"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td style={{ ...tdStyle, color: '#1e40af', fontWeight: '600' }}>{item.party_indent_id || "-"}</td>
+                                  <td style={tdStyle}>{item.shop_name || "-"}</td>
+                                  <td style={{ ...tdStyle, fontWeight: '700' }}>{item.item_name}</td>
+                                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#2563eb' }}>{item.order_box || "-"}</td>
+                                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#2563eb' }}>{item.order_qty || "-"}</td>
+                                  <td style={{ ...tdStyle, textAlign: 'right' }}>{item.closing_qty || "-"}</td>
+                                  <td style={{ ...tdStyle, textAlign: 'right' }}>{item.bcs || "-"}</td>
+                                  <td style={tdStyle}>{item.mls || "-"}</td>
+                                </tr>
+                              ));
                             })()}
                           </tbody>
                         </table>

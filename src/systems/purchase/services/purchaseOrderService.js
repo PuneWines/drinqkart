@@ -336,3 +336,123 @@ export const fetchItemList = async () => {
   return allData;
 };
 
+/**
+ * Fetch all item names currently active in the lifecycle for a given shop.
+ * Matches strictly on Shop Name + Item Name.
+ */
+export const getInLifecycleItemNames = async (shopName) => {
+  if (!shopName || shopName === "All") return new Set();
+
+  const activeNames = new Set();
+
+  try {
+    // Step 1: Fetch pending items in purchase_indent_items for shopName
+    const { data: indentItems } = await supabase
+      .from("purchase_indent_items")
+      .select("item_name, purchase_indents!inner(shop_name)")
+      .eq("purchase_indents.shop_name", shopName)
+      .eq("is_excluded", false)
+      .or("already_in_lifecycle.eq.false,already_in_lifecycle.is.null")
+      .or("approval_status.eq.pending,approval_status.is.null")
+      .is("po_id", null);
+
+    (indentItems || []).forEach(item => {
+      if (item.item_name) {
+        activeNames.add(item.item_name.trim().toLowerCase());
+      }
+    });
+
+    // Step 2: Fetch active POs for this shop that are NOT completed ('yes') or rejected ('no')
+    const { data: activePOs } = await supabase
+      .from("purchase_purchase_orders")
+      .select("id")
+      .eq("shop_name", shopName)
+      .neq("receiver_status", "yes")
+      .neq("receiver_status", "no")
+      .neq("trader_status", "no")
+      .neq("transporter_status", "no");
+
+    const activePoIds = (activePOs || []).map(po => po.id);
+
+    // Step 3: Fetch approved items waiting for PO or attached to an active PO
+    const { data: approvedItems } = await supabase
+      .from("purchase_approved_indent_items")
+      .select("item_name, po_id, purchase_indents!inner(shop_name)")
+      .eq("purchase_indents.shop_name", shopName)
+      .neq("po_status", "excluded");
+
+    (approvedItems || []).forEach(item => {
+      const isWaitingForPo = !item.po_id;
+      const isAttachedToActivePo = item.po_id && activePoIds.includes(item.po_id);
+
+      if ((isWaitingForPo || isAttachedToActivePo) && item.item_name) {
+        activeNames.add(item.item_name.trim().toLowerCase());
+      }
+    });
+
+    // Step 4: Fetch items from purchase_indent_items attached to active POs
+    if (activePoIds.length > 0) {
+      const { data: manualPoItems } = await supabase
+        .from("purchase_indent_items")
+        .select("item_name")
+        .in("po_id", activePoIds);
+
+      (manualPoItems || []).forEach(item => {
+        if (item.item_name) {
+          activeNames.add(item.item_name.trim().toLowerCase());
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Error fetching in-lifecycle item names:", err);
+  }
+
+  return activeNames;
+};
+
+/**
+ * Permanently delete rows in purchase_indent_items marked already_in_lifecycle = true
+ * when an active lifecycle for shopName and specified item names finishes or is rejected.
+ */
+export const deleteSupersededLifecycleItems = async (shopName, itemNamesList = []) => {
+  if (!shopName || !itemNamesList || itemNamesList.length === 0) return;
+
+  try {
+    const { data: indents } = await supabase
+      .from("purchase_indents")
+      .select("id")
+      .eq("shop_name", shopName);
+
+    if (!indents || indents.length === 0) return;
+
+    const indentIds = indents.map(i => i.id);
+    const cleanItemNames = itemNamesList.map(n => n.trim().toLowerCase()).filter(Boolean);
+
+    const { data: heldItems } = await supabase
+      .from("purchase_indent_items")
+      .select("id, item_name")
+      .in("indent_id", indentIds)
+      .eq("already_in_lifecycle", true);
+
+    if (!heldItems || heldItems.length === 0) return;
+
+    const idsToDelete = heldItems
+      .filter(item => item.item_name && cleanItemNames.includes(item.item_name.trim().toLowerCase()))
+      .map(item => item.id);
+
+    if (idsToDelete.length > 0) {
+      const chunkSize = 50;
+      for (let i = 0; i < idsToDelete.length; i += chunkSize) {
+        const chunk = idsToDelete.slice(i, i + chunkSize);
+        await supabase
+          .from("purchase_indent_items")
+          .delete()
+          .in("id", chunk);
+      }
+      console.log(`✅ Permanently deleted ${idsToDelete.length} superseded in-process rows for shop "${shopName}".`);
+    }
+  } catch (err) {
+    console.error("Error deleting superseded lifecycle items:", err);
+  }
+};
+

@@ -6,6 +6,7 @@ import "../styles/Pages.css";
 import Toast, { useToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
 import useShopStore from "../store/useShopStore";
+import { getInLifecycleItemNames } from "../services/purchaseOrderService";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
 const AccordionItem = ({ item, calcs, handleInlineChange }) => {
@@ -1033,6 +1034,9 @@ const Indent = () => {
       if (headerError) throw headerError;
       const indentId = headerData.id;
 
+      // Fetch active item names in lifecycle for this shop (Shop Name + Item Name matching)
+      const activeLifecycleItemNames = await getInLifecycleItemNames(selectedShop || 'UNKNOWN');
+
       const partyMap = new Map();
       const itemsPayload = [];
 
@@ -1044,6 +1048,7 @@ const Indent = () => {
         const partyInfo = partyMap.get(partyName);
         const currentCount = partyInfo.count++;
         const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
+        const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
 
         itemsPayload.push({
           indent_id: indentId,
@@ -1064,7 +1069,8 @@ const Indent = () => {
           order_box: parseFloat(calcs.orderBox) || 0,
           order_qty: parseFloat(calcs.orderQty) || 0,
           is_excluded: false,
-          exclusion_reason: null
+          exclusion_reason: null,
+          already_in_lifecycle: isAlreadyInLifecycle
         });
       });
 
@@ -1076,6 +1082,7 @@ const Indent = () => {
         const partyInfo = partyMap.get(partyName);
         const currentCount = partyInfo.count++;
         const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
+        const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
 
         itemsPayload.push({
           indent_id: indentId,
@@ -1096,7 +1103,8 @@ const Indent = () => {
           order_box: parseFloat(calcs.orderBox) || 0,
           order_qty: parseFloat(calcs.orderQty) || 0,
           is_excluded: true,
-          exclusion_reason: parseFloat(calcs.orderQty) < 0 ? "negative_order_qty" : "low_order_qty"
+          exclusion_reason: parseFloat(calcs.orderQty) < 0 ? "negative_order_qty" : "low_order_qty",
+          already_in_lifecycle: isAlreadyInLifecycle
         });
       });
 
