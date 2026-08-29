@@ -666,7 +666,8 @@ const PurchaseOrder = () => {
         total_po_qty: totalPoQty,
         total_po_box: totalPoBox,
         transporter_number: selectedTransporter || null,
-        receiver_number: selectedReceiver || null
+        receiver_number: selectedReceiver || null,
+        po_items: itemsForActiveParty
       });
 
       const insertedPoId = insertedData[0]?.id;

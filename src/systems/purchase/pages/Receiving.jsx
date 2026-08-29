@@ -115,11 +115,22 @@ const Receiving = () => {
     }
     if (!itemsData || itemsData.length === 0) return [];
     return itemsData
-      .filter(item => (item.po_id === po.id || (item.unique_indent_id === po.indent_id && item.party_name?.toLowerCase() === po.vendor_name?.toLowerCase())) && (parseFloat(item.order_qty) || 0) > 0)
+      .filter(item => {
+        const isPoMatch = item.po_id && String(item.po_id) === String(po.id);
+        const isVendorMatch = item.party_name && po.vendor_name && item.party_name.trim().toLowerCase() === po.vendor_name.trim().toLowerCase() && (item.unique_indent_id === po.indent_id || item.indent_id === po.indent_id);
+        const box = parseFloat(item.po_box ?? item.approved_box ?? item.order_box ?? 0) || 0;
+        const qty = parseFloat(item.po_qty ?? item.approved_qty ?? item.order_qty ?? 0) || 0;
+        return (isPoMatch || isVendorMatch) && (box > 0 || qty > 0);
+      })
       .map(item => {
-        const orderQty = parseFloat(item.order_qty) || 0;
+        const orderBox = parseFloat(item.po_box ?? item.approved_box ?? item.order_box ?? 0) || 0;
+        let orderQty = parseFloat(item.po_qty ?? item.approved_qty ?? item.order_qty ?? 0) || 0;
+        const bcs = item.bcs ? parseFloat(item.bcs) : null;
+        if (orderQty === 0 && orderBox > 0 && bcs > 0) {
+          orderQty = orderBox * bcs;
+        }
         const dbReceivedQty = po.received_items?.[item.id]?.receivedQty !== undefined ? Number(po.received_items[item.id].receivedQty) : 0;
-        return { id: item.id, itemName: item.item_name, brandName: item.brand_name || item.item_name, orderQty, dbReceivedQty, closingQty: item.closing_qty != null ? item.closing_qty : "—", bcs: item.bcs ? parseFloat(item.bcs) : null };
+        return { id: item.id, itemName: item.item_name, brandName: item.brand_name || item.item_name, orderQty, dbReceivedQty, closingQty: item.closing_qty != null ? item.closing_qty : "—", bcs };
       });
   };
 
