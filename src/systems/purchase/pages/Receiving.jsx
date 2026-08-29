@@ -70,7 +70,10 @@ const Receiving = () => {
         const poIds = poData.map(po => po.id).filter(Boolean);
         const indentIds = poData.map(po => po.indent_id).filter(Boolean);
         const promises = [];
-        if (poIds.length > 0) promises.push(supabase.from("purchase_approved_indent_items").select("*").in("po_id", poIds).neq("po_status", "excluded"));
+        if (poIds.length > 0) {
+          promises.push(supabase.from("purchase_approved_indent_items").select("*").in("po_id", poIds).neq("po_status", "excluded"));
+          promises.push(supabase.from("purchase_indent_items").select("*").in("po_id", poIds).neq("po_status", "excluded"));
+        }
         if (indentIds.length > 0) promises.push(supabase.from("purchase_approved_indent_items").select("*").in("unique_indent_id", indentIds).neq("po_status", "excluded"));
 
         const results = await Promise.all(promises);
