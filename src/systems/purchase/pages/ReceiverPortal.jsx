@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
 import { 
   FileText, CheckCircle2, Loader2, AlertCircle, 
   ChevronDown, ChevronUp, Check, X, Calendar, 
@@ -329,6 +330,12 @@ const ReceiverPortal = () => {
         .eq("id", poId);
 
       if (dbError) throw dbError;
+
+      // Clean up superseded held rows for items in this PO
+      const itemNames = items.map(i => i.itemName).filter(Boolean);
+      if (po.shop_name && itemNames.length > 0) {
+        await deleteSupersededLifecycleItems(po.shop_name, itemNames);
+      }
 
       setSuccessPoIds(prev => ({ ...prev, [poId]: true }));
       setExpandedPoId(null);

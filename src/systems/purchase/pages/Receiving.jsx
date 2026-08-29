@@ -15,7 +15,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Toast, { useToast } from "../components/Toast";
-import useShopStore from "../store/useShopStore";
+import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
 
 const Receiving = () => {
   const [data, setData] = useState([]);
@@ -149,6 +149,13 @@ const Receiving = () => {
       const remarks = editingRemarks[po.id] !== undefined ? editingRemarks[po.id] : (po.receiver_remarks || "");
       const { error } = await supabase.from("purchase_purchase_orders").update({ received_items: updatedMap, receiver_status: "yes", receiver_remarks: remarks || null }).eq("id", po.id);
       if (error) throw error;
+
+      // Clean up superseded held rows for items in this completed PO
+      const itemNames = poProducts.map(p => p.itemName).filter(Boolean);
+      if (po.shop_name && itemNames.length > 0) {
+        await deleteSupersededLifecycleItems(po.shop_name, itemNames);
+      }
+
       addToast(`Saved quantities for PO ${po.po_number}.`, "success");
       await fetchData();
     } catch (err) {
