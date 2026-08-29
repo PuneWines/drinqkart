@@ -60,6 +60,22 @@ const TraderVerification = () => {
           return acc;
         }, {});
 
+        // Fetch item counts per PO from both approved_indent_items and indent_items
+        const poIds = poData.map(po => po.id).filter(Boolean);
+        const itemCountMap = {};
+        if (poIds.length > 0) {
+          const [resApproved, resIndent] = await Promise.all([
+            supabase.from("purchase_approved_indent_items").select("po_id").in("po_id", poIds).neq("po_status", "excluded"),
+            supabase.from("purchase_indent_items").select("po_id").in("po_id", poIds).neq("po_status", "excluded")
+          ]);
+          const allPoItems = [...(resApproved.data || []), ...(resIndent.data || [])];
+          allPoItems.forEach(row => {
+            if (row.po_id) {
+              itemCountMap[row.po_id] = (itemCountMap[row.po_id] || 0) + 1;
+            }
+          });
+        }
+
         const formatted = poData.map(item => {
           let totalReceivedQty = 0;
           if (item.received_items && typeof item.received_items === 'object') {
@@ -85,7 +101,7 @@ const TraderVerification = () => {
             }),
             totalReceivedQty: item.receiver_status === 'yes' ? totalReceivedQty : "N/A",
             qtyDifference: diff,
-            total_items: Array.isArray(item.po_items) ? item.po_items.length : 0
+            total_items: Array.isArray(item.po_items) && item.po_items.length > 0 ? item.po_items.length : (itemCountMap[item.id] || 0)
           };
         });
         setData(formatted);

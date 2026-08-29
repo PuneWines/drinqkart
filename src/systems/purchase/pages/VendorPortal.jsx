@@ -209,14 +209,24 @@ const VendorPortal = () => {
     try {
       setLoadingItems(prev => ({ ...prev, [po.id]: true }));
 
-      // Fetch from approved_indent_items
-      const { data: items, error: itemsError } = await supabase
-        .from("purchase_approved_indent_items")
-        .select("*")
-        .or(`po_id.eq.${po.id},unique_indent_id.eq.${po.indent_id}`)
-        .neq("po_status", "excluded");
+      // Fetch from approved_indent_items and indent_items
+      const [approvedRes, indentRes] = await Promise.all([
+        supabase
+          .from("purchase_approved_indent_items")
+          .select("*")
+          .or(`po_id.eq.${po.id},unique_indent_id.eq.${po.indent_id}`)
+          .neq("po_status", "excluded"),
+        supabase
+          .from("purchase_indent_items")
+          .select("*")
+          .eq("po_id", po.id)
+          .neq("po_status", "excluded")
+      ]);
 
-      if (itemsError) throw itemsError;
+      if (approvedRes.error) throw approvedRes.error;
+      if (indentRes.error) throw indentRes.error;
+
+      const items = [...(approvedRes.data || []), ...(indentRes.data || [])];
 
       // Filter in-memory case-insensitively by vendor name and positive quantity
       const filtered = (items || []).filter(
