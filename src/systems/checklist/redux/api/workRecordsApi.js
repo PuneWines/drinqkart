@@ -538,7 +538,34 @@ export const rejectWorkTaskApi = async (taskId, reason) => {
 export const checkAndPromoteAssignmentsApi = async () => {
   try {
     const now = new Date();
-    // 1. Fetch all assignments that have a scheduled next assignment
+
+    // 1. Update status to 'AVAILABLE' in DB for expired assignments with NO next assignment scheduled
+    const { data: expiredNoNext, error: expiredError } = await supabase
+      .from('task_assignments')
+      .select('*')
+      .is('next_start_datetime', null)
+      .neq('status', 'AVAILABLE')
+      .not('end_datetime', 'is', null);
+
+    if (!expiredError && expiredNoNext && expiredNoNext.length > 0) {
+      for (const asgn of expiredNoNext) {
+        const end = new Date(asgn.end_datetime);
+        const durationMins = Number(asgn.estimated_minutes || 0);
+        const endWithDuration = new Date(end.getTime() + durationMins * 60 * 1000);
+
+        if (now > endWithDuration) {
+          await supabase
+            .from('task_assignments')
+            .update({
+              status: 'AVAILABLE',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', asgn.id);
+        }
+      }
+    }
+
+    // 2. Fetch all assignments that have a scheduled next assignment to promote
     const { data: assignments, error } = await supabase
       .from('task_assignments')
       .select('*')

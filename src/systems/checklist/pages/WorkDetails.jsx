@@ -46,6 +46,15 @@ const getTaskStatusInfo = (item, isModified) => {
     };
   }
 
+  // Display Available if there is no assignment OR if current assignment expired with no next assignment scheduled
+  if (item.isAvailable || !item.assignmentId || item.status === 'AVAILABLE' || (isAssignmentExpired(item) && !item.next_start_datetime)) {
+    return {
+      text: "Available",
+      className: "bg-green-50 text-green-700 border-green-200",
+      dotClass: "bg-green-500"
+    };
+  }
+
   if (item.status === 'GENERATED') {
     return {
       text: "GENERATED AND RUNNING",
@@ -67,15 +76,6 @@ const getTaskStatusInfo = (item, isModified) => {
       text: "ACTIVE (EDITABLE)",
       className: "bg-purple-50 text-purple-700 border-purple-200",
       dotClass: "bg-purple-500"
-    };
-  }
-
-  // Display Available if there is no assignment OR if current assignment expired with no next assignment scheduled
-  if (item.isAvailable || !item.assignmentId || (isAssignmentExpired(item) && !item.next_start_datetime)) {
-    return {
-      text: "Available",
-      className: "bg-green-50 text-green-700 border-green-200",
-      dotClass: "bg-green-500"
     };
   }
 
