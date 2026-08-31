@@ -506,8 +506,12 @@ const PurchaseOrder = () => {
     if (!vendor) return null;
     return {
       ...vendor,
-      contact: vendor.contact_number || vendor.contact || "",
-      contact_number: vendor.contact_number || vendor.contact || ""
+      address: vendor.address || vendor.vendor_address || vendor.party_address || "",
+      gstin: vendor.gstin || vendor.gst_number || vendor.gst || "",
+      contact_name: vendor.contact_name || vendor.contact_person || vendor.person_name || vendor.person || "",
+      contact: vendor.contact_number || vendor.contact || vendor.phone || vendor.mobile || "",
+      contact_number: vendor.contact_number || vendor.contact || vendor.phone || vendor.mobile || "",
+      email: vendor.email || vendor.vendor_email || ""
     };
   }, [activeParty, vendorsList]);
 
@@ -607,7 +611,10 @@ const PurchaseOrder = () => {
 
       // --- Insert Database Record ---
       const validIndentItem = itemsForActiveParty.find(item => item.unique_indent_id || item.indent_id);
-      const currentIndentId = poMode === "manual" ? null : (validIndentItem ? (validIndentItem.unique_indent_id || validIndentItem.indent_id) : null);
+      const fallbackManualIndentId = `MANUAL-${nextPoNumber || Date.now()}`;
+      const currentIndentId = poMode === "manual"
+        ? fallbackManualIndentId
+        : (validIndentItem ? (validIndentItem.unique_indent_id || validIndentItem.indent_id) : fallbackManualIndentId);
       const firstBrandName = itemsForActiveParty.length > 0 ? itemsForActiveParty[0].brandName : null;
       // Capture shop name at creation time so it survives indent_items deletion
       const currentShopName = poMode === "manual"
