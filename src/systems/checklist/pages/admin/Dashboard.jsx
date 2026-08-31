@@ -198,22 +198,19 @@ export default function AdminDashboard() {
   const fetchSummaryStats = async (
     currentShopFilter = shopFilter,
     currentStaffFilter = dashboardStaffFilter,
-    currentType = dashboardType
+    currentType = dashboardType,
+    start = dateRange.filtered ? dateRange.startDate : null,
+    end = dateRange.filtered ? dateRange.endDate : null
   ) => {
     try {
-      // OLD:
-      // const summary = await getDashboardSummaryApi(
-      //   currentType, 
-      //   currentStaffFilter === 'all' ? null : currentStaffFilter, 
-      //   currentShopFilter === 'all' ? null : currentShopFilter
-      // );
-      // NEW: React Query cached fetch
       const summary = await queryClient.fetchQuery({
-        queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter],
+        queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter, start, end],
         queryFn: () => getDashboardSummaryApi(
           currentType,
           currentStaffFilter === 'all' ? null : currentStaffFilter,
-          currentShopFilter === 'all' ? null : currentShopFilter
+          currentShopFilter === 'all' ? null : currentShopFilter,
+          start,
+          end
         ),
         staleTime: 2 * 60 * 1000
       });
@@ -603,13 +600,44 @@ export default function AdminDashboard() {
           endDate: end
         });
 
-        if (result) {
+        if (result && result.tasks && result.tasks.length > 0) {
           data = result.tasks || [];
           summary = result.summaryStats || null;
 
           // Sync filteredDateStats state
           if (page === 1 && summary) {
             setFilteredDateStats(summary);
+          }
+        } else {
+          // Direct Supabase query fallback for date range
+          data = await queryClient.fetchQuery({
+            queryKey: ['dashboardTasks', currentType, currentMainTab, currentShopFilter, currentStaffFilter, page, start, end],
+            queryFn: async () => {
+              if (currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance') {
+                const res = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
+                return res.data || [];
+              } else if (currentMainTab === 'repair' || currentShopFilter === 'Repair') {
+                const res = await fetchAllRepairTasks(page, batchSize);
+                return res.data || [];
+              } else {
+                return await fetchDashboardDataApi(currentType, currentStaffFilter, page, batchSize, 'all', currentShopFilter, start, end);
+              }
+            },
+            staleTime: 2 * 60 * 1000
+          });
+
+          if (page === 1) {
+            summary = await queryClient.fetchQuery({
+              queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter, start, end],
+              queryFn: () => getDashboardSummaryApi(
+                currentType,
+                currentStaffFilter === 'all' ? null : currentStaffFilter,
+                currentShopFilter === 'all' ? null : currentShopFilter,
+                start,
+                end
+              ),
+              staleTime: 2 * 60 * 1000
+            });
           }
         }
       } else {
@@ -827,11 +855,14 @@ export default function AdminDashboard() {
           const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
 
           // Robust completion check across all categories
-          const statusLower = (task.status || "").toLowerCase();
-          const isCompleted = (task.submission_date !== null) ||
+          const statusLower = (task.work_status || task.status || "").toLowerCase();
+          const subDateStr = task.submission_date || task.completed_at || task.manager_approval_date || task.admin_approval_date;
+          const isCompleted = (subDateStr !== null && subDateStr !== undefined && subDateStr !== '') ||
             (statusLower === 'yes') ||
             (statusLower.includes('done')) ||
             (statusLower.includes('completed')) ||
+            (statusLower.includes('approved')) ||
+            (statusLower.includes('submitted')) ||
             (currentType === 'delegation' && task.admin_done === true);
 
           // Determine task status accurately
@@ -989,11 +1020,24 @@ export default function AdminDashboard() {
           ? [...prev.allTasks, ...processedTasks]
           : processedTasks
 
-        const finalTotalTasks = summary ? summary.totalTasks : prev.totalTasks;
-        const finalCompletedTasks = summary ? summary.completedTasks : prev.completedTasks;
-        const finalPendingTasks = summary ? summary.pendingTasks : prev.pendingTasks;
-        const finalOverdueTasks = summary ? summary.overdueTasks : prev.overdueTasks;
-        const finalCompletionRate = summary ? summary.completionRate : prev.completionRate;
+        const summaryHasValues = summary && (summary.completedTasks > 0);
+        const finalTotalTasks = summaryHasValues ? summary.totalTasks : (append ? prev.totalTasks + totalTasks : totalTasks);
+        const finalCompletedTasks = summaryHasValues ? summary.completedTasks : (append ? prev.completedTasks + completedTasks : completedTasks);
+        const finalPendingTasks = summaryHasValues ? summary.pendingTasks : (append ? prev.pendingTasks + pendingTasks : pendingTasks);
+        const finalOverdueTasks = summaryHasValues ? summary.overdueTasks : (append ? prev.overdueTasks + overdueTasks : overdueTasks);
+        const finalCompletionRate = summaryHasValues ? summary.completionRate : (finalTotalTasks > 0 ? parseFloat(((finalCompletedTasks / finalTotalTasks) * 100).toFixed(1)) : 0);
+
+        if (page === 1) {
+          setFilteredDateStats({
+            totalTasks: finalTotalTasks,
+            completedTasks: finalCompletedTasks,
+            pendingTasks: finalPendingTasks,
+            overdueTasks: finalOverdueTasks,
+            completionRate: finalCompletionRate,
+          });
+        }
+
+
 
         const newShopData = {
           allTasks: updatedTasks,
@@ -1038,38 +1082,7 @@ export default function AdminDashboard() {
         return newShopData;
       })
 
-      console.group(`🔍 Dashboard Filter Execution Flow debug [Type: ${currentType}]`);
-      console.log("📍 Active Selection State:", {
-        mainTab: currentMainTab,
-        dashboardType: currentType,
-        shopFilter: currentShopFilter,
-        dashboardStaffFilter: currentStaffFilter,
-        currentPage,
-        dateRangeFiltered: dateRange.filtered,
-        dateRangeSpan: `${dateRange.startDate} to ${dateRange.endDate}`
-      });
-      console.log("📥 API Summary Counts Received:", {
-        apiTotal: summary?.totalTasks ?? "N/A",
-        apiCompleted: summary?.completedTasks ?? "N/A",
-        apiPending: summary?.pendingTasks ?? "N/A",
-        apiOverdue: summary?.overdueTasks ?? "N/A",
-        apiCompletionRate: summary?.completionRate ?? "N/A"
-      });
-      console.log("👥 Staff Dropdown Updated:", {
-        count: uniqueStaff?.length || 0,
-        names: uniqueStaff
-      });
-      console.log("📋 Processed Tasks for Table View:", {
-        fetchedCount: data?.length || 0,
-        afterFilteringCount: processedTasks?.length || 0
-      });
-      console.log("👥 Staff Grouped Performance Scores:", staffMembers.map(s => ({
-        name: s.name,
-        tasksCount: s.totalTasks,
-        completed: s.completedTasks,
-        score: s.ontime_score
-      })));
-      console.groupEnd();
+
 
       // Check if we have more data to load
       if (data.length < batchSize) {
@@ -1173,7 +1186,13 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     // Fetch summary stats quickly
-    fetchSummaryStats(shopFilter, dashboardStaffFilter, dashboardType)
+    fetchSummaryStats(
+      shopFilter,
+      dashboardStaffFilter,
+      dashboardType,
+      dateRange.filtered ? dateRange.startDate : null,
+      dateRange.filtered ? dateRange.endDate : null
+    )
 
     // Fetch detailed data for charts and tables (first page)
     fetchShopData(1, false, shopFilter, dashboardStaffFilter, dashboardType, mainTab)
