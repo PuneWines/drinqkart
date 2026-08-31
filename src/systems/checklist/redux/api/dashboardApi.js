@@ -211,7 +211,7 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
       dashboardType === 'repair' ? 'repair_tasks' :
         dashboardType === 'ea' ? 'ea_tasks' :
-          dashboardType === 'work' ? 'work_task' : dashboardType;
+          dashboardType === 'work' ? 'work_task_new' : dashboardType;
 
     const nameField = getNameField(dashboardType);
 
@@ -364,7 +364,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
           dashboardType === 'ea' ? 'ea_tasks' :
-            dashboardType === 'work' ? 'work_task' : dashboardType;
+            dashboardType === 'work' ? 'work_task_new' : dashboardType;
 
       query = supabase
         .from(tableName)
@@ -372,6 +372,9 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
 
       if (dashboardType === 'ea') {
         query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+      } else if (dashboardType === 'work') {
+        query = query.is('submission_date', null)
+          .not('work_status', 'in', '(Done,SUBMITTED,done,APPROVED,Approved,submitted,MANAGER_APPROVED,ADMIN_APPROVED)');
       } else {
         query = query.is('submission_date', null);
       }
@@ -511,18 +514,7 @@ export const fetchStaffTasksDataApi = async (
       endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
     }
 
-    console.log("🚀 [fetchStaffTasksDataApi] Called with parameters:", {
-      dashboardType,
-      staffFilter,
-      shopFilter,
-      page,
-      limit,
-      selectedMonth,
-      startDateParam,
-      endDateParam,
-      computedStartDate: startDate,
-      computedEndDate: endDate
-    });
+
 
     const dateColumn = getDateColumn(dashboardType);
 
@@ -707,13 +699,15 @@ export const fetchStaffTasksDataApi = async (
       summary[key].total_tasks++;
 
       // Check if task is completed
-      // Generic completion check: has submission_date AND (if delegation) is approved
-      const statusLower = (task.status || "").toLowerCase();
-      const isCompleted = (task.submission_date !== null) ||
+      // Check if task is completed
+      const statusLower = (task.work_status || task.status || "").toLowerCase();
+      const subDateStr = task.submission_date || task.completed_at || task.manager_approval_date || task.admin_approval_date;
+      const isCompleted = (subDateStr !== null && subDateStr !== undefined && subDateStr !== '') ||
         (statusLower === 'yes') ||
         (statusLower.includes('done')) ||
         (statusLower.includes('completed')) ||
         (statusLower.includes('approved')) ||
+        (statusLower.includes('submitted')) ||
         (dashboardType === 'delegation' && task.admin_done === true);
 
       if (isCompleted) {
@@ -721,26 +715,37 @@ export const fetchStaffTasksDataApi = async (
 
         if (dashboardType === 'work') {
           let deadline = null;
-          const endDateTimeStr = task.task_assignments?.end_datetime;
+          const endDateTimeStr = task.end_time || task.end_datetime || task.task_assignments?.end_datetime;
           if (task.current_date) {
             if (endDateTimeStr && endDateTimeStr.includes('T')) {
               const timeAndOffset = endDateTimeStr.split('T')[1];
               deadline = new Date(`${task.current_date}T${timeAndOffset}`);
+            } else if (endDateTimeStr && endDateTimeStr.includes(':')) {
+              deadline = new Date(`${task.current_date}T${endDateTimeStr}`);
             } else {
               deadline = new Date(`${task.current_date}T23:59:59+05:30`);
             }
           }
-          if (task.submission_date && deadline && !isNaN(deadline.getTime())) {
-            const submissionDate = new Date(task.submission_date);
+
+          if (subDateStr && deadline && !isNaN(deadline.getTime())) {
+            const submissionDate = new Date(subDateStr);
             if (submissionDate <= deadline) {
               summary[key].total_done_on_time++;
+            } else {
+              const subDateOnly = submissionDate.toISOString().split('T')[0];
+              if (subDateOnly <= task.current_date) {
+                summary[key].total_done_on_time++;
+              }
             }
+          } else {
+            // If task is completed and no timestamp disqualifies it, count as on-time
+            summary[key].total_done_on_time++;
           }
         } else {
           // Check if done on time - use planned_date as the definitive deadline
           const dueDateStr = task.planned_date || task.current_date || task.task_start_date || task.created_at;
-          if (task.submission_date && dueDateStr) {
-            const submissionDate = new Date(task.submission_date);
+          if (subDateStr && dueDateStr) {
+            const submissionDate = new Date(subDateStr);
             const dueDate = new Date(dueDateStr);
 
             // Compare dates only (ignore time)
@@ -751,6 +756,8 @@ export const fetchStaffTasksDataApi = async (
             if (submissionDateOnly <= dueDateOnly) {
               summary[key].total_done_on_time++;
             }
+          } else {
+            summary[key].total_done_on_time++;
           }
         }
       }
@@ -1186,16 +1193,7 @@ export const fetchChecklistDataByDateRangeApi = async (
   dashboardType = 'checklist'
 ) => {
   try {
-    console.log('Fetching checklist data by date range:', {
-      startDate,
-      endDate,
-      staffFilter,
-      shopFilter,
-      page,
-      limit,
-      statusFilter,
-      dashboardType
-    });
+
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -1276,7 +1274,7 @@ export const fetchChecklistDataByDateRangeApi = async (
       throw error;
     }
 
-    console.log(`✅ Fetched ${data?.length || 0} records for date range ${startDate} to ${endDate}`);
+
     return (data || []).map(task => ({
       ...task,
       id: task.id || task.task_id
@@ -1372,7 +1370,7 @@ export const getChecklistDateRangeCountApi = async (
       throw error;
     }
 
-    console.log('🔢 Date range count result:', { startDate, endDate, count, statusFilter });
+
     return count || 0;
 
   } catch (error) {
@@ -1392,9 +1390,7 @@ export const getChecklistDateRangeStatsApi = async (
     const role = localStorage.getItem('role');
     const username = localStorage.getItem('user-name');
 
-    console.log('📊 getChecklistDateRangeStatsApi called with:', {
-      startDate, endDate, staffFilter, shopFilter
-    });
+
 
     // OLD: const dateColumn = 'planned_date'; // checklist specific
     const dateColumn = 'task_start_date'; // Checklist uses task_start_date column
@@ -1445,7 +1441,7 @@ export const getChecklistDateRangeStatsApi = async (
       throw totalError;
     }
 
-    console.log('📊 Total tasks in date range:', totalTasks);
+
 
     // Get completed tasks count
     let completedQuery = supabase
@@ -1483,7 +1479,7 @@ export const getChecklistDateRangeStatsApi = async (
       throw completedError;
     }
 
-    console.log('📊 Completed tasks in date range:', completedTasks);
+
 
     // Calculate pending tasks (total - completed)
     const pendingTasks = totalTasks - completedTasks;
@@ -1525,7 +1521,7 @@ export const getChecklistDateRangeStatsApi = async (
       throw overdueError;
     }
 
-    console.log('📊 Overdue tasks in date range:', overdueTasks);
+
 
     const completionRate = totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) : 0;
 
@@ -1537,7 +1533,7 @@ export const getChecklistDateRangeStatsApi = async (
       completionRate: parseFloat(completionRate),
     };
 
-    console.log('📊 Final stats for date range:', result);
+
     return result;
 
   } catch (error) {
@@ -1660,7 +1656,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
       dashboardType === 'repair' ? 'repair_tasks' :
         dashboardType === 'ea' ? 'ea_tasks' :
-          dashboardType === 'work' ? 'work_task' : dashboardType;
+          dashboardType === 'work' ? 'work_task_new' : dashboardType;
 
     let query = supabase
       .from(tableName)
@@ -1775,7 +1771,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
           dashboardType === 'ea' ? 'ea_tasks' :
-            dashboardType === 'work' ? 'work_task' : dashboardType;
+            dashboardType === 'work' ? 'work_task_new' : dashboardType;
 
       query = supabase
         .from(tableName)
@@ -1784,9 +1780,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
         .lte(dateColumn, (dashboardType === 'work' ? (endDate || defaultEnd.split('T')[0]) : end));
 
       if (dashboardType === 'work') {
-        // Very inclusive check for Work tasks to ensure nothing is missed
-        query = query.or('status.in.("Done","SUBMITTED","done","APPROVED","Approved","submitted"),admin_done.eq.true,submission_date.not.is.null')
-          .not('status', 'ilike', 'REJECTED');
+        query = query.or('work_status.in.(Done,SUBMITTED,done,APPROVED,Approved,submitted,MANAGER_APPROVED,ADMIN_APPROVED),submission_date.not.is.null');
       } else if (dashboardType === 'ea') {
         // EA doesn't have submission_date, use status/admin_done
         query = query.or('status.ilike.done,admin_done.eq.true');
@@ -1900,7 +1894,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
           dashboardType === 'ea' ? 'ea_tasks' :
-            dashboardType === 'work' ? 'work_task' : dashboardType;
+            dashboardType === 'work' ? 'work_task_new' : dashboardType;
 
       query = supabase
         .from(tableName)
@@ -1908,6 +1902,9 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
 
       if (dashboardType === 'ea') {
         query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+      } else if (dashboardType === 'work') {
+        query = query.is('submission_date', null)
+          .not('work_status', 'in', '(Done,SUBMITTED,done,APPROVED,Approved,submitted,MANAGER_APPROVED,ADMIN_APPROVED)');
       } else {
         query = query.is('submission_date', null);
       }
