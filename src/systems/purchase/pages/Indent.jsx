@@ -743,15 +743,6 @@ const Indent = () => {
 
       const uniquePoIndentIds = [...new Set(poIndentIds.filter(Boolean))];
 
-      // 3. Delete matching purchase orders if any exist
-      if (uniquePoIndentIds.length > 0) {
-        const { error: poError } = await supabase
-          .from('purchase_purchase_orders')
-          .delete()
-          .in('indent_id', uniquePoIndentIds);
-        if (poError) throw poError;
-      }
-
       // 4. Delete approved indent items
       const { error: delApprovedError } = await supabase
         .from('purchase_approved_indent_items')
@@ -846,39 +837,31 @@ const Indent = () => {
 
           const remaining = (otherItems || []).filter(i => i.id !== itemId);
 
-          if (remaining.length === 0) {
-            const { error: delPoError } = await supabase
-              .from('purchase_purchase_orders')
-              .delete()
-              .eq('id', po.id);
-            if (delPoError) throw delPoError;
+          const updatedReceivedItems = { ...(po.received_items || {}) };
+          delete updatedReceivedItems[itemId];
+
+          const orderBox = itemData.order_box !== null ? parseFloat(itemData.order_box) : 0;
+          const orderQty = itemData.order_qty !== null ? parseFloat(itemData.order_qty) : 0;
+          const qtyType = orderBox >= 0.90 ? "Box" : "Bottles";
+
+          let newTotalQty = po.total_order_qty || 0;
+          let newTotalBox = po.total_order_box || 0;
+
+          if (qtyType === "Box") {
+            newTotalBox = Math.max(0, newTotalBox - Math.round(orderBox));
           } else {
-            const updatedReceivedItems = { ...(po.received_items || {}) };
-            delete updatedReceivedItems[itemId];
-
-            const orderBox = itemData.order_box !== null ? parseFloat(itemData.order_box) : 0;
-            const orderQty = itemData.order_qty !== null ? parseFloat(itemData.order_qty) : 0;
-            const qtyType = orderBox >= 0.90 ? "Box" : "Bottles";
-
-            let newTotalQty = po.total_order_qty || 0;
-            let newTotalBox = po.total_order_box || 0;
-
-            if (qtyType === "Box") {
-              newTotalBox = Math.max(0, newTotalBox - Math.round(orderBox));
-            } else {
-              newTotalQty = Math.max(0, newTotalQty - Math.ceil(orderQty));
-            }
-
-            const { error: updPoError } = await supabase
-              .from('purchase_purchase_orders')
-              .update({
-                received_items: updatedReceivedItems,
-                total_order_qty: newTotalQty,
-                total_order_box: newTotalBox
-              })
-              .eq('id', po.id);
-            if (updPoError) throw updPoError;
+            newTotalQty = Math.max(0, newTotalQty - Math.ceil(orderQty));
           }
+
+          const { error: updPoError } = await supabase
+            .from('purchase_purchase_orders')
+            .update({
+              received_items: updatedReceivedItems,
+              total_order_qty: newTotalQty,
+              total_order_box: newTotalBox
+            })
+            .eq('id', po.id);
+          if (updPoError) throw updPoError;
         }
       }
 

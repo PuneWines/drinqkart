@@ -47,9 +47,13 @@ const useShopStore = create((set, get) => ({
   getShopRecord: (shopName) => {
     if (!shopName || shopName === "All") return null;
     const details = get().shopsDetails || [];
-    return details.find(
-      s => (s.shop_name || "").trim().toUpperCase() === shopName.trim().toUpperCase()
-    ) || null;
+    const target = String(shopName).trim().toUpperCase();
+    return details.find(s => {
+      const sn = String(s.shop_name || "").trim().toUpperCase();
+      const fn = String(s.full_name || "").trim().toUpperCase();
+      return (sn && (sn === target || target.includes(sn) || sn.includes(target))) ||
+             (fn && (fn === target || target.includes(fn) || fn.includes(target)));
+    }) || null;
   },
   getShopFullName: (shopName) => {
     const rec = get().getShopRecord(shopName);
