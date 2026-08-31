@@ -431,11 +431,6 @@ const ReceiverPortal = () => {
               const isRejected = po.receiver_status === "no";
               const items = poItems[po.id] || [];
               const isLoadingPoItems = loadingItems[po.id];
-              const isLocked = po.transporter_status !== "yes";
-
-              // Totals
-              const totalQty = po.total_order_qty || 0;
-              const totalBox = po.total_order_box || 0;
 
               const getShopName = () => {
                 if (po.shop_name) return po.shop_name;
@@ -450,6 +445,14 @@ const ReceiverPortal = () => {
                 return list?.[0]?.shopName || list?.[0]?.shop_name || "Unknown";
               };
               const shopName = getShopName();
+
+              // Bypass lock for KUNAL ULWE shop
+              const isKunalShop = (shopName || "").trim().toUpperCase().includes("KUNAL");
+              const isLocked = isKunalShop ? false : po.transporter_status !== "yes";
+
+              // Totals
+              const totalQty = po.total_order_qty || 0;
+              const totalBox = po.total_order_box || 0;
 
               return (
                 <div key={po.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">

@@ -4,20 +4,24 @@ export const fetchNextPoNumber = async () => {
   const yr = new Date().getFullYear();
   const { data, error } = await supabase
     .from("purchase_purchase_orders")
-    .select("po_number")
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .select("po_number");
 
-  let nextSeq = 1;
-  if (!error && data && data.length > 0 && data[0].po_number) {
-    const parts = data[0].po_number.split("-");
-    if (parts.length > 1) {
-      const lastSeq = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(lastSeq)) {
-        nextSeq = lastSeq + 1;
+  let maxSeq = 0;
+  if (!error && data && data.length > 0) {
+    data.forEach((row) => {
+      if (row.po_number) {
+        const parts = row.po_number.split("-");
+        if (parts.length > 1) {
+          const num = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(num) && num > maxSeq) {
+            maxSeq = num;
+          }
+        }
       }
-    }
+    });
   }
+
+  const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;
   return `${yr}/PO-${String(nextSeq).padStart(2, "0")}`;
 };
 
