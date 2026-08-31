@@ -568,6 +568,10 @@ const PurchaseOrder = () => {
     isSubmittingRef.current = true;
 
     try {
+      // Atomically fetch fresh highest PO number from DB to guarantee unique sequence
+      const freshPoNumber = await fetchNextPoNumber();
+      setNextPoNumber(freshPoNumber);
+
       // Use Vendor party name for PDF file names
       const baseFilename = activeParty ? `PO_${activeParty.replace(/\s+/g, '_')}` : "Purchase_Order";
 
@@ -576,7 +580,7 @@ const PurchaseOrder = () => {
         <TraderPDF
           partyName={activeParty}
           items={itemsForActiveParty}
-          poNumber={nextPoNumber || "Loading..."}
+          poNumber={freshPoNumber}
           poDate={poDate}
           vendorDetails={activeVendorDetails}
           companyInfo={activeCompany}
@@ -587,7 +591,7 @@ const PurchaseOrder = () => {
         <ReceiverPDF
           partyName={activeParty}
           items={itemsForActiveParty}
-          poNumber={nextPoNumber || "Loading..."}
+          poNumber={freshPoNumber}
           poDate={poDate}
           vendorDetails={activeVendorDetails}
           companyInfo={activeCompany}
@@ -611,7 +615,7 @@ const PurchaseOrder = () => {
 
       // --- Insert Database Record ---
       const validIndentItem = itemsForActiveParty.find(item => item.unique_indent_id || item.indent_id);
-      const fallbackManualIndentId = `MANUAL-${nextPoNumber || Date.now()}`;
+      const fallbackManualIndentId = `MANUAL-${freshPoNumber}`;
       const currentIndentId = poMode === "manual"
         ? fallbackManualIndentId
         : (validIndentItem ? (validIndentItem.unique_indent_id || validIndentItem.indent_id) : fallbackManualIndentId);
@@ -659,7 +663,7 @@ const PurchaseOrder = () => {
       totalPoQty = Math.round(totalPoQty);
 
       const insertedData = await insertPurchaseOrder({
-        po_number: nextPoNumber,
+        po_number: freshPoNumber,
         vendor_name: activeParty,
         trader_pdf_url: traderUrl,
         receiver_pdf_url: receiverUrl,
@@ -743,7 +747,7 @@ const PurchaseOrder = () => {
           sendPOConfirmationMessage(
             formattedPhone,
             activeParty,
-            nextPoNumber,
+            freshPoNumber,
             vendorPortalLink,
             activeCompany?.name || COMPANY.name,
             formattedPoTotal,
@@ -760,7 +764,7 @@ const PurchaseOrder = () => {
         whatsappPromises.push(
           sendTransporterConfirmationMessage(
             formattedPhone,
-            nextPoNumber,
+            freshPoNumber,
             transporterPortalLink,
             activeCompany?.name || COMPANY.name,
             activeParty,
@@ -777,7 +781,7 @@ const PurchaseOrder = () => {
         whatsappPromises.push(
           sendReceiverConfirmationMessage(
             formattedPhone,
-            nextPoNumber,
+            freshPoNumber,
             receiverPortalLink,
             activeCompany?.name || COMPANY.name,
             activeParty,

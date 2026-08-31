@@ -25,9 +25,17 @@ import { useRealtimeSync } from "../hooks/useRealtimeSync";
 const ROWS_PER_PAGE = 20;
 
 /* ── Helpers ─────────────────────────────────────────────────── */
+const parseDate = (isoString) => {
+  if (!isoString) return null;
+  if (typeof isoString === "string" && !isoString.endsWith("Z") && !isoString.includes("+")) {
+    return new Date(isoString.replace(" ", "T") + "Z");
+  }
+  return new Date(isoString);
+};
+
 const formatDate = (isoString) => {
-  if (!isoString) return "—";
-  const d = new Date(isoString);
+  const d = parseDate(isoString);
+  if (!d || isNaN(d)) return "—";
   return d.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -36,14 +44,15 @@ const formatDate = (isoString) => {
 };
 
 const formatDateTime = (isoString) => {
-  if (!isoString) return "—";
-  const d = new Date(isoString);
+  const d = parseDate(isoString);
+  if (!d || isNaN(d)) return "—";
   return d.toLocaleString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
   });
 };
 
