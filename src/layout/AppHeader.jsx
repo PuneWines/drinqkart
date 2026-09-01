@@ -61,9 +61,13 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
             <HelpCircle size={16} />
           </button>
 
-          <div className="w-7 h-7 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-[10px] uppercase border border-[#C9A84C]/40">
+          <Link 
+            to="/systems/profile" 
+            title="View Profile"
+            className="w-7 h-7 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-[10px] uppercase border border-[#C9A84C]/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+          >
             {userName.slice(0, 2)}
-          </div>
+          </Link>
         </div>
       </div>
 
@@ -81,7 +85,7 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
           </div>
         </Link>
 
-        {/* Right Header: Help Center Button + Welcome User + Logout */}
+        {/* Right Header: Help Center Button + Welcome User (Clickable Profile) + Logout */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setIsHelpModalOpen(true)}
@@ -92,13 +96,18 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
             <span>Help Center</span>
           </button>
 
-          <div className="flex items-center gap-2.5 text-xs text-[#2C1D11]">
-            <span className="text-gray-500 font-sans">Welcome,</span>
-            <span className="font-semibold capitalize font-sans">{userName}</span>
-            <div className="w-8 h-8 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-xs uppercase shadow-sm border border-[#C9A84C]/40">
+          {/* Clickable Profile Avatar & User Welcome */}
+          <Link 
+            to="/systems/profile" 
+            title="View Profile"
+            className="flex items-center gap-2.5 text-xs text-[#2C1D11] hover:opacity-85 transition-opacity cursor-pointer group"
+          >
+            <span className="text-gray-500 font-sans group-hover:text-gray-700">Welcome,</span>
+            <span className="font-semibold capitalize font-sans group-hover:underline">{userName}</span>
+            <div className="w-8 h-8 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-xs uppercase shadow-sm border border-[#C9A84C]/40 group-hover:scale-105 transition-transform">
               {userName.slice(0, 2)}
             </div>
-          </div>
+          </Link>
 
           <div className="h-5 w-px bg-gray-200" />
 
@@ -118,7 +127,7 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
         onClose={() => setIsHelpModalOpen(false)}
       />
 
-      {/* Desktop Main Top Navigation Tabs Bar (>= 768px): Unchanged desktop navigation bar */}
+      {/* Desktop Main Top Navigation Tabs Bar (>= 768px) */}
       <nav
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         className="hidden md:flex bg-[#C9A84C] text-[#1c120c] px-2 items-center shadow-inner border-t border-[#8C6D23]/30 overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0"
@@ -146,17 +155,6 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
               </Link>
             );
           })}
-
-          <Link
-            to="/systems/profile"
-            className={`px-4 py-2.5 text-xs font-bold tracking-wider uppercase whitespace-nowrap transition-all duration-150 shrink-0 cursor-pointer border-b-2 ${
-              location.pathname === '/systems/profile'
-                ? 'bg-[#2C1D11] text-[#C9A84C] border-[#1c120c] font-extrabold shadow-md transform scale-[1.01]'
-                : 'text-[#1c120c] hover:bg-black/10 border-transparent'
-            }`}
-          >
-            <span>Profile</span>
-          </Link>
         </div>
       </nav>
     </header>
