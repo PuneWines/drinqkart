@@ -98,8 +98,6 @@ export const systems = [
       { label: 'Trader', to: '/systems/purchase/trader-verification' },
       { label: 'Transporter', to: '/systems/purchase/transporter-verification' },
       { label: 'Receiving', to: '/systems/purchase/receiving' },
-      { type: 'header', label: 'ADMIN' },
-      { label: 'Settings', to: '/systems/purchase/settings' },
     ]
   },
   {
