@@ -4,7 +4,7 @@ import {
   User, Mail, Phone, Shield, Store, Calendar, Clock, 
   CheckCircle2, XCircle, AlertCircle, ClipboardList, 
   Users, Coins, ShoppingCart, ShieldCheck, MessageSquare,
-  FileText, Activity, ArrowRight, Check
+  FileText, Activity, ArrowRight, Check, Pencil, Camera, Upload, X, Loader2
 } from 'lucide-react';
 
 const SYSTEM_DETAILS = {
@@ -12,47 +12,59 @@ const SYSTEM_DETAILS = {
     name: 'Checklist Delegation', 
     desc: 'Manage checklists, delegations, and operational tasks.', 
     icon: ClipboardList,
-    color: 'text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100/30' 
+    color: 'text-slate-800 bg-slate-100/80 border-slate-200 hover:bg-slate-200/60' 
   },
   'hr': { 
     name: 'HR System', 
     desc: 'Employee registry, leaves, payroll, and attendance.', 
     icon: Users,
-    color: 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100/30' 
+    color: 'text-slate-800 bg-slate-100/80 border-slate-200 hover:bg-slate-200/60' 
   },
   'inventory': { 
     name: 'Snacks Inventory', 
     desc: 'Daily logs, form entry, and ledger sheets.', 
     icon: Store,
-    color: 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/30' 
+    color: 'text-emerald-800 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/60' 
   },
   'petty-cash': { 
     name: 'Petty Cash', 
     desc: 'Manage expense tally and counter balances.', 
     icon: Coins,
-    color: 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100/30' 
+    color: 'text-amber-800 bg-amber-50 border-amber-200 hover:bg-amber-100/60' 
   },
   'purchase': { 
     name: 'Purchase System', 
     desc: 'Indent procurement, approvals, POs, and receiving.', 
     icon: ShoppingCart,
-    color: 'text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100/30' 
+    color: 'text-slate-800 bg-slate-100/80 border-slate-200 hover:bg-slate-200/60' 
   },
   'master-setting': { 
     name: 'Master Settings', 
     desc: 'System configuration, shop and counter registries.', 
     icon: ShieldCheck,
-    color: 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100/30' 
+    color: 'text-slate-800 bg-slate-100/80 border-slate-200 hover:bg-slate-200/60' 
   },
   'whatsapp': { 
     name: 'WhatsApp Broadcast', 
     desc: 'Compose and dispatch bulk campaigns.', 
     icon: MessageSquare,
-    color: 'text-green-600 bg-green-50 border-green-200 hover:bg-green-100/30' 
+    color: 'text-emerald-800 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/60' 
   }
 };
 
 // Helper to parse double-stringified JSON fields from localStorage robustly
+const getSystemInfo = (sysKey) => {
+  if (SYSTEM_DETAILS[sysKey]) return SYSTEM_DETAILS[sysKey];
+  const formattedName = sysKey ? sysKey.split(/[-_.]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'System';
+  return {
+    name: formattedName,
+    desc: `${formattedName} Module`,
+    icon: Shield,
+    color: 'text-slate-800 bg-slate-100/80 border-slate-200 hover:bg-slate-200/60'
+  };
+};
+
+// Helper to parse double-stringified JSON or array/comma-separated list fields robustly
 const parseAccessList = (raw) => {
   if (!raw) return [];
   let current = raw;
@@ -70,6 +82,23 @@ const parseAccessList = (raw) => {
   return [];
 };
 
+const formatList = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.flatMap(item => typeof item === 'string' ? item.split(',').map(s => s.trim()) : String(item)).filter(Boolean);
+  }
+  if (typeof raw === 'string') {
+    if (raw.startsWith('[') && raw.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(raw);
+        return formatList(parsed);
+      } catch (e) {}
+    }
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+};
+
 export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [permissions, setPermissions] = useState([]);
@@ -77,6 +106,20 @@ export default function ProfilePage() {
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // States for unified task filters
+  const [taskSystemFilter, setTaskSystemFilter] = useState('all'); // 'all' | 'Checklist' | 'Delegation' | 'Work'
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // 'all' | 'Today' | 'Overdue' | 'Upcoming'
+  const [employeeFilter, setEmployeeFilter] = useState('all');
+  const [allEmployeesList, setAllEmployeesList] = useState([]);
+
+  // States for profile picture upload modal
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
+  const [imageUploadSuccess, setImageUploadSuccess] = useState(false);
 
   // States for attendance stats calculation
   const [attendanceStats, setAttendanceStats] = useState({
@@ -88,88 +131,202 @@ export default function ProfilePage() {
     percentage: 100
   });
 
+  const extractSystemsAccess = (accessList) => {
+    const list = parseAccessList(accessList);
+    const extractedSystems = [...new Set(list.map(item => {
+      if (typeof item !== 'string') return '';
+      // Take all the first words before dot (e.g., "checklist.All Tasks.modify" -> "checklist")
+      const firstWord = item.split('.')[0].toLowerCase().trim();
+      return firstWord;
+    }).filter(Boolean))];
+
+    setPermissions(extractedSystems);
+  };
+
+  const openImageModal = () => {
+    setSelectedFile(null);
+    setPreviewUrl(profile?.profileImage || '');
+    setImageUploadError('');
+    setImageUploadSuccess(false);
+    setIsImageModalOpen(true);
+  };
+
+  const closeImageModal = () => {
+    if (uploadingImage) return;
+    setIsImageModalOpen(false);
+    setSelectedFile(null);
+    setPreviewUrl('');
+    setImageUploadError('');
+    setImageUploadSuccess(false);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('Please select a valid image file (JPG, PNG, WEBP, etc.).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setImageUploadError('File size exceeds 5MB limit. Please select a smaller image.');
+      return;
+    }
+
+    setImageUploadError('');
+    setSelectedFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+  };
+
+  const handleUploadImage = async () => {
+    if (!selectedFile || !profile?.userName) return;
+
+    setUploadingImage(true);
+    setImageUploadError('');
+    setImageUploadSuccess(false);
+
+    try {
+      const fileExt = selectedFile.name.split('.').pop();
+      const sanitizedName = profile.userName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const fileName = `${sanitizedName}_${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      console.log(`[ProfilePage] Uploading image to bucket "profiles" with path: ${filePath}`);
+
+      // Upload image to Supabase Storage bucket "profiles"
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('profiles')
+        .upload(filePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadErr) {
+        console.error('Supabase storage upload error:', uploadErr);
+        throw new Error(uploadErr.message || 'Failed to upload profile picture to bucket "profiles". Please check if bucket "profiles" exists.');
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('profiles')
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData?.publicUrl;
+
+      if (!publicUrl) {
+        throw new Error('Failed to generate public URL for uploaded profile picture.');
+      }
+
+      console.log(`[ProfilePage] Profile image public URL generated: ${publicUrl}`);
+
+      // Update 'users' table in Supabase
+      const { error: dbErr } = await supabase
+        .from('users')
+        .update({ profile_image: publicUrl })
+        .or(`user_name.ilike.${profile.userName},username.ilike.${profile.userName},name.ilike.${profile.userName}`);
+
+      if (dbErr) {
+        console.warn('[ProfilePage] Database profile_image update notice:', dbErr.message);
+      }
+
+      // Update React state
+      setProfile(prev => ({ ...prev, profileImage: publicUrl }));
+
+      // Sync local storage keys
+      localStorage.setItem('profile_image', publicUrl);
+      
+      const userRaw = localStorage.getItem('user');
+      if (userRaw) {
+        try {
+          const parsed = JSON.parse(userRaw);
+          parsed.profile_image = publicUrl;
+          localStorage.setItem('user', JSON.stringify(parsed));
+        } catch(e) {}
+      }
+
+      const drinqRaw = localStorage.getItem('drinqkart_user');
+      if (drinqRaw) {
+        try {
+          const parsed = JSON.parse(drinqRaw);
+          parsed.profile_image = publicUrl;
+          localStorage.setItem('drinqkart_user', JSON.stringify(parsed));
+        } catch(e) {}
+      }
+
+      setImageUploadSuccess(true);
+      setTimeout(() => {
+        closeImageModal();
+      }, 1200);
+
+    } catch (err) {
+      console.error('Error uploading profile picture:', err);
+      setImageUploadError(err.message || 'An error occurred while uploading profile picture.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   useEffect(() => {
     try {
-      console.log('🔍 [ProfilePage] Diagnostic info. LocalStorage dump:');
-      console.log({
-        'user-name': localStorage.getItem('user-name'),
-        'user_name': localStorage.getItem('user_name'),
-        'currentUserName': localStorage.getItem('currentUserName'),
-        'drinqkart_user': localStorage.getItem('drinqkart_user'),
-        'master_user_system_page_access': localStorage.getItem('master_user_system_page_access')
-      });
-
-      // 1. Get user profile details from localStorage (using multi-key fallback parsing)
-      const userName = localStorage.getItem('user_name') || 
-                       localStorage.getItem('user-name') || 
-                       localStorage.getItem('currentUserName') || 
-                       'Guest';
-
-      const email = localStorage.getItem('email_id') || '';
-      const phone = localStorage.getItem('number') || '';
-      const designation = localStorage.getItem('designation') || '';
-      const role = localStorage.getItem('role') || localStorage.getItem('currentUserRole') || 'User';
-      const shopAccess = localStorage.getItem('shop_name') || localStorage.getItem('user_access') || 'N/A';
-      const profileImage = localStorage.getItem('profile_image') || '';
-      const employeeId = localStorage.getItem('user-id') || 'N/A';
-
-      let emailVal = email;
-      let phoneVal = phone;
-      let designationVal = designation;
-      let employeeIdVal = employeeId;
-      let profileImageVal = profileImage;
-
-      // Try parsing drinqkart_user object
-      const du = localStorage.getItem('drinqkart_user');
-      if (du) {
+      // 1. Primary parsing from localStorage.user as per logged-in specification
+      let localUser = null;
+      const userRaw = localStorage.getItem('user');
+      if (userRaw) {
         try {
-          const parsed = JSON.parse(du);
-          if (parsed) {
-            if (!emailVal || emailVal === 'N/A') emailVal = parsed.email_id || '';
-            if (!phoneVal || phoneVal === 'N/A') phoneVal = parsed.number || '';
-            if (!designationVal || designationVal === 'Staff') designationVal = parsed.designation || '';
-            if (!employeeIdVal || employeeIdVal === 'N/A') employeeIdVal = parsed.employee_id || parsed.id?.toString() || '';
-            if (!profileImageVal) profileImageVal = parsed.profile_image || '';
-          }
-        } catch (e) {}
+          localUser = JSON.parse(userRaw);
+        } catch (e) {
+          console.warn('Could not parse localStorage.user:', e);
+        }
       }
 
-      // Try parsing currentUser object
-      const cu = localStorage.getItem('currentUser');
-      if (cu) {
-        try {
-          const parsed = JSON.parse(cu);
-          if (parsed) {
-            if (!emailVal || emailVal === 'N/A') emailVal = parsed.email || '';
-            if (!phoneVal || phoneVal === 'N/A') phoneVal = parsed.phone || '';
-          }
-        } catch (e) {}
+      // Fallback parsers if localStorage.user is not directly present
+      if (!localUser) {
+        const drinqUserRaw = localStorage.getItem('drinqkart_user');
+        if (drinqUserRaw) {
+          try { localUser = JSON.parse(drinqUserRaw); } catch (e) {}
+        }
       }
+      if (!localUser) {
+        const cuRaw = localStorage.getItem('currentUser');
+        if (cuRaw) {
+          try { localUser = JSON.parse(cuRaw); } catch (e) {}
+        }
+      }
+
+      const userName = localUser?.username || localUser?.name || localUser?.user_name ||
+                       localStorage.getItem('user_name') || localStorage.getItem('user-name') || 
+                       localStorage.getItem('currentUserName') || 'Guest';
+
+      const email = localUser?.email_id || localUser?.email || localStorage.getItem('email_id') || 'N/A';
+      const number = localUser?.number || localUser?.phone || localStorage.getItem('number') || 'N/A';
+      const role = localUser?.role || localStorage.getItem('role') || localStorage.getItem('currentUserRole') || 'User';
+      const employeeId = localUser?.employee_id || localUser?.id?.toString() || localStorage.getItem('user-id') || 'N/A';
+      const profileImage = localUser?.profile_image || localStorage.getItem('profile_image') || '';
+      
+      const shopAccess = localUser?.shops || localUser?.shop_name || localUser?.user_access || localStorage.getItem('shop_name') || localStorage.getItem('user_access') || 'N/A';
+      const counterAccess = localUser?.counter_access || localUser?.counterAccess || parseAccessList(localStorage.getItem('counter_access'));
+      
+      const accessStrings = localUser?.master_user_system_page_access || parseAccessList(localStorage.getItem('master_user_system_page_access'));
 
       const userProfile = { 
         userName, 
-        email: emailVal || 'N/A', 
-        phone: phoneVal || 'N/A', 
-        designation: designationVal || 'Staff', 
+        email, 
+        number, 
         role, 
         shopAccess, 
-        profileImage: profileImageVal, 
-        employeeId: employeeIdVal 
+        counterAccess,
+        profileImage, 
+        employeeId,
+        accessStrings
       };
       setProfile(userProfile);
 
-      // Parse system permissions robustly to prevent runtime .map type errors
-      const masterPermissions = parseAccessList(localStorage.getItem('master_user_system_page_access'));
-      
-      const extractedSystems = [...new Set(masterPermissions.map(item => {
-        if (typeof item !== 'string') return '';
-        const systemKey = item.split('.')[0].toLowerCase().trim();
-        return systemKey;
-      }).filter(s => !!SYSTEM_DETAILS[s]))];
-      
-      setPermissions(extractedSystems);
+      // Extract systems permissions (first words of access strings)
+      extractSystemsAccess(accessStrings);
 
-      // Fetch database information
+      // Fetch database information matching logged in user name
       fetchDatabaseData(userName);
     } catch (e) {
       console.error('Error loading profile from localStorage:', e);
@@ -181,88 +338,214 @@ export default function ProfilePage() {
   const fetchDatabaseData = async (userName) => {
     setLoading(true);
     try {
-      console.log(`[ProfilePage] Querying Supabase for user: "${userName}"`);
-      // Fetch checklist, delegation, maintenance, work tasks, and attendance logs matching the user
-      const [checklistRes, delegationRes, maintenanceRes, workRes, attendanceRes] = await Promise.all([
-        supabase.from('checklist').select('*').eq('name', userName).is('submission_date', null),
-        supabase.from('delegation').select('*').eq('name', userName).is('submission_date', null),
-        supabase.from('maintenance_tasks').select('*').eq('name', userName).is('submission_date', null),
-        supabase.from('task_assignments').select('*, master_work_tasks(*, shop(shop_name))').ilike('employee_name', `%${userName}%`),
-        supabase.from('hr_management_attendance_logs').select('*').ilike('employee_name', userName).order('attendance_date', { ascending: false })
+      const userRaw = localStorage.getItem('user');
+      let localRole = 'User';
+      if (userRaw) {
+        try { localRole = JSON.parse(userRaw)?.role || localRole; } catch (e) {}
+      }
+      const currentRole = (profile?.role || localRole || localStorage.getItem('role') || 'User').toLowerCase();
+      const isAdmin = currentRole === 'admin' || currentRole === 'masteradmin' || userName.toLowerCase() === 'admin' || userName.toLowerCase() === 'masteradmin';
+
+      // 1. Fetch Users List if Admin to populate employee filter dropdown
+      if (isAdmin) {
+        supabase.from('users').select('user_name, name').then(({ data: uData }) => {
+          if (uData) {
+            const list = [...new Set(uData.map(u => u.user_name || u.name).filter(Boolean))];
+            setAllEmployeesList(list);
+          }
+        });
+      }
+
+      // Local today date helpers
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      // Build database queries
+      let userQuery = supabase
+        .from('users')
+        .select('*')
+        .or(`user_name.ilike.${userName},username.ilike.${userName},name.ilike.${userName}`)
+        .maybeSingle();
+
+      // Checklist tasks query: Admin sees all, User sees assigned
+      let checklistQuery = supabase.from('checklist').select('*').is('submission_date', null);
+      if (!isAdmin) {
+        checklistQuery = checklistQuery.or(`name.ilike.${userName},given_by.ilike.${userName}`);
+      }
+
+      // Delegation tasks query: Admin sees all, User sees assigned
+      let delegationQuery = supabase.from('delegation').select('*').is('submission_date', null);
+      if (!isAdmin) {
+        delegationQuery = delegationQuery.or(`name.ilike.${userName},assigned_person.ilike.${userName}`);
+      }
+
+      // Work tasks query
+      let workQuery = supabase.from('task_assignments').select('*, master_work_tasks(*, shop(shop_name))');
+      if (!isAdmin) {
+        workQuery = workQuery.ilike('employee_name', `%${userName}%`);
+      }
+
+      // Attendance logs query
+      let attendanceQuery = supabase.from('hr_management_attendance_logs').select('*').order('attendance_date', { ascending: false });
+      if (!isAdmin) {
+        attendanceQuery = attendanceQuery.ilike('employee_name', userName);
+      }
+
+      const [userDbRes, checklistRes, delegationRes, workRes, attendanceRes] = await Promise.all([
+        userQuery,
+        checklistQuery,
+        delegationQuery,
+        workQuery,
+        attendanceQuery
       ]);
 
-      console.log('Checklist data count:', checklistRes.data?.length || 0);
-      console.log('Delegation data count:', delegationRes.data?.length || 0);
-      console.log('Maintenance data count:', maintenanceRes.data?.length || 0);
-      console.log('Work assignments count:', workRes.data?.length || 0);
-      console.log('Attendance logs count:', attendanceRes.data?.length || 0);
+      if (userDbRes?.data) {
+        const dbUser = userDbRes.data;
+        setProfile(prev => ({
+          ...prev,
+          userName: dbUser.user_name || dbUser.username || dbUser.name || prev?.userName,
+          email: dbUser.email_id || dbUser.email || prev?.email,
+          number: dbUser.number || dbUser.phone || dbUser.mobile || prev?.number,
+          role: dbUser.role || prev?.role,
+          employeeId: dbUser.employee_id || dbUser.emp_id || dbUser.id?.toString() || prev?.employeeId,
+          profileImage: dbUser.profile_image || dbUser.profile_pic || prev?.profileImage,
+          shopAccess: dbUser.shop_name || dbUser.user_access || dbUser.user_Access || prev?.shopAccess,
+          counterAccess: dbUser.counter_access || dbUser.counterAccess || prev?.counterAccess,
+          accessStrings: dbUser.master_user_system_page_access || prev?.accessStrings
+        }));
 
-      // Compile checklist tasks
-      const checklistTasks = (checklistRes.data || []).map(t => ({
-        id: `chk-${t.task_id || t.id}`,
-        type: 'Checklist',
-        description: t.task_description,
-        shop: t.shop_name || t.shop || 'N/A',
-        plannedDate: t.task_start_date || t.created_at,
-        status: t.submission_date ? (t.admin_done ? 'Approved' : 'Submitted') : 'Pending',
-        givenBy: t.given_by || 'N/A'
-      }));
+        if (dbUser.master_user_system_page_access) {
+          extractSystemsAccess(dbUser.master_user_system_page_access);
+        }
+      }
 
-      // Compile delegation tasks
-      const delegationTasks = (delegationRes.data || []).map(t => ({
-        id: `del-${t.task_id || t.id}`,
-        type: 'Delegation',
-        description: t.task_description,
-        shop: t.shop_name || t.shop || 'N/A',
-        plannedDate: t.task_start_date || t.created_at,
-        status: t.submission_date ? 'Submitted' : 'Pending',
-        givenBy: t.given_by || 'N/A'
-      }));
+      // Helper to check if a task date falls on TODAY
+      const isTaskForToday = (taskDateStr, isExtended, nextExtendStr) => {
+        const targetStr = (isExtended && nextExtendStr) ? nextExtendStr : taskDateStr;
+        if (!targetStr) return false;
 
-      // Compile maintenance tasks
-      const maintenanceTasks = (maintenanceRes.data || []).map(t => ({
-        id: `maint-${t.id}`,
-        type: 'Maintenance',
-        description: t.task_description || `${t.machine_name} - ${t.part_name}`,
-        shop: t.shop_name || 'N/A',
-        plannedDate: t.planned_date,
-        status: t.submission_date ? 'Submitted' : 'Pending',
-        givenBy: t.given_by || 'N/A'
-      }));
+        let taskDate;
+        if (typeof targetStr === 'string' && targetStr.includes('-') && !targetStr.includes('T') && !targetStr.includes(' ')) {
+          const parts = targetStr.split('-');
+          taskDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else if (typeof targetStr === 'string' && targetStr.includes('/')) {
+          const parts = targetStr.split(' ')[0].split('/');
+          if (parts.length === 3) {
+            taskDate = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          } else {
+            taskDate = new Date(targetStr);
+          }
+        } else {
+          taskDate = new Date(targetStr);
+        }
 
-      // Compile work assignments
-      const workTasks = (workRes.data || []).map(t => {
-        const master = t.master_work_tasks || {};
-        const shopName = master.shop?.shop_name || "N/A";
+        if (isNaN(taskDate.getTime())) return false;
+        taskDate.setHours(0, 0, 0, 0);
+
+        return taskDate.getTime() === todayStart.getTime();
+      };
+
+      // Compile Checklist Tasks for TODAY ONLY
+      const checklistTasks = (checklistRes.data || []).filter(t => {
+        const isExtended = t.status === 'extend' || t.status === 'extended';
+        const dateStr = t.planned_date || t.task_start_date;
+        return isTaskForToday(dateStr, isExtended, t.next_extend_date);
+      }).map(t => {
+        const isExtended = t.status === 'extend' || t.status === 'extended';
+        const dateStr = t.next_extend_date || t.planned_date || t.task_start_date;
+        const tagInfo = isExtended 
+          ? { tag: 'Extended', color: 'bg-purple-100 text-purple-800 border-purple-200' }
+          : { tag: 'Today', color: 'bg-amber-100 text-amber-900 border-amber-300' };
+
         return {
-          id: `work-${t.id}`,
-          type: 'Work',
-          description: master.task_name || 'N/A',
-          shop: shopName,
-          plannedDate: t.start_datetime,
-          status: t.status || 'Pending',
-          givenBy: t.manager_name || 'N/A'
+          id: `chk-${t.id || t.task_id}`,
+          systemType: 'Checklist',
+          description: t.task_description || t.name || 'Checklist Task',
+          shop: t.shop_name || t.shop || 'N/A',
+          assignedTo: t.name || 'N/A',
+          givenBy: t.given_by || 'N/A',
+          plannedDate: dateStr,
+          dynamicTag: tagInfo.tag,
+          tagColor: tagInfo.color
         };
       });
 
-      // Filter work assignments to exclude completed ones
-      const activeWorkTasks = workTasks.filter(t => t.status !== 'Completed');
+      // Compile Delegation Tasks for TODAY ONLY
+      const delegationTasks = (delegationRes.data || []).filter(t => {
+        const isExtended = t.status === 'extend' || t.status === 'extended';
+        const dateStr = t.planned_date || t.task_start_date;
+        return isTaskForToday(dateStr, isExtended, t.next_extend_date);
+      }).map(t => {
+        const isExtended = t.status === 'extend' || t.status === 'extended';
+        const dateStr = t.next_extend_date || t.planned_date || t.task_start_date;
+        const tagInfo = isExtended 
+          ? { tag: 'Extended', color: 'bg-purple-100 text-purple-800 border-purple-200' }
+          : { tag: 'Today', color: 'bg-amber-100 text-amber-900 border-amber-300' };
 
-      const compiledTasks = [
-        ...checklistTasks,
-        ...delegationTasks,
-        ...maintenanceTasks,
-        ...activeWorkTasks
-      ];
+        return {
+          id: `del-${t.id || t.task_id}`,
+          systemType: 'Delegation',
+          description: t.task_description || t.name || 'Delegation Task',
+          shop: t.shop_name || t.shop || 'N/A',
+          assignedTo: t.name || t.assigned_person || 'N/A',
+          givenBy: t.given_by || 'N/A',
+          plannedDate: dateStr,
+          dynamicTag: tagInfo.tag,
+          tagColor: tagInfo.color
+        };
+      });
 
-      // Sort tasks by plannedDate descending
-      compiledTasks.sort((a, b) => new Date(b.plannedDate) - new Date(a.plannedDate));
-      setTasks(compiledTasks);
+      // Compile Work Tasks for TODAY ONLY
+      const workTasks = (workRes.data || []).filter(t => {
+        const master = t.master_work_tasks || {};
+        const dateStr = t.current_date || t.start_datetime;
+        
+        // Exclude completed or approved items
+        if (t.status === 'Completed' || t.status === 'APPROVED' || t.status === 'SUBMITTED' || t.submission_date) {
+          return false;
+        }
+
+        // Must be scheduled for Today
+        return isTaskForToday(dateStr, false, null);
+      }).map(t => {
+        const master = t.master_work_tasks || {};
+        const shopName = master.shop?.shop_name || t.shop_name || 'N/A';
+        const dateStr = t.current_date || t.start_datetime || t.created_at;
+
+        // Calculate dynamic status for Work Tasks (ACTIVE vs UPCOMING)
+        let dynamicTag = 'ACTIVE';
+        let tagColor = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+
+        if (t.start_datetime) {
+          const startDate = new Date(t.start_datetime);
+          if (!isNaN(startDate.getTime()) && now < startDate) {
+            dynamicTag = 'UPCOMING';
+            tagColor = 'bg-indigo-100 text-indigo-900 border-indigo-200';
+          }
+        }
+
+        return {
+          id: `work-${t.id}`,
+          systemType: 'Work',
+          description: master.task_name || t.task_description || 'Work Task',
+          shop: shopName,
+          assignedTo: t.employee_name || t.assigned_to || 'N/A',
+          givenBy: t.manager_name || 'N/A',
+          plannedDate: dateStr,
+          dynamicTag,
+          tagColor
+        };
+      });
+
+      const allCompiled = [...checklistTasks, ...delegationTasks, ...workTasks];
+      allCompiled.sort((a, b) => new Date(b.plannedDate || 0) - new Date(a.plannedDate || 0));
+
+      setTasks(allCompiled);
 
       const personalAttendance = attendanceRes.data || [];
       setAttendanceLogs(personalAttendance);
 
-      // Compute user's personal attendance health statistics
       const totalLogs = personalAttendance.length;
       const presentCount = personalAttendance.filter(log => {
         const status = (log.status || '').toLowerCase();
@@ -271,10 +554,7 @@ export default function ProfilePage() {
       const absentCount = personalAttendance.filter(log => (log.status || '').toLowerCase() === 'absent').length;
       const lateCount = personalAttendance.filter(log => (log.status || '').toLowerCase() === 'late').length;
       const missCount = personalAttendance.filter(log => (log.status || '').toLowerCase() === 'miss').length;
-
-      const attendancePercentage = totalLogs > 0 
-        ? Math.round((presentCount / totalLogs) * 100) 
-        : 100;
+      const attendancePercentage = totalLogs > 0 ? Math.round((presentCount / totalLogs) * 100) : 100;
 
       setAttendanceStats({
         present: presentCount,
@@ -315,186 +595,400 @@ export default function ProfilePage() {
 
   if (!profile) return null;
 
+  const formattedShops = formatList(profile.shopAccess);
+  const formattedCounters = formatList(profile.counterAccess);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6 bg-[#f3f6fb] min-h-screen font-sans animate-in fade-in duration-300">
+    <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6 bg-[#f8fafc] min-h-screen font-sans animate-in fade-in duration-300">
       
-      {/* 1. Profile Info Card (Matching Header in Image) */}
-      <div className="bg-white rounded-[24px] shadow-xs border border-gray-100 overflow-hidden relative">
-        {/* Blue Banner background */}
-        <div className="h-16 bg-gradient-to-r from-blue-500 to-cyan-500 w-full" />
-        
-        {/* User main info overlapping */}
-        <div className="px-8 pb-5 pt-4 flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4 relative">
-          <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5">
+      {/* 1. Hero Profile Header */}
+      <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-slate-200/90 flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
+        {/* Avatar & Identity Info */}
+        <div className="flex flex-col md:flex-row items-center md:items-center gap-6 text-center md:text-left w-full">
+          {/* Profile Avatar */}
+          <div className="relative shrink-0 group">
             {profile.profileImage ? (
               <img 
                 src={profile.profileImage} 
                 alt={profile.userName} 
-                className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md -mt-12 shrink-0"
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-slate-200 shadow-md ring-2 ring-slate-100"
               />
             ) : (
-              <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-blue-500 to-cyan-500 text-white flex items-center justify-center font-black text-3xl shadow-lg border-4 border-white uppercase select-none -mt-12 shrink-0">
-                {profile.userName.slice(0, 2)}
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center font-black text-3xl sm:text-4xl shadow-md border-2 border-amber-400/40 select-none">
+                {profile.userName?.slice(0, 2) || 'U'}
               </div>
             )}
-            <div className="text-center sm:text-left">
-              <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">{profile.userName}</h1>
-              <p className="text-blue-600 font-bold text-xs mt-0.5">{profile.designation}</p>
-            </div>
+            <span className="absolute -top-1 -left-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" title="Active Account" />
+            
+            {/* Pencil edit icon button positioned at LOWER RIGHT corner as a perfect circle */}
+            <button
+              onClick={openImageModal}
+              type="button"
+              title="Edit Profile Picture"
+              style={{ borderRadius: '50%' }}
+              className="absolute -bottom-1 -right-1 w-8 h-8 !rounded-full bg-slate-900 text-amber-400 border-2 border-white shadow-lg hover:bg-slate-800 hover:scale-110 active:scale-95 transition-all flex items-center justify-center cursor-pointer z-10"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
           </div>
 
-          <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 text-[10px] font-black uppercase tracking-wider px-3.5 py-1 rounded-full shrink-0">
-            active
-          </span>
-        </div>
+          {/* Typography Hierarchy: Name at the VERY BEGINNING -> All information below it */}
+          <div className="flex flex-col gap-2 min-w-0 flex-1">
+            {/* 1. Name at the very beginning */}
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight leading-tight">
+              {profile.userName || 'User Name'}
+            </h1>
 
-        {/* Info Grid (5 boxes at bottom of header card - including Role and Shop Access) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 px-8 pb-6 pt-1">
-          {/* Employee ID */}
-          <div className="bg-blue-50/30 border border-blue-50 rounded-2xl p-4 flex items-center gap-3">
-            <div className="p-2.5 bg-blue-100/50 text-blue-600 rounded-xl shrink-0">
-              <Shield className="w-4.5 h-4.5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[9px] uppercase font-bold text-gray-400 tracking-wider">Employee ID</span>
-              <strong className="text-xs font-bold text-gray-800 truncate block">{profile.employeeId}</strong>
-            </div>
-          </div>
+            {/* 2. Key Badges below name: Role & Employee ID (Full key-value "Employee ID : value") */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-0.5">
+              <span className="bg-slate-900 text-amber-400 border border-slate-800 text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-md shadow-2xs">
+                Role : <span className="capitalize">{profile.role || 'User'}</span>
+              </span>
+              
+              <span className="bg-slate-100 text-slate-900 border border-slate-200 text-[11px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-md flex items-center gap-1.5 shadow-2xs">
+                <Shield className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                Employee ID : <span className="font-mono font-black">{profile.employeeId || 'N/A'}</span>
+              </span>
 
-          {/* Role */}
-          <div className="bg-blue-50/30 border border-blue-50 rounded-2xl p-4 flex items-center gap-3">
-            <div className="p-2.5 bg-blue-100/50 text-blue-600 rounded-xl shrink-0">
-              <User className="w-4.5 h-4.5" />
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-md flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Active User
+              </span>
             </div>
-            <div className="min-w-0">
-              <span className="block text-[9px] uppercase font-bold text-gray-400 tracking-wider">Role</span>
-              <strong className="text-xs font-bold text-gray-800 truncate block capitalize">{profile.role}</strong>
-            </div>
-          </div>
 
-          {/* Email */}
-          <div className="bg-blue-50/30 border border-blue-50 rounded-2xl p-4 flex items-center gap-3 min-w-0">
-            <div className="p-2.5 bg-blue-100/50 text-blue-600 rounded-xl shrink-0">
-              <Mail className="w-4.5 h-4.5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[9px] uppercase font-bold text-gray-400 tracking-wider">Email</span>
-              <strong className="text-xs font-bold text-gray-800 truncate block" title={profile.email}>{profile.email}</strong>
-            </div>
-          </div>
-
-          {/* Contact */}
-          <div className="bg-blue-50/30 border border-blue-50 rounded-2xl p-4 flex items-center gap-3">
-            <div className="p-2.5 bg-blue-100/50 text-blue-600 rounded-xl shrink-0">
-              <Phone className="w-4.5 h-4.5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[9px] uppercase font-bold text-gray-400 tracking-wider">Contact</span>
-              <strong className="text-xs font-bold text-gray-800 truncate block">{profile.phone || 'N/A'}</strong>
-            </div>
-          </div>
-
-          {/* Shop Access */}
-          <div className="bg-blue-50/30 border border-blue-50 rounded-2xl p-4 flex items-center gap-3 min-w-0">
-            <div className="p-2.5 bg-blue-100/50 text-blue-600 rounded-xl shrink-0">
-              <Store className="w-4.5 h-4.5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[9px] uppercase font-bold text-gray-400 tracking-wider">Shop Access</span>
-              <strong className="text-xs font-bold text-gray-800 truncate block" title={profile.shopAccess}>{profile.shopAccess}</strong>
+            {/* 3. Contact Details below badges */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-xs font-bold text-slate-800 pt-1">
+              {profile.email && profile.email !== 'N/A' && (
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <Mail className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Email : <strong className="font-extrabold text-slate-900">{profile.email}</strong></span>
+                </div>
+              )}
+              {profile.number && profile.number !== 'N/A' && (
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <Phone className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Number : <strong className="font-extrabold text-slate-900">{profile.number}</strong></span>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Systems Access Row (Tags list at the top) */}
-      <div className="bg-white rounded-[20px] p-4 shadow-xs border border-gray-100 flex flex-wrap items-center gap-3">
-        <span className="text-xs font-black uppercase text-gray-500 tracking-wider flex items-center gap-1.5 shrink-0 select-none">
-          <Shield className="w-4 h-4 text-purple-600" /> Authorized Systems:
-        </span>
-        {permissions.length === 0 ? (
-          <span className="text-xs text-gray-400">None</span>
-        ) : (
-          permissions.map(systemId => {
-            const details = SYSTEM_DETAILS[systemId];
-            if (!details) return null;
-            const Icon = details.icon;
-            return (
-              <span 
-                key={systemId} 
-                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border transition-colors cursor-default ${details.color}`}
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />
-                {details.name}
-              </span>
-            );
-          })
-        )}
+      {/* 2. Shop Access & Counter Access Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Shop Access */}
+        <div className="bg-white rounded-2xl p-5 shadow-xs border border-slate-200 flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+            <div className="flex items-center gap-2.5 text-slate-950">
+              <div className="p-2.5 bg-slate-900 text-amber-400 rounded-xl shadow-2xs">
+                <Store className="w-4.5 h-4.5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-950">Shop Access</h3>
+                <span className="text-xs text-slate-600 font-semibold">Assigned shops and locations</span>
+              </div>
+            </div>
+            <span className="text-xs font-black text-slate-800 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md shadow-2xs">
+              {formattedShops.length} Shops
+            </span>
+          </div>
+          
+          <div className="flex flex-wrap gap-2 pt-1">
+            {formattedShops.length === 0 ? (
+              <span className="text-xs text-slate-500 italic">No shop access assigned</span>
+            ) : (
+              formattedShops.map((shop, idx) => (
+                <span 
+                  key={idx} 
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-900 border border-slate-200/90 rounded-xl text-xs font-extrabold shadow-2xs hover:bg-slate-100 transition-colors"
+                >
+                  <Store className="w-3.5 h-3.5 text-slate-600" />
+                  {shop}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Counter Access */}
+        <div className="bg-white rounded-2xl p-5 shadow-xs border border-slate-200 flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+            <div className="flex items-center gap-2.5 text-slate-950">
+              <div className="p-2.5 bg-amber-500 text-slate-950 rounded-xl shadow-2xs">
+                <Coins className="w-4.5 h-4.5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-950">Counter Access</h3>
+                <span className="text-xs text-slate-600 font-semibold">Accessible cash counters</span>
+              </div>
+            </div>
+            <span className="text-xs font-black text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-md shadow-2xs">
+              {formattedCounters.length} Counters
+            </span>
+          </div>
+          
+          <div className="flex flex-wrap gap-2 pt-1">
+            {formattedCounters.length === 0 ? (
+              <span className="text-xs text-slate-500 italic">No counter access assigned</span>
+            ) : (
+              formattedCounters.map((counter, idx) => (
+                <span 
+                  key={idx} 
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-950 border border-amber-200 rounded-xl text-xs font-extrabold shadow-2xs hover:bg-amber-100 transition-colors"
+                >
+                  <Coins className="w-3.5 h-3.5 text-amber-700" />
+                  {counter}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Accessible Systems List (Extracted from Access Strings) */}
+      <div className="bg-white rounded-2xl p-5 shadow-xs border border-slate-200 flex flex-col gap-3">
+        <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-slate-900 text-amber-400 rounded-xl shadow-2xs">
+              <ShieldCheck className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-950">Accessible Systems</h3>
+              <span className="text-xs text-slate-600 font-semibold">Extracted from master system access permissions</span>
+            </div>
+          </div>
+          <span className="text-xs font-black text-slate-900 bg-slate-100 border border-slate-200 px-3 py-1 rounded-md shadow-2xs">
+            {permissions.length} Authorized Systems
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2.5 pt-1">
+          {permissions.length === 0 ? (
+            <span className="text-xs text-slate-400 italic">No system permissions found</span>
+          ) : (
+            permissions.map(systemKey => {
+              const details = getSystemInfo(systemKey);
+              const Icon = details.icon;
+              return (
+                <div 
+                  key={systemKey} 
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all shadow-2xs ${details.color}`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{details.name}</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 opacity-60 ml-0.5" />
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* 3. Middle Row: Today's Tasks & Attendance Health */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         
-        {/* Left Side: Active Tasks */}
-        <div className="bg-white rounded-[24px] p-6 shadow-xs border border-gray-100 flex flex-col gap-4 min-h-[380px]">
-          <div className="flex justify-between items-center pb-2 border-b border-gray-50">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-gray-900 tracking-tight">Active Tasks Directory</h2>
-              <span className="bg-blue-100 text-blue-700 text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center">
-                {tasks.length}
-              </span>
+        {/* Left Side: Unified Active Tasks Directory */}
+        <div className="bg-white rounded-[24px] p-6 shadow-xs border border-slate-200/90 flex flex-col gap-4 min-h-[420px]">
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-slate-900 text-amber-400 rounded-xl shadow-2xs">
+                <ClipboardList className="w-4.5 h-4.5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-slate-950 uppercase tracking-wide">Active Tasks Directory</h2>
+                <span className="text-xs text-slate-600 font-semibold">
+                  {profile?.role?.toLowerCase()?.includes('admin') ? 'Company-Wide Aggregated Tasks' : 'Assigned to Me'}
+                </span>
+              </div>
             </div>
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">Assigned to Me</span>
+
+            {/* Admin Employee Filter Dropdown */}
+            {allEmployeesList.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold uppercase text-slate-500">Filter Staff:</span>
+                <select
+                  value={employeeFilter}
+                  onChange={(e) => setEmployeeFilter(e.target.value)}
+                  className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer"
+                >
+                  <option value="all">All Employees ({allEmployeesList.length})</option>
+                  {allEmployeesList.map(emp => (
+                    <option key={emp} value={emp}>{emp}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
+          {/* KPI Mini-Counters Row (Today's Metrics) */}
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => setTaskStatusFilter(taskStatusFilter === 'Today' || taskStatusFilter === 'Active' ? 'all' : 'Today')}
+              type="button"
+              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                taskStatusFilter === 'Today' || taskStatusFilter === 'Active'
+                  ? 'bg-amber-100 border-amber-300 ring-1 ring-amber-400' 
+                  : 'bg-amber-50/60 border-amber-200/60 hover:bg-amber-100/50'
+              }`}
+            >
+              <span className="block text-[9px] font-black uppercase tracking-wider text-amber-900">Today / Active</span>
+              <strong className="text-base font-black text-amber-950">
+                {tasks.filter(t => t.dynamicTag === 'Today' || t.dynamicTag === 'Active').length}
+              </strong>
+            </button>
+
+            <button
+              onClick={() => setTaskStatusFilter(taskStatusFilter === 'Upcoming' ? 'all' : 'Upcoming')}
+              type="button"
+              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                taskStatusFilter === 'Upcoming' 
+                  ? 'bg-indigo-100 border-indigo-300 ring-1 ring-indigo-400' 
+                  : 'bg-indigo-50/60 border-indigo-200/60 hover:bg-indigo-100/50'
+              }`}
+            >
+              <span className="block text-[9px] font-black uppercase tracking-wider text-indigo-900">Upcoming Today</span>
+              <strong className="text-base font-black text-indigo-950">
+                {tasks.filter(t => t.dynamicTag === 'Upcoming').length}
+              </strong>
+            </button>
+
+            <button
+              onClick={() => setTaskStatusFilter(taskStatusFilter === 'Extended' ? 'all' : 'Extended')}
+              type="button"
+              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                taskStatusFilter === 'Extended' 
+                  ? 'bg-purple-100 border-purple-300 ring-1 ring-purple-400' 
+                  : 'bg-purple-50/60 border-purple-200/60 hover:bg-purple-100/50'
+              }`}
+            >
+              <span className="block text-[9px] font-black uppercase tracking-wider text-purple-900">Extended</span>
+              <strong className="text-base font-black text-purple-950">
+                {tasks.filter(t => t.dynamicTag === 'Extended').length}
+              </strong>
+            </button>
+
+            <button
+              onClick={() => setTaskStatusFilter('all')}
+              type="button"
+              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                taskStatusFilter === 'all' 
+                  ? 'bg-slate-900 text-amber-400 border-slate-800 ring-1 ring-slate-900' 
+                  : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+              }`}
+            >
+              <span className="block text-[9px] font-black uppercase tracking-wider">Total Today</span>
+              <strong className="text-base font-black">{tasks.length}</strong>
+            </button>
+          </div>
+
+          {/* Sub-system Filter Tabs */}
+          <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2">
+            {[
+              { id: 'all', label: 'All Tasks' },
+              { id: 'Checklist', label: 'Checklist' },
+              { id: 'Delegation', label: 'Delegation' },
+              { id: 'Work', label: 'Work Tasks' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setTaskSystemFilter(tab.id)}
+                type="button"
+                className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                  taskSystemFilter === tab.id
+                    ? 'bg-slate-900 text-amber-400 shadow-2xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tasks List */}
           {loading ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-              <span className="w-6 h-6 rounded-full border-2 border-purple-100 border-t-purple-600 animate-spin mb-3"></span>
-              <span className="text-[10px] font-bold">Fetching tasks...</span>
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 py-12">
+              <span className="w-7 h-7 rounded-full border-2 border-slate-200 border-t-slate-900 animate-spin mb-3"></span>
+              <span className="text-xs font-bold">Fetching multi-system tasks...</span>
             </div>
-          ) : tasks.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 py-12 text-center">
-              <FileText className="w-10 h-10 opacity-30 text-purple-400 mb-2.5 mx-auto" />
-              <strong className="block text-xs text-gray-700">No active tasks assigned to you.</strong>
-              <p className="text-[10px] text-gray-400 mt-1 max-w-[200px] mx-auto leading-relaxed">
-                When new checklists, delegations or maintenance items are registered for you, they will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3 overflow-y-auto max-h-[320px] pr-1">
-              {tasks.map(task => {
-                const isPending = task.status === 'Pending';
-                const dateStr = task.plannedDate 
-                  ? new Date(task.plannedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-                  : '';
-                return (
-                  <div 
-                    key={task.id}
-                    className="flex justify-between items-center bg-[#f9fafb] border border-gray-100 rounded-2xl p-4 hover:border-blue-200 transition-all border-l-4 border-l-amber-500"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-xl shadow-2xs text-amber-500 shrink-0">
-                        <Clock className="w-4 h-4" />
+          ) : (() => {
+            const filtered = tasks.filter(t => {
+              if (taskSystemFilter !== 'all' && t.systemType?.toLowerCase() !== taskSystemFilter.toLowerCase()) return false;
+              if (taskStatusFilter !== 'all' && t.dynamicTag?.toLowerCase() !== taskStatusFilter.toLowerCase()) return false;
+              if (employeeFilter !== 'all') {
+                const assigned = (t.assignedTo || '').toLowerCase();
+                if (!assigned.includes(employeeFilter.toLowerCase())) return false;
+              }
+              return true;
+            });
+
+            if (filtered.length === 0) {
+              return (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 py-12 text-center">
+                  <FileText className="w-10 h-10 opacity-30 text-amber-500 mb-2 mx-auto" />
+                  <strong className="block text-xs text-slate-700 font-extrabold">No active tasks found in directory.</strong>
+                  <p className="text-[10px] text-slate-500 mt-1 max-w-[240px] mx-auto font-medium">
+                    No active tasks match your selected filter criteria.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex flex-col gap-2.5 overflow-y-auto max-h-[340px] pr-1">
+                {filtered.map(task => {
+                  const dateDisplay = task.plannedDate 
+                    ? new Date(task.plannedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                    : 'N/A';
+
+                  const systemBadgeColor = 
+                    task.systemType === 'Checklist' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                    task.systemType === 'Delegation' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                    'bg-emerald-100 text-emerald-800 border-emerald-200';
+
+                  return (
+                    <div 
+                      key={task.id}
+                      className="flex flex-col gap-1.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 hover:border-slate-300 hover:bg-slate-100/60 transition-all shadow-3xs"
+                    >
+                      {/* Top Row: System Tag & Dynamic Tag */}
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${systemBadgeColor}`}>
+                          {task.systemType}
+                        </span>
+
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${task.tagColor}`}>
+                          {task.dynamicTag}
+                        </span>
                       </div>
-                      <div>
-                        <strong className="block text-xs font-bold text-gray-900 tracking-tight uppercase leading-snug">{task.description}</strong>
-                        <p className="text-[10px] text-gray-500 font-semibold mt-0.5">
-                          {task.shop} • <span className="text-emerald-600 font-bold">{task.givenBy}</span> • {dateStr}
-                        </p>
+
+                      {/* Main Description */}
+                      <strong className="text-xs font-black text-slate-900 uppercase tracking-tight leading-snug">
+                        {task.description}
+                      </strong>
+
+                      {/* Bottom Metadata */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-slate-600 pt-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-white border border-slate-200 px-2 py-0.5 rounded-md text-[10px] font-extrabold text-slate-700">
+                            📍 {task.shop}
+                          </span>
+                          {task.assignedTo && task.assignedTo !== 'N/A' && (
+                            <span>Assigned: <strong className="text-slate-900 font-bold">{task.assignedTo}</strong></span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold">
+                          <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>Due: {dateDisplay}</span>
+                        </div>
                       </div>
                     </div>
-                    <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md shrink-0 ${
-                      isPending 
-                        ? 'bg-amber-100 text-amber-700' 
-                        : 'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      {task.status}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Right Side: Personal Attendance Health Card */}
@@ -691,6 +1185,115 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Profile Picture Upload Modal */}
+      {isImageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div 
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 flex flex-col gap-5 relative animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-slate-900 text-amber-400 rounded-xl">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Update Profile Picture</h3>
+                  <p className="text-xs text-slate-500 font-medium">Select & upload your new profile avatar</p>
+                </div>
+              </div>
+              <button
+                onClick={closeImageModal}
+                disabled={uploadingImage}
+                type="button"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Image Preview Box */}
+            <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">
+              {previewUrl ? (
+                <img 
+                  src={previewUrl} 
+                  alt="Profile Preview" 
+                  className="w-32 h-32 rounded-2xl object-cover border-4 border-white shadow-md mb-3"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center font-black text-4xl shadow-md border-4 border-white uppercase select-none mb-3">
+                  {profile.userName?.slice(0, 2) || 'U'}
+                </div>
+              )}
+              <span className="text-xs font-bold text-slate-600 text-center max-w-[260px] truncate">
+                {selectedFile ? selectedFile.name : profile.profileImage ? 'Current Profile Image' : 'Default Initials Avatar'}
+              </span>
+            </div>
+
+            {/* Upload Error / Success Alerts */}
+            {imageUploadError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{imageUploadError}</span>
+              </div>
+            )}
+
+            {imageUploadSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-700 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>Profile picture updated successfully!</span>
+              </div>
+            )}
+
+            {/* File Input Selector */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                Choose Image File
+              </label>
+              <input 
+                type="file" 
+                accept="image/*"
+                onChange={handleFileChange}
+                disabled={uploadingImage}
+                className="file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-slate-900 file:text-amber-400 hover:file:bg-slate-800 text-xs text-slate-600 cursor-pointer border border-slate-200 rounded-xl p-1 bg-slate-50/50"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={closeImageModal}
+                disabled={uploadingImage}
+                className="px-4 py-2 text-xs font-extrabold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleUploadImage}
+                disabled={!selectedFile || uploadingImage}
+                className="px-5 py-2.5 bg-slate-900 text-amber-400 font-extrabold text-xs rounded-xl shadow-md hover:bg-slate-800 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {uploadingImage ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5" />
+                    Save Profile Picture
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
