@@ -225,7 +225,7 @@ export default function ProfilePage() {
       const { error: dbErr } = await supabase
         .from('users')
         .update({ profile_image: publicUrl })
-        .eq('user_name', profile.userName);
+        .ilike('user_name', profile.userName);
 
       if (dbErr) {
         console.warn('[ProfilePage] Database profile_image update notice:', dbErr.message);
@@ -365,7 +365,7 @@ export default function ProfilePage() {
       let userQuery = supabase
         .from('users')
         .select('*')
-        .eq('user_name', userName)
+        .ilike('user_name', userName)
         .maybeSingle();
 
       // Checklist tasks query: Admin sees all, User sees assigned
@@ -407,6 +407,10 @@ export default function ProfilePage() {
 
       if (userDbRes?.data) {
         const dbUser = userDbRes.data;
+        const fetchedImage = dbUser.profile_image || dbUser.profile_pic || dbUser.image_url || '';
+        if (fetchedImage) {
+          localStorage.setItem('profile_image', fetchedImage);
+        }
         setProfile(prev => ({
           ...prev,
           userName: dbUser.user_name || dbUser.username || dbUser.name || prev?.userName,
@@ -414,7 +418,7 @@ export default function ProfilePage() {
           number: dbUser.number || dbUser.phone || dbUser.mobile || prev?.number,
           role: dbUser.role || prev?.role,
           employeeId: dbUser.employee_id || dbUser.emp_id || dbUser.id?.toString() || prev?.employeeId,
-          profileImage: dbUser.profile_image || dbUser.profile_pic || prev?.profileImage,
+          profileImage: fetchedImage || prev?.profileImage,
           shopAccess: dbUser.shop_name || dbUser.user_access || dbUser.user_Access || prev?.shopAccess,
           counterAccess: dbUser.counter_access || dbUser.counterAccess || prev?.counterAccess,
           accessStrings: dbUser.master_user_system_page_access || prev?.accessStrings
