@@ -108,8 +108,8 @@ export default function ProfilePage() {
   const [error, setError] = useState(null);
 
   // States for unified task filters
-  const [taskSystemFilter, setTaskSystemFilter] = useState('all'); // 'all' | 'Checklist' | 'Delegation' | 'Work'
-  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // 'all' | 'Today' | 'Overdue' | 'Upcoming'
+  const [taskSystemFilter, setTaskSystemFilter] = useState('Checklist'); // 'Checklist' | 'Delegation' | 'Work'
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // 'all' | 'Today' | 'Overdue' | 'Upcoming' | 'Extended' | 'Active'
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [allEmployeesList, setAllEmployeesList] = useState([]);
 
@@ -380,10 +380,15 @@ export default function ProfilePage() {
         delegationQuery = delegationQuery.or(`name.ilike.${userName},assigned_person.ilike.${userName}`);
       }
 
-      // Work tasks query
-      let workQuery = supabase.from('task_assignments').select('*, master_work_tasks(*, shop(shop_name))');
+      // Work tasks query: fetch from work_task_new for today
+      let workQuery = supabase
+        .from('work_task_new')
+        .select('*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required))')
+        .eq('current_date', todayStr)
+        .is('submission_date', null);
+
       if (!isAdmin) {
-        workQuery = workQuery.ilike('employee_name', `%${userName}%`);
+        workQuery = workQuery.ilike('name', `%${userName}%`);
       }
 
       // Attendance logs query
@@ -420,43 +425,49 @@ export default function ProfilePage() {
         }
       }
 
-      // Helper to check if a task date falls on TODAY
-      const isTaskForToday = (taskDateStr, isExtended, nextExtendStr) => {
-        const targetStr = (isExtended && nextExtendStr) ? nextExtendStr : taskDateStr;
-        if (!targetStr) return false;
-
-        let taskDate;
-        if (typeof targetStr === 'string' && targetStr.includes('-') && !targetStr.includes('T') && !targetStr.includes(' ')) {
-          const parts = targetStr.split('-');
-          taskDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        } else if (typeof targetStr === 'string' && targetStr.includes('/')) {
-          const parts = targetStr.split(' ')[0].split('/');
-          if (parts.length === 3) {
-            taskDate = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          } else {
-            taskDate = new Date(targetStr);
+      // Helper to parse date string cleanly
+      const parseTaskDate = (str) => {
+        if (!str) return null;
+        try {
+          if (typeof str === 'string' && str.includes('-') && !str.includes('T') && !str.includes(' ')) {
+            const parts = str.split('-');
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); return d; }
           }
-        } else {
-          taskDate = new Date(targetStr);
-        }
-
-        if (isNaN(taskDate.getTime())) return false;
-        taskDate.setHours(0, 0, 0, 0);
-
-        return taskDate.getTime() === todayStart.getTime();
+          if (typeof str === 'string' && str.includes('/')) {
+            const parts = str.split(' ')[0].split('/');
+            if (parts.length === 3) {
+              const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+              if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); return d; }
+            }
+          }
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); return d; }
+        } catch (e) {}
+        return null;
       };
 
-      // Compile Checklist Tasks for TODAY ONLY
-      const checklistTasks = (checklistRes.data || []).filter(t => {
+      // 1. Compile Checklist Tasks
+      const checklistTasks = (checklistRes.data || []).map(t => {
         const isExtended = t.status === 'extend' || t.status === 'extended';
-        const dateStr = t.planned_date || t.task_start_date;
-        return isTaskForToday(dateStr, isExtended, t.next_extend_date);
-      }).map(t => {
-        const isExtended = t.status === 'extend' || t.status === 'extended';
-        const dateStr = t.next_extend_date || t.planned_date || t.task_start_date;
-        const tagInfo = isExtended 
-          ? { tag: 'Extended', color: 'bg-purple-100 text-purple-800 border-purple-200' }
-          : { tag: 'Today', color: 'bg-amber-100 text-amber-900 border-amber-300' };
+        const dateStr = (isExtended && t.next_extend_date) ? t.next_extend_date : (t.planned_date || t.task_start_date);
+        const taskDate = parseTaskDate(dateStr);
+
+        let dynamicTag = null;
+        let tagColor = '';
+
+        if (isExtended && taskDate && taskDate >= todayStart) {
+          dynamicTag = 'Extended';
+          tagColor = 'bg-purple-100 text-purple-800 border-purple-200';
+        } else if (taskDate && taskDate < todayStart) {
+          dynamicTag = 'Overdue';
+          tagColor = 'bg-rose-100 text-rose-800 border-rose-200';
+        } else if (taskDate && taskDate.getTime() === todayStart.getTime()) {
+          dynamicTag = 'Today';
+          tagColor = 'bg-amber-100 text-amber-900 border-amber-300';
+        }
+
+        if (!dynamicTag) return null;
 
         return {
           id: `chk-${t.id || t.task_id}`,
@@ -466,22 +477,38 @@ export default function ProfilePage() {
           assignedTo: t.name || 'N/A',
           givenBy: t.given_by || 'N/A',
           plannedDate: dateStr,
-          dynamicTag: tagInfo.tag,
-          tagColor: tagInfo.color
+          dynamicTag,
+          tagColor
         };
-      });
+      }).filter(Boolean);
 
-      // Compile Delegation Tasks for TODAY ONLY
-      const delegationTasks = (delegationRes.data || []).filter(t => {
+      // 2. Compile Delegation Tasks
+      const delegationTasks = (delegationRes.data || []).map(t => {
         const isExtended = t.status === 'extend' || t.status === 'extended';
-        const dateStr = t.planned_date || t.task_start_date;
-        return isTaskForToday(dateStr, isExtended, t.next_extend_date);
-      }).map(t => {
-        const isExtended = t.status === 'extend' || t.status === 'extended';
-        const dateStr = t.next_extend_date || t.planned_date || t.task_start_date;
-        const tagInfo = isExtended 
-          ? { tag: 'Extended', color: 'bg-purple-100 text-purple-800 border-purple-200' }
-          : { tag: 'Today', color: 'bg-amber-100 text-amber-900 border-amber-300' };
+        const dateStr = (isExtended && t.next_extend_date) ? t.next_extend_date : (t.planned_date || t.task_start_date);
+        const startDateStr = t.task_start_date;
+
+        const taskDate = parseTaskDate(dateStr);
+        const startDateVal = parseTaskDate(startDateStr);
+
+        let dynamicTag = null;
+        let tagColor = '';
+
+        if (isExtended && taskDate && taskDate >= todayStart) {
+          dynamicTag = 'Extended';
+          tagColor = 'bg-purple-100 text-purple-800 border-purple-200';
+        } else if (taskDate && taskDate < todayStart) {
+          dynamicTag = 'Overdue';
+          tagColor = 'bg-rose-100 text-rose-800 border-rose-200';
+        } else if (
+          (taskDate && taskDate.getTime() === todayStart.getTime()) ||
+          (startDateVal && taskDate && todayStart >= startDateVal && todayStart <= taskDate)
+        ) {
+          dynamicTag = 'Today';
+          tagColor = 'bg-amber-100 text-amber-900 border-amber-300';
+        }
+
+        if (!dynamicTag) return null;
 
         return {
           id: `del-${t.id || t.task_id}`,
@@ -491,52 +518,65 @@ export default function ProfilePage() {
           assignedTo: t.name || t.assigned_person || 'N/A',
           givenBy: t.given_by || 'N/A',
           plannedDate: dateStr,
-          dynamicTag: tagInfo.tag,
-          tagColor: tagInfo.color
+          dynamicTag,
+          tagColor
         };
-      });
+      }).filter(Boolean);
 
-      // Compile Work Tasks for TODAY ONLY
-      const workTasks = (workRes.data || []).filter(t => {
-        const master = t.master_work_tasks || {};
-        const dateStr = t.current_date || t.start_datetime;
-        
-        // Exclude completed or approved items
-        if (t.status === 'Completed' || t.status === 'APPROVED' || t.status === 'SUBMITTED' || t.submission_date) {
-          return false;
+      // 3. Compile Work Tasks (Live View logic: active and upcoming only)
+      const workTasks = (workRes.data || []).map(t => {
+        const master = t.task_assignments?.master_work_tasks || {};
+        const shopName = t.shop_name || t.shop || master.shop?.shop_name || 'N/A';
+        const dateStr = t.current_date || t.start_time;
+
+        let startHour = 0, startMin = 0, endHour = 23, endMin = 59;
+        const startStr = t.start_time || t.start_datetime;
+        const endStr = t.end_time || t.end_datetime;
+
+        if (startStr) {
+          const timePart = startStr.includes('T') ? startStr.split('T')[1] : startStr;
+          const parts = timePart.split(':');
+          startHour = parseInt(parts[0], 10) || 0;
+          startMin = parseInt(parts[1], 10) || 0;
         }
 
-        // Must be scheduled for Today
-        return isTaskForToday(dateStr, false, null);
-      }).map(t => {
-        const master = t.master_work_tasks || {};
-        const shopName = master.shop?.shop_name || t.shop_name || 'N/A';
-        const dateStr = t.current_date || t.start_datetime || t.created_at;
+        if (endStr) {
+          const timePart = endStr.includes('T') ? endStr.split('T')[1] : endStr;
+          const parts = timePart.split(':');
+          endHour = parseInt(parts[0], 10) || 0;
+          endMin = parseInt(parts[1], 10) || 0;
+        }
 
-        // Calculate dynamic status for Work Tasks (ACTIVE vs UPCOMING)
-        let dynamicTag = 'ACTIVE';
+        const taskStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, startMin, 0);
+        const estimatedMins = (t.duration || t.estimated_minutes || 0) + (t.extra_time || 0);
+        const baseEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), endHour, endMin, 0);
+        const taskEnd = new Date(baseEnd.getTime() + estimatedMins * 60 * 1000);
+
+        // Exclude if current time has passed end time
+        if (now > taskEnd) {
+          return null;
+        }
+
+        let dynamicTag = 'Active';
         let tagColor = 'bg-emerald-100 text-emerald-800 border-emerald-200';
 
-        if (t.start_datetime) {
-          const startDate = new Date(t.start_datetime);
-          if (!isNaN(startDate.getTime()) && now < startDate) {
-            dynamicTag = 'UPCOMING';
-            tagColor = 'bg-indigo-100 text-indigo-900 border-indigo-200';
-          }
+        if (now < taskStart) {
+          dynamicTag = 'Upcoming';
+          tagColor = 'bg-indigo-100 text-indigo-900 border-indigo-200';
         }
 
         return {
           id: `work-${t.id}`,
           systemType: 'Work',
-          description: master.task_name || t.task_description || 'Work Task',
+          description: t.task_description || master.task_name || 'Work Task',
           shop: shopName,
-          assignedTo: t.employee_name || t.assigned_to || 'N/A',
-          givenBy: t.manager_name || 'N/A',
+          assignedTo: t.name || t.employee_name || 'N/A',
+          givenBy: t.manager_name || t.task_assignments?.manager_name || 'N/A',
           plannedDate: dateStr,
           dynamicTag,
           tagColor
         };
-      });
+      }).filter(Boolean);
 
       const allCompiled = [...checklistTasks, ...delegationTasks, ...workTasks];
       allCompiled.sort((a, b) => new Date(b.plannedDate || 0) - new Date(a.plannedDate || 0));
@@ -821,80 +861,21 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {/* KPI Mini-Counters Row (Today's Metrics) */}
-          <div className="grid grid-cols-4 gap-2">
-            <button
-              onClick={() => setTaskStatusFilter(taskStatusFilter === 'Today' || taskStatusFilter === 'Active' ? 'all' : 'Today')}
-              type="button"
-              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                taskStatusFilter === 'Today' || taskStatusFilter === 'Active'
-                  ? 'bg-amber-100 border-amber-300 ring-1 ring-amber-400' 
-                  : 'bg-amber-50/60 border-amber-200/60 hover:bg-amber-100/50'
-              }`}
-            >
-              <span className="block text-[9px] font-black uppercase tracking-wider text-amber-900">Today / Active</span>
-              <strong className="text-base font-black text-amber-950">
-                {tasks.filter(t => t.dynamicTag === 'Today' || t.dynamicTag === 'Active').length}
-              </strong>
-            </button>
-
-            <button
-              onClick={() => setTaskStatusFilter(taskStatusFilter === 'Upcoming' ? 'all' : 'Upcoming')}
-              type="button"
-              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                taskStatusFilter === 'Upcoming' 
-                  ? 'bg-indigo-100 border-indigo-300 ring-1 ring-indigo-400' 
-                  : 'bg-indigo-50/60 border-indigo-200/60 hover:bg-indigo-100/50'
-              }`}
-            >
-              <span className="block text-[9px] font-black uppercase tracking-wider text-indigo-900">Upcoming Today</span>
-              <strong className="text-base font-black text-indigo-950">
-                {tasks.filter(t => t.dynamicTag === 'Upcoming').length}
-              </strong>
-            </button>
-
-            <button
-              onClick={() => setTaskStatusFilter(taskStatusFilter === 'Extended' ? 'all' : 'Extended')}
-              type="button"
-              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                taskStatusFilter === 'Extended' 
-                  ? 'bg-purple-100 border-purple-300 ring-1 ring-purple-400' 
-                  : 'bg-purple-50/60 border-purple-200/60 hover:bg-purple-100/50'
-              }`}
-            >
-              <span className="block text-[9px] font-black uppercase tracking-wider text-purple-900">Extended</span>
-              <strong className="text-base font-black text-purple-950">
-                {tasks.filter(t => t.dynamicTag === 'Extended').length}
-              </strong>
-            </button>
-
-            <button
-              onClick={() => setTaskStatusFilter('all')}
-              type="button"
-              className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                taskStatusFilter === 'all' 
-                  ? 'bg-slate-900 text-amber-400 border-slate-800 ring-1 ring-slate-900' 
-                  : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
-              }`}
-            >
-              <span className="block text-[9px] font-black uppercase tracking-wider">Total Today</span>
-              <strong className="text-base font-black">{tasks.length}</strong>
-            </button>
-          </div>
-
           {/* Sub-system Filter Tabs */}
           <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2">
             {[
-              { id: 'all', label: 'All Tasks' },
               { id: 'Checklist', label: 'Checklist' },
               { id: 'Delegation', label: 'Delegation' },
               { id: 'Work', label: 'Work Tasks' }
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setTaskSystemFilter(tab.id)}
+                onClick={() => {
+                  setTaskSystemFilter(tab.id);
+                  setTaskStatusFilter('all');
+                }}
                 type="button"
-                className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
                   taskSystemFilter === tab.id
                     ? 'bg-slate-900 text-amber-400 shadow-2xs'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
@@ -905,6 +886,122 @@ export default function ProfilePage() {
             ))}
           </div>
 
+          {/* Dynamic KPI Summary Cards for Selected Tab */}
+          {(() => {
+            const currentSystemTasks = tasks.filter(t => t.systemType?.toLowerCase() === taskSystemFilter.toLowerCase());
+
+            if (taskSystemFilter === 'Work') {
+              const activeCount = currentSystemTasks.filter(t => t.dynamicTag === 'Active').length;
+              const upcomingCount = currentSystemTasks.filter(t => t.dynamicTag === 'Upcoming').length;
+              const totalCount = currentSystemTasks.length;
+
+              return (
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setTaskStatusFilter(taskStatusFilter === 'Active' ? 'all' : 'Active')}
+                    type="button"
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      taskStatusFilter === 'Active'
+                        ? 'bg-emerald-100 border-emerald-300 ring-1 ring-emerald-400' 
+                        : 'bg-emerald-50/60 border-emerald-200/60 hover:bg-emerald-100/50'
+                    }`}
+                  >
+                    <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-900">Active (Due Now)</span>
+                    <strong className="text-lg font-black text-emerald-950">{activeCount}</strong>
+                  </button>
+
+                  <button
+                    onClick={() => setTaskStatusFilter(taskStatusFilter === 'Upcoming' ? 'all' : 'Upcoming')}
+                    type="button"
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      taskStatusFilter === 'Upcoming' 
+                        ? 'bg-indigo-100 border-indigo-300 ring-1 ring-indigo-400' 
+                        : 'bg-indigo-50/60 border-indigo-200/60 hover:bg-indigo-100/50'
+                    }`}
+                  >
+                    <span className="block text-[9px] font-black uppercase tracking-wider text-indigo-900">Upcoming Today</span>
+                    <strong className="text-lg font-black text-indigo-950">{upcomingCount}</strong>
+                  </button>
+
+                  <button
+                    onClick={() => setTaskStatusFilter('all')}
+                    type="button"
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      taskStatusFilter === 'all' 
+                        ? 'bg-slate-900 text-amber-400 border-slate-800 ring-1 ring-slate-900' 
+                        : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span className="block text-[9px] font-black uppercase tracking-wider">Total Work Tasks</span>
+                    <strong className="text-lg font-black">{totalCount}</strong>
+                  </button>
+                </div>
+              );
+            }
+
+            // Checklist & Delegation dynamic cards
+            const todayCount = currentSystemTasks.filter(t => t.dynamicTag === 'Today').length;
+            const extendedCount = currentSystemTasks.filter(t => t.dynamicTag === 'Extended').length;
+            const overdueCount = currentSystemTasks.filter(t => t.dynamicTag === 'Overdue').length;
+            const totalCount = currentSystemTasks.length;
+
+            return (
+              <div className="grid grid-cols-4 gap-2">
+                <button
+                  onClick={() => setTaskStatusFilter(taskStatusFilter === 'Today' ? 'all' : 'Today')}
+                  type="button"
+                  className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                    taskStatusFilter === 'Today'
+                      ? 'bg-amber-100 border-amber-300 ring-1 ring-amber-400' 
+                      : 'bg-amber-50/60 border-amber-200/60 hover:bg-amber-100/50'
+                  }`}
+                >
+                  <span className="block text-[9px] font-black uppercase tracking-wider text-amber-900">Today</span>
+                  <strong className="text-base font-black text-amber-950">{todayCount}</strong>
+                </button>
+
+                <button
+                  onClick={() => setTaskStatusFilter(taskStatusFilter === 'Extended' ? 'all' : 'Extended')}
+                  type="button"
+                  className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                    taskStatusFilter === 'Extended' 
+                      ? 'bg-purple-100 border-purple-300 ring-1 ring-purple-400' 
+                      : 'bg-purple-50/60 border-purple-200/60 hover:bg-purple-100/50'
+                  }`}
+                >
+                  <span className="block text-[9px] font-black uppercase tracking-wider text-purple-900">Extended</span>
+                  <strong className="text-base font-black text-purple-950">{extendedCount}</strong>
+                </button>
+
+                <button
+                  onClick={() => setTaskStatusFilter(taskStatusFilter === 'Overdue' ? 'all' : 'Overdue')}
+                  type="button"
+                  className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                    taskStatusFilter === 'Overdue' 
+                      ? 'bg-rose-100 border-rose-300 ring-1 ring-rose-400' 
+                      : 'bg-rose-50/60 border-rose-200/60 hover:bg-rose-100/50'
+                  }`}
+                >
+                  <span className="block text-[9px] font-black uppercase tracking-wider text-rose-900">Overdue</span>
+                  <strong className="text-base font-black text-rose-950">{overdueCount}</strong>
+                </button>
+
+                <button
+                  onClick={() => setTaskStatusFilter('all')}
+                  type="button"
+                  className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                    taskStatusFilter === 'all' 
+                      ? 'bg-slate-900 text-amber-400 border-slate-800 ring-1 ring-slate-900' 
+                      : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                  }`}
+                >
+                  <span className="block text-[9px] font-black uppercase tracking-wider">Total {taskSystemFilter}</span>
+                  <strong className="text-base font-black">{totalCount}</strong>
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Tasks List */}
           {loading ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 py-12">
@@ -913,7 +1010,7 @@ export default function ProfilePage() {
             </div>
           ) : (() => {
             const filtered = tasks.filter(t => {
-              if (taskSystemFilter !== 'all' && t.systemType?.toLowerCase() !== taskSystemFilter.toLowerCase()) return false;
+              if (t.systemType?.toLowerCase() !== taskSystemFilter.toLowerCase()) return false;
               if (taskStatusFilter !== 'all' && t.dynamicTag?.toLowerCase() !== taskStatusFilter.toLowerCase()) return false;
               if (employeeFilter !== 'all') {
                 const assigned = (t.assignedTo || '').toLowerCase();
