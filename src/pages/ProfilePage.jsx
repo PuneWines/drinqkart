@@ -225,7 +225,7 @@ export default function ProfilePage() {
       const { error: dbErr } = await supabase
         .from('users')
         .update({ profile_image: publicUrl })
-        .or(`user_name.ilike.${profile.userName},username.ilike.${profile.userName},name.ilike.${profile.userName}`);
+        .eq('user_name', profile.userName);
 
       if (dbErr) {
         console.warn('[ProfilePage] Database profile_image update notice:', dbErr.message);
@@ -348,9 +348,9 @@ export default function ProfilePage() {
 
       // 1. Fetch Users List if Admin to populate employee filter dropdown
       if (isAdmin) {
-        supabase.from('users').select('user_name, name').then(({ data: uData }) => {
+        supabase.from('users').select('user_name').then(({ data: uData }) => {
           if (uData) {
-            const list = [...new Set(uData.map(u => u.user_name || u.name).filter(Boolean))];
+            const list = [...new Set(uData.map(u => u.user_name).filter(Boolean))];
             setAllEmployeesList(list);
           }
         });
@@ -365,7 +365,7 @@ export default function ProfilePage() {
       let userQuery = supabase
         .from('users')
         .select('*')
-        .or(`user_name.ilike.${userName},username.ilike.${userName},name.ilike.${userName}`)
+        .eq('user_name', userName)
         .maybeSingle();
 
       // Checklist tasks query: Admin sees all, User sees assigned
