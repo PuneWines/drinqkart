@@ -120,6 +120,7 @@ export default function ProfilePage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState('');
   const [imageUploadSuccess, setImageUploadSuccess] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   // States for attendance stats calculation
   const [attendanceStats, setAttendanceStats] = useState({
@@ -195,22 +196,35 @@ export default function ProfilePage() {
 
       console.log(`[ProfilePage] Uploading image to bucket "profiles" with path: ${filePath}`);
 
-      // Upload image to Supabase Storage bucket "profiles"
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from('profiles')
+      let bucket = 'profiles';
+      let { data: uploadData, error: uploadErr } = await supabase.storage
+        .from(bucket)
         .upload(filePath, selectedFile, {
           cacheControl: '3600',
           upsert: true
         });
 
       if (uploadErr) {
+        console.warn(`[ProfilePage] Upload to "${bucket}" bucket notice:`, uploadErr.message, 'Falling back to "checklist" bucket.');
+        bucket = 'checklist';
+        const fallbackRes = await supabase.storage
+          .from(bucket)
+          .upload(filePath, selectedFile, {
+            cacheControl: '3600',
+            upsert: true
+          });
+        uploadData = fallbackRes.data;
+        uploadErr = fallbackRes.error;
+      }
+
+      if (uploadErr) {
         console.error('Supabase storage upload error:', uploadErr);
-        throw new Error(uploadErr.message || 'Failed to upload profile picture to bucket "profiles". Please check if bucket "profiles" exists.');
+        throw new Error(uploadErr.message || 'Failed to upload profile picture.');
       }
 
       // Get public URL
       const { data: urlData } = supabase.storage
-        .from('profiles')
+        .from(bucket)
         .getPublicUrl(filePath);
 
       const publicUrl = urlData?.publicUrl;
@@ -233,6 +247,7 @@ export default function ProfilePage() {
 
       // Update React state
       setProfile(prev => ({ ...prev, profileImage: publicUrl }));
+      setImageError(false);
 
       // Sync local storage keys
       localStorage.setItem('profile_image', publicUrl);
@@ -651,10 +666,14 @@ export default function ProfilePage() {
         <div className="flex flex-col md:flex-row items-center md:items-center gap-6 text-center md:text-left w-full">
           {/* Profile Avatar */}
           <div className="relative shrink-0 group">
-            {profile.profileImage ? (
+            {profile.profileImage && !imageError ? (
               <img 
                 src={profile.profileImage} 
                 alt={profile.userName} 
+                onError={() => {
+                  console.warn('Profile image failed to load, falling back to initials:', profile.profileImage);
+                  setImageError(true);
+                }}
                 className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-slate-200 shadow-md ring-2 ring-slate-100"
               />
             ) : (
