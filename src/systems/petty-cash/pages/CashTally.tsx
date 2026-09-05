@@ -368,15 +368,66 @@ export default function CashTally({
           status: initialData.status || "pending",
         });
 
-        // Determine added transaction sections based on non-zero fields
+        // Determine added transaction sections based on non-zero fields (supports both camelCase and snake_case keys)
+        const isNonZero = (val: any) => {
+          if (val === undefined || val === null || val === "" || val === false) return false;
+          const n = parseFloat(String(val));
+          return !isNaN(n) && n > 0;
+        };
+
+        const hasNonZeroKeys = (keys: string[]) => keys.some((k) => isNonZero(initialData[k]));
+
         const active: string[] = [];
-        const hasRetail = initialData.retail_scan_amount || initialData.retail_500 || initialData.retail_200 || initialData.retail_100 || initialData.retail_50 || initialData.retail_20 || initialData.retail_10 || initialData.retail_1 || initialData.retail_gpay || initialData.retail_phonepe || initialData.retail_paytm || initialData.retail_card || initialData.expense;
+        const hasRetail = hasNonZeroKeys([
+          "retailScanAmount", "retail_scan_amount",
+          "retail500", "retail_500",
+          "retail200", "retail_200",
+          "retail100", "retail_100",
+          "retail50", "retail_50",
+          "retail20", "retail_20",
+          "retail10", "retail_10",
+          "retail1", "retail_1",
+          "retailGpay", "retail_gpay",
+          "retailPhonePe", "retail_phonepe",
+          "retailPaytm", "retail_paytm",
+          "retailCard", "retail_card",
+          "expense"
+        ]);
         if (hasRetail) active.push("Retail Transactions");
 
-        const hasWS = initialData.ws_cash_billing_amount || initialData.ws_credit_billing_amount || initialData.ws_credit_receipt || initialData.ws_500 || initialData.ws_200 || initialData.ws_100 || initialData.ws_50 || initialData.ws_20 || initialData.ws_10 || initialData.ws_1 || initialData.ws_gpay_card || initialData.ws_phonepe || initialData.ws_paytm || initialData.ws_card;
+        const hasWS = hasNonZeroKeys([
+          "wsCashBillingAmount", "ws_cash_billing_amount",
+          "wsCreditBillingAmount", "ws_credit_billing_amount",
+          "wsCreditReceipt", "ws_credit_receipt",
+          "ws500", "ws_500",
+          "ws200", "ws_200",
+          "ws100", "ws_100",
+          "ws50", "ws_50",
+          "ws20", "ws_20",
+          "ws10", "ws_10",
+          "ws1", "ws_1",
+          "wsGpayCard", "ws_gpay_card",
+          "wsPhonePe", "ws_phonepe",
+          "wsPaytm", "ws_paytm",
+          "wsCard", "ws_card"
+        ]);
         if (hasWS) active.push("Wholesale Transactions");
 
-        const hasOther = initialData.home_delivery || initialData.homeDelivery || initialData.void_sale || initialData.voidSale || initialData.hd500 || initialData.hd200 || initialData.hd100 || initialData.hd50 || initialData.hd20 || initialData.hd10 || initialData.hd1 || initialData.hdGpay || initialData.hdCard || initialData.hdPhonePe || initialData.hdPaytm || initialData.retail_1500 || initialData.expense_gpay_card;
+        const hasOther = hasNonZeroKeys([
+          "homeDelivery", "home_delivery",
+          "voidSale", "void_sale",
+          "hd500", "retail_1500",
+          "hd200", "retail_2200",
+          "hd100", "retail_3100",
+          "hd50", "retail_450",
+          "hd20", "retail_520",
+          "hd10", "retail_610",
+          "hd1", "retail_71",
+          "hdGpay", "hd_gpay", "expense_gpay_card",
+          "hdCard", "hd_card",
+          "hdPhonePe", "hd_phonepe",
+          "hdPaytm", "hd_paytm"
+        ]);
         if (hasOther) active.push("Home Delivery Transactions");
 
         setAddedTransactions(active);
