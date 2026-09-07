@@ -471,9 +471,7 @@ export default function PettyCashModal({
         try {
           const { data, error } = await supabase
             .from('petty_cash_expense')
-            .select('patty_id')
-            .order('id', { ascending: false })
-            .limit(50);
+            .select('patty_id');
 
           if (error) throw error;
 
