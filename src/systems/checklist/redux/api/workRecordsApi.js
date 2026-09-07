@@ -105,10 +105,55 @@ export const extractTimeFromDatetime = (datetimeVal) => {
 };
 
 /**
+ * Ensures that if datetimeVal has a time component of 00:00 or missing time,
+ * it is sanitized with the default time string (e.g. 09:00:00 or 23:00:00).
+ */
+export const sanitizeAssignmentTime = (datetimeVal, defaultTimeStr) => {
+  if (!datetimeVal) return datetimeVal;
+
+  const str = String(datetimeVal).trim();
+  const datePart = str.split(/[T ]/)[0];
+  let timePart = "";
+
+  if (str.includes("T")) {
+    timePart = str.split("T")[1]?.substring(0, 5) || "";
+  } else if (str.includes(" ")) {
+    timePart = str.split(" ")[1]?.substring(0, 5) || "";
+  }
+
+  if (!timePart || timePart === "00:00" || timePart === "00:00:00") {
+    return `${datePart}T${defaultTimeStr}`;
+  }
+
+  return datetimeVal;
+};
+
+/**
  * Generates individual work_task records for each day in the assignment range.
  */
 export const generateWorkTasksApi = async (assignments) => {
   try {
+    // 0. Sanitize assignment start_datetime and end_datetime, updating task_assignments in DB if time was 00:00
+    for (const asgn of assignments) {
+      const sanitizedStart = sanitizeAssignmentTime(asgn.start_datetime, '09:00:00');
+      const sanitizedEnd = sanitizeAssignmentTime(asgn.end_datetime, '23:00:00');
+
+      asgn.start_datetime = sanitizedStart;
+      asgn.end_datetime = sanitizedEnd;
+
+      const asgnId = asgn.assignmentId || asgn.id;
+      if (asgnId) {
+        await supabase
+          .from('task_assignments')
+          .update({
+            start_datetime: sanitizedStart,
+            end_datetime: sanitizedEnd,
+            status: 'GENERATED'
+          })
+          .eq('id', asgnId);
+      }
+    }
+
     const tasksToInsert = [];
 
     // Gather all employee names, dates, task descriptions, and task_ids to query comprehensively
@@ -225,12 +270,15 @@ export const generateWorkTasksApi = async (assignments) => {
     }
 
     // 2. Update task_assignments status to 'GENERATED'
-    const { error: updateError } = await supabase
-      .from('task_assignments')
-      .update({ status: 'GENERATED' })
-      .in('id', assignments.map(a => a.id));
+    const assignmentIds = assignments.map(a => a.assignmentId || a.id).filter(Boolean);
+    if (assignmentIds.length > 0) {
+      const { error: updateError } = await supabase
+        .from('task_assignments')
+        .update({ status: 'GENERATED' })
+        .in('id', assignmentIds);
 
-    if (updateError) throw updateError;
+      if (updateError) throw updateError;
+    }
 
     return { success: true, count: tasksToInsert.length };
   } catch (error) {
