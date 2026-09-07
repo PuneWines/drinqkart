@@ -472,7 +472,7 @@ export default function PettyCashModal({
           const { data, error } = await supabase
             .from('petty_cash_expense')
             .select('patty_id');
-
+ 
           if (error) throw error;
 
           let maxNumber = 0;
