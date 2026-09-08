@@ -12,7 +12,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
-export default function HelpCenterModal({ isOpen, onClose }) {
+export default function HelpCenterModal({ isOpen, onClose, editMode = false, initialData = null, onSaveSuccess = null }) {
   const { user } = useAuth();
   const [optionSources, setOptionSources] = useState([]);
   const [loadingSources, setLoadingSources] = useState(false);
@@ -23,6 +23,7 @@ export default function HelpCenterModal({ isOpen, onClose }) {
   const [selectedCategoryRow, setSelectedCategoryRow] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState('');
   const [customIssueText, setCustomIssueText] = useState('');
+  const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submittedTicket, setSubmittedTicket] = useState(null);
@@ -31,7 +32,6 @@ export default function HelpCenterModal({ isOpen, onClose }) {
   useEffect(() => {
     if (isOpen) {
       fetchOptionSources();
-      resetForm();
     }
   }, [isOpen]);
 
@@ -46,10 +46,27 @@ export default function HelpCenterModal({ isOpen, onClose }) {
       if (error) {
         console.error('[HelpCenter] Error fetching option sources:', error);
       } else {
-        setOptionSources(data || []);
+        const sources = data || [];
+        setOptionSources(sources);
+
+        if (editMode && initialData) {
+          // Find category row in optionSources or construct dummy
+          const foundCategoryRow = sources.find(
+            s => s.category?.toLowerCase() === (initialData.category || '').toLowerCase()
+          ) || { category: initialData.category || 'General' };
+
+          setSelectedCategoryRow(foundCategoryRow);
+          setSelectedIssue(initialData.subject || '');
+          setCustomIssueText(initialData.subject || '');
+          setDescription(initialData.description || '');
+          setStep(1); // Start at category selection so user can change category/subject/description
+        } else {
+          resetForm();
+        }
       }
     } catch (err) {
       console.error('[HelpCenter] Unexpected error:', err);
+      if (!editMode) resetForm();
     } finally {
       setLoadingSources(false);
     }
@@ -60,6 +77,7 @@ export default function HelpCenterModal({ isOpen, onClose }) {
     setSelectedCategoryRow(null);
     setSelectedIssue('');
     setCustomIssueText('');
+    setDescription('');
     setSubmitError(null);
     setSubmittedTicket(null);
   };
@@ -100,7 +118,7 @@ export default function HelpCenterModal({ isOpen, onClose }) {
     selectedCategoryRow?.category &&
     selectedCategoryRow.category.toLowerCase().includes('other employee issue');
 
-  // Submit Ticket to help_center_records table
+  // Submit or Update Ticket in help_center_records table
   const handleSubmitTicket = async () => {
     const finalSubject = isOtherEmployeeIssue
       ? customIssueText.trim()
@@ -112,35 +130,56 @@ export default function HelpCenterModal({ isOpen, onClose }) {
     setSubmitError(null);
 
     const userObj = user || {};
-    const employeeName = userObj.user_name || userObj.username || 'Employee';
-    const shopName = userObj.shop_name || userObj.user_access || "ALL";
+    const employeeName = initialData?.employee || userObj.user_name || userObj.username || 'Employee';
+    const shopName = initialData?.shop || userObj.shop_name || userObj.user_access || "ALL";
     const todayStr = new Date().toISOString().split('T')[0];
 
     const payload = {
-      date: todayStr,
-      employee: employeeName,
-      shop: shopName,
       category: selectedCategoryRow.category,
       subject: finalSubject,
-      assigned_to: null,
-      status: 'In Progress',
+      description: description.trim() || null,
       last_updated: new Date().toISOString()
     };
 
     try {
-      const { data, error } = await supabase
-        .from('help_center_records')
-        .insert([payload])
-        .select('*')
-        .single();
+      if (editMode && initialData?.ticket_id) {
+        const { data, error } = await supabase
+          .from('help_center_records')
+          .update(payload)
+          .eq('ticket_id', initialData.ticket_id)
+          .select('*')
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setSubmittedTicket(data || payload);
-      setStep(4);
+        setSubmittedTicket(data || { ...initialData, ...payload });
+        setStep(4);
+        if (onSaveSuccess) onSaveSuccess(data || { ...initialData, ...payload });
+      } else {
+        const insertPayload = {
+          date: todayStr,
+          employee: employeeName,
+          shop: shopName,
+          ...payload,
+          assigned_to: null,
+          status: 'In Progress'
+        };
+
+        const { data, error } = await supabase
+          .from('help_center_records')
+          .insert([insertPayload])
+          .select('*')
+          .single();
+
+        if (error) throw error;
+
+        setSubmittedTicket(data || insertPayload);
+        setStep(4);
+        if (onSaveSuccess) onSaveSuccess(data || insertPayload);
+      }
     } catch (err) {
       console.error('[HelpCenter] Error submitting ticket:', err);
-      setSubmitError(err.message || 'Failed to submit ticket. Please try again.');
+      setSubmitError(err.message || 'Failed to save ticket. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -172,7 +211,7 @@ export default function HelpCenterModal({ isOpen, onClose }) {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 10 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh]"
+          className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[80vh]"
         >
           {/* Header Bar */}
           <div className="bg-[#1C120C] text-white px-5 py-3.5 flex items-center justify-between shrink-0 shadow-md">
@@ -312,17 +351,31 @@ export default function HelpCenterModal({ isOpen, onClose }) {
                 {isOtherEmployeeIssue ? (
                   <>
                     <div className="bg-[#C9A84C]/15 text-[#1C120C] px-3.5 py-2 rounded-xl border border-[#C9A84C]/30 text-xs font-bold font-sans">
-                      Please enter your issue:
+                      Please enter your issue & description:
                     </div>
 
                     <div className="space-y-3 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-                      <textarea
-                        rows={4}
-                        value={customIssueText}
-                        onChange={(e) => setCustomIssueText(e.target.value)}
-                        placeholder="Describe the issue you are facing in detail..."
-                        className="w-full p-3 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 placeholder-slate-400 font-sans resize-none"
-                      />
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Subject / Title</label>
+                        <input
+                          type="text"
+                          value={customIssueText}
+                          onChange={(e) => setCustomIssueText(e.target.value)}
+                          placeholder="Brief title of the issue..."
+                          className="w-full p-2.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 placeholder-slate-400 font-sans"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Description (Optional)</label>
+                        <textarea
+                          rows={3}
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          placeholder="Provide any additional details or description..."
+                          className="w-full p-2.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 placeholder-slate-400 font-sans resize-none"
+                        />
+                      </div>
 
                       <div className="flex justify-end">
                         <button
@@ -359,6 +412,18 @@ export default function HelpCenterModal({ isOpen, onClose }) {
                         </div>
                       )}
                     </div>
+
+                    {/* Description Field */}
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2 mt-2">
+                      <label className="block text-[11px] font-bold text-slate-700">Description / Additional Notes (Optional)</label>
+                      <textarea
+                        rows={3}
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Add extra description or context for support team..."
+                        className="w-full p-2.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 placeholder-slate-400 font-sans resize-none"
+                      />
+                    </div>
                   </>
                 )}
               </div>
@@ -382,6 +447,18 @@ export default function HelpCenterModal({ isOpen, onClose }) {
                     <span className="font-bold text-[#1C120C]">
                       {isOtherEmployeeIssue ? customIssueText : selectedIssue}
                     </span>
+                  </div>
+
+                  {/* Description row */}
+                  <div className="flex flex-col text-xs border-b border-slate-100 pb-2 space-y-1">
+                    <span className="text-slate-500 font-medium">Description:</span>
+                    <textarea
+                      rows={2}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="No description provided. Click to add..."
+                      className="w-full p-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#C9A84C] bg-slate-50 text-slate-800 resize-none"
+                    />
                   </div>
 
                   <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2">
