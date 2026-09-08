@@ -18,7 +18,10 @@ function BusinessOverviewApp() {
             <Route path="feedback/assigned" element={<AssignedComplaints />} />
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
-            <Route path="help-center" element={<HelpCenterRecords />} />
+            <Route path="help-center" element={<Navigate to="help-center/all" replace />} />
+            <Route path="help-center/all" element={<HelpCenterRecords activeTab="all" />} />
+            <Route path="help-center/follow-up" element={<HelpCenterRecords activeTab="follow-up" />} />
+            <Route path="help-center/completed" element={<HelpCenterRecords activeTab="completed" />} />
             <Route path="*" element={<Navigate to="feedback/customer" replace />} />
           </Routes>
         </main>

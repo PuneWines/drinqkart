@@ -138,7 +138,15 @@ export const systems = [
         ]
       },
       { label: 'Trader Invoices', to: '/systems/business-overview/trader-invoices' },
-      { label: 'Help Center', to: '/systems/business-overview/help-center' }
+      {
+        label: 'Help Center',
+        to: '/systems/business-overview/help-center/all',
+        children: [
+          { label: 'All Tickets', to: '/systems/business-overview/help-center/all' },
+          { label: 'Follow-Up', to: '/systems/business-overview/help-center/follow-up' },
+          { label: 'Completed', to: '/systems/business-overview/help-center/completed' }
+        ]
+      }
     ]
   }
 ];
@@ -234,6 +242,14 @@ export const getVisibleSystems = (user) => {
           sub.label === 'Complaint Resolution'
         ) {
           labelsToCheck.push('Feedback');
+        }
+        if (
+          sub.label === 'Help Center' ||
+          sub.label === 'All Tickets' ||
+          sub.label === 'Follow-Up' ||
+          sub.label === 'Completed'
+        ) {
+          labelsToCheck.push('Help Center', 'Help Center Records');
         }
       }
       if (systemId === 'checklist') {
