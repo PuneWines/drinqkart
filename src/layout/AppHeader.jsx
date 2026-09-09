@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getVisibleSystems, getActiveSystem } from './systemsConfig';
-import { LogOut, HelpCircle, Menu, X, ChevronDown } from 'lucide-react';
+import { LogOut, HelpCircle, Menu, X, ChevronDown, Video, PlayCircle } from 'lucide-react';
 import HelpCenterModal from '../components/help-center/HelpCenterModal';
+import AddTutorialVideoModal from '../components/AddTutorialVideoModal';
+import TutorialVideosModal from '../components/TutorialVideosModal';
 
 const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [isTutorialModalOpen, setIsTutorialModalOpen] = useState(false);
 
   const visibleSystems = getVisibleSystems(user);
   const activeSystem = getActiveSystem(visibleSystems, location.pathname);
@@ -21,6 +25,8 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
 
   const userObj = user || {};
   const userName = userObj.user_name || userObj.username || 'User';
+  const role = (userObj.role || localStorage.getItem('role') || 'User').toLowerCase();
+  const isAdmin = role === 'admin' || role === 'masteradmin' || userName.toLowerCase() === 'admin' || userName.toLowerCase() === 'masteradmin';
 
   return (
     <header className="w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20">
@@ -47,6 +53,24 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
 
         {/* Right Header: Active System Indicator Pill + Help & Profile */}
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => setIsVideoModalOpen(true)}
+              className="p-1.5 bg-[#2C1D11] text-amber-400 rounded-full transition-transform active:scale-95 cursor-pointer shadow-xs border border-[#C9A84C]/40"
+              title="Add Page Tutorial Video (Admin Only)"
+            >
+              <Video size={15} />
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsTutorialModalOpen(true)}
+            className="p-1.5 bg-slate-900 text-amber-400 rounded-full transition-transform active:scale-95 cursor-pointer shadow-xs border border-amber-400/40"
+            title="Watch Page Tutorial Videos"
+          >
+            <PlayCircle size={16} />
+          </button>
+
           {activeSystem && (
             <div className="px-2.5 py-1 bg-[#2C1D11] text-[#C9A84C] rounded-full text-[11px] font-bold shadow-xs">
               <span className="truncate max-w-[100px] block">{activeSystem.label}</span>
@@ -125,6 +149,21 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
       <HelpCenterModal
         isOpen={isHelpModalOpen}
         onClose={() => setIsHelpModalOpen(false)}
+      />
+
+      {/* Add Tutorial Video Modal for Admins */}
+      <AddTutorialVideoModal
+        isOpen={isVideoModalOpen}
+        onClose={() => setIsVideoModalOpen(false)}
+        currentLocation={location}
+        currentUser={userObj}
+      />
+
+      {/* Page Tutorial Videos Sidebar Modal Viewport */}
+      <TutorialVideosModal
+        isOpen={isTutorialModalOpen}
+        onClose={() => setIsTutorialModalOpen(false)}
+        currentUser={userObj}
       />
 
       {/* Desktop Main Top Navigation Tabs Bar (>= 768px) */}

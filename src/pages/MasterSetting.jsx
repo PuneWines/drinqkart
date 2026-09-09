@@ -147,6 +147,16 @@ const AVAILABLE_SYSTEMS = [
         pages: ['User & System Access', 'Shop', 'Counter', 'Expenses', 'Purchase Settings']
       }
     ]
+  },
+  {
+    id: 'system-training',
+    name: 'System Training Videos',
+    sections: [
+      {
+        title: 'SYSTEM TRAINING PAGES ACCESS',
+        pages: ['Checklist Delegation', 'HR System', 'SNACKS INVENTRY', 'Petty Cash', 'Purchase System', 'Master Setting', 'WhatsApp Broadcast', 'Business overview']
+      }
+    ]
   }
 ];
 

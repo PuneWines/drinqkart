@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getVisibleSystems, getActiveSystem } from './systemsConfig';
+import { getVisibleSystems, getActiveSystem, systems } from './systemsConfig';
 import ShopFilter from './ShopFilter';
 import { motion } from 'framer-motion';
 import {
@@ -31,7 +31,8 @@ import {
   Truck,
   ShieldAlert,
   UserCheck,
-  LogOut
+  LogOut,
+  Video
 } from 'lucide-react';
 
 const getSubtabIcon = (label) => {
@@ -113,9 +114,16 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu }) => {
     }
   }, [location.pathname]);
 
+  const isTrainingMode = location.pathname === '/systems/profile' && 
+    (new URLSearchParams(location.search).get('mode') === 'training' || new URLSearchParams(location.search).get('tab') === 'training');
+
+  const selectedSysParam = new URLSearchParams(location.search).get('sys') || 'checklist';
+
   if (!activeSystem || activeSystem.id === 'whatsapp') return null;
 
-  const ActiveIcon = (displayedMobileSystem || activeSystem).icon || Layers;
+  const ActiveIcon = isTrainingMode 
+    ? (systems.find(s => s.id === selectedSysParam)?.icon || Video)
+    : (displayedMobileSystem || activeSystem).icon || Layers;
 
   const toggleTabExpand = (label, e) => {
     e.preventDefault();
@@ -190,7 +198,62 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu }) => {
 
             {/* Subtabs Menu - Displays page options for selected system, collapses drawer on link click */}
             <div className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-              {(displayedMobileSystem?.subtabs || []).map((sub, index) => {
+              {isTrainingMode ? (
+                <>
+                  <div className="text-[10px] font-extrabold tracking-widest text-[#8C6D23] uppercase pt-1 pb-2 px-3">
+                    System Training Pages
+                  </div>
+                  {systems.map((sys) => {
+                    const sysNameLower = sys.label.toLowerCase().trim();
+                    const role = (user?.role || localStorage.getItem('role') || '').toLowerCase();
+                    const userName = (user?.user_name || user?.username || '').toLowerCase();
+                    const isAdmin = role === 'admin' || role === 'masteradmin' || userName === 'admin' || userName === 'masteradmin';
+
+                    if (!isAdmin) {
+                      let rawAccess = user?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];
+                      if (typeof rawAccess === 'string') {
+                        try { rawAccess = JSON.parse(rawAccess); } catch (e) { rawAccess = []; }
+                      }
+                      if (!Array.isArray(rawAccess) && rawAccess && typeof rawAccess === 'object') {
+                        rawAccess = Object.keys(rawAccess);
+                      }
+
+                      const hasPerm = Array.isArray(rawAccess) && rawAccess.some(item => {
+                        if (typeof item !== 'string') return false;
+                        const itemLower = item.toLowerCase().trim();
+                        return itemLower.startsWith('system-training.') || 
+                               itemLower.includes(sys.id) || 
+                               itemLower.includes(sysNameLower);
+                      });
+
+                      if (Array.isArray(rawAccess) && rawAccess.length > 0 && !hasPerm) {
+                        return null;
+                      }
+                    }
+
+                    const SysIcon = sys.icon || FileText;
+                    const isSelected = selectedSysParam === sys.id;
+                    const navTo = `/systems/profile?mode=training&sys=${sys.id}`;
+
+                    return (
+                      <Link
+                        key={`mobile-training-${sys.id}`}
+                        to={navTo}
+                        onClick={handleMobileSubtabClick}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-[#C9A84C] to-[#d4b457] text-[#1c120c] shadow-sm font-bold'
+                            : 'text-[#2C1D11] hover:bg-[#C9A84C]/10'
+                        }`}
+                      >
+                        <SysIcon size={16} className={`shrink-0 ${isSelected ? 'text-[#1c120c]' : 'text-[#C9A84C]'}`} />
+                        <span className="truncate">{sys.label}</span>
+                      </Link>
+                    );
+                  })}
+                </>
+              ) : (
+                (displayedMobileSystem?.subtabs || []).map((sub, index) => {
                 if (sub.type === 'header') {
                   return (
                     <div
@@ -279,7 +342,8 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu }) => {
                     <span className="truncate">{sub.label}</span>
                   </Link>
                 );
-              })}
+              })
+              )}
             </div>
 
             {/* Bottom Footer */}
@@ -349,7 +413,64 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu }) => {
 
             {/* Subtabs Menu */}
             <div className="flex-1 p-3 space-y-1.5 overflow-y-auto overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {activeSystem.subtabs.map((sub, index) => {
+              {isTrainingMode ? (
+                <>
+                  {!isCollapsed && (
+                    <div className="text-[9px] font-extrabold tracking-widest text-[#8C6D23] uppercase pt-1 pb-2 px-3 select-none">
+                      System Training Pages
+                    </div>
+                  )}
+                  {systems.map((sys) => {
+                    const sysNameLower = sys.label.toLowerCase().trim();
+                    const role = (user?.role || localStorage.getItem('role') || '').toLowerCase();
+                    const userName = (user?.user_name || user?.username || '').toLowerCase();
+                    const isAdmin = role === 'admin' || role === 'masteradmin' || userName === 'admin' || userName === 'masteradmin';
+
+                    if (!isAdmin) {
+                      let rawAccess = user?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];
+                      if (typeof rawAccess === 'string') {
+                        try { rawAccess = JSON.parse(rawAccess); } catch (e) { rawAccess = []; }
+                      }
+                      if (!Array.isArray(rawAccess) && rawAccess && typeof rawAccess === 'object') {
+                        rawAccess = Object.keys(rawAccess);
+                      }
+
+                      const hasPerm = Array.isArray(rawAccess) && rawAccess.some(item => {
+                        if (typeof item !== 'string') return false;
+                        const itemLower = item.toLowerCase().trim();
+                        return itemLower.startsWith('system-training.') || 
+                               itemLower.includes(sys.id) || 
+                               itemLower.includes(sysNameLower);
+                      });
+
+                      if (Array.isArray(rawAccess) && rawAccess.length > 0 && !hasPerm) {
+                        return null;
+                      }
+                    }
+
+                    const SysIcon = sys.icon || FileText;
+                    const isSelected = selectedSysParam === sys.id;
+                    const navTo = `/systems/profile?mode=training&sys=${sys.id}`;
+
+                    return (
+                      <Link
+                        key={`training-${sys.id}`}
+                        to={navTo}
+                        title={isCollapsed ? sys.label : undefined}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-[#C9A84C] to-[#d4b457] text-[#1c120c] shadow-md font-bold'
+                            : 'text-[#2C1D11] hover:bg-[#C9A84C]/10 hover:text-[#8C6D23]'
+                        }`}
+                      >
+                        <SysIcon size={16} className={`shrink-0 ${isSelected ? 'text-[#1c120c]' : 'text-[#C9A84C]'}`} />
+                        {!isCollapsed && <span className="truncate">{sys.label}</span>}
+                      </Link>
+                    );
+                  })}
+                </>
+              ) : (
+                activeSystem.subtabs.map((sub, index) => {
                 if (sub.type === 'header') {
                   if (isCollapsed) return <div key={`header-${index}`} className="my-2 border-t border-[#C9A84C]/20" />;
                   return (
@@ -441,7 +562,8 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu }) => {
                     {!isCollapsed && <span className="truncate">{sub.label}</span>}
                   </Link>
                 );
-              })}
+              })
+              )}
             </div>
 
             {/* Bottom Attribution */}
