@@ -251,6 +251,25 @@ const AttendanceDaily = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
+  // Preview Window State (Profile Avatar Click Overview Modal)
+  const [previewModal, setPreviewModal] = useState({
+    isOpen: false,
+    employee: null,
+    month: new Date(),
+    tab: 'timecard', // 'timecard' or 'timeline'
+    loading: false
+  });
+
+  const openPreviewWindow = (employee) => {
+    setPreviewModal({
+      isOpen: true,
+      employee,
+      month: new Date(currentMonth),
+      tab: 'timecard',
+      loading: false
+    });
+  };
+
   // Manual attendance marking state
   const [isMarkModalOpen, setIsMarkModalOpen] = useState(false);
   const [allEmployees, setAllEmployees] = useState([]);
@@ -591,11 +610,10 @@ const AttendanceDaily = () => {
     }
   };
 
-  const calculateLateMinutes = (inStr, dateContext = '') => {
+  const calculateLateMinutes = (inStr, dateContext = '', shift = null) => {
     if (!inStr || inStr === '-') return 0;
     try {
-      const clampedIn = clampInTimeTo10AM(inStr, dateContext);
-      const inDate = parseISTToDate(clampedIn);
+      const inDate = parseISTToDate(inStr);
       if (!inDate) return 0;
 
       const parts = new Intl.DateTimeFormat('en-US', {
@@ -609,8 +627,14 @@ const AttendanceDaily = () => {
       const minute = parseInt(parts.find(p => p.type === 'minute').value, 10);
       const totalMinutes = hour * 60 + minute;
 
-      const officialStartTime = 10 * 60 + 0;
-      const graceTimeThreshold = 10 * 60 + 10;
+      let officialStartTime = 10 * 60 + 0;
+      let graceTimeThreshold = 10 * 60 + 10;
+
+      if (shift?.start_time) {
+        const [shiftH, shiftM] = shift.start_time.split(':').map(Number);
+        officialStartTime = shiftH * 60 + shiftM;
+        graceTimeThreshold = officialStartTime + 10;
+      }
 
       if (totalMinutes >= graceTimeThreshold) {
         return totalMinutes - officialStartTime;
@@ -1371,9 +1395,15 @@ const AttendanceDaily = () => {
     // Sort chronologically
     activeTimes.sort();
 
-    // ── RULE 1: Set 1st punch (In-Time) to 10:00 AM even if user punches at 9 AM or before 10 AM ──
-    if (activeTimes[0] < "10:00") {
-      activeTimes[0] = "10:00";
+    // ── RULE 1: If user punches before shift start_time (or default 10:00 AM), clamp to official shift start ──
+    let officialStartHHMM = "10:00";
+    if (shift?.start_time) {
+      const parts = shift.start_time.split(':');
+      officialStartHHMM = `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+    }
+
+    if (activeTimes[0] < officialStartHHMM) {
+      activeTimes[0] = officialStartHHMM;
     }
 
     // ── RULE 3: After 5th punch, assume 6th OUT punch is 11:00 PM (23:00) ──
@@ -1572,7 +1602,7 @@ const AttendanceDaily = () => {
         if (clampedIn || clampedOut) {
           if (clampedIn && clampedOut && clampedIn !== '-' && clampedOut !== '-') {
             updateData.working_hour = calculateWorkHours(clampedIn, clampedOut, date);
-            updateData.late_minute = calculateLateMinutes(clampedIn, date);
+            updateData.late_minute = calculateLateMinutes(clampedIn, date, shiftEntry);
           }
         }
       }
@@ -2433,15 +2463,22 @@ const AttendanceDaily = () => {
                       >
                         <td className="sticky left-0 px-2 py-1.5 border-r z-10 bg-white">
                           <div className="flex items-center gap-1.5">
-                            <div className="relative flex-shrink-0">
+                            <div
+                              className="relative flex-shrink-0 cursor-pointer group"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openPreviewWindow(employee);
+                              }}
+                              title="Click to view employee overview, timecard & timeline"
+                            >
                               {candidatePhoto ? (
                                 <img
                                   src={candidatePhoto}
                                   alt={employee.name}
-                                  className="w-6 h-6 rounded-full object-cover border border-gray-200 flex-shrink-0"
+                                  className="w-6 h-6 rounded-full object-cover border border-gray-200 flex-shrink-0 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm"
                                 />
                               ) : (
-                                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600">
+                                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm">
                                   {employee.name ? employee.name.charAt(0).toUpperCase() : '?'}
                                 </div>
                               )}
@@ -2458,12 +2495,19 @@ const AttendanceDaily = () => {
                               <p className="text-xs font-medium text-gray-900">{employee.name}</p>
                               <div className="flex items-center gap-1">
                                 <p className="text-[9px] text-gray-500">{employee.id}</p>
-                                {employeeRoster && (
+                                {employeeRoster && employeeRoster.shift_type ? (
                                   <span
                                     className="inline-flex items-center px-1 rounded bg-indigo-50 border border-indigo-100 text-[8px] font-semibold text-indigo-700 leading-none py-0.5 cursor-help"
-                                    title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5)} - ${employeeRoster.end_time?.substring(0, 5)})`}
+                                    title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5) || '10:00'} - ${employeeRoster.end_time?.substring(0, 5) || '19:30'})`}
                                   >
-                                    📅 {employeeRoster.shift_type?.substring(0, 10)}
+                                    📅 {employeeRoster.shift_type?.substring(0, 12)}
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="inline-flex items-center px-1 rounded bg-gray-50 border border-gray-200 text-[8px] font-medium text-gray-500 leading-none py-0.5"
+                                    title="No roster assigned. Fallback schedule 10:00 AM - 7:30 PM applied."
+                                  >
+                                    Roster Not Available
                                   </span>
                                 )}
                               </div>
@@ -2546,8 +2590,8 @@ const AttendanceDaily = () => {
                               const horizontalPosClass = isLeftCol
                                 ? 'left-0'
                                 : isRightCol
-                                ? 'right-0'
-                                : 'left-1/2 -translate-x-1/2';
+                                  ? 'right-0'
+                                  : 'left-1/2 -translate-x-1/2';
 
                               const verticalPosClass = isTopRow
                                 ? 'top-full mt-2 origin-top'
@@ -2856,15 +2900,22 @@ const AttendanceDaily = () => {
                           <td className="px-2 py-1.5 pl-0">
                             <div className="flex items-center justify-between w-full gap-1.5">
                               <div className="flex items-center gap-1.5">
-                                <div className="relative flex-shrink-0">
+                                <div
+                                  className="relative flex-shrink-0 cursor-pointer group"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPreviewWindow(employee);
+                                  }}
+                                  title="Click to view employee overview, timecard & timeline"
+                                >
                                   {candidatePhoto ? (
                                     <img
                                       src={candidatePhoto}
                                       alt={employee.name}
-                                      className="w-7 h-7 rounded-full object-cover border border-gray-200 flex-shrink-0"
+                                      className="w-7 h-7 rounded-full object-cover border border-gray-200 flex-shrink-0 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm"
                                     />
                                   ) : (
-                                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600">
+                                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm">
                                       {employee.name ? employee.name.charAt(0).toUpperCase() : '?'}
                                     </div>
                                   )}
@@ -2881,12 +2932,19 @@ const AttendanceDaily = () => {
                                   <p className="text-xs font-medium text-gray-900">{employee.name}</p>
                                   <div className="flex items-center gap-1">
                                     <p className="text-[9px] text-gray-500">{employee.id}</p>
-                                    {employeeRoster && (
+                                    {employeeRoster && employeeRoster.shift_type ? (
                                       <span
                                         className="inline-flex items-center px-1 rounded bg-indigo-50 border border-indigo-100 text-[8px] font-semibold text-indigo-700 leading-none py-0.5 cursor-help"
-                                        title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5)} - ${employeeRoster.end_time?.substring(0, 5)})`}
+                                        title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5) || '10:00'} - ${employeeRoster.end_time?.substring(0, 5) || '19:30'})`}
                                       >
-                                        📅 {employeeRoster.shift_type?.substring(0, 10)}
+                                        📅 {employeeRoster.shift_type?.substring(0, 12)}
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="inline-flex items-center px-1 rounded bg-gray-50 border border-gray-200 text-[8px] font-medium text-gray-500 leading-none py-0.5"
+                                        title="No roster assigned. Fallback schedule 10:00 AM - 7:30 PM applied."
+                                      >
+                                        Roster Not Available
                                       </span>
                                     )}
                                   </div>
@@ -2940,9 +2998,12 @@ const AttendanceDaily = () => {
                           </td>
                           <td className="px-2 py-1.5 text-center text-[10px] font-semibold">{attendance.working_hour || '-'}</td>
                           <td className="px-2 py-1.5 text-center text-[10px]">
-                            {attendance.late_minute > 0 ? (
-                              <span className="text-orange-600">{attendance.late_minute}m</span>
-                            ) : '-'}
+                            {(() => {
+                              const liveLate = attendance.in_time ? calculateLateMinutes(attendance.in_time, selectedDate, employeeRoster) : (attendance.late_minute || 0);
+                              return liveLate > 0 ? (
+                                <span className="text-orange-600 font-semibold">{liveLate}m</span>
+                              ) : '-';
+                            })()}
                           </td>
                           <td className="px-2 py-1.5 text-center">
                             <button
@@ -3563,6 +3624,426 @@ const AttendanceDaily = () => {
           </div>
         </div>
       )}
+      {/* Employee Attendance Overview Preview Window Modal */}
+      {previewModal.isOpen && previewModal.employee && (() => {
+        const emp = previewModal.employee;
+        const empProfile = employeesData.find(e => e.employee_id === emp.id || e.id === emp.id);
+        const avatar = empProfile?.candidate_photo || emp.candidate_photo;
+        const empDesignation = empProfile?.designation || emp.designation || '-';
+        const empStore = empProfile?.joining_place || emp.store_name || '-';
+
+        // Selected month dates
+        const pMonth = previewModal.month;
+        const pYear = pMonth.getFullYear();
+        const pMonthIdx = pMonth.getMonth();
+        const daysInPMonth = new Date(pYear, pMonthIdx + 1, 0).getDate();
+
+        const todayObj = new Date();
+        const isCurrentMonth = pYear === todayObj.getFullYear() && pMonthIdx === todayObj.getMonth();
+        const maxDay = isCurrentMonth ? Math.min(todayObj.getDate(), daysInPMonth) : daysInPMonth;
+
+        // Build list of days for selected month up to maxDay
+        const dayRows = [];
+        let totalPresent = 0;
+        let totalAbsent = 0;
+        let totalLate = 0;
+        let totalLateMins = 0;
+        let totalWorkMs = 0;
+        let totalLunchMs = 0;
+
+        for (let d = 1; d <= maxDay; d++) {
+          const dateStr = `${pYear}-${String(pMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const dateObj = new Date(pYear, pMonthIdx, d);
+          const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
+
+          // Date-specific roster lookup
+          const rEntry = getEmployeeRoster(emp.id, dateStr);
+          const hasRoster = !!(rEntry && rEntry.shift_type);
+          const shiftName = hasRoster ? rEntry.shift_type : 'Roster Not Available';
+
+          // Scheduled start/end
+          let scheduledStartStr = '10:00';
+          let scheduledEndStr = '19:30';
+          if (hasRoster && rEntry.start_time) {
+            scheduledStartStr = rEntry.start_time.substring(0, 5);
+          }
+          if (hasRoster && rEntry.end_time) {
+            scheduledEndStr = rEntry.end_time.substring(0, 5);
+          }
+
+          // Attendance record
+          const att = getAttendanceForDate(emp.id, dateStr);
+          const inTime = att.in_time;
+          const outTime = att.out_time;
+          const status = att.status || (dateObj.getDay() === 0 ? 'Weekly Off' : 'Absent');
+
+          // Compute late minutes against date-specific roster
+          const lateMins = inTime ? calculateLateMinutes(inTime, dateStr, rEntry) : 0;
+
+          // Compute working hours
+          const workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : (inTime && outTime ? calculateWorkHours(inTime, outTime, dateStr) : '00:00:00');
+          const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
+          const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;
+
+          // Lunch duration
+          const lunchStr = att.standard_lunch || '-';
+
+          // Parse timestamps for timeline visualization
+          let inTimeFormatted = inTime ? formatTimeIST(inTime) : null;
+          let outTimeFormatted = outTime ? formatTimeIST(outTime) : null;
+
+          // Stats counters
+          if (status === 'Present' || status === 'Late') {
+            totalPresent++;
+            if (lateMins > 0 || status === 'Late') {
+              totalLate++;
+              totalLateMins += lateMins;
+            }
+          } else if (status === 'Absent') {
+            totalAbsent++;
+          }
+
+          totalWorkMs += dayWorkMs;
+
+          dayRows.push({
+            dayNum: d,
+            dateStr,
+            dayName,
+            shiftName,
+            hasRoster,
+            scheduledStartStr,
+            scheduledEndStr,
+            inTimeFormatted,
+            outTimeFormatted,
+            inTime,
+            outTime,
+            lunchStr,
+            workHrsStr,
+            dayWorkMs,
+            lateMins,
+            status,
+            attendance: att,
+            rEntry
+          });
+        }
+
+        const totalWorkHrsDec = totalWorkMs / (3600 * 1000);
+        const avgWorkHrsDec = totalPresent > 0 ? (totalWorkHrsDec / totalPresent).toFixed(1) : '0.0';
+
+        // Format total work hours string
+        const totalWorkHrsInt = Math.floor(totalWorkHrsDec);
+        const totalWorkMinsInt = Math.round((totalWorkHrsDec - totalWorkHrsInt) * 60);
+        const totalWorkFormatted = `${totalWorkHrsInt}h ${totalWorkMinsInt}m`;
+
+        return (
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}
+          >
+            <div
+              className="bg-white max-w-5xl w-full rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header & Employee Overview */}
+              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 pr-14 relative">
+                <button
+                  onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}
+                  className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all border border-white/10 shadow-sm active:scale-95"
+                  title="Close preview"
+                >
+                  <X size={18} />
+                </button>
+
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      {avatar ? (
+                        <img
+                          src={avatar}
+                          alt={emp.name}
+                          className="w-14 h-14 rounded-2xl object-cover border-2 border-white/20 shadow-md"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-2xl bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-xl font-bold text-white shadow-md">
+                          {emp.name ? emp.name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold text-white tracking-tight">{emp.name}</h2>
+                        <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-indigo-200 border border-white/10">
+                          ID: {emp.id}
+                        </span>
+                      </div>
+                      <p className="text-xs text-indigo-200 mt-0.5 font-medium">
+                        {empDesignation} • {empStore}
+                      </p>
+
+                      {/* Current Roster Info */}
+                      <div className="flex items-center gap-2 mt-2">
+                        {(() => {
+                          const todayRoster = getEmployeeRoster(emp.id, selectedDate);
+                          if (todayRoster && todayRoster.shift_type) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[11px] font-semibold">
+                                📅 {todayRoster.shift_type} ({todayRoster.start_time?.substring(0, 5) || '10:00'} – {todayRoster.end_time?.substring(0, 5) || '19:30'})
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-medium">
+                              Roster Not Available (10:00 AM – 7:30 PM Fallback)
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Month Selection & View Tab Switcher */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Month Picker */}
+                    <div className="flex items-center gap-1 bg-white/10 border border-white/10 rounded-xl px-1.5 py-1">
+                      <button
+                        onClick={() => {
+                          const newM = new Date(previewModal.month);
+                          newM.setMonth(newM.getMonth() - 1);
+                          setPreviewModal({ ...previewModal, month: newM });
+                        }}
+                        className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
+                        title="Previous Month"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <span className="text-xs font-semibold text-white px-2 min-w-[110px] text-center">
+                        {monthNames[previewModal.month.getMonth()]} {previewModal.month.getFullYear()}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const newM = new Date(previewModal.month);
+                          newM.setMonth(newM.getMonth() + 1);
+                          setPreviewModal({ ...previewModal, month: newM });
+                        }}
+                        className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
+                        title="Next Month"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+
+                    {/* View Mode Toggle: Timecard vs Timeline */}
+                    <div className="flex bg-white/10 p-1 rounded-xl border border-white/10">
+                      <button
+                        onClick={() => setPreviewModal({ ...previewModal, tab: 'timecard' })}
+                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'timecard'
+                          ? 'bg-white text-indigo-950 shadow-md font-bold'
+                          : 'text-indigo-200 hover:text-white'
+                          }`}
+                      >
+                        📊 Timecard
+                      </button>
+                      <button
+                        onClick={() => setPreviewModal({ ...previewModal, tab: 'timeline' })}
+                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'timeline'
+                          ? 'bg-white text-indigo-950 shadow-md font-bold'
+                          : 'text-indigo-200 hover:text-white'
+                          }`}
+                      >
+                        📈 Timeline
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary Stat Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-4 pt-4 border-t border-white/10">
+                  <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
+                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
+                    <p className="text-base font-bold text-white mt-0.5">{dayRows.length}</p>
+                  </div>
+                  <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
+                    <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
+                    <p className="text-base font-bold text-emerald-400 mt-0.5">{totalPresent}</p>
+                  </div>
+                  <div className="bg-red-500/10 rounded-xl p-2 border border-red-500/20 text-center">
+                    <p className="text-[10px] font-medium text-red-300 uppercase tracking-wider">Absent</p>
+                    <p className="text-base font-bold text-red-400 mt-0.5">{totalAbsent}</p>
+                  </div>
+                  <div className="bg-amber-500/10 rounded-xl p-2 border border-amber-500/20 text-center">
+                    <p className="text-[10px] font-medium text-amber-300 uppercase tracking-wider">Late Days / Mins</p>
+                    <p className="text-base font-bold text-amber-400 mt-0.5">{totalLate} <span className="text-xs font-normal">({totalLateMins}m)</span></p>
+                  </div>
+                  <div className="bg-indigo-500/10 rounded-xl p-2 border border-indigo-500/20 text-center">
+                    <p className="text-[10px] font-medium text-indigo-300 uppercase tracking-wider">Total Work Hours</p>
+                    <p className="text-base font-bold text-indigo-300 mt-0.5">{totalWorkFormatted}</p>
+                  </div>
+                  <div className="bg-purple-500/10 rounded-xl p-2 border border-purple-500/20 text-center">
+                    <p className="text-[10px] font-medium text-purple-300 uppercase tracking-wider">Avg Daily Hours</p>
+                    <p className="text-base font-bold text-purple-300 mt-0.5">{avgWorkHrsDec}h</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Body Content */}
+              <div className="flex-1 overflow-y-auto p-5 bg-slate-50 min-h-0">
+                {previewModal.tab === 'timecard' ? (
+                  /* PAGE 1: TIMECARD VIEW */
+                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                          <tr>
+                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Date</th>
+                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Day</th>
+                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Roster / Shift</th>
+                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Scheduled</th>
+                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">In Time</th>
+                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Out Time</th>
+                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Lunch</th>
+                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Work Hours</th>
+                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Late</th>
+                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {dayRows.map((row) => (
+                            <tr key={row.dayNum} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="px-3 py-2 text-slate-900 font-bold font-mono">
+                                {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
+                              </td>
+                              <td className="px-3 py-2 text-slate-500 font-semibold">{row.dayName}</td>
+                              <td className="px-3 py-2">
+                                {row.hasRoster ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                    📅 {row.shiftName}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                    Roster Not Available
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-center text-slate-600 font-mono">
+                                {row.scheduledStartStr} – {row.scheduledEndStr}
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                {row.inTimeFormatted || '-'}
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                {row.outTimeFormatted || '-'}
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
+                              <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">
+                                {row.workHrsStr}
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono">
+                                {row.lateMins > 0 ? (
+                                  <span className="text-orange-600 font-bold">{row.lateMins}m</span>
+                                ) : (
+                                  <span className="text-slate-400">0m</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                {(() => {
+                                  if (row.status === 'Present') return <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Present</span>;
+                                  if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
+                                  if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
+                                  if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
+                                  return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
+                                })()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  /* PAGE 2: TIMELINE VIEW (Visual Work Progress & Segment Graphs) */
+                  <div className="space-y-3">
+                    {dayRows.map((row) => {
+                      const hasPunches = row.inTimeFormatted || row.outTimeFormatted;
+                      return (
+                        <div key={row.dayNum} className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-sm flex flex-col gap-2">
+                          <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-900 font-mono">
+                                {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)} ({row.dayName})
+                              </span>
+                              {row.hasRoster ? (
+                                <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                  📅 {row.shiftName} ({row.scheduledStartStr} – {row.scheduledEndStr})
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                  Roster N/A ({row.scheduledStartStr} – {row.scheduledEndStr})
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-3 text-xs font-mono">
+                              {row.inTimeFormatted && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
+                              {row.outTimeFormatted && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
+                              {!row.outTimeFormatted && row.inTimeFormatted && (
+                                <span className="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
+                                  ⚠️ Missing Punch Out
+                                </span>
+                              )}
+                              <span className="font-bold text-slate-900">Total: {row.workHrsStr}</span>
+                              {row.lateMins > 0 && <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Late by {row.lateMins}m</span>}
+                            </div>
+                          </div>
+
+                          {/* Visual Horizontal Timeline Bar */}
+                          {hasPunches ? (
+                            <div className="pt-1">
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
+                                <span>Scheduled Start ({row.scheduledStartStr})</span>
+                                <span>Lunch Break ({row.lunchStr})</span>
+                                <span>Scheduled End ({row.scheduledEndStr})</span>
+                              </div>
+                              <div className="h-6 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200">
+                                {/* Segment 1: Work Before Lunch */}
+                                <div className="bg-emerald-500 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider shadow-inner">
+                                  WORK HOURS
+                                </div>
+                                {/* Segment 2: Lunch Break */}
+                                <div className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold border-x border-amber-300">
+                                  LUNCH
+                                </div>
+                                {/* Segment 3: Work After Lunch or Incomplete */}
+                                {row.outTimeFormatted ? (
+                                  <div className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider shadow-inner">
+                                    WORK HOURS
+                                  </div>
+                                ) : (
+                                  <div className="bg-amber-500/30 border-l border-dashed border-amber-400 flex-1 flex items-center justify-center text-amber-900 text-[10px] font-semibold animate-pulse">
+                                    INCOMPLETE (Punch Out Missing)
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="py-2 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                              {row.status === 'Weekly Off' ? (
+                                <span className="text-xs font-semibold text-slate-500">Weekly Off</span>
+                              ) : (
+                                <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

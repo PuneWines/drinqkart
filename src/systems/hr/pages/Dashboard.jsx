@@ -30,6 +30,10 @@ export default function Dashboard() {
     const [absentEmployeesList, setAbsentEmployeesList] = useState([])
     const [lateEmployeesList, setLateEmployeesList] = useState([])
     const [halfDayEmployeesList, setHalfDayEmployeesList] = useState([])
+    // Modal filter states (search by name/id and filter by store)
+    const [modalSearchTerm, setModalSearchTerm] = useState('')
+    const [modalSelectedStore, setModalSelectedStore] = useState('ALL')
+
     const [detailModal, setDetailModal] = useState({
         isOpen: false,
         title: '',
@@ -298,6 +302,9 @@ export default function Dashboard() {
             default:
                 return
         }
+
+        setModalSearchTerm('')
+        setModalSelectedStore('ALL')
 
         setDetailModal({
             isOpen: true,
@@ -779,100 +786,151 @@ export default function Dashboard() {
                             </button>
                         </div>
 
-                        {/* Modal Body */}
-                        <div className="p-5 flex-1 overflow-y-auto min-h-0">
-                            {detailModal.employees.length === 0 ? (
-                                <div className="text-center py-16">
-                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                        <Users size={28} className="text-slate-400" />
-                                    </div>
-                                    <p className="text-lg font-semibold text-slate-700">No employees to show</p>
-                                    <p className="text-sm text-slate-400 mt-1">No records matching this category today.</p>
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="border-b border-slate-100">
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">#</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Employee ID</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Name</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Designation</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Store</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Details</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {detailModal.employees.map((emp, index) => (
-                                                <tr
-                                                    key={emp.employee_id}
-                                                    className={(() => {
-                                                        switch (detailModal.type) {
-                                                            case 'Present': return 'hover:bg-green-50/50 transition-colors';
-                                                            case 'Late': return 'hover:bg-orange-50/50 transition-colors';
-                                                            case 'Absent': return 'hover:bg-red-50/50 transition-colors';
-                                                            case 'Half Day': return 'hover:bg-yellow-50/50 transition-colors';
-                                                            default: return 'hover:bg-slate-50 transition-colors';
-                                                        }
-                                                    })()}
+                        {/* Modal Filter Toolbar */}
+                        {(() => {
+                            // Extract unique store names for dropdown
+                            const uniqueStores = Array.from(new Set(detailModal.employees.map(e => e.joining_place || e.shop_name).filter(Boolean))).sort();
+                            const filteredModalEmps = detailModal.employees.filter(emp => {
+                                const nameOrId = `${emp.name_as_per_aadhar || ''} ${emp.employee_id || ''}`.toLowerCase();
+                                const matchesSearch = !modalSearchTerm || nameOrId.includes(modalSearchTerm.toLowerCase());
+                                const empStore = (emp.joining_place || emp.shop_name || '').trim();
+                                const matchesStore = modalSelectedStore === 'ALL' || empStore.toLowerCase() === modalSelectedStore.toLowerCase();
+                                return matchesSearch && matchesStore;
+                            });
+
+                            return (
+                                <>
+                                    <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                                            <div className="relative w-full max-w-xs">
+                                                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search by name or ID..."
+                                                    value={modalSearchTerm}
+                                                    onChange={(e) => setModalSearchTerm(e.target.value)}
+                                                    className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                                                <Filter size={12} className="text-slate-400" /> Store:
+                                            </label>
+                                            <div className="relative">
+                                                <select
+                                                    value={modalSelectedStore}
+                                                    onChange={(e) => setModalSelectedStore(e.target.value)}
+                                                    className="appearance-none bg-white border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                                 >
-                                                    <td className="px-4 py-3 text-slate-400 text-xs">{index + 1}</td>
-                                                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{emp.employee_id}</td>
-                                                    <td className="px-4 py-3 font-semibold text-slate-800">{emp.name_as_per_aadhar}</td>
-                                                    <td className="px-4 py-3 text-slate-500">{emp.designation || '-'}</td>
-                                                    <td className="px-4 py-3 text-slate-500">{emp.joining_place || '-'}</td>
-                                                    <td className="px-4 py-3">
-                                                        {(() => {
-                                                            const currentStatus = emp.status || detailModal.type;
-                                                            if (currentStatus === 'Late') {
-                                                                return (
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-xs text-orange-600 font-semibold flex items-center gap-1">
-                                                                            <Clock size={12} />
-                                                                            Late ({emp.late_minute || 0}m)
-                                                                        </span>
-                                                                        {emp.in_time && (
-                                                                            <span className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                                                                In: {formatTimeIST(emp.in_time)}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            } else if (currentStatus === 'Present') {
-                                                                return (
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
-                                                                            <UserCheck size={12} /> Present
-                                                                        </span>
-                                                                        {emp.in_time && (
-                                                                            <span className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                                                                In: {formatTimeIST(emp.in_time)}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            } else if (currentStatus === 'Half Day') {
-                                                                return (
-                                                                    <span className="text-xs text-yellow-600 font-semibold flex items-center gap-1">
-                                                                        <AlertCircle size={12} /> Half Day
-                                                                    </span>
-                                                                );
-                                                            } else {
-                                                                return (
-                                                                    <span className="text-xs text-red-500 font-semibold flex items-center gap-1">
-                                                                        <UserX size={12} /> Absent
-                                                                    </span>
-                                                                );
-                                                            }
-                                                        })()}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
+                                                    <option value="ALL">All Stores ({detailModal.employees.length})</option>
+                                                    {uniqueStores.map(store => (
+                                                        <option key={store} value={store}>{store}</option>
+                                                    ))}
+                                                </select>
+                                                <Filter size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Modal Body */}
+                                    <div className="p-5 flex-1 overflow-y-auto min-h-0">
+                                        {filteredModalEmps.length === 0 ? (
+                                            <div className="text-center py-16">
+                                                <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                                    <Users size={28} className="text-slate-400" />
+                                                </div>
+                                                <p className="text-lg font-semibold text-slate-700">No matching employees</p>
+                                                <p className="text-sm text-slate-400 mt-1">No records match your search or store filter.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-100">
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">#</th>
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Employee ID</th>
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Name</th>
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Designation</th>
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Store</th>
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Details</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-50">
+                                                        {filteredModalEmps.map((emp, index) => (
+                                                            <tr
+                                                                key={emp.employee_id}
+                                                                className={(() => {
+                                                                    switch (detailModal.type) {
+                                                                        case 'Present': return 'hover:bg-green-50/50 transition-colors';
+                                                                        case 'Late': return 'hover:bg-orange-50/50 transition-colors';
+                                                                        case 'Absent': return 'hover:bg-red-50/50 transition-colors';
+                                                                        case 'Half Day': return 'hover:bg-yellow-50/50 transition-colors';
+                                                                        default: return 'hover:bg-slate-50 transition-colors';
+                                                                    }
+                                                                })()}
+                                                            >
+                                                                <td className="px-4 py-3 text-slate-400 text-xs">{index + 1}</td>
+                                                                <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{emp.employee_id}</td>
+                                                                <td className="px-4 py-3 font-semibold text-slate-800">{emp.name_as_per_aadhar}</td>
+                                                                <td className="px-4 py-3 text-slate-500">{emp.designation || '-'}</td>
+                                                                <td className="px-4 py-3 text-slate-500">{emp.joining_place || '-'}</td>
+                                                                <td className="px-4 py-3">
+                                                                    {(() => {
+                                                                        const currentStatus = emp.status || detailModal.type;
+                                                                        if (currentStatus === 'Late') {
+                                                                            return (
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="text-xs text-orange-600 font-semibold flex items-center gap-1">
+                                                                                        <Clock size={12} />
+                                                                                        Late ({emp.late_minute || 0}m)
+                                                                                    </span>
+                                                                                    {emp.in_time && (
+                                                                                        <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                                                                            In: {formatTimeIST(emp.in_time)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        } else if (currentStatus === 'Present') {
+                                                                            return (
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
+                                                                                        <UserCheck size={12} /> Present
+                                                                                    </span>
+                                                                                    {emp.in_time && (
+                                                                                        <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                                                                            In: {formatTimeIST(emp.in_time)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        } else if (currentStatus === 'Half Day') {
+                                                                            return (
+                                                                                <span className="text-xs text-yellow-600 font-semibold flex items-center gap-1">
+                                                                                    <AlertCircle size={12} /> Half Day
+                                                                                </span>
+                                                                            );
+                                                                        } else {
+                                                                            return (
+                                                                                <span className="text-xs text-red-500 font-semibold flex items-center gap-1">
+                                                                                    <UserX size={12} /> Absent
+                                                                                </span>
+                                                                            );
+                                                                        }
+                                                                    })()}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            );
+                        })()}
 
                         {/* Modal Footer */}
                         <div className="flex justify-between items-center px-5 py-3 border-t border-slate-100 bg-slate-50/50">

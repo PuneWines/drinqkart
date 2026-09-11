@@ -261,16 +261,28 @@ const Roster = () => {
     };
 
     const fetchCustomShifts = async () => {
+        const DEFAULT_SHIFTS = [
+            { id: 'sys-gs', shift_name: 'General Shift', start_time: '09:30:00', end_time: '19:30:00', label: 'GS', color: 'bg-green-100 text-green-700', bg_color: 'bg-green-200' },
+            { id: 'sys-ms', shift_name: 'Morning Shift', start_time: '08:00:00', end_time: '16:00:00', label: 'MS', color: 'bg-blue-100 text-blue-700', bg_color: 'bg-blue-200' },
+            { id: 'sys-es', shift_name: 'Evening Shift', start_time: '14:00:00', end_time: '22:00:00', label: 'ES', color: 'bg-purple-100 text-purple-700', bg_color: 'bg-purple-200' },
+            { id: 'sys-ns', shift_name: 'Night Shift', start_time: '22:00:00', end_time: '06:00:00', label: 'NS', color: 'bg-indigo-100 text-indigo-700', bg_color: 'bg-indigo-200' },
+            { id: 'sys-do', shift_name: 'Day Off', start_time: null, end_time: null, label: 'DO', color: 'bg-gray-100 text-gray-700', bg_color: 'bg-gray-200' },
+            { id: 'sys-hol', shift_name: 'Holiday', start_time: null, end_time: null, label: 'Hol', color: 'bg-red-100 text-red-700', bg_color: 'bg-red-200' }
+        ];
+
         try {
             const { data, error } = await supabase
                 .from('hr_management_custom_shift')
                 .select('*')
                 .order('id');
-            if (error) throw error;
-            setCustomShifts(data || []);
+            if (error || !data || data.length === 0) {
+                setCustomShifts(DEFAULT_SHIFTS);
+            } else {
+                setCustomShifts(data);
+            }
         } catch (error) {
             console.error('Error fetching custom shifts:', error);
-            toast.error('Failed to fetch custom shifts');
+            setCustomShifts(DEFAULT_SHIFTS);
         }
     };
 
@@ -440,8 +452,6 @@ const Roster = () => {
                     start_time: assignForm.start_time,
                     end_time: assignForm.end_time,
                     remark: assignForm.remark
-                }, {
-                    onConflict: 'employee_id,date'
                 });
 
             if (error) throw error;
@@ -497,9 +507,7 @@ const Roster = () => {
 
             const { error } = await supabase
                 .from('hr_management_shift_roster')
-                .upsert(shiftsToInsert, {
-                    onConflict: 'employee_id,date'
-                });
+                .upsert(shiftsToInsert);
 
             if (error) throw error;
 
@@ -674,9 +682,7 @@ const Roster = () => {
 
             const { error } = await supabase
                 .from('hr_management_shift_roster')
-                .upsert(shiftsToInsert, {
-                    onConflict: 'employee_id,date'
-                });
+                .upsert(shiftsToInsert);
 
             if (error) throw error;
 
