@@ -33,11 +33,12 @@ const AttendanceMonthly = () => {
     const [lastSynced, setLastSynced] = useState(null);
     const [employeesData, setEmployeesData] = useState([]);
     const [matchFilter, setMatchFilter] = useState('ALL'); // 'ALL', 'MATCHED', 'UNMATCHED'
+    const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'HAS_PRESENT', 'HAS_ABSENT', 'HAS_LATE', 'ALL_ABSENT'
     const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedMonth, selectedYear, selectedDevice, matchFilter]);
+    }, [searchTerm, selectedMonth, selectedYear, selectedDevice, matchFilter, statusFilter]);
 
     const monthNames = [
         "January", "February", "March", "April", "May", "June",
@@ -283,13 +284,28 @@ const AttendanceMonthly = () => {
         return baseList;
     })();
 
+    // Apply monthly status filter
+    const statusFilteredData = (() => {
+        if (statusFilter === 'ALL') return filteredData;
+        return filteredData.filter(item => {
+            const present = parseInt(item.presentDays) || 0;
+            const absent = parseInt(item.absentDays) || 0;
+            const late = parseInt(item.lateDays) || 0;
+            if (statusFilter === 'HAS_PRESENT') return present > 0;
+            if (statusFilter === 'HAS_ABSENT') return absent > 0;
+            if (statusFilter === 'HAS_LATE') return late > 0;
+            if (statusFilter === 'ALL_ABSENT') return present === 0 && absent > 0;
+            return true;
+        });
+    })();
+
     const pageSize = 15;
-    const totalPages = Math.ceil(filteredData.length / pageSize);
+    const totalPages = Math.ceil(statusFilteredData.length / pageSize);
     const activePage = Math.min(currentPage, Math.max(1, totalPages));
-    const paginatedData = filteredData.slice((activePage - 1) * pageSize, activePage * pageSize);
+    const paginatedData = statusFilteredData.slice((activePage - 1) * pageSize, activePage * pageSize);
 
     const downloadExcel = () => {
-        const dataToExport = filteredData.map((item, idx) => ({
+        const dataToExport = statusFilteredData.map((item, idx) => ({
             'S.No.': idx + 1,
             'Month/Year': `${item.month} ${item.year}`,
             'Employee Code': item.employeeCode,
@@ -366,8 +382,8 @@ const AttendanceMonthly = () => {
 
                     <button
                         onClick={downloadExcel}
-                        disabled={filteredData.length === 0}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-white font-medium text-xs transition-colors ${filteredData.length === 0
+                        disabled={statusFilteredData.length === 0}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-white font-medium text-xs transition-colors ${statusFilteredData.length === 0
                             ? 'bg-gray-400 cursor-not-allowed'
                             : 'bg-green-600 hover:bg-green-700'
                             }`}
@@ -444,6 +460,31 @@ const AttendanceMonthly = () => {
                                 <option key={y} value={y}>{y}</option>
                             ))}
                         </select>
+                    </div>
+                    {/* Status Filter Pills */}
+                    <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Status</label>
+                        <div className="flex items-center gap-1 flex-wrap">
+                            {[
+                                { key: 'ALL', label: 'All', cls: 'bg-gray-100 text-gray-700 hover:bg-gray-200', active: 'bg-gray-700 text-white' },
+                                { key: 'HAS_PRESENT', label: '✓ Has Present', cls: 'bg-green-50 text-green-700 hover:bg-green-100', active: 'bg-green-600 text-white' },
+                                { key: 'HAS_ABSENT', label: '✗ Has Absent', cls: 'bg-red-50 text-red-700 hover:bg-red-100', active: 'bg-red-600 text-white' },
+                                { key: 'HAS_LATE', label: '⏱ Has Late', cls: 'bg-orange-50 text-orange-700 hover:bg-orange-100', active: 'bg-orange-500 text-white' },
+                                { key: 'ALL_ABSENT', label: '⛔ Fully Absent', cls: 'bg-rose-50 text-rose-700 hover:bg-rose-100', active: 'bg-rose-600 text-white' },
+                            ].map(({ key, label, cls, active }) => (
+                                <button
+                                    key={key}
+                                    onClick={() => setStatusFilter(key)}
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all border ${
+                                        statusFilter === key
+                                            ? `${active} border-transparent shadow-sm`
+                                            : `${cls} border-transparent`
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>

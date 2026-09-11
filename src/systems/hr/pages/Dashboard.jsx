@@ -388,286 +388,390 @@ export default function Dashboard() {
         return `conic-gradient(${segments.join(', ')})`
     }
 
-    const StatCard = ({ icon: Icon, title, value, color, bgColor, trend, subtext, onClick }) => (
-        <div
-            onClick={onClick}
-            className={`bg-white border border-gray-200 p-4 hover:shadow-md transition-all hover:-translate-y-0.5 ${onClick ? 'cursor-pointer hover:bg-slate-50' : ''}`}
-        >
-            <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                    <p className="text-sm text-gray-500 font-medium">{title}</p>
-                    <h3 className="text-3xl font-bold text-gray-900">{value}</h3>
-                    {trend && <p className="text-xs text-green-600">{trend}</p>}
-                    {subtext && <p className="text-xs text-gray-400">{subtext}</p>}
-                </div>
-                <div className={`p-3  ${bgColor}`}>
-                    <Icon size={24} className={color} />
-                </div>
-            </div>
-        </div>
-    )
+    // Attendance rate calculation
+    const attendanceRate = activeEmployee > 0
+        ? Math.round(((todayAttendance.present) / activeEmployee) * 100)
+        : 0;
+
+    // Current time display
+    const [currentTime, setCurrentTime] = useState(new Date());
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const timeString = currentTime.toLocaleTimeString('en-IN', {
+        hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
+    });
+
+    const greeting = (() => {
+        const h = new Date().getHours();
+        if (h < 12) return 'Good Morning';
+        if (h < 17) return 'Good Afternoon';
+        return 'Good Evening';
+    })();
+
+    // SVG Donut chart helper
+    const DonutChart = ({ data, size = 180 }) => {
+        const cx = size / 2, cy = size / 2, r = (size / 2) - 16;
+        const circumference = 2 * Math.PI * r;
+        let cumulativePercent = 0;
+        const total = data.reduce((s, d) => s + d.count, 0);
+
+        return (
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="drop-shadow-sm">
+                {/* Background circle */}
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f1f5f9" strokeWidth="20" />
+                {data.map((segment, i) => {
+                    const pct = total > 0 ? segment.count / total : 0;
+                    const dashLen = circumference * pct;
+                    const dashGap = circumference - dashLen;
+                    const offset = circumference * (1 - cumulativePercent) + circumference * 0.25;
+                    cumulativePercent += pct;
+                    return (
+                        <circle
+                            key={i}
+                            cx={cx} cy={cy} r={r}
+                            fill="none"
+                            stroke={segment.color}
+                            strokeWidth="20"
+                            strokeDasharray={`${dashLen} ${dashGap}`}
+                            strokeDashoffset={offset}
+                            strokeLinecap="round"
+                            className="transition-all duration-700 ease-out"
+                            style={{ transformOrigin: `${cx}px ${cy}px` }}
+                        />
+                    );
+                })}
+                {/* Center text */}
+                <text x={cx} y={cy - 8} textAnchor="middle" className="fill-slate-900 text-2xl font-bold" style={{ fontSize: '28px', fontWeight: 700 }}>
+                    {total}
+                </text>
+                <text x={cx} y={cy + 14} textAnchor="middle" className="fill-slate-400" style={{ fontSize: '12px' }}>
+                    Total
+                </text>
+            </svg>
+        );
+    };
 
     return (
-        <div className="p-10 pt-5">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6">
+        <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+            {/* Premium Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                        <PieChart size={28} />
-                        Dashboard
+                    <p className="text-sm font-medium text-indigo-600 mb-1">{greeting} 👋</p>
+                    <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
+                        HR Dashboard
                     </h1>
-                    <p className="text-gray-500 text-sm mt-1">
-                        Overview of employee statistics and today's attendance
+                    <p className="text-slate-500 text-sm mt-1">
+                        Real-time workforce overview &bull; {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
                     </p>
                 </div>
-                <div className="text-right">
-                    <p className="text-sm text-gray-500">
-                        {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </p>
+                <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl shadow-sm">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        <span className="text-sm font-semibold text-slate-700">{timeString} IST</span>
+                    </div>
                     <button
                         onClick={refreshAttendance}
-                        className="mt-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                        className="group flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-all shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-300 active:scale-95"
                     >
-                        Refresh Data
+                        <svg className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
                     </button>
                 </div>
             </div>
 
             {/* Loading State */}
             {loading ? (
-                <div className="flex justify-center py-12">
-                    <div className="flex items-center gap-2 text-gray-500">
-                        <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                        Loading dashboard data...
-                    </div>
+                <div className="flex flex-col items-center justify-center py-24">
+                    <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
+                    <p className="text-slate-500 font-medium">Loading dashboard data...</p>
                 </div>
             ) : (
                 <>
-                    {/* Today's Attendance Stats Cards */}
-                    <div className="mb-6">
+                    {/* ── Today's Attendance Stat Cards ── */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                        {/* Present */}
+                        <div
+                            onClick={() => handleCardClick('Present')}
+                            className="group relative bg-white rounded-2xl border border-slate-200/80 p-5 cursor-pointer hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                        >
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-green-400 to-emerald-500 rounded-l-2xl" />
+                            <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Present</p>
+                                    <p className="text-3xl font-extrabold text-slate-900">{todayAttendance.present}</p>
+                                    <p className="text-xs text-slate-400 font-medium">{presentEmployeesList.length} on-time, {lateEmployeesList.length} late</p>
+                                </div>
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center shadow-md shadow-green-200 group-hover:scale-110 transition-transform">
+                                    <UserCheck size={20} className="text-white" />
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center gap-1.5">
+                                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700" style={{ width: `${attendanceRate}%` }} />
+                                </div>
+                                <span className="text-[10px] font-bold text-green-600">{attendanceRate}%</span>
+                            </div>
+                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <StatCard
-                                icon={UserCheck}
-                                title="Present"
-                                value={todayAttendance.present}
-                                color="text-green-600"
-                                bgColor="bg-green-50"
-                                subtext={`${presentEmployeesList.length} on-time, ${lateEmployeesList.length} late`}
-                                onClick={() => handleCardClick('Present')}
-                            />
-                            <StatCard
-                                icon={Clock}
-                                title="Late Arrivals"
-                                value={todayAttendance.late}
-                                color="text-orange-600"
-                                bgColor="bg-orange-50"
-                                subtext="Clocked in after 10:10 AM"
-                                onClick={() => handleCardClick('Late')}
-                            />
-                            <StatCard
-                                icon={UserX}
-                                title="Absent"
-                                value={todayAttendance.absent}
-                                color="text-red-600"
-                                bgColor="bg-red-50"
-                                subtext="No attendance log today"
-                                onClick={() => handleCardClick('Absent')}
-                            />
-                            <StatCard
-                                icon={AlertCircle}
-                                title="Half Day"
-                                value={todayAttendance.halfDay}
-                                color="text-yellow-600"
-                                bgColor="bg-yellow-50"
-                                subtext="Marked on half day status"
-                                onClick={() => handleCardClick('Half Day')}
-                            />
+                        {/* Late */}
+                        <div
+                            onClick={() => handleCardClick('Late')}
+                            className="group relative bg-white rounded-2xl border border-slate-200/80 p-5 cursor-pointer hover:shadow-lg hover:shadow-amber-100/50 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                        >
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-orange-500 rounded-l-2xl" />
+                            <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Late Arrivals</p>
+                                    <p className="text-3xl font-extrabold text-slate-900">{todayAttendance.late}</p>
+                                    <p className="text-xs text-slate-400 font-medium">After 10:10 AM</p>
+                                </div>
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-md shadow-amber-200 group-hover:scale-110 transition-transform">
+                                    <Clock size={20} className="text-white" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Absent */}
+                        <div
+                            onClick={() => handleCardClick('Absent')}
+                            className="group relative bg-white rounded-2xl border border-slate-200/80 p-5 cursor-pointer hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                        >
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-rose-400 to-red-500 rounded-l-2xl" />
+                            <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Absent</p>
+                                    <p className="text-3xl font-extrabold text-slate-900">{todayAttendance.absent}</p>
+                                    <p className="text-xs text-slate-400 font-medium">No log today</p>
+                                </div>
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-rose-400 to-red-500 flex items-center justify-center shadow-md shadow-red-200 group-hover:scale-110 transition-transform">
+                                    <UserX size={20} className="text-white" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Half Day */}
+                        <div
+                            onClick={() => handleCardClick('Half Day')}
+                            className="group relative bg-white rounded-2xl border border-slate-200/80 p-5 cursor-pointer hover:shadow-lg hover:shadow-yellow-100/50 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                        >
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-yellow-400 to-amber-500 rounded-l-2xl" />
+                            <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Half Day</p>
+                                    <p className="text-3xl font-extrabold text-slate-900">{todayAttendance.halfDay}</p>
+                                    <p className="text-xs text-slate-400 font-medium">Half day marked</p>
+                                </div>
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-md shadow-yellow-200 group-hover:scale-110 transition-transform">
+                                    <AlertCircle size={20} className="text-white" />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Charts and Activity Section */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                        {/* Employee Status Distribution - Pie Chart */}
-                        <div className="lg:col-span-2 bg-white  border border-gray-200 p-6">
+                    {/* ── Charts & Activity Section ── */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                        {/* Employee Status Distribution */}
+                        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-lg font-semibold text-gray-900">Employee Status Distribution</h2>
-                                <PieChart size={20} className="text-gray-400" />
+                                <div>
+                                    <h2 className="text-lg font-bold text-slate-900">Employee Status</h2>
+                                    <p className="text-xs text-slate-400 mt-0.5">Distribution across workforce</p>
+                                </div>
+                                <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
+                                    <PieChart size={18} className="text-indigo-500" />
+                                </div>
                             </div>
 
                             {totalEmployee > 0 ? (
                                 <div className="flex flex-col lg:flex-row items-center gap-8">
-                                    {/* Pie Chart */}
-                                    <div className="relative w-48 h-48">
-                                        <div
-                                            className="w-full h-full rounded-full shadow-sm transition-all duration-500"
-                                            style={{ background: getPieChartGradient() }}
-                                        />
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <div className="text-center">
-                                                <p className="text-2xl font-bold text-gray-900">{totalEmployee}</p>
-                                                <p className="text-xs text-gray-500">Total</p>
-                                            </div>
-                                        </div>
+                                    {/* SVG Donut */}
+                                    <div className="relative">
+                                        <DonutChart data={statusDistribution} size={180} />
                                     </div>
 
                                     {/* Legend */}
-                                    <div className="flex-1 space-y-3">
+                                    <div className="flex-1 space-y-2 w-full">
                                         {statusDistribution.map((status) => (
-                                            <div key={status.name} className="flex items-center justify-between p-3  hover:bg-gray-50 transition-colors">
+                                            <div key={status.name} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-3 h-3 rounded-full ${status.bgColor.replace('100', '500')}`} />
-                                                    <span className="text-sm font-medium text-gray-700">{status.name}</span>
+                                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.color }} />
+                                                    <span className="text-sm font-medium text-slate-700">{status.name}</span>
                                                 </div>
-                                                <div className="text-right">
-                                                    <span className="text-sm font-semibold text-gray-900">{status.count}</span>
-                                                    <span className="text-xs text-gray-500 ml-1">({status.percentage}%)</span>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-sm font-bold text-slate-900">{status.count}</span>
+                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${status.badgeColor}`}>
+                                                        {status.percentage}%
+                                                    </span>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             ) : (
-                                <div className="text-center py-8">
-                                    <p className="text-gray-400">No employee data available</p>
+                                <div className="text-center py-12">
+                                    <Users size={36} className="text-slate-300 mx-auto mb-3" />
+                                    <p className="text-slate-400 font-medium">No employee data available</p>
                                 </div>
                             )}
 
-                            {/* Quick Stats */}
-                            <div className="mt-6 pt-6 border-t border-gray-200 grid grid-cols-3 gap-4">
-                                <div className="text-center">
-                                    <p className="text-xs text-gray-500 mb-1">Active Rate</p>
-                                    <p className="text-xl font-bold text-green-600">
-                                        {totalEmployee ? Math.round((activeEmployee / totalEmployee) * 100) : 0}%
-                                    </p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-xs text-gray-500 mb-1">Inactive Rate</p>
-                                    <p className="text-xl font-bold text-amber-600">
-                                        {totalEmployee ? Math.round((inactiveEmployee / totalEmployee) * 100) : 0}%
-                                    </p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-xs text-gray-500 mb-1">Retention Rate</p>
-                                    <p className="text-xl font-bold text-blue-600">
-                                        {totalEmployee ? Math.round(((totalEmployee - leftEmployee) / totalEmployee) * 100) : 0}%
-                                    </p>
-                                </div>
+                            {/* Quick Stats Row */}
+                            <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-3 gap-4">
+                                {[
+                                    { label: 'Active Rate', value: `${totalEmployee ? Math.round((activeEmployee / totalEmployee) * 100) : 0}%`, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                    { label: 'Inactive Rate', value: `${totalEmployee ? Math.round((inactiveEmployee / totalEmployee) * 100) : 0}%`, color: 'text-amber-600', bg: 'bg-amber-50' },
+                                    { label: 'Retention', value: `${totalEmployee ? Math.round(((totalEmployee - leftEmployee) / totalEmployee) * 100) : 0}%`, color: 'text-blue-600', bg: 'bg-blue-50' },
+                                ].map((stat) => (
+                                    <div key={stat.label} className={`text-center p-3 rounded-xl ${stat.bg}`}>
+                                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{stat.label}</p>
+                                        <p className={`text-xl font-extrabold ${stat.color}`}>{stat.value}</p>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
                         {/* Recent Activities */}
-                        <div className="bg-white  border border-gray-200 p-6">
+                        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-lg font-semibold text-gray-900">Recent Activities</h2>
-                                <Calendar size={20} className="text-gray-400" />
+                                <div>
+                                    <h2 className="text-lg font-bold text-slate-900">Recent Joinings</h2>
+                                    <p className="text-xs text-slate-400 mt-0.5">Latest additions</p>
+                                </div>
+                                <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center">
+                                    <Calendar size={18} className="text-violet-500" />
+                                </div>
                             </div>
-                            <div className="space-y-4">
+                            <div className="space-y-1">
                                 {recentEmployees.length > 0 ? (
-                                    recentEmployees.map((emp) => (
-                                        <div key={emp.id} className="flex items-start gap-3 pb-3 border-b border-gray-100 last:border-0">
-                                            <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold shrink-0">
-                                                {emp.name_as_per_aadhar?.charAt(0) || '?'}
+                                    recentEmployees.map((emp, i) => (
+                                        <div key={emp.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
+                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white flex items-center justify-center text-sm font-bold shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                                                {emp.name_as_per_aadhar?.charAt(0)?.toUpperCase() || '?'}
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-900">{emp.name_as_per_aadhar}</p>
-                                                <p className="text-xs text-gray-500">{emp.designation || 'Employee'} joined</p>
+                                                <p className="text-sm font-semibold text-slate-800 truncate">{emp.name_as_per_aadhar}</p>
+                                                <p className="text-[11px] text-slate-400">{emp.designation || 'Employee'}</p>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-gray-400">{formatDate(emp.date_of_joining)}</p>
-                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${emp.status === 'Active' ? 'bg-green-100 text-green-700' :
+                                            <div className="text-right shrink-0">
+                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${emp.status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
                                                     emp.status === 'Inactive' ? 'bg-amber-100 text-amber-700' :
                                                         'bg-red-100 text-red-700'
                                                     }`}>
                                                     {emp.status}
                                                 </span>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(emp.date_of_joining)}</p>
                                             </div>
                                         </div>
                                     ))
                                 ) : (
-                                    <div className="text-center py-8">
-                                        <p className="text-gray-400">No recent activities</p>
+                                    <div className="text-center py-10">
+                                        <Users size={28} className="text-slate-300 mx-auto mb-2" />
+                                        <p className="text-slate-400 text-sm">No recent joinings</p>
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Bottom Stats Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-gradient-to-br from-blue-500 to-blue-600  shadow-lg p-6 text-white">
-                            <div className="flex items-center justify-between mb-4">
-                                <TrendingUp size={28} />
-                                <span className="text-xs bg-white/20 px-2 py-1 rounded-full">This Year</span>
-                            </div>
-                            <p className="text-3xl font-bold">{totalEmployee}</p>
-                            <p className="text-sm opacity-90 mt-1">Total Employees</p>
-                            <div className="mt-4 pt-4 border-t border-white/20">
-                                <p className="text-xs opacity-75">+{activeEmployee} active employees</p>
-                            </div>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-green-500 to-green-600  shadow-lg p-6 text-white">
-                            <div className="flex items-center justify-between mb-4">
-                                <Award size={28} />
-                                <span className="text-xs bg-white/20 px-2 py-1 rounded-full">Current</span>
-                            </div>
-                            <p className="text-3xl font-bold">{activeEmployee}</p>
-                            <p className="text-sm opacity-90 mt-1">Active Employees</p>
-                            <div className="mt-4 pt-4 border-t border-white/20">
-                                <p className="text-xs opacity-75">{totalEmployee ? Math.round((activeEmployee / totalEmployee) * 100) : 0}% of total workforce</p>
+                    {/* ── Bottom Highlight Cards ── */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        <div className="relative bg-gradient-to-br from-indigo-500 via-indigo-600 to-blue-700 rounded-2xl shadow-xl shadow-indigo-200/50 p-6 text-white overflow-hidden">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl" />
+                            <div className="absolute -left-4 -bottom-4 w-20 h-20 bg-white/5 rounded-full blur-lg" />
+                            <div className="relative z-10">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                                        <TrendingUp size={22} />
+                                    </div>
+                                    <span className="text-[10px] font-bold bg-white/20 px-2.5 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm">This Year</span>
+                                </div>
+                                <p className="text-4xl font-extrabold">{totalEmployee}</p>
+                                <p className="text-sm opacity-80 mt-1 font-medium">Total Employees</p>
+                                <div className="mt-4 pt-3 border-t border-white/20">
+                                    <p className="text-xs opacity-70 font-medium">+{activeEmployee} currently active</p>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-gradient-to-br from-red-500 to-red-600  shadow-lg p-6 text-white">
-                            <div className="flex items-center justify-between mb-4">
-                                <UserX size={28} />
-                                <span className="text-xs bg-white/20 px-2 py-1 rounded-full">Today</span>
+                        <div className="relative bg-gradient-to-br from-emerald-500 via-emerald-600 to-green-700 rounded-2xl shadow-xl shadow-emerald-200/50 p-6 text-white overflow-hidden">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl" />
+                            <div className="absolute -left-4 -bottom-4 w-20 h-20 bg-white/5 rounded-full blur-lg" />
+                            <div className="relative z-10">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                                        <Award size={22} />
+                                    </div>
+                                    <span className="text-[10px] font-bold bg-white/20 px-2.5 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm">Current</span>
+                                </div>
+                                <p className="text-4xl font-extrabold">{activeEmployee}</p>
+                                <p className="text-sm opacity-80 mt-1 font-medium">Active Employees</p>
+                                <div className="mt-4 pt-3 border-t border-white/20">
+                                    <p className="text-xs opacity-70 font-medium">{totalEmployee ? Math.round((activeEmployee / totalEmployee) * 100) : 0}% of workforce</p>
+                                </div>
                             </div>
-                            <p className="text-3xl font-bold">{todayAttendance.absent}</p>
-                            <p className="text-sm opacity-90 mt-1">Absent Today</p>
-                            <div className="mt-4 pt-4 border-t border-white/20">
-                                <p className="text-xs opacity-75">
-                                    {(() => {
-                                        const totalActive = activeEmployee || 1;
-                                        return `${Math.round((todayAttendance.absent / totalActive) * 100)}% of active employees`
-                                    })()}
-                                </p>
+                        </div>
+
+                        <div className="relative bg-gradient-to-br from-rose-500 via-red-500 to-red-700 rounded-2xl shadow-xl shadow-red-200/50 p-6 text-white overflow-hidden">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl" />
+                            <div className="absolute -left-4 -bottom-4 w-20 h-20 bg-white/5 rounded-full blur-lg" />
+                            <div className="relative z-10">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                                        <UserX size={22} />
+                                    </div>
+                                    <span className="text-[10px] font-bold bg-white/20 px-2.5 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm">Today</span>
+                                </div>
+                                <p className="text-4xl font-extrabold">{todayAttendance.absent}</p>
+                                <p className="text-sm opacity-80 mt-1 font-medium">Absent Today</p>
+                                <div className="mt-4 pt-3 border-t border-white/20">
+                                    <p className="text-xs opacity-70 font-medium">
+                                        {(() => {
+                                            const totalActive = activeEmployee || 1;
+                                            return `${Math.round((todayAttendance.absent / totalActive) * 100)}% of active employees`
+                                        })()}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </>
             )}
 
-            {/* Detailed Employees Modal - REMOVED SCROLLBAR */}
+            {/* ── Detail Modal ── */}
             {detailModal.isOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDetailModal({ ...detailModal, isOpen: false })}>
-                    <div className="bg-white max-w-4xl w-full max-h-[80vh] shadow-2xl overflow-hidden border border-slate-100 flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDetailModal({ ...detailModal, isOpen: false })}>
+                    <div className="bg-white max-w-4xl w-full max-h-[85vh] shadow-2xl rounded-2xl overflow-hidden border border-slate-100 flex flex-col" onClick={e => e.stopPropagation()}>
                         {/* Modal Header */}
-                        <div className="flex justify-between items-center p-5 border-b bg-gray-50">
+                        <div className="flex justify-between items-center p-5 border-b border-slate-100">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                     {(() => {
-                                        switch (detailModal.type) {
-                                            case 'Present': return <UserCheck size={20} className="text-green-600" />;
-                                            case 'Late': return <Clock size={20} className="text-orange-600" />;
-                                            case 'Absent': return <UserX size={20} className="text-red-600" />;
-                                            case 'Half Day': return <AlertCircle size={20} className="text-yellow-600" />;
-                                            default: return <UserCheck size={20} className="text-indigo-600" />;
-                                        }
+                                        const iconMap = {
+                                            'Present': <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><UserCheck size={18} className="text-green-600" /></div>,
+                                            'Late': <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center"><Clock size={18} className="text-orange-600" /></div>,
+                                            'Absent': <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center"><UserX size={18} className="text-red-600" /></div>,
+                                            'Half Day': <div className="w-8 h-8 rounded-lg bg-yellow-100 flex items-center justify-center"><AlertCircle size={18} className="text-yellow-600" /></div>,
+                                        };
+                                        return iconMap[detailModal.type] || iconMap['Present'];
                                     })()}
-                                    {detailModal.title}
-                                    <span className="text-sm font-normal text-gray-500 ml-2">
-                                        ({detailModal.employees.length} employees)
-                                    </span>
+                                    <div>
+                                        {detailModal.title}
+                                        <span className="text-sm font-normal text-slate-400 ml-2">
+                                            ({detailModal.employees.length})
+                                        </span>
+                                    </div>
                                 </h3>
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="text-xs text-slate-400 mt-1 ml-10">
                                     {detailModal.subtitle}
                                 </p>
                             </div>
                             <button
                                 onClick={() => setDetailModal({ ...detailModal, isOpen: false })}
-                                className="p-2 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -675,48 +779,48 @@ export default function Dashboard() {
                             </button>
                         </div>
 
-                        {/* Modal Body - REMOVED overflow-y-auto */}
-                        <div className="p-5 flex-1">
+                        {/* Modal Body */}
+                        <div className="p-5 flex-1 overflow-y-auto min-h-0">
                             {detailModal.employees.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <Users size={32} className="text-gray-400" />
+                                <div className="text-center py-16">
+                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                        <Users size={28} className="text-slate-400" />
                                     </div>
-                                    <p className="text-lg font-semibold text-gray-700">No employees to show</p>
-                                    <p className="text-sm text-gray-400">There are no records matching this category today.</p>
+                                    <p className="text-lg font-semibold text-slate-700">No employees to show</p>
+                                    <p className="text-sm text-slate-400 mt-1">No records matching this category today.</p>
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-gray-50 border-b border-gray-200">
-                                            <tr>
-                                                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">#</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Employee ID</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Employee Name</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Designation</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Store</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Attendance Details</th>
+                                        <thead>
+                                            <tr className="border-b border-slate-100">
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">#</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Employee ID</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Name</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Designation</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Store</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Details</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100">
+                                        <tbody className="divide-y divide-slate-50">
                                             {detailModal.employees.map((emp, index) => (
                                                 <tr
                                                     key={emp.employee_id}
                                                     className={(() => {
                                                         switch (detailModal.type) {
-                                                            case 'Present': return 'hover:bg-green-50 transition-colors';
-                                                            case 'Late': return 'hover:bg-orange-50 transition-colors';
-                                                            case 'Absent': return 'hover:bg-red-50 transition-colors';
-                                                            case 'Half Day': return 'hover:bg-yellow-50 transition-colors';
+                                                            case 'Present': return 'hover:bg-green-50/50 transition-colors';
+                                                            case 'Late': return 'hover:bg-orange-50/50 transition-colors';
+                                                            case 'Absent': return 'hover:bg-red-50/50 transition-colors';
+                                                            case 'Half Day': return 'hover:bg-yellow-50/50 transition-colors';
                                                             default: return 'hover:bg-slate-50 transition-colors';
                                                         }
                                                     })()}
                                                 >
-                                                    <td className="px-4 py-3 text-gray-500 text-xs">{index + 1}</td>
-                                                    <td className="px-4 py-3 font-mono text-xs font-medium text-gray-900">{emp.employee_id}</td>
-                                                    <td className="px-4 py-3 font-medium text-gray-900">{emp.name_as_per_aadhar}</td>
-                                                    <td className="px-4 py-3 text-gray-600">{emp.designation || '-'}</td>
-                                                    <td className="px-4 py-3 text-gray-600">{emp.joining_place || '-'}</td>
+                                                    <td className="px-4 py-3 text-slate-400 text-xs">{index + 1}</td>
+                                                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{emp.employee_id}</td>
+                                                    <td className="px-4 py-3 font-semibold text-slate-800">{emp.name_as_per_aadhar}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{emp.designation || '-'}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{emp.joining_place || '-'}</td>
                                                     <td className="px-4 py-3">
                                                         {(() => {
                                                             const currentStatus = emp.status || detailModal.type;
@@ -725,10 +829,10 @@ export default function Dashboard() {
                                                                     <div className="flex flex-col">
                                                                         <span className="text-xs text-orange-600 font-semibold flex items-center gap-1">
                                                                             <Clock size={12} />
-                                                                            Late ({emp.late_minute || 0} mins)
+                                                                            Late ({emp.late_minute || 0}m)
                                                                         </span>
                                                                         {emp.in_time && (
-                                                                            <span className="text-[10px] text-gray-500 font-mono">
+                                                                            <span className="text-[10px] text-slate-400 font-mono mt-0.5">
                                                                                 In: {formatTimeIST(emp.in_time)}
                                                                             </span>
                                                                         )}
@@ -738,11 +842,10 @@ export default function Dashboard() {
                                                                 return (
                                                                     <div className="flex flex-col">
                                                                         <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
-                                                                            <UserCheck size={12} />
-                                                                            Present
+                                                                            <UserCheck size={12} /> Present
                                                                         </span>
                                                                         {emp.in_time && (
-                                                                            <span className="text-[10px] text-gray-500 font-mono">
+                                                                            <span className="text-[10px] text-slate-400 font-mono mt-0.5">
                                                                                 In: {formatTimeIST(emp.in_time)}
                                                                             </span>
                                                                         )}
@@ -751,15 +854,13 @@ export default function Dashboard() {
                                                             } else if (currentStatus === 'Half Day') {
                                                                 return (
                                                                     <span className="text-xs text-yellow-600 font-semibold flex items-center gap-1">
-                                                                        <AlertCircle size={12} />
-                                                                        Half Day
+                                                                        <AlertCircle size={12} /> Half Day
                                                                     </span>
                                                                 );
                                                             } else {
                                                                 return (
-                                                                    <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
-                                                                        <UserX size={12} />
-                                                                        Absent
+                                                                    <span className="text-xs text-red-500 font-semibold flex items-center gap-1">
+                                                                        <UserX size={12} /> Absent
                                                                     </span>
                                                                 );
                                                             }
@@ -774,13 +875,13 @@ export default function Dashboard() {
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="flex justify-between items-center p-4 border-t bg-gray-50">
-                            <p className="text-xs text-gray-500">
-                                Total active employees: {activeEmployee}
+                        <div className="flex justify-between items-center px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+                            <p className="text-xs text-slate-400 font-medium">
+                                Active employees: <span className="font-bold text-slate-600">{activeEmployee}</span>
                             </p>
                             <button
                                 onClick={() => setDetailModal({ ...detailModal, isOpen: false })}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm font-medium transition-colors"
+                                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold transition-colors"
                             >
                                 Close
                             </button>

@@ -149,7 +149,7 @@ export const runDailyReminders = async () => {
 
         for (const user of users) {
             if (!user.user_name || !user.number) continue;
-            
+
             const name = user.user_name;
             let pendingCount = 0;
 
@@ -160,7 +160,7 @@ export const runDailyReminders = async () => {
                 .is('submission_date', null)
                 .lte('planned_date', `${today}T23:59:59`)
                 .eq('name', name);
-            
+
             // Delegation
             const { count: delegationCount } = await supabase.from('delegation')
                 .select('*', { count: 'exact', head: true })
@@ -198,12 +198,12 @@ export const runDailyReminders = async () => {
                 .lte('planned_date', `${today}T23:59:59`)
                 .eq('doer_name', name);
 
-            pendingCount = (checklistCount || 0) + 
-                           (delegationCount || 0) + 
-                           (maintenanceCount || 0) + 
-                           (repairCount || 0) + 
-                           (workCount || 0) + 
-                           (eaCount || 0);
+            pendingCount = (checklistCount || 0) +
+                (delegationCount || 0) +
+                (maintenanceCount || 0) +
+                (repairCount || 0) +
+                (workCount || 0) +
+                (eaCount || 0);
 
             if (pendingCount > 0) {
                 const message = `☀️ *Daily Task Reminder*\n\n` +
@@ -217,7 +217,7 @@ export const runDailyReminders = async () => {
                 await new Promise(r => setTimeout(r, 1000));
             }
         }
-        
+
         console.log('✅ Daily Task Reminder Finished!');
 
     } catch (error) {
