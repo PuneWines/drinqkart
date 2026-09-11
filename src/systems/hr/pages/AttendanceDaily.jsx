@@ -345,7 +345,7 @@ const AttendanceDaily = () => {
       const endDayStr = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
       const { data, error } = await supabase
-        .from('Hr_management_shift_roster')
+        .from('hr_management_shift_roster')
         .select('*')
         .gte('date', startDayStr)
         .lte('date', endDayStr);
@@ -595,7 +595,13 @@ const AttendanceDaily = () => {
               rowData: JSON.stringify(rowData)
             })
           });
-          const result = await response.json();
+          const text = await response.text();
+          let result = {};
+          try {
+            result = JSON.parse(text);
+          } catch (jsonErr) {
+            console.warn('Google Apps Script returned non-JSON response:', text.substring(0, 100));
+          }
           if (result.success) successCount++;
           else failCount++;
         } catch (err) {
@@ -1316,7 +1322,7 @@ const AttendanceDaily = () => {
         let shiftEntry = null;
         try {
           const { data: shiftRows } = await supabase
-            .from('Hr_management_shift_roster')
+            .from('hr_management_shift_roster')
             .select('*')
             .eq('employee_id', employeeId)
             .eq('date', date)
@@ -1586,6 +1592,56 @@ const AttendanceDaily = () => {
       setTempInTime('');
       setTempOutTime('');
     }
+  };
+
+  // Sync Clock In input change to manual punch logs list (replaces earliest punch)
+  const handleClockInChange = (val) => {
+    setTempInTime(val);
+    if (!val) return;
+    const timePart = val.split('T')[1]?.substring(0, 5);
+    if (!timePart) return;
+
+    const existing = Object.values(tempManualPunches).filter(Boolean).sort();
+    let updatedList = [];
+    if (existing.length === 0) {
+      updatedList = [timePart];
+    } else {
+      updatedList = [timePart, ...existing.slice(1)].sort();
+    }
+
+    const newPunchesObj = {
+      "1": updatedList[0] || "",
+      "2": updatedList[1] || "",
+      "3": updatedList[2] || "",
+      "4": updatedList[3] || "",
+      "5": updatedList[4] || ""
+    };
+    setTempManualPunches(newPunchesObj);
+  };
+
+  // Sync Clock Out input change to manual punch logs list (replaces latest punch)
+  const handleClockOutChange = (val) => {
+    setTempOutTime(val);
+    if (!val) return;
+    const timePart = val.split('T')[1]?.substring(0, 5);
+    if (!timePart) return;
+
+    const existing = Object.values(tempManualPunches).filter(Boolean).sort();
+    let updatedList = [];
+    if (existing.length <= 1) {
+      updatedList = [...existing, timePart].sort();
+    } else {
+      updatedList = [...existing.slice(0, existing.length - 1), timePart].sort();
+    }
+
+    const newPunchesObj = {
+      "1": updatedList[0] || "",
+      "2": updatedList[1] || "",
+      "3": updatedList[2] || "",
+      "4": updatedList[3] || "",
+      "5": updatedList[4] || ""
+    };
+    setTempManualPunches(newPunchesObj);
   };
 
   // Handle save from slide panel
@@ -2641,7 +2697,7 @@ const AttendanceDaily = () => {
                         <input
                           type="datetime-local"
                           value={tempInTime}
-                          onChange={(e) => setTempInTime(e.target.value)}
+                          onChange={(e) => handleClockInChange(e.target.value)}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                         />
                       </div>
@@ -2652,7 +2708,7 @@ const AttendanceDaily = () => {
                         <input
                           type="datetime-local"
                           value={tempOutTime}
-                          onChange={(e) => setTempOutTime(e.target.value)}
+                          onChange={(e) => handleClockOutChange(e.target.value)}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                         />
                       </div>

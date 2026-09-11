@@ -20,9 +20,10 @@ const Payroll = () => {
     const [isSubmittingPayments, setIsSubmittingPayments] = useState(false);
     const [isSavingToDB, setIsSavingToDB] = useState(false);
     const [showSchemaModal, setShowSchemaModal] = useState(false);
+    const [advanceMapState, setAdvanceMapState] = useState({});
 
-    // const PAYROLL_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby1QHKttecIhZwoyh8-xo_wzqHgxIuFr9Tci8L803T1q0nKkjA1w26soUXSffkMY4E0sQ/exec';
-    // const SPREADSHEET_ID = '1lg8cvRaYHpnR75bWxHoh-a30-gGL94-_WAnE7Zue6r8';
+    const PAYROLL_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby1QHKttecIhZwoyh8-xo_wzqHgxIuFr9Tci8L803T1q0nKkjA1w26soUXSffkMY4E0sQ/exec';
+    const SPREADSHEET_ID = '1lg8cvRaYHpnR75bWxHoh-a30-gGL94-_WAnE7Zue6r8';
 
     const monthNames = [
         "January", "February", "March", "April", "May", "June",
@@ -82,12 +83,17 @@ const Payroll = () => {
     const getAdvanceDeductionForPeriod = (adv, targetYear, targetMonth) => {
         const apprAmount = Number(adv.approved_amount) || Number(adv.amount) || 0;
         const apprMonthlyDeduction = Number(adv.approved_monthly_deduction) || Number(adv.monthly_deduction) || 0;
+        const currentRemaining = adv.remaining_amount !== null && adv.remaining_amount !== undefined 
+            ? Number(adv.remaining_amount) 
+            : apprAmount;
 
-        if (apprAmount <= 0 || apprMonthlyDeduction <= 0) return { remaining: apprAmount, deduction: 0 };
+        if (apprAmount <= 0 || apprMonthlyDeduction <= 0 || currentRemaining <= 0) {
+            return { remaining: currentRemaining, deduction: 0 };
+        }
 
         const dateSource = adv.starting_month || adv.created_at;
         const dateInfo = parseTimestampToMonthYear(dateSource);
-        if (!dateInfo.month || !dateInfo.year) return { remaining: apprAmount, deduction: 0 };
+        if (!dateInfo.month || !dateInfo.year) return { remaining: currentRemaining, deduction: 0 };
 
         // Calculate months difference
         const startMonthsSinceEpoch = dateInfo.year * 12 + (dateInfo.month - 1);
@@ -96,21 +102,12 @@ const Payroll = () => {
 
         if (monthsActive < 0) {
             // Deduction hasn't started yet
-            return { remaining: apprAmount, deduction: 0 };
-        }
-
-        // How much has been deducted in previous months
-        const previousDeductions = monthsActive * apprMonthlyDeduction;
-        const remainingBalance = Math.max(0, apprAmount - previousDeductions);
-
-        if (remainingBalance <= 0) {
-            // Already fully paid off
-            return { remaining: 0, deduction: 0 };
+            return { remaining: currentRemaining, deduction: 0 };
         }
 
         // Deduction for this month is the minimum of monthly deduction and remaining balance
-        const currentDeduction = Math.min(apprMonthlyDeduction, remainingBalance);
-        return { remaining: remainingBalance, deduction: currentDeduction };
+        const currentDeduction = Math.min(apprMonthlyDeduction, currentRemaining);
+        return { remaining: currentRemaining, deduction: currentDeduction };
     };
 
     // Fetch dynamic payroll data from Supabase and Google Sheet advances
@@ -213,8 +210,8 @@ const Payroll = () => {
             const advanceMap = {};
             try {
                 const { data: dbAdvances, error: advError } = await supabase
-                    .from('Hr_management_advance_requests')
-                    .select('employee_id, status, type, created_at, starting_month, amount, monthly_deduction, approved_amount, approved_monthly_deduction');
+                    .from('hr_management_advance_requests')
+                    .select('id, employee_id, status, type, created_at, starting_month, amount, monthly_deduction, approved_amount, approved_monthly_deduction, remaining_amount');
 
                 if (advError) throw advError;
 
@@ -229,7 +226,8 @@ const Payroll = () => {
                         advanceMap[empId] = {
                             advanceDeduction: 0,
                             fixedAdvanceAmount: 0,
-                            fixedAdvanceDeduction: 0
+                            fixedAdvanceDeduction: 0,
+                            advancesList: []
                         };
                     }
 
@@ -237,12 +235,14 @@ const Payroll = () => {
 
                     if (type === 'advance' || type === 'monthly advance') {
                         advanceMap[empId].advanceDeduction += deduction;
+                        advanceMap[empId].advancesList.push({ adv, deduction });
                     } else if (type === 'fix advance' || type === 'fixed advance' || type === 'medical amount' || type === 'fixed advanced' || type === 'fixed amount') {
                         const apprAmount = Number(adv.approved_amount) || Number(adv.amount) || 0;
                         advanceMap[empId].fixedAdvanceAmount += apprAmount;
                         advanceMap[empId].fixedAdvanceDeduction += deduction;
                     }
                 });
+                setAdvanceMapState(advanceMap);
             } catch (e) {
                 console.error("Failed to load advances from Supabase:", e);
             }
@@ -252,7 +252,7 @@ const Payroll = () => {
             try {
                 const monthStr = monthNames[selectedMonth - 1];
                 const { data: dbPayroll, error: payrollError } = await supabase
-                    .from('Hr_management_payroll')
+                    .from('hr_management_payroll')
                     .select('*')
                     .eq('year', selectedYear)
                     .eq('month', monthStr);
@@ -390,7 +390,11 @@ const Payroll = () => {
                 ];
             });
 
-            const allRows = [...verifiedRows, ...unmatchedRows];
+            // Filter out employees who have already been processed/saved for this month
+            const activeSalaryVerifiedRows = verifiedRows.filter(r => !payrollMap[r[0]?.toString().toLowerCase().trim()]);
+            const activeSalaryUnmatchedRows = unmatchedRows.filter(r => !payrollMap[r[0]?.toString().toLowerCase().trim()]);
+
+            const allRows = [...activeSalaryVerifiedRows, ...activeSalaryUnmatchedRows];
             setSalaryData({ headers, rows: allRows });
         } catch (err) {
             setError("Failed to fetch payroll: " + err.message);
@@ -400,22 +404,73 @@ const Payroll = () => {
         }
     };
 
-    // Fetch payout history from PAID Record sheet
+    // Fetch payout history from Supabase hr_management_payroll table
     const fetchHistoryData = async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${PAYROLL_SCRIPT_URL}?sheet=PAID Record&action=fetch&spreadsheetId=${SPREADSHEET_ID}`);
-            const result = await response.json();
-            if (result.success && result.data && result.data.length > 0) {
-                const headers = result.data[0];
-                const dataRows = result.data.slice(1);
-                setHistoryData({ headers, rows: dataRows });
-            } else {
-                setHistoryData({ headers: [], rows: [] });
-            }
+            const { data: dbPayroll, error: payrollError } = await supabase
+                .from('hr_management_payroll')
+                .select('*')
+                .eq('year', selectedYear)
+                .eq('month', monthNames[selectedMonth - 1])
+                .order('created_at', { ascending: false });
+
+            if (payrollError) throw payrollError;
+
+            // Fetch employee names to map employee_id to name
+            const { data: dbEmp } = await supabase
+                .from('hr_management_employees')
+                .select('employee_id, name_as_per_aadhar');
+
+            const empNameMap = {};
+            (dbEmp || []).forEach(e => {
+                if (e.employee_id) empNameMap[e.employee_id.trim().toLowerCase()] = e.name_as_per_aadhar;
+            });
+
+            const headers = [
+                'Emp ID',
+                'Name',
+                'Month',
+                'Year',
+                'Basic Salary',
+                'Total Days',
+                'Present',
+                'Extra Days',
+                'Advance Deduction',
+                'Breakage',
+                'Medical',
+                'RTO',
+                'Prorated Salary',
+                'Seasonal Bonus',
+                'Referral Bonus',
+                'Net Salary',
+                'Saved Date'
+            ];
+
+            const rows = (dbPayroll || []).map(r => [
+                r.employee_id,
+                empNameMap[r.employee_id?.trim().toLowerCase()] || r.employee_id,
+                r.month,
+                r.year,
+                r.salary,
+                r.total_month_days,
+                r.total_present,
+                r.extra_days,
+                r.advance_deduction,
+                r.breakage_deduction,
+                r.medical_deduction,
+                r.rto_deduction,
+                r.prorated_salary,
+                r.seasonal_bonus,
+                r.referral_bonus,
+                r.net_salary,
+                formatDate(r.created_at)
+            ]);
+
+            setHistoryData({ headers, rows });
         } catch (err) {
-            setError("Failed to fetch history records");
+            setError("Failed to fetch history records: " + err.message);
             console.error(err);
         } finally {
             setLoading(false);
@@ -424,6 +479,7 @@ const Payroll = () => {
 
     useEffect(() => {
         setCurrentPage(1);
+        setSelectedEmpIds(new Set());
         if (activeTab === 'salary') {
             fetchPayrollData();
         } else {
@@ -469,7 +525,7 @@ const Payroll = () => {
             }));
 
             const { error } = await supabase
-                .from('Hr_management_payroll')
+                .from('hr_management_payroll')
                 .upsert(payrollRecords, { onConflict: 'employee_id,year,month' });
 
             if (error) {
@@ -483,7 +539,32 @@ const Payroll = () => {
                     throw error;
                 }
             } else {
-                toast.success(`Successfully saved ${payrollRecords.length} records to Supabase 'payroll' table!`);
+                // Update remaining_amount in hr_management_advance_requests for deducted advances
+                for (const row of targetRows) {
+                    const empIdLower = row[0]?.toString().toLowerCase().trim();
+                    const advInfo = advanceMapState[empIdLower];
+                    if (advInfo && advInfo.advancesList && advInfo.advancesList.length > 0) {
+                        for (const { adv, deduction } of advInfo.advancesList) {
+                            if (deduction > 0 && adv.id) {
+                                const currentRem = adv.remaining_amount !== null && adv.remaining_amount !== undefined 
+                                    ? Number(adv.remaining_amount) 
+                                    : (Number(adv.approved_amount) || Number(adv.amount) || 0);
+                                const newRem = Math.max(0, currentRem - deduction);
+                                const updatePayload = { remaining_amount: newRem };
+                                if (newRem === 0) {
+                                    updatePayload.status = 'Received';
+                                }
+                                await supabase
+                                    .from('hr_management_advance_requests')
+                                    .update(updatePayload)
+                                    .eq('id', adv.id);
+                            }
+                        }
+                    }
+                }
+                toast.success(`Successfully saved ${payrollRecords.length} records and updated advance remaining balances!`);
+                setSelectedEmpIds(new Set());
+                fetchPayrollData();
             }
         } catch (e) {
             console.error(e);
@@ -890,7 +971,7 @@ const Payroll = () => {
                 </div>
             ) : (
                 <div className="bg-white border border-gray-200  overflow-hidden max-w-full">
-                    {selectedEmpIds.size > 0 && (
+                    {activeTab === 'salary' && selectedEmpIds.size > 0 && (
                         <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 transition-all animate-in fade-in slide-in-from-top-2 duration-200">
                             <div className="flex items-center gap-2">
                                 <div className="p-1 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center">
@@ -922,27 +1003,29 @@ const Payroll = () => {
                         <table className="w-full min-w-[1400px] text-xs text-left border-collapse">
                             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-4 py-2.5 font-semibold text-gray-600 w-10 text-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={paginatedRows.length > 0 && paginatedRows.every(row => selectedEmpIds.has(row[0]?.toString()))}
-                                            onChange={(e) => {
-                                                const newSelected = new Set(selectedEmpIds);
-                                                paginatedRows.forEach(row => {
-                                                    const id = row[0]?.toString();
-                                                    if (id) {
-                                                        if (e.target.checked) {
-                                                            newSelected.add(id);
-                                                        } else {
-                                                            newSelected.delete(id);
+                                    {activeTab === 'salary' && (
+                                        <th className="px-4 py-2.5 font-semibold text-gray-600 w-10 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={paginatedRows.length > 0 && paginatedRows.every(row => selectedEmpIds.has(row[0]?.toString()))}
+                                                onChange={(e) => {
+                                                    const newSelected = new Set(selectedEmpIds);
+                                                    paginatedRows.forEach(row => {
+                                                        const id = row[0]?.toString();
+                                                        if (id) {
+                                                            if (e.target.checked) {
+                                                                newSelected.add(id);
+                                                            } else {
+                                                                newSelected.delete(id);
+                                                            }
                                                         }
-                                                    }
-                                                });
-                                                setSelectedEmpIds(newSelected);
-                                            }}
-                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                        />
-                                    </th>
+                                                    });
+                                                    setSelectedEmpIds(newSelected);
+                                                }}
+                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                            />
+                                        </th>
+                                    )}
                                     <th className="px-4 py-2.5 font-semibold text-gray-600 w-12 text-center">S.no</th>
                                     {(activeTab === 'salary' ? salaryData.headers : historyData.headers).map((header, idx) => (
                                         <th key={idx} className="px-4 py-2.5 font-semibold text-gray-600 whitespace-nowrap text-center">
@@ -962,25 +1045,27 @@ const Payroll = () => {
 
                                     return (
                                         <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-4 py-2.5 text-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedEmpIds.has(row[0]?.toString())}
-                                                    onChange={(e) => {
-                                                        const newSelected = new Set(selectedEmpIds);
-                                                        const id = row[0]?.toString();
-                                                        if (id) {
-                                                            if (e.target.checked) {
-                                                                newSelected.add(id);
-                                                            } else {
-                                                                newSelected.delete(id);
+                                            {activeTab === 'salary' && (
+                                                <td className="px-4 py-2.5 text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedEmpIds.has(row[0]?.toString())}
+                                                        onChange={(e) => {
+                                                            const newSelected = new Set(selectedEmpIds);
+                                                            const id = row[0]?.toString();
+                                                            if (id) {
+                                                                if (e.target.checked) {
+                                                                    newSelected.add(id);
+                                                                } else {
+                                                                    newSelected.delete(id);
+                                                                }
                                                             }
-                                                        }
-                                                        setSelectedEmpIds(newSelected);
-                                                    }}
-                                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                                />
-                                            </td>
+                                                            setSelectedEmpIds(newSelected);
+                                                        }}
+                                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                    />
+                                                </td>
+                                            )}
                                             <td className="px-4 py-2.5 text-center text-gray-400 font-mono border-r border-gray-100">{(activePage - 1) * pageSize + idx + 1}</td>
                                             {cellsToRender.map(({ header, cell }, j) => {
                                                 const headerName = header?.toLowerCase() || '';
@@ -1147,7 +1232,7 @@ const Payroll = () => {
                             </p>
                             <div className="relative bg-slate-950 rounded-lg p-3.5 mb-4">
                                 <pre className="text-[10px] text-emerald-400 font-mono overflow-x-auto max-h-48 scrollbar-thin whitespace-pre-wrap">
-                                    {`CREATE TABLE IF NOT EXISTS payroll (
+                                    {`CREATE TABLE IF NOT EXISTS hr_management_payroll (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     employee_id VARCHAR(255) NOT NULL,
     year INTEGER NOT NULL,
@@ -1169,21 +1254,14 @@ const Payroll = () => {
     UNIQUE (employee_id, year, month)
 );
 
-ALTER TABLE public.payroll 
-ADD COLUMN IF NOT EXISTS extra_days INTEGER DEFAULT 0,
-ADD COLUMN IF NOT EXISTS rto_deduction NUMERIC DEFAULT 0,
-ADD COLUMN IF NOT EXISTS prorated_salary NUMERIC DEFAULT 0,
-ADD COLUMN IF NOT EXISTS seasonal_bonus NUMERIC DEFAULT 0,
-ADD COLUMN IF NOT EXISTS referral_bonus NUMERIC DEFAULT 0,
-DROP COLUMN IF EXISTS total_absent,
-DROP COLUMN IF EXISTS advance_amount,
-DROP COLUMN IF EXISTS management_adjustment,
-DROP COLUMN IF EXISTS fixed_advance_amount,
-DROP COLUMN IF EXISTS fixed_advance_deduction;`}
+-- For existing hr_management_payroll tables without unique constraint:
+ALTER TABLE hr_management_payroll 
+ADD CONSTRAINT hr_management_payroll_emp_year_month_key 
+UNIQUE (employee_id, year, month);`}
                                 </pre>
                                 <button
                                     onClick={() => {
-                                        navigator.clipboard.writeText(`CREATE TABLE IF NOT EXISTS payroll (\n    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,\n    employee_id VARCHAR(255) NOT NULL,\n    year INTEGER NOT NULL,\n    month VARCHAR(50) NOT NULL,\n    total_month_days INTEGER DEFAULT 0,\n    total_present INTEGER DEFAULT 0,\n    extra_days INTEGER DEFAULT 0,\n    salary NUMERIC DEFAULT 0,\n    advance_deduction NUMERIC DEFAULT 0,\n    breakage_deduction NUMERIC DEFAULT 0,\n    medical_deduction NUMERIC DEFAULT 0,\n    rto_deduction NUMERIC DEFAULT 0,\n    prorated_salary NUMERIC DEFAULT 0,\n    seasonal_bonus NUMERIC DEFAULT 0,\n    referral_bonus NUMERIC DEFAULT 0,\n    net_salary NUMERIC DEFAULT 0,\n    is_verified BOOLEAN DEFAULT TRUE,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,\n    UNIQUE (employee_id, year, month)\n);\n\nALTER TABLE public.payroll \nADD COLUMN IF NOT EXISTS extra_days INTEGER DEFAULT 0,\nADD COLUMN IF NOT EXISTS rto_deduction NUMERIC DEFAULT 0,\nADD COLUMN IF NOT EXISTS prorated_salary NUMERIC DEFAULT 0,\nADD COLUMN IF NOT EXISTS seasonal_bonus NUMERIC DEFAULT 0,\nADD COLUMN IF NOT EXISTS referral_bonus NUMERIC DEFAULT 0,\nDROP COLUMN IF EXISTS total_absent,\nDROP COLUMN IF EXISTS advance_amount,\nDROP COLUMN IF EXISTS management_adjustment,\nDROP COLUMN IF EXISTS fixed_advance_amount,\nDROP COLUMN IF EXISTS fixed_advance_deduction;`);
+                                        navigator.clipboard.writeText(`ALTER TABLE hr_management_payroll ADD CONSTRAINT hr_management_payroll_emp_year_month_key UNIQUE (employee_id, year, month);`);
                                         toast.success("SQL copied to clipboard!");
                                     }}
                                     className="absolute top-2 right-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] text-gray-300 rounded font-medium transition-colors cursor-pointer"
