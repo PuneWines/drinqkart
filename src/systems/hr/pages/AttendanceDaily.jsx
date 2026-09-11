@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Search, Download, Calendar, Loader2, CheckCircle, X, Clock, Pencil, Filter, Users, User, Clock as ClockIcon, TrendingUp, Database, RefreshCw, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Plus, ChevronDown } from 'lucide-react';
+import { Search, Download, Calendar, Loader2, CheckCircle, X, Clock, Pencil, Filter, Users, User, Clock as ClockIcon, TrendingUp, Database, RefreshCw, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Plus, ChevronDown, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
@@ -213,13 +213,14 @@ const AttendanceDaily = () => {
   const [selectedDate, setSelectedDate] = useState(todayDate);
   const [employeesData, setEmployeesData] = useState([]); // Store employees table data
   const [matchFilter, setMatchFilter] = useState('ALL'); // 'ALL', 'MATCHED', 'UNMATCHED'
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'Present', 'Late', 'Absent', 'Half Day'
   const [currentPage, setCurrentPage] = useState(1);
   const [rosterData, setRosterData] = useState([]); // Store shift_roster data
 
   // Reset page to 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStore, matchFilter, selectedDate]);
+  }, [searchTerm, selectedStore, matchFilter, statusFilter, selectedDate]);
 
   const handleDateChange = (dateStr) => {
     if (!dateStr) return;
@@ -244,7 +245,7 @@ const AttendanceDaily = () => {
   const [tempStatus, setTempStatus] = useState('');
   const [tempInTime, setTempInTime] = useState('');
   const [tempOutTime, setTempOutTime] = useState('');
-  const [tempManualPunches, setTempManualPunches] = useState({ "1": "", "2": "", "3": "", "4": "", "5": "" });
+  const [tempManualPunches, setTempManualPunches] = useState({ "1": "", "2": "", "3": "", "4": "", "5": "", "6": "" });
   const [newPunchTime, setNewPunchTime] = useState('');
   const [isSlidePanelOpen, setIsSlidePanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -259,6 +260,7 @@ const AttendanceDaily = () => {
   const [markOutTime, setMarkOutTime] = useState('');
   const [markEmployeeSearch, setMarkEmployeeSearch] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [leavesData, setLeavesData] = useState([]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -278,6 +280,7 @@ const AttendanceDaily = () => {
       await Promise.all([
         fetchEmployeesTable(),
         fetchRosterData(null, selectedDate),
+        fetchLeavesData(),
         fetchAttendanceFromDB(currentMonth)
       ]);
     } catch (err) {
@@ -366,6 +369,75 @@ const AttendanceDaily = () => {
     );
   };
 
+  // Fetch leaves from Hr_management_leaves
+  const fetchLeavesData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('Hr_management_leaves')
+        .select('*');
+      if (!error && data) {
+        setLeavesData(data);
+      }
+    } catch (e) {
+      console.warn('Could not fetch leaves data:', e);
+    }
+  };
+
+  // Helper to find leave info or reason for an absent streak
+  const getLeaveInfoForStreak = (employeeId, startFullDate, endFullDate, streak = []) => {
+    // 1. Check leave applications from Hr_management_leaves table
+    if (leavesData && leavesData.length > 0) {
+      const cleanId = employeeId?.toString().trim().toLowerCase();
+
+      const matched = leavesData.find(l => {
+        const lEmpId = (l.employee_id || l.employeeId)?.toString().trim().toLowerCase();
+        if (lEmpId !== cleanId) return false;
+        const from = l.from_date || l.fromDate;
+        const to = l.to_date || l.toDate;
+        if (!from || !to) return false;
+        return from <= endFullDate && to >= startFullDate;
+      });
+
+      if (matched && (matched.reason || matched.remarks || matched.leave_type || matched.leaveType)) {
+        return {
+          reason: matched.reason || matched.remarks || null,
+          leaveType: matched.leave_type || matched.leaveType || null
+        };
+      }
+    }
+
+    // 2. Check individual attendance records within the streak for reasons or remarks
+    if (streak && streak.length > 0) {
+      for (const item of streak) {
+        const att = item.attendance;
+        if (att) {
+          const reason = att.reason || att.remarks || att.notes || att.note || att.punchMissReason;
+          if (reason) {
+            return {
+              reason: reason,
+              leaveType: att.leave_type || att.status || null
+            };
+          }
+        }
+      }
+    }
+
+    return { reason: null, leaveType: null };
+  };
+
+  // Format short date (e.g. "5 Jun")
+  const formatDateRangeDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const [y, m, d] = dateStr.split('-');
+      const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthShort = shortMonths[parseInt(m, 10) - 1] || '';
+      return `${parseInt(d, 10)} ${monthShort}`;
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
   const formatTime12h = (dateStr) => {
     if (!dateStr || dateStr === '-') return '-';
     try {
@@ -402,11 +474,116 @@ const AttendanceDaily = () => {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Clamps In-Time to 10:00 AM if it is before 10:00 AM
+  const clampInTimeTo10AM = (timeStr, dateContext = '') => {
+    if (!timeStr || timeStr === '-') return timeStr;
+    try {
+      const d = parseISTToDate(timeStr);
+      if (!d) return timeStr;
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(d);
+      const getVal = (type) => parts.find(p => p.type === type)?.value;
+      const h = parseInt(getVal('hour'), 10);
+      if (h < 10) {
+        return `${getVal('year')}-${getVal('month')}-${getVal('day')}T10:00:00`;
+      }
+      return timeStr;
+    } catch (e) {
+      return timeStr;
+    }
+  };
+
+  // Clamps Out-Time to 11:00 PM (23:00) if it is after 11:00 PM
+  const clampOutTimeTo11PM = (timeStr, dateContext = '') => {
+    if (!timeStr || timeStr === '-') return timeStr;
+    try {
+      const d = parseISTToDate(timeStr);
+      if (!d) return timeStr;
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).formatToParts(d);
+      const getVal = (type) => parts.find(p => p.type === type)?.value;
+      const h = parseInt(getVal('hour'), 10);
+      const m = parseInt(getVal('minute'), 10);
+      const s = parseInt(getVal('second'), 10);
+      if (h > 23 || (h === 23 && (m > 0 || s > 0))) {
+        return `${getVal('year')}-${getVal('month')}-${getVal('day')}T23:00:00`;
+      }
+      return timeStr;
+    } catch (e) {
+      return timeStr;
+    }
+  };
+
+  // Normalizes attendance record loaded from DB to respect 10 AM, 11 PM, and 5-punch rule
+  const normalizeAttendanceRecord = (record) => {
+    if (!record) return record;
+    let modified = { ...record };
+
+    // 1. RULE 1: If in_time is before 10:00 AM, set to 10:00 AM
+    if (modified.in_time && modified.in_time !== '-') {
+      const clampedIn = clampInTimeTo10AM(modified.in_time);
+      if (clampedIn !== modified.in_time) {
+        modified.in_time = clampedIn;
+        modified.late_minute = 0;
+      }
+    }
+
+    // 2. Parse punch log if present
+    let punchList = [];
+    if (modified.punch_log && modified.punch_log !== '-') {
+      punchList = modified.punch_log.split(/\s*\|\s*/).filter(Boolean);
+    }
+
+    // RULE 3: If punch_log has 5 punches, assume 6th out punch is 11:00 PM
+    if (punchList.length === 5) {
+      punchList.push('11:00 PM');
+      modified.punch_log = punchList.join(' | ');
+      modified.punch_log_status = 'Bahar';
+      modified.punch_miss = 'No';
+      modified.punch_miss_msg = '';
+      if (modified.attendance_date) {
+        modified.out_time = `${modified.attendance_date}T23:00:00`;
+      }
+    }
+
+    // 3. RULE 2: If out_time is after 11:00 PM (23:00), clamp to 11:00 PM
+    if (modified.out_time && modified.out_time !== '-') {
+      const clampedOut = clampOutTimeTo11PM(modified.out_time);
+      if (clampedOut !== modified.out_time) {
+        modified.out_time = clampedOut;
+      }
+    }
+
+    // Recompute working hours with clamped times
+    if (modified.in_time && modified.out_time && modified.in_time !== '-' && modified.out_time !== '-') {
+      modified.working_hour = calculateWorkHours(modified.in_time, modified.out_time, modified.attendance_date);
+    }
+
+    return modified;
+  };
+
   const calculateWorkHours = (inStr, outStr, dateContext = '') => {
     if (!inStr || !outStr || inStr === '-' || outStr === '-' || inStr === outStr) return '00:00:00';
     try {
-      const inDate = parseISTToDate(inStr);
-      const outDate = parseISTToDate(outStr);
+      const clampedIn = clampInTimeTo10AM(inStr, dateContext);
+      const clampedOut = clampOutTimeTo11PM(outStr, dateContext);
+      const inDate = parseISTToDate(clampedIn);
+      const outDate = parseISTToDate(clampedOut);
       if (!inDate || !outDate || outDate <= inDate) return '00:00:00';
       return calculateHoursMins(outDate - inDate);
     } catch (e) {
@@ -417,7 +594,8 @@ const AttendanceDaily = () => {
   const calculateLateMinutes = (inStr, dateContext = '') => {
     if (!inStr || inStr === '-') return 0;
     try {
-      const inDate = parseISTToDate(inStr);
+      const clampedIn = clampInTimeTo10AM(inStr, dateContext);
+      const inDate = parseISTToDate(clampedIn);
       if (!inDate) return 0;
 
       const parts = new Intl.DateTimeFormat('en-US', {
@@ -669,7 +847,8 @@ const AttendanceDaily = () => {
       const todayData = todayDataRaw || [];
 
       const withoutToday = monthData.filter(r => r.attendance_date !== todayDate);
-      const merged = [...withoutToday, ...todayData];
+      const mergedRaw = [...withoutToday, ...todayData];
+      const merged = mergedRaw.map(normalizeAttendanceRecord);
 
       console.log('🔍 [fetchAttendanceFromDB] Debugging Info:', {
         todayDate,
@@ -699,6 +878,7 @@ const AttendanceDaily = () => {
 
       // Fetch roster data for the selected month
       await fetchRosterData(null, startDateStr);
+      await fetchLeavesData();
 
       console.log(`Loaded ${merged.length} records (month: ${withoutToday.length} + today: ${todayData.length})`);
     } catch (err) {
@@ -845,7 +1025,8 @@ const AttendanceDaily = () => {
           "2": getHM(markOutTime) ? convert24hTo12h(getHM(markOutTime)) : "",
           "3": "",
           "4": "",
-          "5": ""
+          "5": "",
+          "6": ""
         };
       } else {
         manualPunches = {
@@ -1169,8 +1350,9 @@ const AttendanceDaily = () => {
     const time3 = convertTo24h(punches["3"]);
     const time4 = convertTo24h(punches["4"]);
     const time5 = convertTo24h(punches["5"]);
+    const time6 = convertTo24h(punches["6"]);
 
-    const activeTimes = [time1, time2, time3, time4, time5].filter(Boolean);
+    let activeTimes = [time1, time2, time3, time4, time5, time6].filter(Boolean);
 
     if (activeTimes.length === 0) {
       return {
@@ -1184,6 +1366,27 @@ const AttendanceDaily = () => {
         late_minute: 0,
         status: null
       };
+    }
+
+    // Sort chronologically
+    activeTimes.sort();
+
+    // ── RULE 1: Set 1st punch (In-Time) to 10:00 AM even if user punches at 9 AM or before 10 AM ──
+    if (activeTimes[0] < "10:00") {
+      activeTimes[0] = "10:00";
+    }
+
+    // ── RULE 3: After 5th punch, assume 6th OUT punch is 11:00 PM (23:00) ──
+    if (activeTimes.length === 5) {
+      activeTimes.push("23:00");
+    }
+
+    // ── RULE 2: Set last punch (Out-Time) to 11:00 PM (23:00) even if punched after 11 PM ──
+    if (activeTimes.length > 1) {
+      const lastIdx = activeTimes.length - 1;
+      if (activeTimes[lastIdx] > "23:00") {
+        activeTimes[lastIdx] = "23:00";
+      }
     }
 
     const formatDateTime = (timeVal) => {
@@ -1357,17 +1560,19 @@ const AttendanceDaily = () => {
           updateData.punch_log_status = "Bahar";
         }
       } else {
+        const clampedIn = inTime ? clampInTimeTo10AM(inTime, date) : null;
+        const clampedOut = outTime ? clampOutTimeTo11PM(outTime, date) : null;
         if (inTime !== undefined) {
-          updateData.in_time = inTime ? formatToISTISOString(inTime) : null;
+          updateData.in_time = clampedIn ? formatToISTISOString(clampedIn) : null;
         }
         if (outTime !== undefined) {
-          updateData.out_time = outTime ? formatToISTISOString(outTime) : null;
+          updateData.out_time = clampedOut ? formatToISTISOString(clampedOut) : null;
         }
 
-        if (inTime || outTime) {
-          if (inTime && outTime && inTime !== '-' && outTime !== '-') {
-            updateData.working_hour = calculateWorkHours(inTime, outTime, date);
-            updateData.late_minute = calculateLateMinutes(inTime, date);
+        if (clampedIn || clampedOut) {
+          if (clampedIn && clampedOut && clampedIn !== '-' && clampedOut !== '-') {
+            updateData.working_hour = calculateWorkHours(clampedIn, clampedOut, date);
+            updateData.late_minute = calculateLateMinutes(clampedIn, date);
           }
         }
       }
@@ -1505,10 +1710,14 @@ const AttendanceDaily = () => {
       const parsedPunches = fullRecord.punch_log.split('|').map(p => convert12hTo24h(p)).filter(Boolean);
       punchesObj = {};
       parsedPunches.forEach((p, idx) => {
-        if (idx < 5) {
+        if (idx < 6) {
           punchesObj[(idx + 1).toString()] = p;
         }
       });
+      // If 5 punches present, assume 6th punch is 23:00 (11:00 PM)
+      if (parsedPunches.length === 5 && !punchesObj["6"]) {
+        punchesObj["6"] = "23:00";
+      }
     }
 
     const parsePunchTo24h = (val) => {
@@ -1525,7 +1734,8 @@ const AttendanceDaily = () => {
       "2": parsePunchTo24h(punchesObj["2"]),
       "3": parsePunchTo24h(punchesObj["3"]),
       "4": parsePunchTo24h(punchesObj["4"]),
-      "5": parsePunchTo24h(punchesObj["5"])
+      "5": parsePunchTo24h(punchesObj["5"]),
+      "6": parsePunchTo24h(punchesObj["6"])
     });
 
     setNewPunchTime('');
@@ -1548,7 +1758,8 @@ const AttendanceDaily = () => {
       "2": updatedList[1] || "",
       "3": updatedList[2] || "",
       "4": updatedList[3] || "",
-      "5": updatedList[4] || ""
+      "5": updatedList[4] || "",
+      "6": updatedList[5] || ""
     };
 
     setTempManualPunches(newPunchesObj);
@@ -1576,7 +1787,8 @@ const AttendanceDaily = () => {
       "2": remainingList[1] || "",
       "3": remainingList[2] || "",
       "4": remainingList[3] || "",
-      "5": remainingList[4] || ""
+      "5": remainingList[4] || "",
+      "6": remainingList[5] || ""
     };
 
     setTempManualPunches(newPunchesObj);
@@ -1614,7 +1826,8 @@ const AttendanceDaily = () => {
       "2": updatedList[1] || "",
       "3": updatedList[2] || "",
       "4": updatedList[3] || "",
-      "5": updatedList[4] || ""
+      "5": updatedList[4] || "",
+      "6": updatedList[5] || ""
     };
     setTempManualPunches(newPunchesObj);
   };
@@ -1639,7 +1852,8 @@ const AttendanceDaily = () => {
       "2": updatedList[1] || "",
       "3": updatedList[2] || "",
       "4": updatedList[3] || "",
-      "5": updatedList[4] || ""
+      "5": updatedList[4] || "",
+      "6": updatedList[5] || ""
     };
     setTempManualPunches(newPunchesObj);
   };
@@ -1656,6 +1870,7 @@ const AttendanceDaily = () => {
         "3": tempManualPunches["3"] ? convert24hTo12h(tempManualPunches["3"]) : "",
         "4": tempManualPunches["4"] ? convert24hTo12h(tempManualPunches["4"]) : "",
         "5": tempManualPunches["5"] ? convert24hTo12h(tempManualPunches["5"]) : "",
+        "6": tempManualPunches["6"] ? convert24hTo12h(tempManualPunches["6"]) : "",
         is_manual: true
       };
 
@@ -1762,7 +1977,15 @@ const AttendanceDaily = () => {
           matchesFilterMode = !isMatched;
         }
 
-        return matchesSearch && matchesStore && matchesFilterMode;
+        // Status filter: check today's attendance status for daily view
+        let matchesStatus = true;
+        if (statusFilter !== 'ALL') {
+          const att = getAttendanceForDate(emp.id, selectedDate);
+          const empStatus = att?.status || 'Absent';
+          matchesStatus = empStatus === statusFilter;
+        }
+
+        return matchesSearch && matchesStore && matchesFilterMode && matchesStatus;
       });
 
     // 2. If showing verified or all (matchFilter is not UNMATCHED), append remaining employees from users table
@@ -1776,6 +1999,9 @@ const AttendanceDaily = () => {
           const empId = emp.employee_id || emp.id;
           // Exclude if already in employees list (meaning they have logs)
           if (hasAttendance(empId)) return false;
+
+          // Remaining employees (no log) are always 'Absent'
+          if (statusFilter !== 'ALL' && statusFilter !== 'Absent') return false;
 
           // Apply search term and store filters
           const name = emp.user_name || emp.name_as_per_aadhar || '';
@@ -2108,6 +2334,25 @@ const AttendanceDaily = () => {
             </div>
           </div>
 
+          {/* Status Filter Dropdown */}
+          <div className="min-w-[140px]">
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Filter by Status</label>
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full appearance-none pl-2 pr-6 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs bg-white font-medium text-gray-700"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="Present">✓ Present</option>
+                <option value="Late">⏱ Late</option>
+                <option value="Absent">✗ Absent</option>
+                <option value="Half Day">◑ Half Day</option>
+              </select>
+              <Filter size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+
           <div>
             <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Month</label>
             <div className="flex items-center gap-1">
@@ -2174,7 +2419,7 @@ const AttendanceDaily = () => {
                     </td>
                   </tr>
                 ) : paginatedEmployees.length > 0 ? (
-                  paginatedEmployees.map((employee) => {
+                  paginatedEmployees.map((employee, empIdx) => {
                     let presentCount = 0, lateCount = 0, absentCount = 0, halfDayCount = 0;
                     const isInEmployeesTable = isEmployeeInTable(employee.id);
                     const employeeProfile = employeesData.find(e => e.employee_id === employee.id || e.id === employee.id);
@@ -2230,54 +2475,197 @@ const AttendanceDaily = () => {
                             </div>
                           </div>
                         </td>
-                        {days.map((day, idx) => {
-                          const attendance = getAttendanceForDate(employee.id, day.fullDate);
-                          let status = attendance.status || 'Absent';
-                          const config = STATUS_CONFIG[status] || STATUS_CONFIG['Absent'];
+                        {(() => {
+                          // Segment days into single cells or merged streaks (for 3+ consecutive absent days)
+                          const segments = [];
+                          let i = 0;
+                          while (i < days.length) {
+                            const d = days[i];
+                            const att = getAttendanceForDate(employee.id, d.fullDate);
+                            const st = att.status || 'Absent';
 
-                          if (status === 'Present') presentCount++;
-                          else if (status === 'Late') lateCount++;
-                          else if (status === 'Absent') absentCount++;
-                          else if (status === 'Half Day') halfDayCount++;
+                            if (st === 'Absent' || st === 'On Leave') {
+                              let j = i;
+                              const streak = [];
+                              while (j < days.length) {
+                                const nextAtt = getAttendanceForDate(employee.id, days[j].fullDate);
+                                const nextSt = nextAtt.status || 'Absent';
+                                if (nextSt === 'Absent' || nextSt === 'On Leave') {
+                                  streak.push({ day: days[j], idx: j, attendance: nextAtt, status: nextSt });
+                                  j++;
+                                } else {
+                                  break;
+                                }
+                              }
 
-                          return (
-                            <td
-                              key={idx}
-                              className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 relative ${day.isWeekend ? 'bg-gray-50' : ''}`}
-                              onClick={() => handleEmployeeSelect(employee, day.fullDate, status, attendance.in_time, attendance.out_time)}
-                            >
-                              <div className="relative inline-block">
-                                <div className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${config.color} font-medium text-[10px] transition-transform hover:scale-105`}>
-                                  {config.label}
+                              if (streak.length >= 3) {
+                                segments.push({
+                                  type: 'merged_absent',
+                                  colSpan: streak.length,
+                                  startIndex: i,
+                                  streak: streak,
+                                  startDay: streak[0].day,
+                                  endDay: streak[streak.length - 1].day
+                                });
+                                i = j;
+                              } else {
+                                streak.forEach(item => {
+                                  segments.push({
+                                    type: 'single',
+                                    colSpan: 1,
+                                    day: item.day,
+                                    idx: item.idx,
+                                    attendance: item.attendance,
+                                    status: item.status
+                                  });
+                                });
+                                i = j;
+                              }
+                            } else {
+                              segments.push({
+                                type: 'single',
+                                colSpan: 1,
+                                day: d,
+                                idx: i,
+                                attendance: att,
+                                status: st
+                              });
+                              i++;
+                            }
+                          }
+
+                          return segments.map((seg, sIdx) => {
+                            if (seg.type === 'merged_absent') {
+                              const leaveInfo = getLeaveInfoForStreak(employee.id, seg.startDay.fullDate, seg.endDay.fullDate, seg.streak);
+                              absentCount += seg.colSpan;
+
+                              const isTopRow = empIdx < 2;
+                              const isLeftCol = seg.startIndex <= 2;
+                              const isRightCol = (seg.startIndex + seg.colSpan) >= (days.length - 2);
+
+                              const horizontalPosClass = isLeftCol
+                                ? 'left-0'
+                                : isRightCol
+                                ? 'right-0'
+                                : 'left-1/2 -translate-x-1/2';
+
+                              const verticalPosClass = isTopRow
+                                ? 'top-full mt-2 origin-top'
+                                : 'bottom-full mb-2 origin-bottom';
+
+                              const arrowClass = isTopRow
+                                ? `bottom-full ${isLeftCol ? 'left-4' : isRightCol ? 'right-4' : 'left-1/2 -translate-x-1/2'} -mb-1 border-4 border-transparent border-b-slate-900/95`
+                                : `top-full ${isLeftCol ? 'left-4' : isRightCol ? 'right-4' : 'left-1/2 -translate-x-1/2'} -mt-1 border-4 border-transparent border-t-slate-900/95`;
+
+                              return (
+                                <td
+                                  key={`seg-${employee.id}-${seg.startDay.fullDate}`}
+                                  colSpan={seg.colSpan}
+                                  className="px-0.5 py-1 text-center relative"
+                                  onClick={() => handleEmployeeSelect(employee, seg.startDay.fullDate, 'Absent', null, null)}
+                                >
+                                  <div className="relative group/leave mx-auto w-full flex items-center justify-center">
+                                    <div className="w-full h-6 px-1.5 py-0.5 rounded-md bg-gradient-to-r from-rose-100 via-rose-50 to-rose-100 border border-rose-300 text-rose-700 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition-all duration-150 hover:bg-rose-200 hover:border-rose-400 hover:shadow-sm">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 animate-pulse"></span>
+                                      <span className="text-[9px] font-bold tracking-tight whitespace-nowrap">
+                                        Leave ({seg.colSpan}d)
+                                      </span>
+                                    </div>
+
+                                    {/* Hover Tooltip Popover */}
+                                    <div className={`absolute ${verticalPosClass} ${horizontalPosClass} w-64 p-2.5 bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl border border-slate-700/80 opacity-0 invisible group-hover/leave:opacity-100 group-hover/leave:visible transition-all duration-200 pointer-events-none z-50 text-left scale-95 group-hover/leave:scale-100`}>
+                                      <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700/80">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-400 uppercase tracking-wider">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                          Continuous Absence
+                                        </div>
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">
+                                          {seg.colSpan} Days
+                                        </span>
+                                      </div>
+
+                                      <div className="space-y-1 text-xs">
+                                        <div className="flex items-center gap-1.5 text-slate-200">
+                                          <Calendar size={12} className="text-rose-400 shrink-0" />
+                                          <span className="font-semibold text-slate-100 text-[11px]">
+                                            Leave: {formatDateRangeDisplay(seg.startDay.fullDate)} to {formatDateRangeDisplay(seg.endDay.fullDate)}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-[11px] text-slate-300">
+                                          <span className="text-slate-400">Total Duration:</span>
+                                          <span className="font-semibold text-rose-300">{seg.colSpan} Days</span>
+                                        </div>
+
+                                        <div className="pt-1 border-t border-slate-800 text-[11px]">
+                                          <span className="text-slate-400 font-medium">Reason: </span>
+                                          <span className={`font-medium ${leaveInfo.reason ? 'text-amber-200' : 'text-slate-400 italic'}`}>
+                                            {leaveInfo.reason || 'Not specified (Absent streak)'}
+                                          </span>
+                                          {leaveInfo.leaveType && (
+                                            <div className="mt-1 inline-block px-1.5 py-0.5 rounded text-[8px] bg-slate-800 text-indigo-300 border border-slate-700 font-medium">
+                                              {leaveInfo.leaveType}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Tooltip arrow */}
+                                      <div className={`absolute ${arrowClass}`}></div>
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            }
+
+                            // Single cell rendering
+                            const { day, idx, attendance, status } = seg;
+                            const config = STATUS_CONFIG[status] || STATUS_CONFIG['Absent'];
+
+                            if (status === 'Present') presentCount++;
+                            else if (status === 'Late') lateCount++;
+                            else if (status === 'Absent' || status === 'On Leave') absentCount++;
+                            else if (status === 'Half Day') halfDayCount++;
+
+                            return (
+                              <td
+                                key={idx}
+                                className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 relative ${day.isWeekend ? 'bg-gray-50' : ''}`}
+                                onClick={() => handleEmployeeSelect(employee, day.fullDate, status, attendance.in_time, attendance.out_time)}
+                              >
+                                <div className="relative inline-block">
+                                  <div className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${config.color} font-medium text-[10px] transition-transform hover:scale-105`}>
+                                    {config.label}
+                                  </div>
+                                  {(() => {
+                                    if (!attendance?.manual_punches) return null;
+                                    const punches = attendance.manual_punches.manual && typeof attendance.manual_punches.manual === 'object'
+                                      ? attendance.manual_punches.manual
+                                      : attendance.manual_punches;
+                                    const hasManual = Object.values(punches).some(v => v && v !== '' && typeof v === 'string');
+                                    return hasManual ? (
+                                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-purple-500 rounded-full border border-white" title="Manual punch log" />
+                                    ) : null;
+                                  })()}
+                                  {(() => {
+                                    const dayRoster = getEmployeeRoster(employee.id, day.fullDate);
+                                    return dayRoster ? (
+                                      <span
+                                        className="absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 bg-indigo-600 rounded-full border border-white cursor-help"
+                                        title={`Shift: ${dayRoster.shift_type} (${dayRoster.start_time?.substring(0, 5)} - ${dayRoster.end_time?.substring(0, 5)})`}
+                                      />
+                                    ) : null;
+                                  })()}
                                 </div>
-                                {(() => {
-                                  if (!attendance?.manual_punches) return null;
-                                  const punches = attendance.manual_punches.manual && typeof attendance.manual_punches.manual === 'object'
-                                    ? attendance.manual_punches.manual
-                                    : attendance.manual_punches;
-                                  const hasManual = Object.values(punches).some(v => v && v !== '' && typeof v === 'string');
-                                  return hasManual ? (
-                                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-purple-500 rounded-full border border-white" title="Manual punch log" />
-                                  ) : null;
-                                })()}
-                                {(() => {
-                                  const dayRoster = getEmployeeRoster(employee.id, day.fullDate);
-                                  return dayRoster ? (
-                                    <span
-                                      className="absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 bg-indigo-600 rounded-full border border-white cursor-help"
-                                      title={`Shift: ${dayRoster.shift_type} (${dayRoster.start_time?.substring(0, 5)} - ${dayRoster.end_time?.substring(0, 5)})`}
-                                    />
-                                  ) : null;
-                                })()}
-                              </div>
-                              {attendance.late_minute > 0 && (
-                                <div className="text-[8px] text-gray-400 mt-0.5">
-                                  {attendance.late_minute}m
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
+                                {attendance.late_minute > 0 && (
+                                  <div className="text-[8px] text-gray-400 mt-0.5">
+                                    {attendance.late_minute}m
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          });
+                        })()}
                       </tr>
                     );
                   })
@@ -2393,7 +2781,7 @@ const AttendanceDaily = () => {
                           }
                         } else {
                           // Old structure: direct keys
-                          const rawManual = ["1", "2", "3", "4", "5"]
+                          const rawManual = ["1", "2", "3", "4", "5", "6"]
                             .map(key => punchesObj[key])
                             .filter(value => value && value !== '' && typeof value === 'string');
                           if (rawManual.length > 0) {
@@ -2452,7 +2840,7 @@ const AttendanceDaily = () => {
                           const apiCount = punchesObj.api ? Object.values(punchesObj.api).filter(v => v && v !== '' && typeof v === 'string').length : 0;
                           totalPunches = manualCount + apiCount;
                         } else {
-                          const oldManualCount = ["1", "2", "3", "4", "5"]
+                          const oldManualCount = ["1", "2", "3", "4", "5", "6"]
                             .map(key => punchesObj[key])
                             .filter(v => v && v !== '' && typeof v === 'string').length;
                           totalPunches = oldManualCount;

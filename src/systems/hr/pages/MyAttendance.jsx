@@ -5,6 +5,7 @@ import {
     User, Hash, Timer, Coffee, AlertCircle, FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 const DEVICES = [
     { name: 'BAWDHAN', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
@@ -52,6 +53,52 @@ const MyAttendance = () => {
     const [error, setError] = useState(null);
     const [attendanceData, setAttendanceData] = useState([]);
     const [isDemo, setIsDemo] = useState(false);
+    const [leavesData, setLeavesData] = useState([]);
+
+    useEffect(() => {
+        const fetchLeaves = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('Hr_management_leaves')
+                    .select('*');
+                if (!error && data) {
+                    setLeavesData(data);
+                }
+            } catch (e) {
+                console.warn('Could not load leaves in MyAttendance:', e);
+            }
+        };
+        fetchLeaves();
+    }, []);
+
+    const getLeaveInfoForStreak = (empCode, startDateKey, endDateKey, streak = []) => {
+        if (leavesData && leavesData.length > 0) {
+            const cleanId = (empCode || '').toString().trim().toLowerCase();
+            const matched = leavesData.find(l => {
+                const lEmpId = (l.employee_id || l.employeeId)?.toString().trim().toLowerCase();
+                if (lEmpId !== cleanId) return false;
+                const from = l.from_date || l.fromDate;
+                const to = l.to_date || l.toDate;
+                if (!from || !to) return false;
+                return from <= endDateKey && to >= startDateKey;
+            });
+            if (matched && (matched.reason || matched.remarks || matched.leave_type || matched.leaveType)) {
+                return {
+                    reason: matched.reason || matched.remarks || null,
+                    leaveType: matched.leave_type || matched.leaveType || null
+                };
+            }
+        }
+        for (const item of streak) {
+            if (item.reason || item.remarks || item.notes) {
+                return {
+                    reason: item.reason || item.remarks || item.notes,
+                    leaveType: item.leave_type || null
+                };
+            }
+        }
+        return { reason: null, leaveType: null };
+    };
 
     const timeToSeconds = (timeStr) => {
         if (!timeStr || timeStr === '-' || timeStr === '0.0' || timeStr === '0') return 0;
@@ -182,7 +229,18 @@ const MyAttendance = () => {
             };
             const inDate = parse(inStr);
             const outDate = parse(outStr);
-            if (!inDate || !outDate || outDate <= inDate) return '00:00:00';
+            if (!inDate || !outDate) return '00:00:00';
+
+            // Clamp inDate to 10:00 AM if before 10:00 AM
+            if (inDate.getHours() < 10) {
+                inDate.setHours(10, 0, 0, 0);
+            }
+            // Clamp outDate to 11:00 PM (23:00) if after 23:00
+            if (outDate.getHours() > 23 || (outDate.getHours() === 23 && (outDate.getMinutes() > 0 || outDate.getSeconds() > 0))) {
+                outDate.setHours(23, 0, 0, 0);
+            }
+
+            if (outDate <= inDate) return '00:00:00';
             return calculateHoursMins(outDate - inDate);
         } catch (e) { return '00:00:00'; }
     };
@@ -353,7 +411,29 @@ const MyAttendance = () => {
                     else inTime = punchTime;
                 } else {
                     inTime = logs[0];
-                    outTime = logs[logs.length - 1];
+                    // RULE 3: If 5 punches exist, assume 6th OUT punch is 11:00 PM (23:00)
+                    if (logs.length === 5) {
+                        outTime = `${group.date} 23:00:00`;
+                        punchMiss = 'No';
+                    } else {
+                        outTime = logs[logs.length - 1];
+                    }
+                }
+
+                // RULE 1: Clamp inTime to 10:00 AM if punched before 10:00 AM
+                if (inTime && inTime !== '-') {
+                    const t = inTime.split(' ')[1] || inTime.split('T')[1] || '';
+                    if (t && t.substring(0, 5) < '10:00') {
+                        inTime = `${inTime.split(/[ T]/)[0]} 10:00:00`;
+                    }
+                }
+
+                // RULE 2: Clamp outTime to 11:00 PM if punched after 11:00 PM (23:00)
+                if (outTime && outTime !== '-') {
+                    const t = outTime.split(' ')[1] || outTime.split('T')[1] || '';
+                    if (t && t.substring(0, 5) > '23:00') {
+                        outTime = `${outTime.split(/[ T]/)[0]} 23:00:00`;
+                    }
                 }
 
                 const code = group.id;
@@ -511,6 +591,53 @@ const MyAttendance = () => {
     // Sort by date just in case
     displayAttendance.sort((a, b) => new Date(a.dateKey).getTime() - new Date(b.dateKey).getTime());
 
+    // Segment displayAttendance into single days or merged absent streaks (3+ days)
+    const segmentedAttendance = [];
+    let sIdx = 0;
+    while (sIdx < displayAttendance.length) {
+        const rec = displayAttendance[sIdx];
+        const isAbsent = (rec.status || '').trim().toLowerCase() === 'absent' || (rec.status || '').trim().toLowerCase() === 'on leave';
+        if (isAbsent) {
+            let j = sIdx;
+            const streak = [];
+            while (j < displayAttendance.length) {
+                const nextRec = displayAttendance[j];
+                const nextIsAbsent = (nextRec.status || '').trim().toLowerCase() === 'absent' || (nextRec.status || '').trim().toLowerCase() === 'on leave';
+                if (nextIsAbsent) {
+                    streak.push(nextRec);
+                    j++;
+                } else {
+                    break;
+                }
+            }
+
+            if (streak.length >= 3) {
+                segmentedAttendance.push({
+                    type: 'merged_absent',
+                    streak: streak,
+                    startRecord: streak[0],
+                    endRecord: streak[streak.length - 1],
+                    colSpan: streak.length
+                });
+                sIdx = j;
+            } else {
+                streak.forEach(item => {
+                    segmentedAttendance.push({
+                        type: 'single',
+                        record: item
+                    });
+                });
+                sIdx = j;
+            }
+        } else {
+            segmentedAttendance.push({
+                type: 'single',
+                record: rec
+            });
+            sIdx++;
+        }
+    }
+
     // Calculate final dashboard stats
     const presentDays = displayAttendance.filter(r => r.status.trim().toLowerCase() === 'present').length;
     const absentDays = displayAttendance.filter(r => r.status.trim().toLowerCase() === 'absent').length;
@@ -633,32 +760,104 @@ const MyAttendance = () => {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : displayAttendance.map((record, index) => (
-                                <tr key={index} className="group hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-5 text-sm font-bold text-gray-900">{record.employeeCode}</td>
-                                    <td className="px-6 py-5 text-sm font-medium text-gray-700">{record.employeeName}</td>
-                                    <td className="px-6 py-5 text-sm text-gray-500 font-bold">{formatSheetDate(record.date)}</td>
-                                    <td className="px-6 py-5 text-sm text-green-600 font-bold">{formatSheetTime(record.inTime)}</td>
-                                    <td className="px-6 py-5 text-sm text-red-600 font-bold">{formatSheetTime(record.outTime)}</td>
-                                    <td className="px-6 py-5 text-sm text-yellow-600 font-bold">{record.lateMinutes}</td>
-                                    <td className="px-6 py-5 text-sm font-black text-indigo-600">{record.totalWithLunchDuration}</td>
-                                    <td className="px-6 py-5 text-xs text-amber-600 font-bold flex items-center gap-1 mt-4">
-                                        <Coffee size={12} /> {record.lunchTime}
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        <span
-                                            title={record.punchMiss ? record.punchMissReason : ''}
-                                            className={`px-3 py-1 text-[10px] font-black uppercase rounded-full cursor-help transition-all shadow-sm border ${record.status.trim().toLowerCase() === 'present' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                record.status.trim().toLowerCase() === 'late' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                    record.status.trim().toLowerCase() === 'holiday' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                                        'bg-red-50 text-red-700 border-red-200'
-                                                }`}
-                                        >
-                                            {record.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
+                            ) : segmentedAttendance.map((item, index) => {
+                                if (item.type === 'merged_absent') {
+                                    const leaveInfo = getLeaveInfoForStreak(
+                                        item.startRecord.employeeCode,
+                                        item.startRecord.dateKey,
+                                        item.endRecord.dateKey,
+                                        item.streak
+                                    );
+                                    const isTop = index < 2;
+                                    return (
+                                        <tr key={`merged-${index}`} className="group bg-rose-50/40 hover:bg-rose-50/70 transition-colors border-y border-rose-100">
+                                            <td className="px-6 py-4 text-sm font-bold text-gray-900">{item.startRecord.employeeCode}</td>
+                                            <td className="px-6 py-4 text-sm font-medium text-gray-700">{item.startRecord.employeeName}</td>
+                                            <td className="px-6 py-4 text-sm text-rose-700 font-bold whitespace-nowrap">
+                                                {formatSheetDate(item.startRecord.date)} → {formatSheetDate(item.endRecord.date)}
+                                            </td>
+                                            <td colSpan={5} className="px-6 py-4">
+                                                <div className="relative group/leave inline-flex items-center">
+                                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-rose-100 to-rose-50 border border-rose-300 text-rose-800 text-xs font-bold cursor-help shadow-xs hover:border-rose-400 hover:bg-rose-100 transition-all">
+                                                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                                                        <span>Consecutive Leave ({item.colSpan} Days)</span>
+                                                    </div>
+
+                                                    {/* Hover Tooltip Popover */}
+                                                    <div className={`absolute ${isTop ? 'top-full mt-2 origin-top' : 'bottom-full mb-2 origin-bottom'} left-0 w-72 p-3 bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl border border-slate-700/80 opacity-0 invisible group-hover/leave:opacity-100 group-hover/leave:visible transition-all duration-200 pointer-events-none z-50 text-left scale-95 group-hover/leave:scale-100`}>
+                                                        <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700/80">
+                                                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-400 uppercase tracking-wider">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                                                Continuous Absence
+                                                            </div>
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">
+                                                                {item.colSpan} Days
+                                                            </span>
+                                                        </div>
+                                                        <div className="space-y-1.5 text-xs">
+                                                            <div className="flex items-center gap-1.5 text-slate-200">
+                                                                <Calendar size={13} className="text-rose-400 shrink-0" />
+                                                                <span className="font-semibold text-slate-100 text-[11px]">
+                                                                    Leave: {formatSheetDate(item.startRecord.date)} to {formatSheetDate(item.endRecord.date)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between text-[11px] text-slate-300">
+                                                                <span className="text-slate-400">Total Duration:</span>
+                                                                <span className="font-semibold text-rose-300">{item.colSpan} Days</span>
+                                                            </div>
+                                                            <div className="pt-1.5 border-t border-slate-800 text-[11px]">
+                                                                <span className="text-slate-400 font-medium">Reason: </span>
+                                                                <span className={`font-medium ${leaveInfo.reason ? 'text-amber-200' : 'text-slate-400 italic'}`}>
+                                                                    {leaveInfo.reason || 'Not specified (Absent streak)'}
+                                                                </span>
+                                                                {leaveInfo.leaveType && (
+                                                                    <div className="mt-1 inline-block px-1.5 py-0.5 rounded text-[8px] bg-slate-800 text-indigo-300 border border-slate-700 font-medium">
+                                                                        {leaveInfo.leaveType}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className={`absolute ${isTop ? 'bottom-full -mb-1 border-b-slate-900/95' : 'top-full -mt-1 border-t-slate-900/95'} left-6 border-4 border-transparent`}></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="px-3 py-1 text-[10px] font-black uppercase rounded-full shadow-sm border bg-rose-100 text-rose-700 border-rose-200">
+                                                    Leave ({item.colSpan}d)
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                }
+
+                                const record = item.record;
+                                return (
+                                    <tr key={index} className="group hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-5 text-sm font-bold text-gray-900">{record.employeeCode}</td>
+                                        <td className="px-6 py-5 text-sm font-medium text-gray-700">{record.employeeName}</td>
+                                        <td className="px-6 py-5 text-sm text-gray-500 font-bold">{formatSheetDate(record.date)}</td>
+                                        <td className="px-6 py-5 text-sm text-green-600 font-bold">{formatSheetTime(record.inTime)}</td>
+                                        <td className="px-6 py-5 text-sm text-red-600 font-bold">{formatSheetTime(record.outTime)}</td>
+                                        <td className="px-6 py-5 text-sm text-yellow-600 font-bold">{record.lateMinutes}</td>
+                                        <td className="px-6 py-5 text-sm font-black text-indigo-600">{record.totalWithLunchDuration}</td>
+                                        <td className="px-6 py-5 text-xs text-amber-600 font-bold flex items-center gap-1 mt-4">
+                                            <Coffee size={12} /> {record.lunchTime}
+                                        </td>
+                                        <td className="px-6 py-5">
+                                            <span
+                                                title={record.punchMiss ? record.punchMissReason : ''}
+                                                className={`px-3 py-1 text-[10px] font-black uppercase rounded-full cursor-help transition-all shadow-sm border ${record.status.trim().toLowerCase() === 'present' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                    record.status.trim().toLowerCase() === 'late' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                        record.status.trim().toLowerCase() === 'holiday' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                                            'bg-red-50 text-red-700 border-red-200'
+                                                    }`}
+                                            >
+                                                {record.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

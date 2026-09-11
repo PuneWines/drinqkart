@@ -53,6 +53,84 @@ const parseTimeToSeconds = (timeStr) => {
     return 0;
 };
 
+const clampInTimeTo10AM = (timeStr, dateContext = '') => {
+    if (!timeStr || timeStr === '-') return timeStr;
+    try {
+        let cleanTime = timeStr.toString().trim();
+        let timePart = cleanTime.includes(' ') ? cleanTime.split(' ')[1] : cleanTime.includes('T') ? cleanTime.split('T')[1] : cleanTime;
+        let [hStr] = timePart.split(':');
+        let h = parseInt(hStr, 10);
+        if (cleanTime.toUpperCase().includes('PM') && h < 12) h += 12;
+        if (cleanTime.toUpperCase().includes('AM') && h === 12) h = 0;
+        if (h < 10) {
+            const prefix = cleanTime.includes('T') ? cleanTime.split('T')[0] + 'T' : cleanTime.includes(' ') ? cleanTime.split(' ')[0] + ' ' : '';
+            return `${prefix}10:00:00`;
+        }
+        return timeStr;
+    } catch (e) {
+        return timeStr;
+    }
+};
+
+const clampOutTimeTo11PM = (timeStr, dateContext = '') => {
+    if (!timeStr || timeStr === '-') return timeStr;
+    try {
+        let cleanTime = timeStr.toString().trim();
+        let timePart = cleanTime.includes(' ') ? cleanTime.split(' ')[1] : cleanTime.includes('T') ? cleanTime.split('T')[1] : cleanTime;
+        let [hStr, mStr] = timePart.split(':');
+        let h = parseInt(hStr, 10);
+        let m = parseInt(mStr, 10) || 0;
+        if (cleanTime.toUpperCase().includes('PM') && h < 12) h += 12;
+        if (cleanTime.toUpperCase().includes('AM') && h === 12) h = 0;
+        if (h > 23 || (h === 23 && m > 0)) {
+            const prefix = cleanTime.includes('T') ? cleanTime.split('T')[0] + 'T' : cleanTime.includes(' ') ? cleanTime.split(' ')[0] + ' ' : '';
+            return `${prefix}23:00:00`;
+        }
+        return timeStr;
+    } catch (e) {
+        return timeStr;
+    }
+};
+
+const calculateWorkHoursFromTimes = (inStr, outStr, dateContext = '') => {
+    if (!inStr || !outStr || inStr === '-' || outStr === '-' || inStr === outStr) return '00:00:00';
+    try {
+        const clampedIn = clampInTimeTo10AM(inStr, dateContext);
+        const clampedOut = clampOutTimeTo11PM(outStr, dateContext);
+
+        const parse = (s) => {
+            if (!s || s === '-') return null;
+            let clean = s.trim();
+            if (clean.includes('-') && clean.includes(':')) {
+                const d = new Date(clean.replace(/-/g, '/').replace('T', ' '));
+                if (!isNaN(d.getTime())) return d;
+            }
+            let timePart = clean.includes(' ') ? clean.split(' ')[1] : clean.includes('T') ? clean.split('T')[1] : clean;
+            let isPM = clean.toUpperCase().includes('PM');
+            let isAM = clean.toUpperCase().includes('AM');
+            timePart = timePart.replace(/[AP]M/gi, '').trim();
+            let [h, m, sec] = timePart.split(':').map(Number);
+            if (isPM && h < 12) h += 12;
+            if (isAM && h === 12) h = 0;
+            const base = dateContext ? new Date(dateContext.replace(/-/g, '/')) : new Date();
+            base.setHours(h || 0, m || 0, sec || 0, 0);
+            return base;
+        };
+
+        const inDate = parse(clampedIn);
+        const outDate = parse(clampedOut);
+        if (!inDate || !outDate || outDate <= inDate) return '00:00:00';
+        const diffMs = outDate - inDate;
+        const totalSecs = Math.floor(diffMs / 1000);
+        const hrs = Math.floor(totalSecs / 3600);
+        const mins = Math.floor((totalSecs % 3600) / 60);
+        const secs = totalSecs % 60;
+        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } catch (e) {
+        return '00:00:00';
+    }
+};
+
 /**
  * Fetch logs and metadata, aggregate, and sync/upsert to Supabase
  * @param {number} month - 1-based month (1-12)
@@ -308,8 +386,28 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
 
         const agg = monthlyAgg[id];
 
-        // Accumulate statistics
+        // Accumulate statistics with 10 AM, 11 PM, and 5-punch rules
         const status = row.status;
+        let punchMiss = row.punch_miss === 'Yes' || row.punch_miss === true;
+        let punchLog = row.punch_log || '';
+        let punchList = punchLog && punchLog !== '-' ? punchLog.split(/\s*\|\s*/).filter(Boolean) : [];
+        let inTime = row.in_time;
+        let outTime = row.out_time;
+
+        // RULE 3: If 5 punches exist, assume 6th punch at 11:00 PM and clear punch miss
+        if (punchList.length === 5) {
+            punchMiss = false;
+            outTime = `${row.attendance_date}T23:00:00`;
+        }
+
+        if (inTime && inTime !== '-') inTime = clampInTimeTo10AM(inTime, row.attendance_date);
+        if (outTime && outTime !== '-') outTime = clampOutTimeTo11PM(outTime, row.attendance_date);
+
+        let workHoursStr = row.working_hour;
+        if (inTime && outTime && inTime !== '-' && outTime !== '-') {
+            workHoursStr = calculateWorkHoursFromTimes(inTime, outTime, row.attendance_date);
+        }
+
         if (status === 'Present' || status === 'Late' || status === 'Half Day') {
             agg.presentDays += 1;
         } else if (status === 'Absent') {
@@ -320,11 +418,11 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
             agg.lateDays += 1;
         }
 
-        if (row.punch_miss === 'Yes' || row.punch_miss === true) {
+        if (punchMiss) {
             agg.punchMissDays += 1;
         }
 
-        agg.totalWorkSecs += parseTimeToSeconds(row.working_hour);
+        agg.totalWorkSecs += parseTimeToSeconds(workHoursStr);
         agg.totalLunchSecs += parseTimeToSeconds(row.standard_lunch);
     });
 

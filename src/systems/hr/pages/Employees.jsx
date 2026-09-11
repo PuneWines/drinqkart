@@ -232,11 +232,56 @@ export default function EmployeeManagement() {
 
       if (hrError) throw hrError
 
+      // Fetch latest attendance logs for each employee to check transfer status (last punch location vs assigned location)
+      const { data: latestLogs, error: logsErr } = await supabase
+        .from('hr_management_attendance_logs')
+        .select('*')
+        .order('attendance_date', { ascending: false });
+
+      if (logsErr) {
+        console.warn('Could not fetch attendance logs for transfer check:', logsErr);
+      }
+
+      // Build map of employee_id -> last punched store name
+      const lastPunchStoreMap = {};
+      if (latestLogs && latestLogs.length > 0) {
+        latestLogs.forEach(log => {
+          if (log && log.employee_id) {
+            const empKey = log.employee_id.toString().trim().toLowerCase();
+            const logStore = log.store_name || log.shop_name || log.device_name || log.device_location || '';
+            if (!lastPunchStoreMap[empKey] && logStore) {
+              lastPunchStoreMap[empKey] = logStore.toString().trim();
+            }
+          }
+        });
+      }
+
       if (hrData && hrData.length > 0) {
         hrData.forEach(emp => {
           const details = emp.HR_SYSTEM_employee_data || {}
           const empId = emp.employee_id || details.employee_id
           const name = emp.name_as_per_aadhar || details.name_as_per_aadhar
+
+          const assignedPlace = (emp.joining_place || details.joining_place || '').toString().trim();
+          const assignedShop = (emp.joining_company_name || details.joining_company_name || '').toString().trim();
+          const empKey = empId ? empId.toString().trim().toLowerCase() : '';
+          const lastPunchStore = lastPunchStoreMap[empKey] || '';
+
+          // Determine transferred shop: compare last punch store with both assigned shop name and work location
+          let transferredShop = 'Not Transferred';
+          if (lastPunchStore) {
+            const pLower = lastPunchStore.toLowerCase();
+            const shopLower = assignedShop.toLowerCase();
+            const placeLower = assignedPlace.toLowerCase();
+
+            // If the last punch store doesn't match either assigned shop name OR assigned work location (and both aren't substring matches)
+            const isMatchShop = shopLower && (pLower === shopLower || pLower.includes(shopLower) || shopLower.includes(pLower));
+            const isMatchPlace = placeLower && (pLower === placeLower || pLower.includes(placeLower) || placeLower.includes(pLower));
+
+            if (!isMatchShop && !isMatchPlace) {
+              transferredShop = lastPunchStore;
+            }
+          }
 
           mappedList.push({
             id: emp.id,
@@ -254,6 +299,7 @@ export default function EmployeeManagement() {
             designation: emp.designation || details.designation || '',
             salary: emp.salary ?? details.salary ?? '',
             joining_company_name: emp.joining_company_name || details.joining_company_name || '',
+            transferred_shop: transferredShop,
             mode_of_attendance: emp.mode_of_attendance || details.mode_of_attendance || 'Biometric',
             status: emp.status || emp.employee_status || emp.Employee_status || details.status || 'Active',
             aadhar_no: emp.aadhar_no || details.aadhar_no || '',
@@ -1246,6 +1292,7 @@ export default function EmployeeManagement() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Work Location</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Designation</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Shop name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Transferred Shop</th>
 
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
@@ -1253,11 +1300,11 @@ export default function EmployeeManagement() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="text-center py-8 text-gray-500">Loading...</td>
+                  <td colSpan="11" className="text-center py-8 text-gray-500">Loading...</td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="text-center py-8 text-gray-500">No employees found</td>
+                  <td colSpan="11" className="text-center py-8 text-gray-500">No employees found</td>
                 </tr>
               ) : (
                 paginatedEmployees.map((emp) => (
@@ -1302,6 +1349,17 @@ export default function EmployeeManagement() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {emp.joining_company_name}
+                    </td>
+                    <td className="px-4 py-3">
+                      {!emp.transferred_shop || emp.transferred_shop === 'Not Transferred' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                          Not Transferred
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 shadow-sm" title={`Assigned: ${emp.joining_place || 'N/A'} | Punched at: ${emp.transferred_shop}`}>
+                          ⚡ {emp.transferred_shop}
+                        </span>
+                      )}
                     </td>
 
 
