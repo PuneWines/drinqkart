@@ -945,7 +945,7 @@ const Roster = () => {
                     <LayoutGrid size={14} />
                     Roster View
                 </button>
-                <button
+                {/* <button
                     onClick={() => setViewMode('range')}
                     className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 ${viewMode === 'range'
                         ? 'border-indigo-600 text-indigo-600'
@@ -954,7 +954,7 @@ const Roster = () => {
                 >
                     <CalendarRange size={14} />
                     Date Range View
-                </button>
+                </button> */}
             </div>
 
             {/* Status Legend */}

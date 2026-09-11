@@ -35,6 +35,7 @@ const AdminAdvance = () => {
 
   const [approvedAmount, setApprovedAmount] = useState('');
   const [approvedMonthlyDeduction, setApprovedMonthlyDeduction] = useState('');
+  const [receiveAmount, setReceiveAmount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [showSchemaModal, setShowSchemaModal] = useState(false);
 
@@ -120,21 +121,39 @@ const AdminAdvance = () => {
         }
       }
 
-      const allRecords = (advances || []).map(adv => ({
-        id: adv.id,
-        timestamp: adv.created_at,
-        empId: adv.employee_id,
-        empName: employeeMap[adv.employee_id?.toLowerCase().trim()] || 'Unknown Employee',
-        amount: adv.amount,
-        monthlyDeduction: adv.monthly_deduction,
-        reason: adv.reason,
-        status: adv.status || 'Pending',
-        type: adv.type || 'Advance',
-        apprAmount: adv.approved_amount || '',
-        apprMonthlyDeduction: adv.approved_monthly_deduction || '',
-        adminRemarks: adv.admin_remarks || '',
-        startingMonth: adv.starting_month || ''
-      }));
+      // Fetch payment transactions
+      const { data: paymentsData } = await supabase
+        .from('hr_management_advance_payments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const paymentsGroupedByAdvId = {};
+      (paymentsData || []).forEach(p => {
+        if (!paymentsGroupedByAdvId[p.advance_id]) paymentsGroupedByAdvId[p.advance_id] = [];
+        paymentsGroupedByAdvId[p.advance_id].push(p);
+      });
+
+      const allRecords = (advances || []).map(adv => {
+        const fullAmt = parseNumber(adv.approved_amount || adv.amount || 0);
+        const remAmt = adv.remaining_amount !== null && adv.remaining_amount !== undefined ? parseNumber(adv.remaining_amount) : fullAmt;
+        return {
+          id: adv.id,
+          timestamp: adv.created_at,
+          empId: adv.employee_id,
+          empName: employeeMap[adv.employee_id?.toLowerCase().trim()] || 'Unknown Employee',
+          amount: adv.amount,
+          monthlyDeduction: adv.monthly_deduction,
+          reason: adv.reason,
+          status: adv.status || 'Pending',
+          type: adv.type || 'Advance',
+          apprAmount: adv.approved_amount || '',
+          apprMonthlyDeduction: adv.approved_monthly_deduction || '',
+          adminRemarks: adv.admin_remarks || '',
+          startingMonth: adv.starting_month || '',
+          remainingAmount: remAmt,
+          payments: paymentsGroupedByAdvId[adv.id] || []
+        };
+      });
 
       setPendingRequests(allRecords.filter(r => r.status?.toLowerCase() === 'pending'));
       setApprovedRequests(allRecords.filter(r =>
@@ -148,7 +167,7 @@ const AdminAdvance = () => {
       ));
       setFixedReceivedRequests(allRecords.filter(r =>
         (r.type?.toLowerCase() === 'fixed amount' || r.type?.toLowerCase() === 'fixed advance' || r.type?.toLowerCase() === 'fixed advanced' || r.type?.toLowerCase() === 'fix advance' || r.type?.toLowerCase() === 'medical amount' || r.type?.toLowerCase() === 'brackage') &&
-        r.status?.toLowerCase() === 'received'
+        (r.status?.toLowerCase() === 'received' || r.remainingAmount < parseNumber(r.apprAmount || r.amount || 0))
       ));
 
     } catch (error) {
@@ -251,6 +270,8 @@ const AdminAdvance = () => {
 
     const isFixed = ['fixed amount', 'fixed advance', 'fixed advanced', 'fix advance', 'medical amount', 'brackage'].includes(request.type?.toLowerCase());
     setApprovedMonthlyDeduction(isFixed ? (request.apprAmount || request.amount || '') : (request.apprMonthlyDeduction || request.monthlyDeduction || ''));
+    
+    setReceiveAmount(request.remainingAmount !== undefined && request.remainingAmount !== null ? request.remainingAmount : (request.apprAmount || request.amount || 0));
 
     setRemarks(request.adminRemarks || '');
     setShowModal(true);
@@ -418,7 +439,7 @@ const AdminAdvance = () => {
 
       const isFixed = ['fixed amount', 'fixed advance', 'fixed advanced', 'fix advance', 'medical amount', 'brackage'].includes(selectedRequest.type?.toLowerCase());
 
-      if (actionStatus === 'Approved' || actionStatus === 'Received') {
+      if (actionStatus === 'Approved') {
         if (!isFixed) {
           if (Number(approvedMonthlyDeduction) > Number(approvedAmount)) {
             toast.error("Approved monthly deduction cannot be greater than the approved amount");
@@ -427,9 +448,50 @@ const AdminAdvance = () => {
           }
           updateData.approved_amount = Number(approvedAmount) || 0;
           updateData.approved_monthly_deduction = Number(approvedMonthlyDeduction) || 0;
+          updateData.remaining_amount = Number(approvedAmount) || 0;
         } else {
           updateData.approved_amount = Number(approvedAmount) || 0;
-          updateData.approved_monthly_deduction = Number(approvedAmount) || 0; // Same as approved amount (one-time deduction)
+          updateData.approved_monthly_deduction = Number(approvedAmount) || 0;
+          updateData.remaining_amount = Number(approvedAmount) || 0;
+        }
+      } else if (actionStatus === 'Received') {
+        const currentRemaining = selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null 
+          ? parseNumber(selectedRequest.remainingAmount)
+          : parseNumber(selectedRequest.apprAmount || selectedRequest.amount || 0);
+
+        const recAmt = Number(receiveAmount);
+        if (isNaN(recAmt) || recAmt <= 0) {
+          toast.error("Please enter a valid receive amount greater than 0");
+          setSubmitting(false);
+          return;
+        }
+        if (recAmt > currentRemaining) {
+          toast.error(`Received amount cannot exceed remaining amount (₹${currentRemaining.toLocaleString()})`);
+          setSubmitting(false);
+          return;
+        }
+
+        const newRemaining = currentRemaining - recAmt;
+        updateData.remaining_amount = newRemaining;
+
+        // If fully paid, mark status as Received / fully paid, otherwise keep as Approved so further payments can be received
+        if (newRemaining <= 0) {
+          updateData.status = 'Received';
+        } else {
+          updateData.status = selectedRequest.status || 'Approved';
+        }
+        // Insert payment log entry
+        try {
+          await supabase
+            .from('hr_management_advance_payments')
+            .insert({
+              advance_id: selectedRequest.id,
+              employee_id: selectedRequest.empId,
+              amount: recAmt,
+              remarks: remarks || 'Received partial/full payment'
+            });
+        } catch (payErr) {
+          console.warn("Failed to log payment transaction:", payErr);
         }
       }
 
@@ -440,7 +502,7 @@ const AdminAdvance = () => {
 
       if (updateError) throw updateError;
 
-      toast.success(`Request ${actionStatus.toLowerCase()} successfully!`);
+      toast.success(actionStatus === 'Received' ? 'Payment received successfully!' : `Request ${actionStatus.toLowerCase()} successfully!`);
       setShowModal(false);
       fetchData();
     } catch (err) {
@@ -608,6 +670,7 @@ const AdminAdvance = () => {
                 {!(activeTab === 'received' || activeTab === 'fixed_received') && (
                   <th className="text-right px-4 py-3 font-medium text-gray-600 text-xs">Monthly Deduction</th>
                 )}
+                <th className="text-right px-4 py-3 font-medium text-gray-600 text-xs">Remain Amount</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 text-xs">Starting Month</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 text-xs">Reason</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600 text-xs">Action</th>
@@ -669,6 +732,11 @@ const AdminAdvance = () => {
                         )}
                       </td>
                     )}
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-sm font-semibold text-emerald-600">
+                        ₹{parseNumber(record.remainingAmount !== undefined && record.remainingAmount !== null ? record.remainingAmount : ((record.status === 'Approved' || record.status === 'Received') && record.apprAmount ? record.apprAmount : record.amount)).toLocaleString()}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
                       {formatStartingMonth(record.startingMonth)}
                     </td>
@@ -743,6 +811,10 @@ const AdminAdvance = () => {
                   </div>
                 )}
                 <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Current Remaining Amount</span>
+                  <span className="text-sm font-bold text-emerald-600">₹{parseNumber(selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null ? selectedRequest.remainingAmount : (selectedRequest.apprAmount || selectedRequest.amount || 0)).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Starting Month</span>
                   <span className="text-sm font-semibold text-gray-800">{formatStartingMonth(selectedRequest.startingMonth)}</span>
                 </div>
@@ -754,7 +826,57 @@ const AdminAdvance = () => {
                 </div>
               </div>
 
-              {(activeTab === 'pending' || (activeTab !== 'pending' && (selectedRequest.status === 'Approved' || selectedRequest.status === 'Received'))) && (
+              {selectedRequest.payments && selectedRequest.payments.length > 0 && (
+                <div className="bg-slate-50 p-4 border border-slate-200 rounded-lg space-y-2">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Transactions History ({selectedRequest.payments.length})</h4>
+                  <div className="divide-y divide-gray-200 max-h-36 overflow-y-auto pr-1">
+                    {selectedRequest.payments.map((p, pIdx) => (
+                      <div key={pIdx} className="py-2 flex justify-between items-center text-xs">
+                        <div>
+                          <p className="font-semibold text-slate-800">₹{parseNumber(p.amount).toLocaleString()}</p>
+                          <p className="text-[10px] text-gray-500">{p.remarks || 'Partial/Full Payment'}</p>
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-mono">{formatDate(p.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'received' && (
+                <div className="bg-teal-50/50 p-4 border border-teal-100 rounded-lg space-y-3">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-semibold text-teal-800">
+                        Receive Payment Amount (₹)
+                      </label>
+                      <span className="text-xs font-medium text-teal-600">
+                        Max: ₹{parseNumber(selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null ? selectedRequest.remainingAmount : (selectedRequest.apprAmount || selectedRequest.amount || 0)).toLocaleString()}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null ? selectedRequest.remainingAmount : (selectedRequest.apprAmount || selectedRequest.amount || 0)}
+                      className={`w-full px-3 py-2 border text-sm rounded focus:ring-1 ${receiveAmount && Number(receiveAmount) > Number(selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null ? selectedRequest.remainingAmount : (selectedRequest.apprAmount || selectedRequest.amount || 0))
+                        ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/30 text-red-700'
+                        : 'border-teal-300 focus:ring-teal-500 focus:border-teal-500 bg-white text-teal-900'
+                        }`}
+                      value={receiveAmount}
+                      onChange={(e) => setReceiveAmount(e.target.value)}
+                      disabled={submitting}
+                      placeholder="Enter amount to receive"
+                    />
+                    {receiveAmount && Number(receiveAmount) > Number(selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null ? selectedRequest.remainingAmount : (selectedRequest.apprAmount || selectedRequest.amount || 0)) && (
+                      <p className="text-[10px] text-red-500 font-semibold mt-1">
+                        Received amount cannot exceed remaining amount (₹{parseNumber(selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null ? selectedRequest.remainingAmount : (selectedRequest.apprAmount || selectedRequest.amount || 0)).toLocaleString()})
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(activeTab === 'pending' || (activeTab !== 'pending' && activeTab !== 'received' && (selectedRequest.status === 'Approved' || selectedRequest.status === 'Received'))) && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className={['fixed amount', 'fixed advance', 'fixed advanced', 'fix advance', 'medical amount', 'brackage'].includes(selectedRequest.type?.toLowerCase()) ? "col-span-2" : ""}>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Approved Amount</label>
@@ -804,7 +926,7 @@ const AdminAdvance = () => {
                   className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm resize-none"
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  disabled={activeTab !== 'pending' || submitting}
+                  disabled={(activeTab !== 'pending' && activeTab !== 'received') || submitting}
                 />
               </div>
             </div>
@@ -882,7 +1004,7 @@ const AdminAdvance = () => {
               </p>
               <div className="relative bg-slate-950 rounded-lg p-3.5 mb-4">
                 <pre className="text-[10px] text-emerald-400 font-mono overflow-x-auto max-h-48 scrollbar-thin whitespace-pre-wrap">
-                  {`CREATE TABLE IF NOT EXISTS advance_requests (
+                  {`CREATE TABLE IF NOT EXISTS hr_management_advance_requests (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     employee_id VARCHAR(255) NOT NULL,
     amount NUMERIC NOT NULL,
@@ -892,18 +1014,27 @@ const AdminAdvance = () => {
     type VARCHAR(100) DEFAULT 'Advance',
     approved_amount NUMERIC,
     approved_monthly_deduction NUMERIC,
+    remaining_amount NUMERIC,
     admin_remarks TEXT,
     starting_month VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS hr_management_advance_payments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    advance_id UUID REFERENCES hr_management_advance_requests(id) ON DELETE CASCADE,
+    employee_id VARCHAR(255) NOT NULL,
+    amount NUMERIC NOT NULL,
+    remarks TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- For existing databases, run this:
-ALTER TABLE advance_requests DROP CONSTRAINT IF EXISTS advance_requests_status_check;
-ALTER TABLE advance_requests ADD CONSTRAINT advance_requests_status_check CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Received'));`}
+ALTER TABLE hr_management_advance_requests ADD COLUMN IF NOT EXISTS remaining_amount NUMERIC;`}
                 </pre>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`CREATE TABLE IF NOT EXISTS advance_requests (\n    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,\n    employee_id VARCHAR(255) NOT NULL,\n    amount NUMERIC NOT NULL,\n    monthly_deduction NUMERIC NOT NULL,\n    reason TEXT,\n    status VARCHAR(50) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Received')),\n    type VARCHAR(100) DEFAULT 'Advance',\n    approved_amount NUMERIC,\n    approved_monthly_deduction NUMERIC,\n    admin_remarks TEXT,\n    starting_month VARCHAR(50),\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL\n);\n\nALTER TABLE advance_requests DROP CONSTRAINT IF EXISTS advance_requests_status_check;\nALTER TABLE advance_requests ADD CONSTRAINT advance_requests_status_check CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Received'));`);
+                    navigator.clipboard.writeText(`ALTER TABLE hr_management_advance_requests ADD COLUMN IF NOT EXISTS remaining_amount NUMERIC;\n\nUPDATE hr_management_advance_requests SET remaining_amount = COALESCE(approved_amount, amount) WHERE remaining_amount IS NULL;\n\nCREATE TABLE IF NOT EXISTS hr_management_advance_payments (\n    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,\n    advance_id UUID REFERENCES hr_management_advance_requests(id) ON DELETE CASCADE,\n    employee_id VARCHAR(255) NOT NULL,\n    amount NUMERIC NOT NULL,\n    remarks TEXT,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL\n);`);
                     toast.success("SQL copied to clipboard!");
                   }}
                   className="absolute top-2 right-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] text-gray-300 rounded font-medium transition-colors cursor-pointer"
