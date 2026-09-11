@@ -245,7 +245,7 @@ const MyAttendance = () => {
         } catch (e) { return '00:00:00'; }
     };
 
-    const calculateLateMinutesLive = (inStr, dateContext = '') => {
+    const calculateLateMinutesLive = (inStr, dateContext = '', shift = null) => {
         if (!inStr || inStr === '-') return 0;
         try {
             const parse = (s) => {
@@ -272,8 +272,16 @@ const MyAttendance = () => {
             const inDate = parse(inStr);
             if (!inDate) return 0;
             const totalMinutes = inDate.getHours() * 60 + inDate.getMinutes();
-            const officialStartTime = 10 * 60; // 10:00 AM
-            const graceTimeThreshold = 10 * 60 + 10; // 10:10 AM
+
+            let officialStartTime = 10 * 60; // 10:00 AM fallback
+            let graceTimeThreshold = 10 * 60 + 10; // 10:10 AM fallback
+
+            if (shift?.start_time) {
+                const parts = shift.start_time.split(':').map(Number);
+                officialStartTime = parts[0] * 60 + (parts[1] || 0);
+                graceTimeThreshold = officialStartTime + 10;
+            }
+
             return totalMinutes >= graceTimeThreshold ? totalMinutes - officialStartTime : 0;
         } catch (e) { return 0; }
     };
@@ -443,8 +451,9 @@ const MyAttendance = () => {
                 const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : code);
                 const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : code);
 
+                const empShift = rosterMap.get(`${displayCode}-${group.date}`);
                 const workHrs = punchMiss === 'Yes' ? '00:00:00' : calculateWorkHours(inTime, outTime, group.date);
-                const lateMins = calculateLateMinutesLive(inTime, group.date);
+                const lateMins = calculateLateMinutesLive(inTime, group.date, empShift);
 
                 // Lunch Calculation (Same as Admin)
                 let actualLunchMs = 0;
