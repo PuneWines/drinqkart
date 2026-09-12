@@ -9,7 +9,8 @@ const DEVICES = [
   { name: 'HINJEWADI', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
   { name: 'WAGHOLI', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
   { name: 'AKOLE', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-  { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' }
+  { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+  { name: 'KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
@@ -18,7 +19,6 @@ const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfX
 const resolvePunchedStore = (attendance, deviceMapping = []) => {
   if (!attendance) return null;
   const serial = (attendance.serial_number || attendance.serialNo || '').toString().trim();
-  const devId = (attendance.device_id || attendance.deviceId || '').toString().trim();
 
   if (serial && serial !== '-' && serial !== 'ALL') {
     const matchedDevice = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
@@ -33,17 +33,8 @@ const resolvePunchedStore = (attendance, deviceMapping = []) => {
     }
   }
 
-  if (devId && devId !== '-' && devId !== 'ALL') {
-    if (deviceMapping && deviceMapping.length > 0) {
-      const matchedMapping = deviceMapping.find(m => m.deviceId && m.deviceId.toString().trim().toLowerCase() === devId.toLowerCase());
-      if (matchedMapping && matchedMapping.storeName) {
-        return matchedMapping.storeName;
-      }
-    }
-  }
-
   if (attendance.store_name && attendance.store_name !== '-') {
-    return attendance.store_name;
+    return attendance.store_name.toString().trim();
   }
 
   return null;
@@ -529,38 +520,64 @@ const AttendanceDaily = () => {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Clamps In-Time to 10:00 AM if it is before 10:00 AM
-  const clampInTimeTo10AM = (timeStr, dateContext = '') => {
-    if (!timeStr || timeStr === '-') return timeStr;
+  // Helper to check if a time is before 9:00 AM (09:00 IST)
+  const isBefore9AM = (timeStr) => {
+    if (!timeStr || timeStr === '-') return false;
     try {
       const d = parseISTToDate(timeStr);
-      if (!d) return timeStr;
+      if (!d) {
+        // Fallback for simple time strings like "08:30 AM"
+        const clean = timeStr.trim().toUpperCase();
+        const isAM = clean.endsWith('AM');
+        const isPM = clean.endsWith('PM');
+        let timePart = clean;
+        if (isAM || isPM) timePart = clean.slice(0, -2).trim();
+        const [hStr] = timePart.split(':');
+        let h = parseInt(hStr, 10);
+        if (isAM && h === 12) h = 0;
+        if (isPM && h < 12) h += 12;
+        return h < 9;
+      }
       const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
       }).formatToParts(d);
       const getVal = (type) => parts.find(p => p.type === type)?.value;
       const h = parseInt(getVal('hour'), 10);
-      if (h < 10) {
-        return `${getVal('year')}-${getVal('month')}-${getVal('day')}T10:00:00`;
-      }
-      return timeStr;
+      return h < 9;
     } catch (e) {
-      return timeStr;
+      return false;
     }
   };
 
-  // Clamps Out-Time to 11:00 PM (23:00) if it is after 11:00 PM
-  const clampOutTimeTo11PM = (timeStr, dateContext = '') => {
+  // Clamps In-Time: No longer force-clamping to 10:00 AM; returns as-is if after 9:00 AM
+  const clampInTimeTo10AM = (timeStr, dateContext = '') => {
+    if (!timeStr || timeStr === '-') return timeStr;
+    if (isBefore9AM(timeStr)) return '-';
+    return timeStr;
+  };
+
+  // Helper to map any log between 11:30 PM and 11:59 PM to 11:00 PM
+  const map1130PMTo11PM = (timeStr) => {
     if (!timeStr || timeStr === '-') return timeStr;
     try {
       const d = parseISTToDate(timeStr);
-      if (!d) return timeStr;
+      if (!d) {
+        const clean = timeStr.trim().toUpperCase();
+        const isPM = clean.endsWith('PM');
+        let timePart = clean;
+        if (isPM || clean.endsWith('AM')) timePart = clean.slice(0, -2).trim();
+        const [hStr, mStr] = timePart.split(':');
+        let h = parseInt(hStr, 10);
+        const m = parseInt(mStr, 10) || 0;
+        if (isPM && h < 12) h += 12;
+        if (h === 23 && m >= 30) {
+          return '11:00 PM';
+        }
+        return timeStr;
+      }
       const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: 'Asia/Kolkata',
         year: 'numeric',
@@ -574,8 +591,7 @@ const AttendanceDaily = () => {
       const getVal = (type) => parts.find(p => p.type === type)?.value;
       const h = parseInt(getVal('hour'), 10);
       const m = parseInt(getVal('minute'), 10);
-      const s = parseInt(getVal('second'), 10);
-      if (h > 23 || (h === 23 && (m > 0 || s > 0))) {
+      if (h === 23 && m >= 30) {
         return `${getVal('year')}-${getVal('month')}-${getVal('day')}T23:00:00`;
       }
       return timeStr;
@@ -584,39 +600,59 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Normalizes attendance record loaded from DB to respect 10 AM, 11 PM, and 5-punch rule
+  // Clamps Out-Time to 11:00 PM (23:00) if it is between 11:30 PM and 11:59 PM or after
+  const clampOutTimeTo11PM = (timeStr, dateContext = '') => {
+    if (!timeStr || timeStr === '-') return timeStr;
+    return map1130PMTo11PM(timeStr);
+  };
+
+  // Normalizes attendance record: Ignores logs before 9 AM and shows exact punch times
   const normalizeAttendanceRecord = (record) => {
     if (!record) return record;
     let modified = { ...record };
 
-    // 1. RULE 1: If in_time is before 10:00 AM, set to 10:00 AM
+    // 1. Ignore in_time if before 9:00 AM
     if (modified.in_time && modified.in_time !== '-') {
-      const clampedIn = clampInTimeTo10AM(modified.in_time);
-      if (clampedIn !== modified.in_time) {
-        modified.in_time = clampedIn;
-        modified.late_minute = 0;
+      if (isBefore9AM(modified.in_time)) {
+        modified.in_time = '-';
+        modified.status = 'Absent';
       }
     }
 
-    // 2. Parse punch log if present
+    // 2. Filter punch_log to exclude logs before 9:00 AM & map 11:30 PM - 11:59 PM punches to 11:00 PM
     let punchList = [];
     if (modified.punch_log && modified.punch_log !== '-') {
-      punchList = modified.punch_log.split(/\s*\|\s*/).filter(Boolean);
+      punchList = modified.punch_log
+        .split(/\s*\|\s*/)
+        .filter(p => Boolean(p) && !isBefore9AM(p))
+        .map(p => map1130PMTo11PM(p));
+      modified.punch_log = punchList.length > 0 ? punchList.join(' | ') : '-';
     }
 
-    // RULE 3: If punch_log has 5 punches, assume 6th out punch is 11:00 PM
-    if (punchList.length === 5) {
-      punchList.push('11:00 PM');
-      modified.punch_log = punchList.join(' | ');
-      modified.punch_log_status = 'Bahar';
-      modified.punch_miss = 'No';
-      modified.punch_miss_msg = '';
-      if (modified.attendance_date) {
-        modified.out_time = `${modified.attendance_date}T23:00:00`;
+    // If employee forgot to punch out (odd punches or missing out_time):
+    // Wait until 11:30 PM of that date. If past 11:30 PM or past date and employee did not punch out,
+    // assume punch out time as equal to their punch in time (in_time).
+    const now = new Date();
+    const todayStr = getLocalDateString(now);
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const isPast1130PM = currentMins >= (23 * 60 + 30);
+    const isPastDate = modified.attendance_date && modified.attendance_date < todayStr;
+    const isTodayPastCutoff = modified.attendance_date === todayStr && isPast1130PM;
+
+    if (punchList.length % 2 === 1 || (!modified.out_time || modified.out_time === '-')) {
+      if (modified.in_time && modified.in_time !== '-') {
+        if (isPastDate || isTodayPastCutoff) {
+          // Time passed 11:30 PM: set out_time equal to in_time
+          modified.out_time = modified.in_time;
+          modified.punch_miss = 'No';
+        } else {
+          // Still waiting before 11:30 PM today: keep out_time pending (-)
+          modified.out_time = '-';
+        }
       }
     }
 
-    // 3. RULE 2: If out_time is after 11:00 PM (23:00), clamp to 11:00 PM
+    // 3. Clamp out_time to 11:00 PM if after 11:00 PM
     if (modified.out_time && modified.out_time !== '-') {
       const clampedOut = clampOutTimeTo11PM(modified.out_time);
       if (clampedOut !== modified.out_time) {
@@ -624,7 +660,7 @@ const AttendanceDaily = () => {
       }
     }
 
-    // Recompute working hours with clamped times
+    // Recompute working hours with exact punch times
     if (modified.in_time && modified.out_time && modified.in_time !== '-' && modified.out_time !== '-') {
       modified.working_hour = calculateWorkHours(modified.in_time, modified.out_time, modified.attendance_date);
     }
@@ -634,10 +670,10 @@ const AttendanceDaily = () => {
 
   const calculateWorkHours = (inStr, outStr, dateContext = '') => {
     if (!inStr || !outStr || inStr === '-' || outStr === '-' || inStr === outStr) return '00:00:00';
+    if (isBefore9AM(inStr)) return '00:00:00';
     try {
-      const clampedIn = clampInTimeTo10AM(inStr, dateContext);
       const clampedOut = clampOutTimeTo11PM(outStr, dateContext);
-      const inDate = parseISTToDate(clampedIn);
+      const inDate = parseISTToDate(inStr);
       const outDate = parseISTToDate(clampedOut);
       if (!inDate || !outDate || outDate <= inDate) return '00:00:00';
       return calculateHoursMins(outDate - inDate);
@@ -1257,9 +1293,12 @@ const AttendanceDaily = () => {
 
         const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNumeric ? 'Unknown' : code));
         const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (isNumeric ? code : 'Unknown'));
-        const displayStore = dMap ? dMap.storeName : (empMeta ? empMeta.store : group.SourceDeviceName);
+        
+        // Preserve actual hardware punch device store and serial number
+        const matchedPunchDevice = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
+        const displayStore = matchedPunchDevice ? matchedPunchDevice.name : (group.SourceDeviceName && group.SourceDeviceName !== 'ALL DEVICES' ? group.SourceDeviceName : (dMap ? dMap.storeName : (empMeta ? empMeta.store : '-')));
         const displayDeviceId = dMap ? dMap.deviceId : '-';
-        const displayAssignedSerial = dMap ? dMap.serialNo : serial;
+        const displayAssignedSerial = serial || (dMap ? dMap.serialNo : '-');
 
         const lateMins = calculateLateMinutes(inTime);
         const workHrs = punchMiss === 'Yes' ? '00:00:00' : calculateWorkHours(inTime, outTime);
@@ -2013,8 +2052,24 @@ const AttendanceDaily = () => {
     setSelectedDate(`${yyyy}-${mm}-${dd}`);
   };
 
-  // Unique store names list
-  const stores = [...new Set(employees.map(emp => emp.store_name).filter(Boolean))].sort();
+  // Shop Name -> Location Mapping
+  const SHOP_NAME_TO_LOCATION = {
+    'MADHURA': 'BAVDHAN',
+    'VISHAL': 'HINJEWADI',
+    'FRIENDS': 'WAGHOLI',
+    'BALAJI': 'AKOLE',
+    'KUNAL': 'MUMBAI',
+    'KUNAL KHARGHAR': 'KHARGHAR'
+  };
+
+  const shops = Object.keys(SHOP_NAME_TO_LOCATION);
+
+  // Helper to map shop name to location
+  const getMappedLocation = (shopName) => {
+    if (!shopName) return '';
+    const cleanName = shopName.trim().toUpperCase();
+    return SHOP_NAME_TO_LOCATION[cleanName] || cleanName;
+  };
 
   // Filter employees
   const filteredEmployees = (() => {
@@ -2033,7 +2088,23 @@ const AttendanceDaily = () => {
       .filter(emp => {
         const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           emp.id?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStore = selectedStore === 'ALL' || emp.store_name === selectedStore;
+
+        const targetLocation = getMappedLocation(selectedStore);
+
+        const punchedLoc = (resolvePunchedStore(emp) || '').trim().toUpperCase();
+        const assignedLoc = (emp.store_name || '').trim().toUpperCase();
+
+        // Normalize BAWDHAN / BAVDHAN spelling variations if present
+        const normalizeLoc = (loc) => loc.replace('BAWDHAN', 'BAVDHAN');
+
+        const normTargetLoc = normalizeLoc(targetLocation);
+        const normPunchedLoc = normalizeLoc(punchedLoc);
+        const normAssignedLoc = normalizeLoc(assignedLoc);
+
+        const matchesStore = selectedStore === 'ALL' ||
+          normAssignedLoc.includes(normTargetLoc) ||
+          normPunchedLoc.includes(normTargetLoc);
+
         const isMatched = isEmployeeInTable(emp.id);
 
         let matchesFilterMode = true;
@@ -2048,7 +2119,11 @@ const AttendanceDaily = () => {
         if (statusFilter !== 'ALL') {
           const att = getAttendanceForDate(emp.id, selectedDate);
           const empStatus = att?.status || 'Absent';
-          matchesStatus = empStatus === statusFilter;
+          if (statusFilter === 'Present') {
+            matchesStatus = empStatus === 'Present' || empStatus === 'Late';
+          } else {
+            matchesStatus = empStatus === statusFilter;
+          }
         }
 
         return matchesSearch && matchesStore && matchesFilterMode && matchesStatus;
@@ -2392,16 +2467,16 @@ const AttendanceDaily = () => {
           </div>
 
           <div className="min-w-[150px]">
-            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Filter by Store</label>
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Filter by Location</label>
             <div className="relative">
               <select
                 value={selectedStore}
                 onChange={(e) => setSelectedStore(e.target.value)}
                 className="w-full appearance-none pl-2 pr-6 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs bg-white font-medium text-gray-700"
               >
-                <option value="ALL">All Stores</option>
-                {stores.map(store => (
-                  <option key={store} value={store}>{store}</option>
+                <option value="ALL">All Locations</option>
+                {shops.map(shop => (
+                  <option key={shop} value={shop}>{shop}</option>
                 ))}
               </select>
               <Filter size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -2782,7 +2857,7 @@ const AttendanceDaily = () => {
                   <tr>
                     <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[40px] z-10">#</th>
                     <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[10vw] z-10">Employee</th>
-                    <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[100px] z-10">Store</th>
+                    <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[100px] z-10">Location</th>
                     <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[80px] z-10">Status</th>
                     <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[90px] z-10">In Time (IST)</th>
                     <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[90px] z-10">Out Time (IST)</th>
@@ -2852,7 +2927,7 @@ const AttendanceDaily = () => {
                           // New structure
                           if (punchesObj.manual && typeof punchesObj.manual === 'object') {
                             const rawManual = Object.values(punchesObj.manual)
-                              .filter(value => value && value !== '' && typeof value === 'string');
+                              .filter(value => value && value !== '' && typeof value === 'string' && parseToMinutes(value) >= 540);
                             if (rawManual.length > 0) {
                               const sortedManual = [...rawManual].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
                               manualPunchesDisplay = sortedManual.join(' | ');
@@ -2861,7 +2936,7 @@ const AttendanceDaily = () => {
 
                           if (punchesObj.api && typeof punchesObj.api === 'object') {
                             const rawApi = Object.values(punchesObj.api)
-                              .filter(value => value && value !== '' && typeof value === 'string');
+                              .filter(value => value && value !== '' && typeof value === 'string' && parseToMinutes(value) >= 540);
                             if (rawApi.length > 0) {
                               const sortedApi = [...rawApi].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
                               apiPunchesDisplay = sortedApi.join(' | ');
@@ -2871,7 +2946,7 @@ const AttendanceDaily = () => {
                           // Old structure: direct keys
                           const rawManual = ["1", "2", "3", "4", "5", "6"]
                             .map(key => punchesObj[key])
-                            .filter(value => value && value !== '' && typeof value === 'string');
+                            .filter(value => value && value !== '' && typeof value === 'string' && parseToMinutes(value) >= 540);
                           if (rawManual.length > 0) {
                             const sortedManual = [...rawManual].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
                             manualPunchesDisplay = sortedManual.join(' | ');
@@ -3007,14 +3082,16 @@ const AttendanceDaily = () => {
                           </td>
                           <td className="px-2 py-1.5 text-[10px] text-gray-600">
                             {(() => {
-                              const assignedStore = employeeProfile?.joining_place || employee.store_name || '-';
-                              const punchedStore = resolvePunchedStore(attendance, deviceMapping);
+                              const rawAssigned = employeeProfile?.joining_place || employee.store_name || '-';
+                              const assignedStore = rawAssigned.toString().trim();
+                              const rawPunched = resolvePunchedStore(attendance, deviceMapping) || '';
+                              const punchedStore = rawPunched.toString().trim();
                               const isDifferent = punchedStore && assignedStore !== '-' && punchedStore.toLowerCase() !== assignedStore.toLowerCase();
 
-                              if (isDifferent) {
+                              if (punchedStore) {
                                 return (
                                   <div className="flex flex-col gap-0.5">
-                                    <span className="font-semibold text-gray-900" title={`Assigned Home Branch: ${assignedStore}`}>
+                                    <span className="font-semibold text-gray-900">
                                       {assignedStore}
                                     </span>
                                     <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded leading-none w-fit" title={`Punched from biometric device at ${punchedStore} (Serial: ${attendance.serial_number || 'N/A'})`}>
@@ -3023,7 +3100,7 @@ const AttendanceDaily = () => {
                                   </div>
                                 );
                               }
-                              return <span className="font-medium text-gray-700">{assignedStore !== '-' ? assignedStore : (punchedStore || '-')}</span>;
+                              return <span className="font-medium text-gray-700">{assignedStore !== '-' ? assignedStore : '-'}</span>;
                             })()}
                           </td>
                           <td className="px-2 py-1.5 text-center">
@@ -3972,12 +4049,31 @@ const AttendanceDaily = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-medium">
-                          {dayRows.map((row) => (
-                            <tr key={row.dayNum} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="px-3 py-2 text-slate-900 font-bold font-mono">
-                                {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
-                              </td>
-                              <td className="px-3 py-2 text-slate-500 font-semibold">{row.dayName}</td>
+                          {dayRows.map((row) => {
+                            const isAbsent = row.status === 'Absent';
+                            const isWeekend = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                            const isWeekendAbsent = isAbsent && isWeekend;
+
+                            return (
+                              <tr
+                                key={row.dayNum}
+                                className={`transition-colors ${
+                                  isWeekendAbsent
+                                    ? 'bg-red-100/80 hover:bg-red-200/80 font-bold'
+                                    : 'hover:bg-slate-50/80'
+                                }`}
+                              >
+                                <td className="px-3 py-2 text-slate-900 font-bold font-mono">
+                                  {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
+                                </td>
+                                <td className={`px-3 py-2 font-bold ${isWeekendAbsent ? 'text-red-900 font-extrabold' : 'text-slate-500'}`}>
+                                  {row.dayName}
+                                  {isWeekendAbsent && (
+                                    <span className="ml-1.5 text-[9px] text-red-700 bg-red-200/90 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
+                                      Weekend Leave
+                                    </span>
+                                  )}
+                                </td>
                               <td className="px-3 py-2">
                                 {row.hasRoster ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
@@ -4019,7 +4115,8 @@ const AttendanceDaily = () => {
                                 })()}
                               </td>
                             </tr>
-                          ))}
+                          );
+                        })}
                         </tbody>
                       </table>
                     </div>
@@ -4029,8 +4126,19 @@ const AttendanceDaily = () => {
                   <div className="space-y-3">
                     {dayRows.map((row) => {
                       const hasPunches = row.inTimeFormatted || row.outTimeFormatted;
+                      const isAbsent = row.status === 'Absent';
+                      const isWeekend = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                      const isWeekendAbsent = isAbsent && isWeekend;
+
                       return (
-                        <div key={row.dayNum} className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-sm flex flex-col gap-2">
+                        <div
+                          key={row.dayNum}
+                          className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${
+                            isWeekendAbsent
+                              ? 'bg-red-100/80 border-red-300'
+                              : 'bg-white border-slate-200/80'
+                          }`}
+                        >
                           <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-slate-900 font-mono">

@@ -274,9 +274,10 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
 
         const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNaN(code) ? code : 'Unknown'));
         const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (isNaN(code) ? 'Unknown' : code));
-        const displayStore = dMap ? dMap.storeName : (empMeta ? empMeta.store : device.name);
+        const matchedPunchDevice = device ? device.name : null;
+        const displayStore = matchedPunchDevice || (dMap ? dMap.storeName : (empMeta ? empMeta.store : 'Unknown'));
         const displayDeviceId = dMap ? dMap.deviceId : '-';
-        const displayAssignedSerial = dMap ? dMap.serialNo : agg.actualSerial;
+        const displayAssignedSerial = (agg.actualSerial && agg.actualSerial !== '-') ? agg.actualSerial : (dMap ? dMap.serialNo : device.serial);
 
         const absentDays = Math.max(0, totalDaysInMonth - agg.presentDays);
 
@@ -344,7 +345,8 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
         { name: 'HINJEWADI', serial: 'AMDB25061400335' },
         { name: 'WAGHOLI', serial: 'AMDB25061400343' },
         { name: 'AKOLE', serial: 'C262CC13CF202038' },
-        { name: 'MUMBAI', serial: 'C2630450C32A2327' }
+        { name: 'MUMBAI', serial: 'C2630450C32A2327' },
+        { name: 'KHARGHAR', serial: 'AMDB25120600859' }
     ];
 
     const monthlyAgg = {};
@@ -394,14 +396,47 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
         let inTime = row.in_time;
         let outTime = row.out_time;
 
-        // RULE 3: If 5 punches exist, assume 6th punch at 11:00 PM and clear punch miss
-        if (punchList.length === 5) {
-            punchMiss = false;
-            outTime = `${row.attendance_date}T23:00:00`;
+        // Forgotten punch-out rule: Wait until 11:30 PM of that date.
+        // If past 11:30 PM (or past date) and no punch-out occurred, assume out_time equal to in_time.
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        const isPast1130PM = (now.getHours() * 60 + now.getMinutes()) >= (23 * 60 + 30);
+        const isPastDate = row.attendance_date && row.attendance_date < todayStr;
+        const isTodayPastCutoff = row.attendance_date === todayStr && isPast1130PM;
+
+        if (punchList.length % 2 === 1 || (!outTime || outTime === '-')) {
+            if (inTime && inTime !== '-') {
+                if (isPastDate || isTodayPastCutoff) {
+                    punchMiss = false;
+                    outTime = inTime;
+                } else {
+                    outTime = '-';
+                }
+            }
         }
 
+        const map1130PMTo11PM = (t) => {
+            if (!t || t === '-') return t;
+            try {
+                let clean = t.toString().trim();
+                let timePart = clean.includes(' ') ? clean.split(' ')[1] : clean.includes('T') ? clean.split('T')[1] : clean;
+                let [hStr, mStr] = timePart.split(':');
+                let h = parseInt(hStr, 10);
+                let m = parseInt(mStr, 10) || 0;
+                if (clean.toUpperCase().includes('PM') && h < 12) h += 12;
+                if (h === 23 && m >= 30) {
+                    const prefix = clean.includes('T') ? clean.split('T')[0] + 'T' : clean.includes(' ') ? clean.split(' ')[0] + ' ' : '';
+                    return `${prefix}23:00:00`;
+                }
+                return t;
+            } catch (e) { return t; }
+        };
+
         if (inTime && inTime !== '-') inTime = clampInTimeTo10AM(inTime, row.attendance_date);
-        if (outTime && outTime !== '-') outTime = clampOutTimeTo11PM(outTime, row.attendance_date);
+        if (outTime && outTime !== '-') outTime = map1130PMTo11PM(outTime);
 
         let workHoursStr = row.working_hour;
         if (inTime && outTime && inTime !== '-' && outTime !== '-') {

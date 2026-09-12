@@ -12,7 +12,8 @@ const DEVICES = [
     { name: 'HINJEWADI', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
     { name: 'WAGHOLI', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
     { name: 'AKOLE', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-    { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' }
+    { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+    { name: 'KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
