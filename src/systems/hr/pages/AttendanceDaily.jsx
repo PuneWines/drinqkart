@@ -4098,33 +4098,36 @@ const AttendanceDaily = () => {
                             const isAbsent = row.status === 'Absent';
                             const isWeekendLeave = row.status === 'Weekend Leave';
                             const isOnLeave = row.status === 'On Leave';
+                            const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                            // Only trigger weekend leave highlight if employee is on leave / absent on Fri, Sat, or Sun
+                            const isLeaveOnWeekend = isWeekendDay && (isAbsent || isWeekendLeave || isOnLeave);
 
                             return (
                               <tr
                                 key={row.dayNum}
                                 className={`transition-colors ${
-                                  isWeekendLeave
-                                    ? 'bg-red-100/90 hover:bg-red-200/90 font-bold border-l-4 border-l-red-600'
+                                  isLeaveOnWeekend
+                                    ? 'bg-red-100/90 hover:bg-red-200/90 border-l-4 border-l-red-500'
                                     : isOnLeave
-                                    ? 'bg-rose-100/80 hover:bg-rose-200/80 font-bold border-l-4 border-l-rose-500'
+                                    ? 'bg-rose-50/80 hover:bg-rose-100/80 border-l-4 border-l-rose-400'
                                     : isAbsent
-                                    ? 'bg-red-50/60 hover:bg-red-100/60'
+                                    ? 'bg-red-50/40 hover:bg-red-50/80'
                                     : 'hover:bg-slate-50/80'
                                 }`}
                               >
                                 <td className="px-3 py-2 text-slate-900 font-bold font-mono">
                                   {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
                                 </td>
-                                <td className={`px-3 py-2 font-bold ${isWeekendLeave || isOnLeave ? 'text-red-950 font-black' : isAbsent ? 'text-red-900 font-extrabold' : 'text-slate-500'}`}>
+                                <td className={`px-3 py-2 font-bold ${isLeaveOnWeekend ? 'text-red-700 font-bold' : isAbsent ? 'text-red-900 font-semibold' : 'text-slate-500'}`}>
                                   {row.dayName}
                                 </td>
                               <td className="px-3 py-2">
                                 {row.hasRoster ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold text-[10px] ${isLeaveOnWeekend ? 'bg-red-200/60 border border-red-300 text-red-800' : 'bg-indigo-50 border border-indigo-100 text-indigo-700'}`}>
                                     📅 {row.shiftName}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium text-[10px] ${isLeaveOnWeekend ? 'bg-red-200/60 border border-red-300 text-red-700' : 'bg-slate-100 border border-slate-200 text-slate-500'}`}>
                                     Roster Not Available
                                   </span>
                                 )}
@@ -4151,11 +4154,13 @@ const AttendanceDaily = () => {
                               </td>
                               <td className="px-3 py-2 text-center">
                                 {(() => {
+                                  if (isLeaveOnWeekend) {
+                                    return <span className="px-2 py-0.5 rounded-full bg-red-200 text-red-800 text-[10px] font-bold border border-red-300">LEAVE ({row.dayName.toUpperCase()})</span>;
+                                  }
                                   if (row.status === 'Present') return <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Present</span>;
                                   if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
                                   if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
                                   if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
-                                  if (row.status === 'Weekend Leave') return <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">Weekend Leave</span>;
                                   if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">On Leave</span>;
                                   return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
                                 })()}
@@ -4174,12 +4179,17 @@ const AttendanceDaily = () => {
                       const hasPunches = row.inTimeFormatted || row.outTimeFormatted;
                       const isAbsent = row.status === 'Absent';
                       const isWeekendLeave = row.status === 'Weekend Leave';
+                      const isOnLeave = row.status === 'On Leave';
+                      const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                      const isOffOrLeaveOnWeekend = isWeekendDay && (isAbsent || isWeekendLeave || isOnLeave || row.status === 'Weekly Off');
 
                       return (
                         <div
                           key={row.dayNum}
                           className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${
-                            isAbsent
+                            isOffOrLeaveOnWeekend
+                              ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20'
+                              : isAbsent
                               ? 'bg-red-50/50 border-red-200'
                               : isWeekendLeave
                               ? 'bg-indigo-50/30 border-indigo-200'
@@ -4188,7 +4198,7 @@ const AttendanceDaily = () => {
                         >
                           <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900 font-mono">
+                              <span className={`text-xs font-bold font-mono ${isOffOrLeaveOnWeekend ? 'text-red-700' : 'text-slate-900'}`}>
                                 {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)} ({row.dayName})
                               </span>
                               {row.hasRoster ? (
@@ -4198,6 +4208,11 @@ const AttendanceDaily = () => {
                               ) : (
                                 <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
                                   Roster N/A ({row.scheduledStartStr} – {row.scheduledEndStr})
+                                </span>
+                              )}
+                              {isOffOrLeaveOnWeekend && (
+                                <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold text-[10px] uppercase">
+                                  ON LEAVE ({row.dayName.toUpperCase()})
                                 </span>
                               )}
                             </div>
@@ -4245,8 +4260,10 @@ const AttendanceDaily = () => {
                               </div>
                             </div>
                           ) : (
-                            <div className="py-2 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                              {row.status === 'Weekly Off' || row.status === 'Weekend Leave' ? (
+                            <div className={`py-2 text-center rounded-xl border border-dashed ${isOffOrLeaveOnWeekend ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>
+                              {isOffOrLeaveOnWeekend ? (
+                                <span className="text-xs font-bold text-red-700">On Leave ({row.dayName}) — Highlighting Required</span>
+                              ) : row.status === 'Weekly Off' || row.status === 'Weekend Leave' ? (
                                 <span className="text-xs font-semibold text-indigo-600">{row.status}</span>
                               ) : (
                                 <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
