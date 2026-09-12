@@ -651,9 +651,9 @@ const AttendanceDaily = () => {
       }
     }
 
-    // If employee forgot to punch out (odd punches or missing out_time):
+    // If employee forgot to punch out (missing out_time or odd punches):
     // Wait until 11:30 PM of that date. If past 11:30 PM or past date and employee did not punch out,
-    // assume punch out time as equal to their punch in time (in_time).
+    // set punch out time to their last valid punch (or in_time if only 1 punch existed).
     const now = new Date();
     const todayStr = getLocalDateString(now);
     const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -661,11 +661,28 @@ const AttendanceDaily = () => {
     const isPastDate = modified.attendance_date && modified.attendance_date < todayStr;
     const isTodayPastCutoff = modified.attendance_date === todayStr && isPast1130PM;
 
-    if (punchList.length % 2 === 1 || (!modified.out_time || modified.out_time === '-')) {
+    if (!modified.out_time || modified.out_time === '-' || modified.out_time === modified.in_time || validDayPunches.length % 2 === 1) {
       if (modified.in_time && modified.in_time !== '-') {
         if (isPastDate || isTodayPastCutoff) {
-          // Time passed 11:30 PM: set out_time equal to in_time
-          modified.out_time = modified.in_time;
+          // If multiple punches exist for the day, use the last valid punch as out_time; otherwise fallback to in_time
+          if (validDayPunches.length > 1 && modified.attendance_date) {
+            const lastPunch = validDayPunches[validDayPunches.length - 1];
+            const clean = lastPunch.trim().toUpperCase();
+            const isPM = clean.endsWith('PM');
+            const isAM = clean.endsWith('AM');
+            let timePart = clean;
+            if (isPM || isAM) timePart = clean.slice(0, -2).trim();
+            const [hStr, mStr] = timePart.split(':');
+            let h = parseInt(hStr, 10);
+            const m = parseInt(mStr, 10) || 0;
+            if (isPM && h < 12) h += 12;
+            if (isAM && h === 12) h = 0;
+            const formattedH = String(h).padStart(2, '0');
+            const formattedM = String(m).padStart(2, '0');
+            modified.out_time = `${modified.attendance_date}T${formattedH}:${formattedM}:00`;
+          } else {
+            modified.out_time = modified.in_time;
+          }
           modified.punch_miss = 'No';
         } else {
           // Still waiting before 11:30 PM today: keep out_time pending (-)
@@ -682,15 +699,30 @@ const AttendanceDaily = () => {
       }
     }
 
-    // Recompute working hours with exact punch times
+    // Recompute working hours with exact punch times (deducting lunch duration if present)
     if (modified.in_time && modified.out_time && modified.in_time !== '-' && modified.out_time !== '-') {
-      modified.working_hour = calculateWorkHours(modified.in_time, modified.out_time, modified.attendance_date);
+      modified.working_hour = calculateWorkHours(modified.in_time, modified.out_time, modified.attendance_date, modified.standard_lunch);
     }
 
     return modified;
   };
 
-  const calculateWorkHours = (inStr, outStr, dateContext = '') => {
+  const parseDurationMs = (durStr) => {
+    if (!durStr || durStr === '-') return 0;
+    try {
+      const parts = durStr.trim().split(':').map(Number);
+      if (parts.length === 3) {
+        return ((parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0)) * 1000;
+      } else if (parts.length === 2) {
+        return ((parts[0] || 0) * 3600 + (parts[1] || 0) * 60) * 1000;
+      }
+      return 0;
+    } catch (e) {
+      return 0;
+    }
+  };
+
+  const calculateWorkHours = (inStr, outStr, dateContext = '', lunchStr = '-') => {
     if (!inStr || !outStr || inStr === '-' || outStr === '-' || inStr === outStr) return '00:00:00';
     if (isBefore9AM(inStr)) return '00:00:00';
     try {
@@ -698,7 +730,11 @@ const AttendanceDaily = () => {
       const inDate = parseISTToDate(inStr);
       const outDate = parseISTToDate(clampedOut);
       if (!inDate || !outDate || outDate <= inDate) return '00:00:00';
-      return calculateHoursMins(outDate - inDate);
+      
+      let totalMs = outDate - inDate;
+      const lunchMs = parseDurationMs(lunchStr);
+      const netWorkMs = Math.max(0, totalMs - lunchMs);
+      return calculateHoursMins(netWorkMs);
     } catch (e) {
       return '00:00:00';
     }
@@ -3841,7 +3877,6 @@ const AttendanceDaily = () => {
           const att = getAttendanceForDate(emp.id, dateStr);
           const inTime = att.in_time;
           const outTime = att.out_time;
-          const isWeekendLeaveDay = ['Fri', 'Sat'].includes(dayName);
 
           const empLeaveInfo = getLeaveInfoForStreak(emp.id, dateStr, dateStr);
           const isOnLeaveInTable = !!(empLeaveInfo && (empLeaveInfo.reason || empLeaveInfo.leaveType));
@@ -3850,11 +3885,7 @@ const AttendanceDaily = () => {
           if (!status || status === 'Absent') {
             if (!inTime || inTime === '-') {
               if (isOnLeaveInTable) {
-                status = isWeekendLeaveDay ? 'Weekend Leave' : 'On Leave';
-              } else if (isWeekendLeaveDay) {
-                status = 'Weekend Leave';
-              } else if (dateObj.getDay() === 0) {
-                status = 'Weekly Off';
+                status = 'On Leave';
               } else {
                 status = 'Absent';
               }
@@ -3866,13 +3897,13 @@ const AttendanceDaily = () => {
           // Compute late minutes against date-specific roster
           const lateMins = inTime ? calculateLateMinutes(inTime, dateStr, rEntry) : 0;
 
-          // Compute working hours
-          const workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : (inTime && outTime ? calculateWorkHours(inTime, outTime, dateStr) : '00:00:00');
-          const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
-          const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;
-
           // Lunch duration
           const lunchStr = att.standard_lunch || '-';
+
+          // Compute working hours (deducting lunch duration)
+          const workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : (inTime && outTime ? calculateWorkHours(inTime, outTime, dateStr, lunchStr) : '00:00:00');
+          const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
+          const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;
 
           // Parse timestamps for timeline visualization
           let inTimeFormatted = inTime ? formatTimeIST(inTime) : null;
@@ -4096,38 +4127,33 @@ const AttendanceDaily = () => {
                         <tbody className="divide-y divide-slate-100 font-medium">
                           {dayRows.map((row) => {
                             const isAbsent = row.status === 'Absent';
-                            const isWeekendLeave = row.status === 'Weekend Leave';
                             const isOnLeave = row.status === 'On Leave';
                             const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
-                            // Only trigger weekend leave highlight if employee is on leave / absent on Fri, Sat, or Sun
-                            const isLeaveOnWeekend = isWeekendDay && (isAbsent || isWeekendLeave || isOnLeave);
+                            // Highlight ONLY if Friday, Saturday, or Sunday AND absent/on leave
+                            const isWeekendAbsentOrLeave = isWeekendDay && (isAbsent || isOnLeave);
 
                             return (
                               <tr
                                 key={row.dayNum}
                                 className={`transition-colors ${
-                                  isLeaveOnWeekend
-                                    ? 'bg-red-100/90 hover:bg-red-200/90 border-l-4 border-l-red-500'
-                                    : isOnLeave
-                                    ? 'bg-rose-50/80 hover:bg-rose-100/80 border-l-4 border-l-rose-400'
-                                    : isAbsent
-                                    ? 'bg-red-50/40 hover:bg-red-50/80'
+                                  isWeekendAbsentOrLeave
+                                    ? 'bg-red-100/80 hover:bg-red-200/80 border-l-4 border-l-red-500'
                                     : 'hover:bg-slate-50/80'
                                 }`}
                               >
                                 <td className="px-3 py-2 text-slate-900 font-bold font-mono">
                                   {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
                                 </td>
-                                <td className={`px-3 py-2 font-bold ${isLeaveOnWeekend ? 'text-red-700 font-bold' : isAbsent ? 'text-red-900 font-semibold' : 'text-slate-500'}`}>
+                                <td className={`px-3 py-2 font-bold ${isWeekendAbsentOrLeave ? 'text-red-700' : 'text-slate-500'}`}>
                                   {row.dayName}
                                 </td>
                               <td className="px-3 py-2">
                                 {row.hasRoster ? (
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold text-[10px] ${isLeaveOnWeekend ? 'bg-red-200/60 border border-red-300 text-red-800' : 'bg-indigo-50 border border-indigo-100 text-indigo-700'}`}>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
                                     📅 {row.shiftName}
                                   </span>
                                 ) : (
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium text-[10px] ${isLeaveOnWeekend ? 'bg-red-200/60 border border-red-300 text-red-700' : 'bg-slate-100 border border-slate-200 text-slate-500'}`}>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
                                     Roster Not Available
                                   </span>
                                 )}
@@ -4154,14 +4180,11 @@ const AttendanceDaily = () => {
                               </td>
                               <td className="px-3 py-2 text-center">
                                 {(() => {
-                                  if (isLeaveOnWeekend) {
-                                    return <span className="px-2 py-0.5 rounded-full bg-red-200 text-red-800 text-[10px] font-bold border border-red-300">LEAVE ({row.dayName.toUpperCase()})</span>;
-                                  }
                                   if (row.status === 'Present') return <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Present</span>;
                                   if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
                                   if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
                                   if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
-                                  if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">On Leave</span>;
+                                  if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">On Leave</span>;
                                   return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
                                 })()}
                               </td>
@@ -4178,27 +4201,22 @@ const AttendanceDaily = () => {
                     {dayRows.map((row) => {
                       const hasPunches = row.inTimeFormatted || row.outTimeFormatted;
                       const isAbsent = row.status === 'Absent';
-                      const isWeekendLeave = row.status === 'Weekend Leave';
                       const isOnLeave = row.status === 'On Leave';
                       const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
-                      const isOffOrLeaveOnWeekend = isWeekendDay && (isAbsent || isWeekendLeave || isOnLeave || row.status === 'Weekly Off');
+                      const isWeekendAbsentOrLeave = isWeekendDay && (isAbsent || isOnLeave);
 
                       return (
                         <div
                           key={row.dayNum}
                           className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${
-                            isOffOrLeaveOnWeekend
-                              ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20'
-                              : isAbsent
-                              ? 'bg-red-50/50 border-red-200'
-                              : isWeekendLeave
-                              ? 'bg-indigo-50/30 border-indigo-200'
+                            isWeekendAbsentOrLeave
+                              ? 'bg-red-50/80 border-red-300 ring-1 ring-red-400/30'
                               : 'bg-white border-slate-200/80'
                           }`}
                         >
                           <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                             <div className="flex items-center gap-2">
-                              <span className={`text-xs font-bold font-mono ${isOffOrLeaveOnWeekend ? 'text-red-700' : 'text-slate-900'}`}>
+                              <span className={`text-xs font-bold font-mono ${isWeekendAbsentOrLeave ? 'text-red-700' : 'text-slate-900'}`}>
                                 {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)} ({row.dayName})
                               </span>
                               {row.hasRoster ? (
@@ -4208,11 +4226,6 @@ const AttendanceDaily = () => {
                               ) : (
                                 <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
                                   Roster N/A ({row.scheduledStartStr} – {row.scheduledEndStr})
-                                </span>
-                              )}
-                              {isOffOrLeaveOnWeekend && (
-                                <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold text-[10px] uppercase">
-                                  ON LEAVE ({row.dayName.toUpperCase()})
                                 </span>
                               )}
                             </div>
@@ -4260,14 +4273,8 @@ const AttendanceDaily = () => {
                               </div>
                             </div>
                           ) : (
-                            <div className={`py-2 text-center rounded-xl border border-dashed ${isOffOrLeaveOnWeekend ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>
-                              {isOffOrLeaveOnWeekend ? (
-                                <span className="text-xs font-bold text-red-700">On Leave ({row.dayName}) — Highlighting Required</span>
-                              ) : row.status === 'Weekly Off' || row.status === 'Weekend Leave' ? (
-                                <span className="text-xs font-semibold text-indigo-600">{row.status}</span>
-                              ) : (
-                                <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
-                              )}
+                            <div className={`py-2 text-center rounded-xl border border-dashed ${isWeekendAbsentOrLeave ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>
+                              <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
                             </div>
                           )}
                         </div>
