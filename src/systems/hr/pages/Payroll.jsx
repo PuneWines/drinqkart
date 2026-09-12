@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Download, Calendar, Save, Users, DollarSign, TrendingUp, HelpCircle, Database, X, ChevronDown, Pencil, RefreshCw } from 'lucide-react';
+import { Search, Loader2, Download, Calendar, Save, Users, DollarSign, TrendingUp, HelpCircle, Database, X, ChevronDown, Pencil, RefreshCw, CheckCircle2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
@@ -283,7 +283,8 @@ const Payroll = () => {
                 'Basic salary (Prorated)',
                 'Seasonal Bonus',
                 'Refferal Bonus',
-                'Final Salary'
+                'Final Salary',
+                'Action'
             ];
 
             const verifiedRows = activeEmployees.map(emp => {
@@ -315,7 +316,7 @@ const Payroll = () => {
                 const proratedSalary = (savedPayroll && savedPayroll.prorated_salary !== null && savedPayroll.prorated_salary !== undefined)
                     ? Number(savedPayroll.prorated_salary)
                     : calculatedProrated;
-                const netSalary = Math.round(Math.max(0, proratedSalary + seasonalBonus + referralBonus - advDeduction - breakageDeduction - medicalDeduction - rtoDeduction));
+                const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction));
 
                 return [
                     empId,                     // 0: Emp ID
@@ -362,7 +363,7 @@ const Payroll = () => {
 
                 const savedProrated = savedPayroll ? Number(savedPayroll.prorated_salary) : null;
                 const proratedSalary = (savedProrated !== null && savedProrated !== undefined && savedPayroll) ? savedProrated : 0;
-                const netSalary = Math.round(Math.max(0, proratedSalary + seasonalBonus + referralBonus - advDeduction - breakageDeduction - medicalDeduction - rtoDeduction));
+                const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction));
 
                 return [
                     emp.id,                    // 0: Emp ID
@@ -489,23 +490,93 @@ const Payroll = () => {
 
 
 
-    // Save/Upsert current month's calculated salaries into Supabase 'payroll' table
-    const handleSavePayrollToDB = async () => {
-        if (!salaryData?.rows?.length) {
+    // 1. Update Employee Records: Only updates values in hr_management_employees & draft payroll without sending to payment history or generating payroll
+    const handleSavePayrollToDB = async (singleRow = null) => {
+        const rowsToProcess = singleRow
+            ? [singleRow]
+            : (salaryData.rows.filter(row => selectedEmpIds.has(row[0]?.toString())).length > 0
+                ? salaryData.rows.filter(row => selectedEmpIds.has(row[0]?.toString()))
+                : salaryData.rows);
+
+        if (!rowsToProcess || rowsToProcess.length === 0) {
             toast.error("No payroll records to save.");
             return;
         }
 
-        const selectedRows = salaryData.rows.filter(row => selectedEmpIds.has(row[0]?.toString()));
-        const targetRows = selectedRows.length > 0 ? selectedRows : salaryData.rows;
+        setIsSavingToDB(true);
+        try {
+            let updatedCount = 0;
+            const monthStr = monthNames[selectedMonth - 1];
 
-        if (!window.confirm(`Upsert ${targetRows.length} record(s) into database table 'payroll'?`)) return;
+            for (const row of rowsToProcess) {
+                const empId = row[0]?.toString() || '';
+                const basicSalary = Number(row[2]) || 0;
+                if (!empId || empId === '-') continue;
+
+                // Update basic salary in hr_management_employees
+                await supabase
+                    .from('hr_management_employees')
+                    .update({ salary: basicSalary })
+                    .eq('employee_id', empId);
+
+                // Save draft parameters into hr_management_payroll without sending to payment history or deducting advances
+                const draftRecord = {
+                    employee_id: empId,
+                    year: Number(selectedYear),
+                    month: monthStr,
+                    total_month_days: Number(row[3]) || 0,
+                    total_present: Number(row[4]) || 0,
+                    extra_days: Number(row[5]) || 0,
+                    salary: Number(row[2]) || 0,
+                    advance_deduction: Number(row[6]) || 0,
+                    breakage_deduction: Number(row[7]) || 0,
+                    medical_deduction: Number(row[8]) || 0,
+                    rto_deduction: Number(row[9]) || 0,
+                    prorated_salary: Number(row[10]) || 0,
+                    seasonal_bonus: Number(row[11]) || 0,
+                    referral_bonus: Number(row[12]) || 0,
+                    net_salary: Number(row[13]) || 0,
+                    is_verified: false
+                };
+
+                await supabase
+                    .from('hr_management_payroll')
+                    .upsert(draftRecord, { onConflict: 'employee_id,year,month' });
+
+                updatedCount++;
+            }
+
+            toast.success(`Successfully saved employee record for ${updatedCount} employee(s)!`);
+            setSelectedEmpIds(new Set());
+            fetchPayrollData();
+        } catch (e) {
+            console.error(e);
+            toast.error(`Failed to update employee records: ${e.message}`);
+        } finally {
+            setIsSavingToDB(false);
+        }
+    };
+
+    // 2. Mark as Paid: Generates payroll, marks record as Paid, updates advance deductions, and sends to Payment History
+    const handleMarkAsPaid = async (singleRow = null) => {
+        const rowsToProcess = singleRow
+            ? [singleRow]
+            : (salaryData.rows.filter(row => selectedEmpIds.has(row[0]?.toString())).length > 0
+                ? salaryData.rows.filter(row => selectedEmpIds.has(row[0]?.toString()))
+                : salaryData.rows);
+
+        if (!rowsToProcess || rowsToProcess.length === 0) {
+            toast.error("No payroll records to mark as paid.");
+            return;
+        }
+
+        if (!window.confirm(`Mark ${rowsToProcess.length} employee record(s) as Paid and generate payroll?`)) return;
 
         setIsSavingToDB(true);
         try {
             const monthStr = monthNames[selectedMonth - 1];
 
-            const payrollRecords = targetRows.map(row => ({
+            const payrollRecords = rowsToProcess.map(row => ({
                 employee_id: row[0]?.toString() || '',
                 year: Number(selectedYear),
                 month: monthStr,
@@ -521,7 +592,7 @@ const Payroll = () => {
                 seasonal_bonus: Number(row[11]) || 0,
                 referral_bonus: Number(row[12]) || 0,
                 net_salary: Number(row[13]) || 0,
-                is_verified: !!row[14]
+                is_verified: true
             }));
 
             const { error } = await supabase
@@ -529,18 +600,18 @@ const Payroll = () => {
                 .upsert(payrollRecords, { onConflict: 'employee_id,year,month' });
 
             if (error) {
-                if (error.code === '42P01' || error.message?.includes('relation "payroll" does not exist')) {
-                    toast.error("Database table 'payroll' does not exist.");
+                if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+                    toast.error("Database table 'hr_management_payroll' does not exist.");
                     setShowSchemaModal(true);
                 } else if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
-                    toast.error("Database table 'payroll' is missing some columns. Please run migration SQL.");
+                    toast.error("Database table 'hr_management_payroll' is missing some columns.");
                     setShowSchemaModal(true);
                 } else {
                     throw error;
                 }
             } else {
                 // Update remaining_amount in hr_management_advance_requests for deducted advances
-                for (const row of targetRows) {
+                for (const row of rowsToProcess) {
                     const empIdLower = row[0]?.toString().toLowerCase().trim();
                     const advInfo = advanceMapState[empIdLower];
                     if (advInfo && advInfo.advancesList && advInfo.advancesList.length > 0) {
@@ -562,13 +633,13 @@ const Payroll = () => {
                         }
                     }
                 }
-                toast.success(`Successfully saved ${payrollRecords.length} records and updated advance remaining balances!`);
+                toast.success(`Successfully marked ${payrollRecords.length} record(s) as Paid & generated payroll!`);
                 setSelectedEmpIds(new Set());
                 fetchPayrollData();
             }
         } catch (e) {
             console.error(e);
-            toast.error(`Failed to save to database: ${e.message}`);
+            toast.error(`Failed to mark as paid: ${e.message}`);
         } finally {
             setIsSavingToDB(false);
         }
@@ -680,8 +751,8 @@ const Payroll = () => {
     // Calculate Summary Totals
     const totalEmployeesCount = salaryData.rows?.length || 0;
     const totalBaseSalarySum = salaryData.rows?.reduce((sum, row) => sum + (Number(row[2]) || 0), 0) || 0;
-    const totalNetPayableSum = salaryData.rows?.reduce((sum, row) => sum + (Number(row[15]) || 0), 0) || 0;
-    const totalDeductionsSum = salaryData.rows?.reduce((sum, row) => sum + (Number(row[6]) || 0) + (Number(row[8]) || 0) + (Number(row[9]) || 0) + (Number(row[10]) || 0) + (Number(row[14]) || 0), 0) || 0;
+    const totalNetPayableSum = salaryData.rows?.reduce((sum, row) => sum + (Number(row[13]) || 0), 0) || 0;
+    const totalDeductionsSum = salaryData.rows?.reduce((sum, row) => sum + (Number(row[6]) || 0) + (Number(row[7]) || 0) + (Number(row[8]) || 0) + (Number(row[9]) || 0), 0) || 0;
 
     // Pagination variables
     const pageSize = 15;
@@ -750,18 +821,17 @@ const Payroll = () => {
                     newRow[colIndex] = numVal;
 
                     // Recalculate Final Salary
-                    // Index 11: prorated salary, Index 12: seasonal bonus, Index 13: referral bonus
-                    // Index 6: advance, Index 8: breakage, Index 9: medical, Index 10: RTO, Index 14: fix advance deduction
-                    const prorated = Number(newRow[11]) || 0;
-                    const seasonal = Number(newRow[12]) || 0;
-                    const referral = Number(newRow[13]) || 0;
+                    // Index 10: prorated salary, Index 11: seasonal bonus, Index 12: referral bonus
+                    // Index 6: advance, Index 7: breakage, Index 8: medical, Index 9: RTO
+                    const prorated = Number(newRow[10]) || 0;
+                    const seasonal = Number(newRow[11]) || 0;
+                    const referral = Number(newRow[12]) || 0;
                     const advance = Number(newRow[6]) || 0;
-                    const breakage = Number(newRow[8]) || 0;
-                    const medical = Number(newRow[9]) || 0;
-                    const rto = Number(newRow[10]) || 0;
-                    const fixAdvDeduction = Number(newRow[14]) || 0;
+                    const breakage = Number(newRow[7]) || 0;
+                    const medical = Number(newRow[8]) || 0;
+                    const rto = Number(newRow[9]) || 0;
 
-                    newRow[15] = Math.round(Math.max(0, prorated + seasonal + referral - advance - breakage - medical - rto - fixAdvDeduction));
+                    newRow[13] = Math.round(Math.max(0, prorated - breakage - rto + seasonal + referral - advance));
                     return newRow;
                 }
                 return r;
@@ -835,12 +905,22 @@ const Payroll = () => {
                                 {loading ? 'Refreshing...' : 'Refresh'}
                             </button>
                             <button
-                                onClick={handleSavePayrollToDB}
+                                onClick={() => handleSavePayrollToDB()}
                                 disabled={isSavingToDB || !salaryData?.rows?.length}
-                                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
+                                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
+                                title="Update basic salary & employee record (does not send to Payment History)"
                             >
-                                {isSavingToDB ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
-                                {isSavingToDB ? 'Saving...' : 'Save to Storage'}
+                                {isSavingToDB ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                {isSavingToDB ? 'Updating...' : 'Update Record'}
+                            </button>
+                            <button
+                                onClick={() => handleMarkAsPaid()}
+                                disabled={isSavingToDB || !salaryData?.rows?.length}
+                                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
+                                title="Mark as Paid & generate payroll to Payment History"
+                            >
+                                {isSavingToDB ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                {isSavingToDB ? 'Processing...' : 'Mark as Paid'}
                             </button>
                         </div>
                     )}
@@ -983,16 +1063,24 @@ const Payroll = () => {
                             </div>
                             <div className="flex items-center gap-3">
                                 <button
-                                    onClick={handleSavePayrollToDB}
+                                    onClick={() => handleSavePayrollToDB()}
                                     disabled={isSavingToDB}
                                     className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
                                 >
                                     {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                                    Update Records
+                                    Update Record
+                                </button>
+                                <button
+                                    onClick={() => handleMarkAsPaid()}
+                                    disabled={isSavingToDB}
+                                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
+                                >
+                                    {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                    Mark as Paid
                                 </button>
                                 <button
                                     onClick={() => setSelectedEmpIds(new Set())}
-                                    className="text-xs font-semibold text-gray-600 hover:text-gray-800 transition-colors cursor-pointer"
+                                    className="text-xs font-semibold text-gray-600 hover:text-gray-800 transition-colors cursor-pointer ml-2"
                                 >
                                     Cancel
                                 </button>
@@ -1180,6 +1268,30 @@ const Payroll = () => {
                                                             onChange={(e) => handleManualInputChange(row[0], 10, e.target.value)}
                                                             className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
                                                         />
+                                                    );
+                                                } else if (headerName === 'action') {
+                                                    cellClass = "px-4 py-2.5 text-center whitespace-nowrap";
+                                                    content = (
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            <button
+                                                                onClick={() => handleSavePayrollToDB(row)}
+                                                                disabled={isSavingToDB}
+                                                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[11px] rounded border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                                                title="Update basic salary & employee record"
+                                                            >
+                                                                <Save size={11} />
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleMarkAsPaid(row)}
+                                                                disabled={isSavingToDB}
+                                                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded transition-colors flex items-center gap-1 cursor-pointer shadow-xs disabled:opacity-50"
+                                                                title="Mark as Paid & Generate Payroll"
+                                                            >
+                                                                <CheckCircle2 size={11} />
+                                                                Mark as Paid
+                                                            </button>
+                                                        </div>
                                                     );
                                                 }
 

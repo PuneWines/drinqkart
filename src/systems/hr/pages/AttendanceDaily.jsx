@@ -606,27 +606,49 @@ const AttendanceDaily = () => {
     return map1130PMTo11PM(timeStr);
   };
 
-  // Normalizes attendance record: Ignores logs before 9 AM and shows exact punch times
+  // Normalizes attendance record: Filters pre-9 AM punches and assigns first valid punch (>= 9 AM) as 1st Punch In
   const normalizeAttendanceRecord = (record) => {
     if (!record) return record;
     let modified = { ...record };
 
-    // 1. Ignore in_time if before 9:00 AM
-    if (modified.in_time && modified.in_time !== '-') {
-      if (isBefore9AM(modified.in_time)) {
-        modified.in_time = '-';
-        modified.status = 'Absent';
-      }
-    }
-
-    // 2. Filter punch_log to exclude logs before 9:00 AM & map 11:30 PM - 11:59 PM punches to 11:00 PM
+    // Parse punch log if present
     let punchList = [];
     if (modified.punch_log && modified.punch_log !== '-') {
       punchList = modified.punch_log
         .split(/\s*\|\s*/)
-        .filter(p => Boolean(p) && !isBefore9AM(p))
+        .filter(Boolean)
         .map(p => map1130PMTo11PM(p));
-      modified.punch_log = punchList.length > 0 ? punchList.join(' | ') : '-';
+    }
+
+    // Filter valid day punches (>= 9:00 AM) - logs between 12 AM to 9 AM are invalid
+    const validDayPunches = punchList.filter(p => !isBefore9AM(p));
+
+    // When punch between 12 AM and 9 AM is invalid, assign the first valid punch (>= 9 AM) as 1st Punch In
+    if (validDayPunches.length > 0) {
+      const firstDayPunch = validDayPunches[0];
+      if (modified.attendance_date) {
+        const clean = firstDayPunch.trim().toUpperCase();
+        const isPM = clean.endsWith('PM');
+        const isAM = clean.endsWith('AM');
+        let timePart = clean;
+        if (isPM || isAM) timePart = clean.slice(0, -2).trim();
+        const [hStr, mStr] = timePart.split(':');
+        let h = parseInt(hStr, 10);
+        const m = parseInt(mStr, 10) || 0;
+        if (isPM && h < 12) h += 12;
+        if (isAM && h === 12) h = 0;
+        const formattedH = String(h).padStart(2, '0');
+        const formattedM = String(m).padStart(2, '0');
+        modified.in_time = `${modified.attendance_date}T${formattedH}:${formattedM}:00`;
+      }
+      if (modified.status === 'Absent' || !modified.status) {
+        modified.status = 'Present';
+      }
+    } else if (modified.in_time && modified.in_time !== '-') {
+      if (isBefore9AM(modified.in_time)) {
+        modified.in_time = '-';
+        modified.status = 'Absent';
+      }
     }
 
     // If employee forgot to punch out (odd punches or missing out_time):
@@ -2927,7 +2949,7 @@ const AttendanceDaily = () => {
                           // New structure
                           if (punchesObj.manual && typeof punchesObj.manual === 'object') {
                             const rawManual = Object.values(punchesObj.manual)
-                              .filter(value => value && value !== '' && typeof value === 'string' && parseToMinutes(value) >= 540);
+                              .filter(value => value && value !== '' && typeof value === 'string');
                             if (rawManual.length > 0) {
                               const sortedManual = [...rawManual].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
                               manualPunchesDisplay = sortedManual.join(' | ');
@@ -2936,7 +2958,7 @@ const AttendanceDaily = () => {
 
                           if (punchesObj.api && typeof punchesObj.api === 'object') {
                             const rawApi = Object.values(punchesObj.api)
-                              .filter(value => value && value !== '' && typeof value === 'string' && parseToMinutes(value) >= 540);
+                              .filter(value => value && value !== '' && typeof value === 'string');
                             if (rawApi.length > 0) {
                               const sortedApi = [...rawApi].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
                               apiPunchesDisplay = sortedApi.join(' | ');
@@ -2946,7 +2968,7 @@ const AttendanceDaily = () => {
                           // Old structure: direct keys
                           const rawManual = ["1", "2", "3", "4", "5", "6"]
                             .map(key => punchesObj[key])
-                            .filter(value => value && value !== '' && typeof value === 'string' && parseToMinutes(value) >= 540);
+                            .filter(value => value && value !== '' && typeof value === 'string');
                           if (rawManual.length > 0) {
                             const sortedManual = [...rawManual].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
                             manualPunchesDisplay = sortedManual.join(' | ');
@@ -2954,14 +2976,17 @@ const AttendanceDaily = () => {
                         }
                       }
 
-                      // Function to render colored punch logs with even/odd logic (1st green, 2nd red, 3rd green, 4th red, etc.)
+                      // Function to render colored punch logs (pre-9 AM invalid punches are filtered out completely)
                       const renderColoredPunches = (punchLogStr) => {
                         if (!punchLogStr || punchLogStr === '-') {
                           return <span className="text-gray-500 font-medium">-</span>;
                         }
 
-                        // Split by ' | ' or '|' separator
-                        const punches = punchLogStr.split(/\s*\|\s*/).filter(p => p.trim());
+                        // Split by ' | ' or '|' separator and filter out pre-9 AM punches completely
+                        const punches = punchLogStr
+                          .split(/\s*\|\s*/)
+                          .map(p => p.trim())
+                          .filter(p => Boolean(p) && !isBefore9AM(p));
 
                         if (punches.length === 0) {
                           return <span className="text-gray-500 font-medium">-</span>;
@@ -2970,19 +2995,19 @@ const AttendanceDaily = () => {
                         return (
                           <div className="flex flex-wrap items-center justify-center gap-0.5">
                             {punches.map((punch, index) => {
-                              // 1st punch (index 0) = green, 2nd (index 1) = red, 3rd (index 2) = green, etc.
                               const isEven = index % 2 === 0;
                               const colorClass = isEven ? 'text-green-600' : 'text-red-600';
-                              const bgClass = isEven ? 'bg--50' : 'bg--50';
+                              const titleText = isEven ? 'Check-In Punch' : 'Check-Out Punch';
 
                               return (
                                 <span
                                   key={index}
-                                  className={`${colorClass} ${bgClass} px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold`}
+                                  className={`${colorClass} bg-gray-50 px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold`}
+                                  title={titleText}
                                 >
-                                  {punch.trim()}
+                                  {punch}
                                   {index < punches.length - 1 && (
-                                    <span className="text-gray-400 mx-0.5 font-normal">|</span>
+                                    <span className="text-gray-400 mx-0.5 font-normal inline-block">|</span>
                                   )}
                                 </span>
                               );
@@ -3812,11 +3837,31 @@ const AttendanceDaily = () => {
             scheduledEndStr = rEntry.end_time.substring(0, 5);
           }
 
-          // Attendance record
+          // Attendance record & Leave status check
           const att = getAttendanceForDate(emp.id, dateStr);
           const inTime = att.in_time;
           const outTime = att.out_time;
-          const status = att.status || (dateObj.getDay() === 0 ? 'Weekly Off' : 'Absent');
+          const isWeekendLeaveDay = ['Fri', 'Sat'].includes(dayName);
+
+          const empLeaveInfo = getLeaveInfoForStreak(emp.id, dateStr, dateStr);
+          const isOnLeaveInTable = !!(empLeaveInfo && (empLeaveInfo.reason || empLeaveInfo.leaveType));
+
+          let status = att.status;
+          if (!status || status === 'Absent') {
+            if (!inTime || inTime === '-') {
+              if (isOnLeaveInTable) {
+                status = isWeekendLeaveDay ? 'Weekend Leave' : 'On Leave';
+              } else if (isWeekendLeaveDay) {
+                status = 'Weekend Leave';
+              } else if (dateObj.getDay() === 0) {
+                status = 'Weekly Off';
+              } else {
+                status = 'Absent';
+              }
+            } else {
+              status = att.status || 'Absent';
+            }
+          }
 
           // Compute late minutes against date-specific roster
           const lateMins = inTime ? calculateLateMinutes(inTime, dateStr, rEntry) : 0;
@@ -4051,28 +4096,27 @@ const AttendanceDaily = () => {
                         <tbody className="divide-y divide-slate-100 font-medium">
                           {dayRows.map((row) => {
                             const isAbsent = row.status === 'Absent';
-                            const isWeekend = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
-                            const isWeekendAbsent = isAbsent && isWeekend;
+                            const isWeekendLeave = row.status === 'Weekend Leave';
+                            const isOnLeave = row.status === 'On Leave';
 
                             return (
                               <tr
                                 key={row.dayNum}
                                 className={`transition-colors ${
-                                  isWeekendAbsent
-                                    ? 'bg-red-100/80 hover:bg-red-200/80 font-bold'
+                                  isWeekendLeave
+                                    ? 'bg-red-100/90 hover:bg-red-200/90 font-bold border-l-4 border-l-red-600'
+                                    : isOnLeave
+                                    ? 'bg-rose-100/80 hover:bg-rose-200/80 font-bold border-l-4 border-l-rose-500'
+                                    : isAbsent
+                                    ? 'bg-red-50/60 hover:bg-red-100/60'
                                     : 'hover:bg-slate-50/80'
                                 }`}
                               >
                                 <td className="px-3 py-2 text-slate-900 font-bold font-mono">
                                   {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
                                 </td>
-                                <td className={`px-3 py-2 font-bold ${isWeekendAbsent ? 'text-red-900 font-extrabold' : 'text-slate-500'}`}>
+                                <td className={`px-3 py-2 font-bold ${isWeekendLeave || isOnLeave ? 'text-red-950 font-black' : isAbsent ? 'text-red-900 font-extrabold' : 'text-slate-500'}`}>
                                   {row.dayName}
-                                  {isWeekendAbsent && (
-                                    <span className="ml-1.5 text-[9px] text-red-700 bg-red-200/90 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
-                                      Weekend Leave
-                                    </span>
-                                  )}
                                 </td>
                               <td className="px-3 py-2">
                                 {row.hasRoster ? (
@@ -4111,6 +4155,8 @@ const AttendanceDaily = () => {
                                   if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
                                   if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
                                   if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
+                                  if (row.status === 'Weekend Leave') return <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">Weekend Leave</span>;
+                                  if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">On Leave</span>;
                                   return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
                                 })()}
                               </td>
@@ -4127,15 +4173,16 @@ const AttendanceDaily = () => {
                     {dayRows.map((row) => {
                       const hasPunches = row.inTimeFormatted || row.outTimeFormatted;
                       const isAbsent = row.status === 'Absent';
-                      const isWeekend = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
-                      const isWeekendAbsent = isAbsent && isWeekend;
+                      const isWeekendLeave = row.status === 'Weekend Leave';
 
                       return (
                         <div
                           key={row.dayNum}
                           className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${
-                            isWeekendAbsent
-                              ? 'bg-red-100/80 border-red-300'
+                            isAbsent
+                              ? 'bg-red-50/50 border-red-200'
+                              : isWeekendLeave
+                              ? 'bg-indigo-50/30 border-indigo-200'
                               : 'bg-white border-slate-200/80'
                           }`}
                         >
@@ -4199,8 +4246,8 @@ const AttendanceDaily = () => {
                             </div>
                           ) : (
                             <div className="py-2 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                              {row.status === 'Weekly Off' ? (
-                                <span className="text-xs font-semibold text-slate-500">Weekly Off</span>
+                              {row.status === 'Weekly Off' || row.status === 'Weekend Leave' ? (
+                                <span className="text-xs font-semibold text-indigo-600">{row.status}</span>
                               ) : (
                                 <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
                               )}

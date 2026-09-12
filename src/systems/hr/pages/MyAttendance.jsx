@@ -579,6 +579,10 @@ const MyAttendance = () => {
             } else {
                 // Find employee info from any available record
                 const empInfo = filteredAttendance[0] || {};
+                const dObj = new Date(yearNum, monthIdx, d);
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dObj.getDay()];
+                const isWeekendLeaveDay = ['Fri', 'Sat'].includes(dayName);
+                const isSunday = dayName === 'Sun';
                 displayAttendance.push({
                     employeeCode: empInfo.employeeCode || fallbackCode,
                     employeeName: empInfo.employeeName || fallbackName,
@@ -589,7 +593,7 @@ const MyAttendance = () => {
                     lateMinutes: '-',
                     totalWithLunchDuration: '-',
                     lunchTime: '-',
-                    status: 'Absent',
+                    status: isWeekendLeaveDay ? 'Weekend Leave' : isSunday ? 'Weekly Off' : 'Absent',
                     month: selectedMonth,
                     year: selectedYear,
                     punchMiss: false
@@ -858,7 +862,7 @@ const MyAttendance = () => {
                                                 title={record.punchMiss ? record.punchMissReason : ''}
                                                 className={`px-3 py-1 text-[10px] font-black uppercase rounded-full cursor-help transition-all shadow-sm border ${record.status.trim().toLowerCase() === 'present' ? 'bg-green-50 text-green-700 border-green-200' :
                                                     record.status.trim().toLowerCase() === 'late' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                        record.status.trim().toLowerCase() === 'holiday' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                                        record.status.trim().toLowerCase() === 'holiday' || record.status.trim().toLowerCase() === 'weekend leave' || record.status.trim().toLowerCase() === 'weekly off' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
                                                             'bg-red-50 text-red-700 border-red-200'
                                                     }`}
                                             >
