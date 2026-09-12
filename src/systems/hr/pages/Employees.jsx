@@ -10,7 +10,8 @@ const DEVICES = [
   { name: 'HINJEWADI', serial: 'AMDB25061400335' },
   { name: 'WAGHOLI', serial: 'AMDB25061400343' },
   { name: 'AKOLE', serial: 'C262CC13CF202038' },
-  { name: 'MUMBAI', serial: 'C2630450C32A2327' }
+  { name: 'MUMBAI', serial: 'C2630450C32A2327' },
+  { name: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const resolveDeviceStore = (log) => {

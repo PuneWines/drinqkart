@@ -9,7 +9,8 @@ const DEVICES = [
     { name: 'HINJEWADI', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
     { name: 'WAGHOLI', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
     { name: 'AKOLE', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-    { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' }
+    { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+    { name: 'KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const ALL_DEVICES_OPTION = { name: 'ALL DEVICES', apiName: 'ALL', serial: 'ALL' };
