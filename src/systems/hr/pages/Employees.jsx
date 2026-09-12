@@ -5,6 +5,25 @@ import { supabase } from '../lib/supabase'
 // Storage bucket name
 const STORAGE_BUCKET = 'HR_System_employee_documents'
 
+const DEVICES = [
+  { name: 'BAVDHAN', serial: 'C26238441B1E342D' },
+  { name: 'HINJEWADI', serial: 'AMDB25061400335' },
+  { name: 'WAGHOLI', serial: 'AMDB25061400343' },
+  { name: 'AKOLE', serial: 'C262CC13CF202038' },
+  { name: 'MUMBAI', serial: 'C2630450C32A2327' }
+];
+
+const resolveDeviceStore = (log) => {
+  if (!log) return '';
+  const serial = (log.serial_number || log.serialNo || '').toString().trim();
+  if (serial && serial !== '-' && serial !== 'ALL') {
+    const dev = DEVICES.find(d => d.serial.toLowerCase() === serial.toLowerCase());
+    if (dev) return dev.name;
+  }
+  return log.store_name || log.shop_name || log.device_name || log.device_location || '';
+};
+
+
 export default function EmployeeManagement() {
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
@@ -248,7 +267,7 @@ export default function EmployeeManagement() {
         latestLogs.forEach(log => {
           if (log && log.employee_id) {
             const empKey = log.employee_id.toString().trim().toLowerCase();
-            const logStore = log.store_name || log.shop_name || log.device_name || log.device_location || '';
+            const logStore = resolveDeviceStore(log);
             if (!lastPunchStoreMap[empKey] && logStore) {
               lastPunchStoreMap[empKey] = logStore.toString().trim();
             }

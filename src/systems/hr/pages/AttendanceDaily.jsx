@@ -14,6 +14,42 @@ const DEVICES = [
 
 const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
 
+// Resolve store location from punch attendance log device serial or device_id
+const resolvePunchedStore = (attendance, deviceMapping = []) => {
+  if (!attendance) return null;
+  const serial = (attendance.serial_number || attendance.serialNo || '').toString().trim();
+  const devId = (attendance.device_id || attendance.deviceId || '').toString().trim();
+
+  if (serial && serial !== '-' && serial !== 'ALL') {
+    const matchedDevice = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
+    if (matchedDevice && matchedDevice.name !== 'ALL DEVICES') {
+      return matchedDevice.name;
+    }
+    if (deviceMapping && deviceMapping.length > 0) {
+      const matchedMapping = deviceMapping.find(m => m.serialNo && m.serialNo.toString().trim().toLowerCase() === serial.toLowerCase());
+      if (matchedMapping && matchedMapping.storeName) {
+        return matchedMapping.storeName;
+      }
+    }
+  }
+
+  if (devId && devId !== '-' && devId !== 'ALL') {
+    if (deviceMapping && deviceMapping.length > 0) {
+      const matchedMapping = deviceMapping.find(m => m.deviceId && m.deviceId.toString().trim().toLowerCase() === devId.toLowerCase());
+      if (matchedMapping && matchedMapping.storeName) {
+        return matchedMapping.storeName;
+      }
+    }
+  }
+
+  if (attendance.store_name && attendance.store_name !== '-') {
+    return attendance.store_name;
+  }
+
+  return null;
+};
+
+
 // IST Timezone offset (UTC+5:30)
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 
@@ -2155,12 +2191,16 @@ const AttendanceDaily = () => {
       filteredEmployees.forEach(employee => {
         const attendance = getAttendanceForDate(employee.id, selectedDate);
         const roster = getEmployeeRoster(employee.id, selectedDate);
+        const empProfile = employeesData.find(e => e.employee_id === employee.id || e.id === employee.id);
+        const assignedStore = empProfile?.joining_place || employee.store_name || '-';
+        const punchedStore = resolvePunchedStore(attendance, deviceMapping) || '-';
         const dateObj = new Date(selectedDate);
         exportData.push({
           'Employee ID': employee.id,
           'Employee Name': employee.name,
           'Designation': employee.designation,
-          'Store': employee.store_name,
+          'Assigned Store': assignedStore,
+          'Punched Store': punchedStore,
           'Date': selectedDate,
           'Day': dateObj.toLocaleDateString('en-US', { weekday: 'long' }),
           'Status': attendance.status === 'Future' ? '' : attendance.status,
@@ -2185,11 +2225,15 @@ const AttendanceDaily = () => {
         days.forEach(day => {
           const attendance = getAttendanceForDate(employee.id, day.fullDate);
           const roster = getEmployeeRoster(employee.id, day.fullDate);
+          const empProfile = employeesData.find(e => e.employee_id === employee.id || e.id === employee.id);
+          const assignedStore = empProfile?.joining_place || employee.store_name || '-';
+          const punchedStore = resolvePunchedStore(attendance, deviceMapping) || '-';
           exportData.push({
             'Employee ID': employee.id,
             'Employee Name': employee.name,
             'Designation': employee.designation,
-            'Store': employee.store_name,
+            'Assigned Store': assignedStore,
+            'Punched Store': punchedStore,
             'Date': day.fullDate,
             'Day': new Date(day.fullDate).toLocaleDateString('en-US', { weekday: 'long' }),
             'Status': attendance.status === 'Future' ? '' : attendance.status,
@@ -2961,7 +3005,27 @@ const AttendanceDaily = () => {
                               />
                             </div>
                           </td>
-                          <td className="px-2 py-1.5 text-[10px] text-gray-600">{employee.store_name || '-'}</td>
+                          <td className="px-2 py-1.5 text-[10px] text-gray-600">
+                            {(() => {
+                              const assignedStore = employeeProfile?.joining_place || employee.store_name || '-';
+                              const punchedStore = resolvePunchedStore(attendance, deviceMapping);
+                              const isDifferent = punchedStore && assignedStore !== '-' && punchedStore.toLowerCase() !== assignedStore.toLowerCase();
+
+                              if (isDifferent) {
+                                return (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-semibold text-gray-900" title={`Assigned Home Branch: ${assignedStore}`}>
+                                      {assignedStore}
+                                    </span>
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded leading-none w-fit" title={`Punched from biometric device at ${punchedStore} (Serial: ${attendance.serial_number || 'N/A'})`}>
+                                      📍 Punched: {punchedStore}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return <span className="font-medium text-gray-700">{assignedStore !== '-' ? assignedStore : (punchedStore || '-')}</span>;
+                            })()}
+                          </td>
                           <td className="px-2 py-1.5 text-center">
                             <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-medium ${config.color} ${config.bgColor}`}>
                               {config.fullLabel}
