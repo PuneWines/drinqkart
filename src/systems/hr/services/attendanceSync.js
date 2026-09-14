@@ -132,6 +132,134 @@ const calculateWorkHoursFromTimes = (inStr, outStr, dateContext = '') => {
 };
 
 /**
+export const syncDeviceLogsToSupabase = async (month, year, device) => {
+    const startDay = '01';
+    const endDay = getDaysInMonth(month, year);
+    const paddedMonth = month.toString().padStart(2, '0');
+    const fromDate = `${year}-${paddedMonth}-${startDay}`;
+    const toDate = `${year}-${paddedMonth}-${endDay}`;
+
+    const devicesToSync = (device && device.serial && device.serial !== 'ALL') ? [device] : [
+        { name: 'BAWDHAN', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
+        { name: 'HINJEWADI', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
+        { name: 'WAGHOLI', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
+        { name: 'AKOLE', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
+        { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+        { name: 'KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
+    ];
+
+    const { data: hrEmps } = await supabase
+        .from('hr_management_employees')
+        .select('employee_id, name_as_per_aadhar, joining_place');
+
+    const empMap = {};
+    (hrEmps || []).forEach(e => {
+        if (e.employee_id) {
+            empMap[e.employee_id.toString().trim().toLowerCase()] = {
+                name: e.name_as_per_aadhar || 'Unknown',
+                store: e.joining_place || ''
+            };
+        }
+    });
+
+    const allPunches = [];
+
+    await Promise.all(devicesToSync.map(async (dev) => {
+        try {
+            const url = `http://103.195.203.77:15167/api/v2/WebAPI/GetDeviceLogs?APIKey=211616032630&SerialNumber=${dev.serial}&DeviceName=${dev.apiName || dev.name}&FromDate=${fromDate}&ToDate=${toDate}`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const text = await res.text();
+                if (text && !text.trim().startsWith('<')) {
+                    const raw = JSON.parse(text);
+                    if (Array.isArray(raw)) {
+                        raw.forEach(p => {
+                            if (p.EmployeeCode && p.LogDate) {
+                                allPunches.push({ ...p, devName: dev.name, devSerial: dev.serial });
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(`Error fetching CAMS logs for ${dev.name}:`, e);
+        }
+    }));
+
+    if (allPunches.length === 0) return;
+
+    const grouped = {};
+    allPunches.forEach(p => {
+        const empId = p.EmployeeCode.toString().trim();
+        const dateStr = p.LogDate.split(' ')[0];
+        const key = `${empId}_${dateStr}`;
+        if (!grouped[key]) {
+            grouped[key] = { empId, date: dateStr, devName: p.devName, devSerial: p.devSerial, punches: [] };
+        }
+        grouped[key].punches.push(p.LogDate);
+    });
+
+    const formatTimeISTStr = (timeStr) => {
+        if (!timeStr) return '-';
+        try {
+            const d = new Date(timeStr.replace(/-/g, '/'));
+            if (isNaN(d.getTime())) return timeStr;
+            return new Intl.DateTimeFormat('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            }).format(d);
+        } catch (e) { return timeStr; }
+    };
+
+    const upsertRows = Object.values(grouped).map(item => {
+        item.punches.sort((a, b) => new Date(a.replace(/-/g, '/')) - new Date(b.replace(/-/g, '/')));
+        const cleanEmpKey = item.empId.toLowerCase();
+        const empInfo = empMap[cleanEmpKey] || { name: 'Unknown', store: item.devName };
+
+        const inTimeRaw = item.punches[0];
+        const outTimeRaw = item.punches.length > 1 ? item.punches[item.punches.length - 1] : item.punches[0];
+        const formattedPunches = item.punches.map(p => formatTimeISTStr(p)).join(' | ');
+
+        let workHoursStr = '00:00:00';
+        if (item.punches.length > 1) {
+            const d1 = new Date(inTimeRaw.replace(/-/g, '/'));
+            const d2 = new Date(outTimeRaw.replace(/-/g, '/'));
+            if (!isNaN(d1) && !isNaN(d2) && d2 > d1) {
+                const diff = Math.floor((d2 - d1) / 1000);
+                const h = Math.floor(diff / 3600);
+                const m = Math.floor((diff % 3600) / 60);
+                const s = diff % 60;
+                workHoursStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }
+        }
+
+        return {
+            employee_id: item.empId,
+            employee_name: empInfo.name,
+            attendance_date: item.date,
+            status: 'Present',
+            in_time: inTimeRaw.replace(' ', 'T'),
+            out_time: outTimeRaw.replace(' ', 'T'),
+            working_hour: workHoursStr,
+            punch_log: formattedPunches,
+            store_name: empInfo.store || item.devName,
+            serial_number: item.devSerial,
+            updated_at: new Date().toISOString()
+        };
+    });
+
+    if (upsertRows.length > 0) {
+        for (let i = 0; i < upsertRows.length; i += 100) {
+            const batch = upsertRows.slice(i, i + 100);
+            await supabase
+                .from('hr_management_attendance_logs')
+                .upsert(batch, { onConflict: 'employee_id,attendance_date' });
+        }
+    }
+};
+
+/**
  * Fetch logs and metadata, aggregate, and sync/upsert to Supabase
  * @param {number} month - 1-based month (1-12)
  * @param {number} year - year
@@ -143,167 +271,13 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
         return [];
     }
 
-    /*
-    // 1. Fetch metadata in parallel
-    const [joiningRes, masterRes] = await Promise.all([
-        fetch(JOINING_API_URL),
-        fetch(MASTER_MAP_URL)
-    ]);
-
-    const joiningDataRaw = await joiningRes.json();
-    const masterDataRaw = await masterRes.json();
-
-    let joiningData = [];
-    if (joiningDataRaw.success) {
-        const raw = joiningDataRaw.data || joiningDataRaw;
-        const headers = raw[5];
-        const dataRows = raw.slice(6);
-        const getIdx = (n) => headers.findIndex(h => h && h.toString().trim().toLowerCase() === n.toLowerCase());
-
-        joiningData = dataRows.map(r => ({
-            id: r[getIdx('Employee ID')]?.toString().trim(),
-            name: r[getIdx('Name As Per Aadhar')]?.toString().trim(),
-            designation: r[getIdx('Designation')]?.toString().trim()
-        })).filter(h => h.id);
+    // Pull raw CAMS biometric device logs across devices and sync to Supabase table
+    try {
+        await syncDeviceLogsToSupabase(month, year, device);
+    } catch (e) {
+        console.warn('CAMS biometric sync warning:', e);
     }
 
-    let deviceMapping = [];
-    if (masterDataRaw.success) {
-        const rows = masterDataRaw.data.slice(1);
-        deviceMapping = rows.map(r => ({
-            userId: r[5]?.toString().trim(),
-            name: r[6]?.toString().trim(),
-            deviceId: r[7]?.toString().trim(),
-            serialNo: r[8]?.toString().trim(),
-            storeName: r[9]?.toString().trim()
-        }));
-    }
-
-    // 2. Fetch biometric device logs
-    const startDay = '01';
-    const endDay = getDaysInMonth(month, year);
-    const paddedMonth = month.toString().padStart(2, '0');
-    const fromDate = `${year}-${paddedMonth}-${startDay}`;
-    const toDate = `${year}-${paddedMonth}-${endDay}`;
-
-    const API_URL = `/api/device-logs?APIKey=211616032630&SerialNumber=${device.serial}&DeviceName=${device.apiName}&FromDate=${fromDate}&ToDate=${toDate}`;
-    const logsResponse = await fetch(API_URL);
-    if (!logsResponse.ok) {
-        throw new Error(`Device logs API status: ${logsResponse.status}`);
-    }
-    const rawLogs = await logsResponse.json();
-    if (!Array.isArray(rawLogs)) {
-        throw new Error('Invalid logs data from API');
-    }
-
-    // Filter logs for strictly >= 2026-04-01
-    const logs = rawLogs.filter(log => {
-        if (!log.LogDate) return false;
-        const logDateStr = log.LogDate.split(' ')[0];
-        return logDateStr >= '2026-04-01';
-    });
-
-    // 3. Group and aggregate daily logs
-    const dailyGrouped = {};
-    logs.sort((a, b) => new Date(a.LogDate) - new Date(b.LogDate));
-
-    logs.forEach(log => {
-        if (!log.EmployeeCode || !log.LogDate) return;
-        const dateKey = log.LogDate.split(' ')[0];
-        const key = `${log.EmployeeCode}_${dateKey}`;
-        if (!dailyGrouped[key]) {
-            dailyGrouped[key] = { id: log.EmployeeCode, date: dateKey, logs: [] };
-        }
-        dailyGrouped[key].logs.push(log.LogDate);
-    });
-
-    const monthlyAgg = {};
-    const totalSundays = getSundaysCount(month, year);
-    const totalDaysInMonth = getDaysInMonth(month, year);
-
-    Object.values(dailyGrouped).forEach(day => {
-        const id = day.id.toString().trim();
-        if (!monthlyAgg[id]) {
-            monthlyAgg[id] = {
-                id,
-                presentDays: 0,
-                lateDays: 0,
-                punchMissDays: 0,
-                totalWorkSecs: 0,
-                totalLunchSecs: 0,
-                holidayDays: 0,
-                userId: id,
-                actualSerial: day.logs[0] ? device.serial : '-'
-            };
-        }
-
-        const agg = monthlyAgg[id];
-        agg.presentDays += 1;
-
-        const inTime = day.logs[0];
-        const outTime = day.logs[day.logs.length - 1];
-
-        if (calculateLateMinutes(inTime) > 0) agg.lateDays += 1;
-        if (day.logs.length === 1) agg.punchMissDays += 1;
-        else {
-            const start = new Date(inTime.replace(/-/g, '/'));
-            const end = new Date(outTime.replace(/-/g, '/'));
-            agg.totalWorkSecs += (end - start) / 1000;
-            if (day.logs.length >= 4) {
-                const lStart = new Date(day.logs[1].replace(/-/g, '/'));
-                const lEnd = new Date(day.logs[2].replace(/-/g, '/'));
-                agg.totalLunchSecs += (lEnd - lStart) / 1000;
-            }
-        }
-    });
-
-    // 4. Map to final structures
-    const finalData = Object.values(monthlyAgg).map((agg, idx) => {
-        const code = agg.id.toString().trim();
-        const empMeta = joiningData.find(e =>
-            (e.id && e.id.toLowerCase() === code.toLowerCase()) ||
-            (e.name && e.name.toLowerCase() === code.toLowerCase())
-        );
-
-        let dMap = deviceMapping.find(m => m.userId && m.userId.toString().toLowerCase() === code.toLowerCase());
-
-        if (!dMap) {
-            const entryName = (empMeta?.name || code).toString().trim().toLowerCase();
-            dMap = deviceMapping.find(m => m.name && m.name.toString().toLowerCase() === entryName);
-        }
-
-        const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNaN(code) ? code : 'Unknown'));
-        const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (isNaN(code) ? 'Unknown' : code));
-        const matchedPunchDevice = device ? device.name : null;
-        const displayStore = matchedPunchDevice || (dMap ? dMap.storeName : (empMeta ? empMeta.store : 'Unknown'));
-        const displayDeviceId = dMap ? dMap.deviceId : '-';
-        const displayAssignedSerial = (agg.actualSerial && agg.actualSerial !== '-') ? agg.actualSerial : (dMap ? dMap.serialNo : device.serial);
-
-        const absentDays = Math.max(0, totalDaysInMonth - agg.presentDays);
-
-        return {
-            year: year,
-            month: monthNames[month - 1],
-            employee_code: displayCode,
-            employee_name: displayName,
-            designation: empMeta ? empMeta.designation : '-',
-            store_name: displayStore,
-            device_id: displayDeviceId,
-            serial_no: device.serial,
-            present_days: agg.presentDays,
-            absent_days: absentDays,
-            punch_miss: agg.punchMissDays,
-            late_days: agg.lateDays,
-            total_work_hours: formatSecsToHrsMins(agg.totalWorkSecs),
-            total_work_secs: agg.totalWorkSecs,
-            total_lunch_time: formatSecsToHrsMins(agg.totalLunchSecs),
-            total_lunch_secs: agg.totalLunchSecs,
-            holidays: totalSundays
-        };
-    });
-    */
-
-    // NEW LOGIC: Fetch from database table `attendance_logs` as SOURCE OF TRUTH
     const startDay = '01';
     const endDay = getDaysInMonth(month, year);
     const paddedMonth = month.toString().padStart(2, '0');
