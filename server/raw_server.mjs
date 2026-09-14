@@ -45,6 +45,24 @@ app.get('/raw/attendance-logs', async (req, res) => {
     query = query.order('created_at', { ascending: false }).limit(50);
     const { data, error } = await query;
     if (error) return res.status(500).json({ error });
+
+    if ((!data || data.length === 0) && employee_id && date) {
+      const { data: empData } = await supabase.from('hr_management_employees').select('*').eq('employee_id', employee_id.toString().trim());
+      const emp = empData?.[0];
+      return res.json([{
+        employee_id: employee_id.toString().trim(),
+        employee_name: emp ? (emp.user_name || emp.name_as_per_aadhar || 'Unknown') : 'Unknown',
+        attendance_date: date,
+        status: 'Absent',
+        in_time: '-',
+        out_time: '-',
+        working_hour: '00:00:00',
+        punch_log: '-',
+        store_name: emp ? (emp.joining_place || emp.shop_name || '-') : '-',
+        is_fallback_generated: true
+      }]);
+    }
+
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -69,7 +87,7 @@ app.get('/raw/employees', async (req, res) => {
 app.get('/raw/device-api', async (req, res) => {
   try {
     const { serial = 'AMDB25061400343', deviceName = 'WAGHOLI', fromDate = '2026-09-12', toDate = '2026-09-12' } = req.query;
-    const url = `https://sub.camsunit.com/api/device-logs?APIKey=211616032630&SerialNumber=${serial}&DeviceName=${deviceName}&FromDate=${fromDate}&ToDate=${toDate}`;
+    const url = `http://103.195.203.77:15167/api/v2/WebAPI/GetDeviceLogs?APIKey=211616032630&SerialNumber=${serial}&DeviceName=${deviceName}&FromDate=${fromDate}&ToDate=${toDate}`;
     const response = await fetch(url);
     const text = await response.text();
     try {
@@ -115,12 +133,29 @@ app.get('/raw/all', async (req, res) => {
       supabase.from('hr_management_attendance_logs').select('*').eq('employee_id', employeeId).eq('attendance_date', date)
     ]);
 
+    let rawLogs = logsRes.data || [];
+    if (rawLogs.length === 0) {
+      const emp = empRes.data?.[0];
+      rawLogs = [{
+        employee_id: employeeId,
+        employee_name: emp ? (emp.user_name || emp.name_as_per_aadhar || 'Unknown') : 'Unknown',
+        attendance_date: date,
+        status: 'Absent',
+        in_time: '-',
+        out_time: '-',
+        working_hour: '00:00:00',
+        punch_log: '-',
+        store_name: emp ? (emp.joining_place || emp.shop_name || '-') : '-',
+        is_fallback_generated: true
+      }];
+    }
+
     res.json({
       timestamp: new Date().toISOString(),
       requested_employee_id: employeeId,
       requested_date: date,
       raw_employee_profile: empRes.data || empRes.error,
-      raw_attendance_logs: logsRes.data || logsRes.error
+      raw_attendance_logs: rawLogs
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -391,9 +391,15 @@ const Payroll = () => {
                 ];
             });
 
-            // Filter out employees who have already been processed/saved for this month
-            const activeSalaryVerifiedRows = verifiedRows.filter(r => !payrollMap[r[0]?.toString().toLowerCase().trim()]);
-            const activeSalaryUnmatchedRows = unmatchedRows.filter(r => !payrollMap[r[0]?.toString().toLowerCase().trim()]);
+            // Filter out employees who have already been paid (is_verified: true) for this month from the active Salary Sheet
+            const activeSalaryVerifiedRows = verifiedRows.filter(r => {
+                const rec = payrollMap[r[0]?.toString().toLowerCase().trim()];
+                return !rec || !rec.is_verified;
+            });
+            const activeSalaryUnmatchedRows = unmatchedRows.filter(r => {
+                const rec = payrollMap[r[0]?.toString().toLowerCase().trim()];
+                return !rec || !rec.is_verified;
+            });
 
             const allRows = [...activeSalaryVerifiedRows, ...activeSalaryUnmatchedRows];
             setSalaryData({ headers, rows: allRows });
@@ -415,6 +421,7 @@ const Payroll = () => {
                 .select('*')
                 .eq('year', selectedYear)
                 .eq('month', monthNames[selectedMonth - 1])
+                .eq('is_verified', true)
                 .order('created_at', { ascending: false });
 
             if (payrollError) throw payrollError;
@@ -519,7 +526,7 @@ const Payroll = () => {
                     .update({ salary: basicSalary })
                     .eq('employee_id', empId);
 
-                // Save draft parameters into hr_management_payroll without sending to payment history or deducting advances
+                // Save draft parameters into hr_management_payroll without sending to payment history (is_verified: false)
                 const draftRecord = {
                     employee_id: empId,
                     year: Number(selectedYear),
@@ -557,7 +564,7 @@ const Payroll = () => {
         }
     };
 
-    // 2. Mark as Paid: Generates payroll, marks record as Paid, updates advance deductions, and sends to Payment History
+    // 2. Mark as Paid: Generates payroll, marks record as Paid (is_verified: true), updates advance deductions, and moves to Payment History
     const handleMarkAsPaid = async (singleRow = null) => {
         const rowsToProcess = singleRow
             ? [singleRow]
