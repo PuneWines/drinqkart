@@ -1213,43 +1213,60 @@ const AttendanceDaily = () => {
     try {
       let currentJoining = joiningData;
       if (joiningData.length === 0) {
-        const jResponse = await fetch(JOINING_API_URL);
-        const jResult = await jResponse.json();
-        if (jResult.success) {
-          const rawRows = jResult.data || jResult;
-          const headers = rawRows[5];
-          const dataRows = rawRows.slice(6);
+        try {
+          const jResponse = await fetch(JOINING_API_URL);
+          if (jResponse.ok) {
+            const jText = await jResponse.text();
+            if (jText && !jText.trim().startsWith('<')) {
+              const jResult = JSON.parse(jText);
+              if (jResult && jResult.success) {
+                const rawRows = jResult.data || jResult;
+                const headers = rawRows[5] || [];
+                const dataRows = rawRows.slice(6);
 
-          const getIdx = (name) => headers.findIndex(h => h && h.toString().trim().toLowerCase() === name.toLowerCase());
-          const empIdIdx = getIdx('Employee ID');
-          const nameIdx = getIdx('Name As Per Aadhar');
-          const desIdx = getIdx('Designation');
-          const storeIdx = getIdx('Joining Place');
+                const getIdx = (name) => headers.findIndex(h => h && h.toString().trim().toLowerCase() === name.toLowerCase());
+                const empIdIdx = getIdx('Employee ID');
+                const nameIdx = getIdx('Name As Per Aadhar');
+                const desIdx = getIdx('Designation');
+                const storeIdx = getIdx('Joining Place');
 
-          currentJoining = dataRows.map(r => ({
-            id: r[empIdIdx]?.toString().trim(),
-            name: r[nameIdx]?.toString().trim(),
-            designation: r[getIdx('Designation')]?.toString().trim() || r[desIdx]?.toString().trim(),
-            store: r[getIdx('Joining Place')]?.toString().trim() || r[storeIdx]?.toString().trim()
-          })).filter(h => h.id);
-          setJoiningData(currentJoining);
+                currentJoining = dataRows.map(r => ({
+                  id: r[empIdIdx]?.toString().trim(),
+                  name: r[nameIdx]?.toString().trim(),
+                  designation: r[getIdx('Designation')]?.toString().trim() || r[desIdx]?.toString().trim(),
+                  store: r[getIdx('Joining Place')]?.toString().trim() || r[storeIdx]?.toString().trim()
+                })).filter(h => h.id);
+                setJoiningData(currentJoining);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Could not fetch joining sheet:', e);
         }
       }
 
       const MASTER_MAP_URL = `https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=MASTER&action=fetch`;
-      const dmResponse = await fetch(MASTER_MAP_URL);
-      const dmResult = await dmResponse.json();
-      let currentMapping = [];
-      if (dmResult.success) {
-        const rows = dmResult.data.slice(1);
-        currentMapping = rows.map(r => ({
-          userId: r[5]?.toString().trim(),
-          name: r[6]?.toString().trim(),
-          deviceId: r[7]?.toString().trim(),
-          serialNo: r[8]?.toString().trim(),
-          storeName: r[9]?.toString().trim()
-        }));
-        setDeviceMapping(currentMapping);
+      try {
+        const dmResponse = await fetch(MASTER_MAP_URL);
+        if (dmResponse.ok) {
+          const dmText = await dmResponse.text();
+          if (dmText && !dmText.trim().startsWith('<')) {
+            const dmResult = JSON.parse(dmText);
+            if (dmResult && dmResult.success) {
+              const rows = dmResult.data.slice(1);
+              const currentMapping = rows.map(r => ({
+                userId: r[5]?.toString().trim(),
+                name: r[6]?.toString().trim(),
+                deviceId: r[7]?.toString().trim(),
+                serialNo: r[8]?.toString().trim(),
+                storeName: r[9]?.toString().trim()
+              }));
+              setDeviceMapping(currentMapping);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Could not fetch master map sheet:', e);
       }
 
       let rawLogsData = [];
@@ -1262,7 +1279,9 @@ const AttendanceDaily = () => {
               const url = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${device.serial}&DeviceName=${device.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
               const res = await fetch(url);
               if (!res.ok) return [];
-              const logs = await res.json();
+              const text = await res.text();
+              if (!text || text.trim().startsWith('<')) return [];
+              const logs = JSON.parse(text);
               return Array.isArray(logs) ? logs.map(l => ({ ...l, _DeviceName: device.name })) : [];
             } catch (e) {
               console.error(`Error fetching for ${device.name}:`, e);
@@ -1272,11 +1291,19 @@ const AttendanceDaily = () => {
         );
         rawLogsData = allResponses.flat();
       } else {
-        const API_URL = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${selectedDevice.serial}&DeviceName=${selectedDevice.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
-        const response = await fetch(API_URL);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        rawLogsData = Array.isArray(data) ? data.map(l => ({ ...l, _DeviceName: selectedDevice.name })) : [];
+        try {
+          const API_URL = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${selectedDevice.serial}&DeviceName=${selectedDevice.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
+          const response = await fetch(API_URL);
+          if (response.ok) {
+            const text = await response.text();
+            if (text && !text.trim().startsWith('<')) {
+              const data = JSON.parse(text);
+              rawLogsData = Array.isArray(data) ? data.map(l => ({ ...l, _DeviceName: selectedDevice.name })) : [];
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching device logs:', e);
+        }
       }
 
       if (!rawLogsData || rawLogsData.length === 0) {
