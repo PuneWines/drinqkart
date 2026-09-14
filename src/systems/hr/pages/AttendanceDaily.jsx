@@ -218,6 +218,7 @@ const STATUS_CONFIG = {
   'Absent': { color: 'bg-red-100 text-red-700', label: 'A', fullLabel: 'Absent', bgColor: 'bg-red-200/40' },
   'Half Day': { color: 'bg-yellow-100 text-yellow-700', label: 'H', fullLabel: 'Half Day', bgColor: 'bg-yellow-200/60' },
   'Holiday': { color: 'bg-purple-100 text-purple-700', label: 'Hol', fullLabel: 'Holiday', bgColor: 'bg-purple-200' },
+  'Weekly Off': { color: 'bg-indigo-100 text-indigo-700', label: 'WO', fullLabel: 'Weekly Off', bgColor: 'bg-indigo-100/60' },
   'Day Off': { color: 'bg-gray-100 text-gray-700', label: 'DO', fullLabel: 'Day Off', bgColor: 'bg-gray-200' },
   'On Leave': { color: 'bg-blue-100 text-blue-700', label: 'Lv', fullLabel: 'On Leave', bgColor: 'bg-blue-200' },
   'Future': { color: 'bg-transparent border-transparent', label: '-', fullLabel: '', bgColor: 'bg-transparent' }
@@ -327,7 +328,7 @@ const AttendanceDaily = () => {
         fetchEmployeesTable(),
         fetchRosterData(null, selectedDate),
         fetchLeavesData(),
-        fetchAttendanceFromDB(currentMonth)
+        syncDeviceLogs()
       ]);
     } catch (err) {
       console.error('Error refreshing data:', err);
@@ -415,11 +416,11 @@ const AttendanceDaily = () => {
     );
   };
 
-  // Fetch leaves from Hr_management_leaves
+  // Fetch leaves from hr_management_leaves
   const fetchLeavesData = async () => {
     try {
       const { data, error } = await supabase
-        .from('Hr_management_leaves')
+        .from('hr_management_leaves')
         .select('*');
       if (!error && data) {
         setLeavesData(data);
@@ -431,7 +432,7 @@ const AttendanceDaily = () => {
 
   // Helper to find leave info or reason for an absent streak
   const getLeaveInfoForStreak = (employeeId, startFullDate, endFullDate, streak = []) => {
-    // 1. Check leave applications from Hr_management_leaves table
+    // 1. Check leave applications from hr_management_leaves table
     if (leavesData && leavesData.length > 0) {
       const cleanId = employeeId?.toString().trim().toLowerCase();
 
@@ -648,6 +649,8 @@ const AttendanceDaily = () => {
       if (isBefore9AM(modified.in_time)) {
         modified.in_time = '-';
         modified.status = 'Absent';
+      } else if (modified.status === 'Absent' || !modified.status) {
+        modified.status = 'Present';
       }
     }
 
@@ -776,113 +779,113 @@ const AttendanceDaily = () => {
   };
 
   // Save attendance to Supabase using UPSERT
-  // const saveAttendanceToDB = async (aggregatedData) => {
-  //   if (!aggregatedData || aggregatedData.length === 0) return [];
+  const saveAttendanceToDB = async (aggregatedData) => {
+    if (!aggregatedData || aggregatedData.length === 0) return [];
 
-  //   try {
-  //     const dates = [...new Set(aggregatedData.map(item => item.Date))];
+    try {
+      const dates = [...new Set(aggregatedData.map(item => item.Date))];
 
-  //     // Fetch existing logs for these dates to preserve manual_punches
-  //     const { data: existingLogs } = await supabase
-  //       .from('hr_management_attendance_logs')
-  //       .select('*')
-  //       .in('attendance_date', dates);
+      // Fetch existing logs for these dates to preserve manual_punches
+      const { data: existingLogs } = await supabase
+        .from('hr_management_attendance_logs')
+        .select('*')
+        .in('attendance_date', dates);
 
-  //     const rows = aggregatedData.map(item => {
-  //       const existing = existingLogs?.find(
-  //         r => r.employee_id === item.EmployeeID && r.attendance_date === item.Date
-  //       );
+      const rows = aggregatedData.map(item => {
+        const existing = existingLogs?.find(
+          r => String(r.employee_id).trim() === String(item.EmployeeID).trim() && r.attendance_date === item.Date
+        );
 
-  //       if (existing && existing.manual_punches && (existing.manual_punches.is_manual === true || existing.manual_punches.manual_override === true)) {
-  //         return {
-  //           employee_id: existing.employee_id,
-  //           employee_name: existing.employee_name,
-  //           attendance_date: existing.attendance_date,
-  //           day: existing.day,
-  //           designation: existing.designation,
-  //           store_name: existing.store_name,
-  //           device_id: existing.device_id,
-  //           serial_number: existing.serial_number,
-  //           in_time: existing.in_time,
-  //           out_time: existing.out_time,
-  //           working_hour: existing.working_hour,
-  //           overtime: existing.overtime,
-  //           late_minute: existing.late_minute,
-  //           status: existing.status,
-  //           standard_lunch: existing.standard_lunch,
-  //           waste_time: existing.waste_time,
-  //           punch_log: item.PunchLog, // update to latest API logs
-  //           punch_log_status: item.PunchLogStatus, // update to latest API logs
-  //           punch_miss: existing.punch_miss,
-  //           punch_miss_msg: existing.punch_miss_msg,
-  //           manual_punches: existing.manual_punches,
-  //           updated_at: new Date()
-  //         };
-  //       }
+        if (existing && existing.manual_punches && (existing.manual_punches.is_manual === true || existing.manual_punches.manual_override === true)) {
+          return {
+            employee_id: existing.employee_id,
+            employee_name: existing.employee_name,
+            attendance_date: existing.attendance_date,
+            day: existing.day,
+            designation: existing.designation,
+            store_name: existing.store_name,
+            device_id: existing.device_id,
+            serial_number: existing.serial_number,
+            in_time: existing.in_time,
+            out_time: existing.out_time,
+            working_hour: existing.working_hour,
+            overtime: existing.overtime,
+            late_minute: existing.late_minute,
+            status: existing.status,
+            standard_lunch: existing.standard_lunch,
+            waste_time: existing.waste_time,
+            punch_log: item.PunchLog, // update to latest API logs
+            punch_log_status: item.PunchLogStatus, // update to latest API logs
+            punch_miss: existing.punch_miss,
+            punch_miss_msg: existing.punch_miss_msg,
+            manual_punches: existing.manual_punches,
+            updated_at: new Date()
+          };
+        }
 
-  //       const apiManualPunches = {
-  //         "1": "",
-  //         "2": "",
-  //         "3": "",
-  //         "4": "",
-  //         "5": ""
-  //       };
-  //       if (item.RawLogs) {
-  //         item.RawLogs.forEach((logStr, idx) => {
-  //           if (idx < 5) {
-  //             try {
-  //               const timePart = logStr.split(' ')[1] || '';
-  //               apiManualPunches[(idx + 1).toString()] = timePart.substring(0, 5);
-  //             } catch (e) {
-  //               // ignore
-  //             }
-  //           }
-  //         });
-  //       }
+        const apiManualPunches = {
+          "1": "",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": ""
+        };
+        if (item.RawLogs) {
+          item.RawLogs.forEach((logStr, idx) => {
+            if (idx < 5) {
+              try {
+                const timePart = logStr.split(' ')[1] || '';
+                apiManualPunches[(idx + 1).toString()] = timePart.substring(0, 5);
+              } catch (e) {
+                // ignore
+              }
+            }
+          });
+        }
 
-  //       return {
-  //         employee_id: item.EmployeeID,
-  //         employee_name: item.EmployeeName,
-  //         attendance_date: item.Date,
-  //         day: item.Day,
-  //         designation: item.Designation,
-  //         store_name: item.StoreName,
-  //         device_id: item.DeviceID,
-  //         serial_number: item.AssignedSerial || item.SerialNumber,
-  //         in_time: formatToISTISOString(item.InTime),
-  //         out_time: formatToISTISOString(item.OutTime),
-  //         working_hour: item.WorkingHour,
-  //         overtime: item.Overtime,
-  //         late_minute: item.LateMinute,
-  //         status: item.Status,
-  //         standard_lunch: item.StandardLunch,
-  //         waste_time: item.WasteTime,
-  //         punch_log: item.PunchLog,
-  //         punch_log_status: item.PunchLogStatus,
-  //         punch_miss: item.PunchMiss,
-  //         punch_miss_msg: item.PunchMissMsg,
-  //         manual_punches: apiManualPunches,
-  //         updated_at: new Date()
-  //       };
-  //     });
+        return {
+          employee_id: item.EmployeeID,
+          employee_name: item.EmployeeName,
+          attendance_date: item.Date,
+          day: item.Day,
+          designation: item.Designation,
+          store_name: item.StoreName,
+          device_id: item.DeviceID,
+          serial_number: item.AssignedSerial || item.SerialNumber,
+          in_time: formatToISTISOString(item.InTime),
+          out_time: formatToISTISOString(item.OutTime),
+          working_hour: item.WorkingHour,
+          overtime: item.Overtime,
+          late_minute: item.LateMinute,
+          status: item.Status,
+          standard_lunch: item.StandardLunch,
+          waste_time: item.WasteTime,
+          punch_log: item.PunchLog,
+          punch_log_status: item.PunchLogStatus,
+          punch_miss: item.PunchMiss,
+          punch_miss_msg: item.PunchMissMsg,
+          manual_punches: apiManualPunches,
+          updated_at: new Date()
+        };
+      });
 
-  //     const { data, error } = await supabase
-  //       .from('hr_management_attendance_logs')
-  //       .upsert(rows, {
-  //         onConflict: 'employee_id,attendance_date',
-  //         ignoreDuplicates: false
-  //       })
-  //       .select();
+      const { data, error } = await supabase
+        .from('hr_management_attendance_logs')
+        .upsert(rows, {
+          onConflict: 'employee_id,attendance_date',
+          ignoreDuplicates: false
+        })
+        .select();
 
-  //     if (error) throw error;
+      if (error) throw error;
 
-  //     console.log(`UPSERT complete: ${data?.length || 0} rows affected`);
-  //     return data || [];
-  //   } catch (err) {
-  //     console.error('Error saving to Supabase:', err);
-  //     throw err;
-  //   }
-  // };
+      console.log(`UPSERT complete: ${data?.length || 0} rows affected`);
+      return data || [];
+    } catch (err) {
+      console.error('Error saving to Supabase:', err);
+      throw err;
+    }
+  };
 
   // Sync only changed rows to Google Sheet
   const syncToMachineDataSheet = async (changedRows) => {
@@ -1202,7 +1205,6 @@ const AttendanceDaily = () => {
     }
   };
 
-  /*
   // Sync device logs helper for custom date range
   const syncLogsForRange = async (queryStart, queryEnd, targetMonth = currentMonth) => {
     setLoading(true);
@@ -1251,12 +1253,13 @@ const AttendanceDaily = () => {
       }
 
       let rawLogsData = [];
+      const DEVICE_LOG_API_BASE = 'http://103.195.203.77:15167/api/v2/WebAPI/GetDeviceLogs';
       if (selectedDevice.name === 'ALL DEVICES') {
         const otherDevices = DEVICES.filter(d => d.name !== 'ALL DEVICES');
         const allResponses = await Promise.all(
           otherDevices.map(async (device) => {
             try {
-              const url = `/api/device-logs?APIKey=211616032630&SerialNumber=${device.serial}&DeviceName=${device.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
+              const url = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${device.serial}&DeviceName=${device.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
               const res = await fetch(url);
               if (!res.ok) return [];
               const logs = await res.json();
@@ -1269,7 +1272,7 @@ const AttendanceDaily = () => {
         );
         rawLogsData = allResponses.flat();
       } else {
-        const API_URL = `/api/device-logs?APIKey=211616032630&SerialNumber=${selectedDevice.serial}&DeviceName=${selectedDevice.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
+        const API_URL = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${selectedDevice.serial}&DeviceName=${selectedDevice.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
         const response = await fetch(API_URL);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
@@ -1277,7 +1280,7 @@ const AttendanceDaily = () => {
       }
 
       if (!rawLogsData || rawLogsData.length === 0) {
-        setAttendanceData([]);
+        await fetchAttendanceFromDB(targetMonth);
         setLoading(false);
         return;
       }
@@ -1434,50 +1437,21 @@ const AttendanceDaily = () => {
       }
 
       await fetchAttendanceFromDB(targetMonth);
-
-      const processedRawLogs = filteredLogs.map(log => {
-        const code = log.EmployeeCode.toString().trim();
-        const empMeta = currentJoining.find(e =>
-          (e.id && e.id.toLowerCase() === code.toLowerCase()) ||
-          (e.name && e.name.toLowerCase() === code.toLowerCase())
-        );
-
-        let dMap = currentMapping.find(m => m.userId && m.userId.toString().toLowerCase() === code.toLowerCase());
-        if (!dMap) {
-          const entryName = (empMeta?.name || code).toString().trim().toLowerCase();
-          dMap = currentMapping.find(m => m.name && m.name.toString().toLowerCase() === entryName);
-        }
-
-        const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNaN(code) ? code : 'Unknown'));
-        const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (isNaN(code) ? 'Unknown' : code));
-        const displayStore = dMap ? dMap.storeName : (empMeta ? empMeta.store : log._DeviceName);
-
-        const dateObj = parseISTToDate(log.LogDate);
-
-        return {
-          date: log.LogDate.split(' ')[0],
-          day: dateObj ? dateObj.toLocaleDateString('en-US', { weekday: 'long' }) : '',
-          time: formatTimeIST(log.LogDate),
-          employeeId: displayCode,
-          employeeName: displayName,
-          storeName: displayStore,
-          serialNo: log.SerialNumber
-        };
-      });
-
-      setRawLogs(processedRawLogs);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error syncing device logs:', error);
       setError(error.message);
     } finally {
       setLoading(false);
     }
   };
-  */
 
   // Sync device logs
   const syncDeviceLogs = async () => {
-    await fetchAttendanceFromDB(currentMonth);
+    const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const startDateStr = getLocalDateString(startOfMonth);
+    const endDateStr = getLocalDateString(endOfMonth);
+    await syncLogsForRange(startDateStr, endDateStr, currentMonth);
   };
 
   // Sync only today's logs
@@ -2075,15 +2049,11 @@ const AttendanceDaily = () => {
 
   // Get attendance status for an employee on a specific date
   const getAttendanceForDate = (employeeId, date) => {
+    if (!employeeId || !date) return { status: 'Absent', in_time: '-', out_time: '-' };
+    const empIdClean = String(employeeId).trim();
     const record = attendanceData.find(
-      a => a.employee_id === employeeId && a.attendance_date === date
+      a => a.employee_id && String(a.employee_id).trim() === empIdClean && a.attendance_date === date
     );
-    if (date === '2026-06-28') {
-      console.log(`🔎 [getAttendanceForDate] Lookup for ${employeeId} on ${date}:`, {
-        foundRecord: record,
-        totalAttendanceData: attendanceData.length
-      });
-    }
     if (record) {
       return record;
     }
@@ -2299,6 +2269,7 @@ const AttendanceDaily = () => {
 
   useEffect(() => {
     fetchAttendanceFromDB();
+    syncDeviceLogs();
   }, [currentMonth]);
 
   // Fetch logs from Supabase on load / date change
@@ -3881,6 +3852,9 @@ const AttendanceDaily = () => {
           const empLeaveInfo = getLeaveInfoForStreak(emp.id, dateStr, dateStr);
           const isOnLeaveInTable = !!(empLeaveInfo && (empLeaveInfo.reason || empLeaveInfo.leaveType));
 
+          // Compute late minutes against date-specific roster
+          const lateMins = inTime ? calculateLateMinutes(inTime, dateStr, rEntry) : 0;
+
           let status = att.status;
           if (!status || status === 'Absent') {
             if (!inTime || inTime === '-') {
@@ -3890,12 +3864,9 @@ const AttendanceDaily = () => {
                 status = 'Absent';
               }
             } else {
-              status = att.status || 'Absent';
+              status = lateMins > 0 ? 'Late' : 'Present';
             }
           }
-
-          // Compute late minutes against date-specific roster
-          const lateMins = inTime ? calculateLateMinutes(inTime, dateStr, rEntry) : 0;
 
           // Lunch duration
           const lunchStr = att.standard_lunch || '-';

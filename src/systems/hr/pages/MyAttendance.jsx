@@ -60,7 +60,7 @@ const MyAttendance = () => {
         const fetchLeaves = async () => {
             try {
                 const { data, error } = await supabase
-                    .from('Hr_management_leaves')
+                    .from('hr_management_leaves')
                     .select('*');
                 if (!error && data) {
                     setLeavesData(data);

@@ -48,7 +48,7 @@ export default function LeaveManagement() {
     try {
       setLoading(true)
       const { data, error } = await supabase
-        .from('Hr_management_leaves')
+        .from('hr_management_leaves')
         .select('*')
         .order('created_at', { ascending: false })
 
@@ -102,7 +102,7 @@ export default function LeaveManagement() {
       const today = new Date().toISOString().split('T')[0]
 
       const { data, error } = await supabase
-        .from('Hr_management_leaves')
+        .from('hr_management_leaves')
         .select('*')
         .eq('employee_id', employeeId)
         .eq('status', 'Approved')
@@ -129,7 +129,7 @@ export default function LeaveManagement() {
       if (newStatus === 'Approved') {
         // Check for overlapping approved leaves
         const { data: overlappingLeaves } = await supabase
-          .from('Hr_management_leaves')
+          .from('hr_management_leaves')
           .select('*')
           .eq('employee_id', leaveToUpdate.employee_id)
           .eq('status', 'Approved')
@@ -144,7 +144,7 @@ export default function LeaveManagement() {
 
       // Update leave status
       const { error } = await supabase
-        .from('Hr_management_leaves')
+        .from('hr_management_leaves')
         .update({ status: newStatus })
         .eq('id', leaveId)
 
@@ -157,7 +157,7 @@ export default function LeaveManagement() {
       } else if (newStatus === 'Rejected' || newStatus === 'Pending') {
         // Check if employee has any other approved leaves
         const { data: activeLeaves } = await supabase
-          .from('Hr_management_leaves')
+          .from('hr_management_leaves')
           .select('*')
           .eq('employee_id', leaveToUpdate.employee_id)
           .eq('status', 'Approved')
@@ -267,7 +267,7 @@ export default function LeaveManagement() {
       }
 
       const { data, error } = await supabase
-        .from('Hr_management_leaves')
+        .from('hr_management_leaves')
         .insert([leavePayload])
         .select()
 
