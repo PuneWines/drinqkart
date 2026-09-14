@@ -271,7 +271,10 @@ export default function WorkDetails() {
         }
       }
 
-      if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+      const userRole = (role || localStorage.getItem("role") || "").toLowerCase();
+      const isUserAdmin = userRole === "admin" || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+
+      if (!isUserAdmin && rawShopStr && rawShopStr.toLowerCase() !== "all") {
         const list = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
         setAssignedShops(list);
         setHasAllShopsAccess(false);
@@ -281,21 +284,43 @@ export default function WorkDetails() {
       }
     };
     fetchUserAssignedShops();
-  }, [username]);
+  }, [username, role]);
 
-  // Derived Available Shops List based on assigned shops
+  const [allDbShops, setAllDbShops] = useState([]);
+
+  // Fetch all shop names directly from database
+  useEffect(() => {
+    const fetchAllShops = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("shop")
+          .select("shop_name")
+          .order("shop_name", { ascending: true });
+        if (!error && data) {
+          const names = data.map(s => s.shop_name).filter(Boolean);
+          setAllDbShops(names);
+        }
+      } catch (err) {
+        console.error("Error fetching shops in WorkDetails:", err);
+      }
+    };
+    fetchAllShops();
+  }, []);
+
+  // Derived Available Shops List based on assigned shops and database shops
   const availableShops = useMemo(() => {
     const filteredMasterTasks = role === "manager"
       ? masterTasks.filter(t => managerShops.includes(t.shop?.shop_name?.toLowerCase()))
       : masterTasks;
-    const allTaskShops = Array.from(new Set(filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean)));
+    const taskShops = filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean);
+    const combinedShops = Array.from(new Set([...allDbShops, ...taskShops]));
 
     if (!hasAllShopsAccess && assignedShops.length > 0) {
-      const matched = allTaskShops.filter(s => assignedShops.includes(s.toLowerCase()));
+      const matched = combinedShops.filter(s => assignedShops.includes(s.toLowerCase()));
       return matched.length > 0 ? matched : assignedShops;
     }
-    return allTaskShops;
-  }, [masterTasks, role, managerShops, hasAllShopsAccess, assignedShops]);
+    return combinedShops;
+  }, [masterTasks, role, managerShops, hasAllShopsAccess, assignedShops, allDbShops]);
 
   useEffect(() => {
     if (!hasAllShopsAccess && availableShops.length > 0) {

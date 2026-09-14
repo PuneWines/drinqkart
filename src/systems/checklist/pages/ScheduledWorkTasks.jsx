@@ -155,6 +155,11 @@ export default function ScheduledWorkTasks() {
   // Derived Dropdowns
   const shopFilteredUsers = useMemo(() => {
     return userData.filter(u => {
+      // Exclude inactive users
+      if ((u.status || "").toLowerCase() === "inactive") {
+        return false;
+      }
+
       const userShopsList = (u.shop_name || u.user_access || "")
         .toLowerCase()
         .split(',')
@@ -287,13 +292,13 @@ export default function ScheduledWorkTasks() {
     const updates = {};
     selectedRows.forEach(id => {
       const currentTask = mergedData.find(t => t.taskId === id) || {};
-      const displayStart = currentTask.next_start_datetime || "";
-      const displayEnd = currentTask.next_end_datetime || "";
+      const displayStart = currentTask.next_start_datetime || currentTask.start_datetime || currentTask.start_time || "";
+      const displayEnd = currentTask.next_end_datetime || currentTask.end_datetime || currentTask.end_time || "";
       
       const currentStartDate = getDatePart(displayStart);
       const currentEndDate = getDatePart(displayEnd);
-      const currentStartTime = getTimePart(displayStart);
-      const currentEndTime = getTimePart(displayEnd);
+      const currentStartTime = getTimePart(displayStart) || (typeof currentTask.start_time === 'string' ? currentTask.start_time.substring(0, 5) : "") || "09:00";
+      const currentEndTime = getTimePart(displayEnd) || (typeof currentTask.end_time === 'string' ? currentTask.end_time.substring(0, 5) : "") || "23:00";
 
       const targetStartDate = bulkStartDate || currentStartDate;
       const targetEndDate = bulkEndDate || currentEndDate;
@@ -634,8 +639,8 @@ export default function ScheduledWorkTasks() {
             <tbody className="divide-y divide-gray-50">
               {filteredTasks.map((item, index) => {
                 const isModified = !!modifiedRows[item.taskId];
-                const displayStart = item.next_start_datetime || item.start_datetime || "";
-                const displayEnd = item.next_end_datetime || item.end_datetime || "";
+                const displayStart = item.next_start_datetime || item.start_datetime || (item.start_time ? `T${item.start_time}` : "");
+                const displayEnd = item.next_end_datetime || item.end_datetime || (item.end_time ? `T${item.end_time}` : "");
 
                 return (
                   <tr key={item.taskId} className={`hover:bg-indigo-50/20 transition-all group ${isModified ? 'bg-amber-50/20' : ''}`}>

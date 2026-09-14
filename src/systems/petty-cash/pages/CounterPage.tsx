@@ -118,24 +118,7 @@ const getRowTotalDiff = (rec: any) => {
 
 const getRowCreditReceipt = (rec: any) => Number(rec?.ws_credit_receipt) || 0;
 
-const getRowWholesaleAmount = (rec: any) => {
-  if (!rec) return 0;
-  const wsCash =
-    (Number(rec.ws_500) || 0) * 500 +
-    (Number(rec.ws_200) || 0) * 200 +
-    (Number(rec.ws_100) || 0) * 100 +
-    (Number(rec.ws_50) || 0) * 50 +
-    (Number(rec.ws_20) || 0) * 20 +
-    (Number(rec.ws_10) || 0) * 10 +
-    (Number(rec.ws_1) || 0) * 1;
-  return (
-    wsCash +
-    (Number(rec.ws_gpay_card) || Number(rec.ws_gpay) || 0) +
-    (Number(rec.ws_phonepe) || 0) +
-    (Number(rec.ws_paytm) || Number(rec.ws_patym) || 0) +
-    (Number(rec.ws_card) || 0)
-  );
-};
+const getRowWholesaleAmount = (rec: any) => Number(rec?.ws_cash_billing_amount) || 0;
 
 const getRowHomeDeliveryAmount = (rec: any) => {
   if (!rec) return 0;
@@ -516,7 +499,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               </div>
             </div>
 
-            {/* 2. Wholesale Amount = (Wholesale Amount - Credit Receipt) */}
+            {/* 2. Wholesale Amount (Cash Billing) */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Wholesale Amount</p>

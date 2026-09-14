@@ -695,6 +695,60 @@ export default function EmployeeManagement() {
 
       if (hrUpdateErr) throw hrUpdateErr
 
+      // Sync updated shop_name & status back to users table (Master Settings / User & Permission)
+      try {
+        const empIdStr = (editFormData.employee_id || editingEmployee.employee_id || '').toString().trim();
+        const empNameStr = (editFormData.name_as_per_aadhar || editingEmployee.name_as_per_aadhar || '').toString().trim();
+        const newShopName = editFormData.joining_company_name || null;
+        const newStatus = (editFormData.status || 'Active').toLowerCase();
+
+        let targetUser = null;
+
+        // 1. Match user by employee_id
+        if (empIdStr) {
+          const { data: userByEmp } = await supabase
+            .from('users')
+            .select('id, user_name')
+            .eq('employee_id', empIdStr)
+            .maybeSingle();
+
+          if (userByEmp) {
+            targetUser = userByEmp;
+          }
+        }
+
+        // 2. Fallback match user by name
+        if (!targetUser && empNameStr) {
+          const { data: allUsers } = await supabase
+            .from('users')
+            .select('id, user_name, employee_id');
+
+          if (allUsers && allUsers.length > 0) {
+            const eClean = empNameStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+            targetUser = allUsers.find(u => {
+              const uNameClean = (u.user_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return uNameClean && eClean && (uNameClean === eClean || uNameClean.startsWith(eClean) || eClean.startsWith(uNameClean));
+            });
+          }
+        }
+
+        if (targetUser) {
+          const userPayload = {
+            shop_name: newShopName,
+            status: newStatus
+          };
+          if (empIdStr) {
+            userPayload.employee_id = empIdStr;
+          }
+          await supabase
+            .from('users')
+            .update(userPayload)
+            .eq('id', targetUser.id);
+        }
+      } catch (userSyncErr) {
+        console.warn('Could not sync HR update to users table:', userSyncErr);
+      }
+
       await fetchEmployees()
 
       alert('Employee updated successfully!')

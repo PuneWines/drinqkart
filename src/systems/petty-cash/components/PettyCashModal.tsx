@@ -189,11 +189,12 @@ export default function PettyCashModal({
 
       const { data, error } = await supabase
         .from('users')
-        .select('user_name, shop_name')
+        .select('user_name, shop_name, status')
         .order('user_name', { ascending: true });
 
       if (!error && data && data.length > 0) {
         const userDetails = data
+          .filter((row: any) => !row.status || row.status.toString().toLowerCase() === 'active')
           .map((row: any) => ({
             userName: row.user_name || row.username || row.name || "",
             shopName: row.shop_name || "All",
