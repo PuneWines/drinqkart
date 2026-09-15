@@ -12,7 +12,8 @@ import {
   Code,
   Key,
   UserCheck,
-  Building
+  Building,
+  Trash2
 } from 'lucide-react';
 import supabase from '../SupabaseClient';
 
@@ -135,6 +136,30 @@ export default function MasterSetting() {
 
   const togglePasswordVisibility = (userId) => {
     setShowPassword((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  const handleDeleteUser = async (userToDelete) => {
+    const name = userToDelete.user_name || userToDelete.username || 'this user';
+    if (!window.confirm(`Are you sure you want to delete user "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userToDelete.id);
+
+      if (error) {
+        showToast(`Failed to delete user: ${error.message}`, 'error');
+      } else {
+        showToast(`User "${name}" deleted successfully!`, 'success');
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      showToast('Unexpected error deleting user', 'error');
+    }
   };
 
   // Open Edit User Modal
@@ -366,13 +391,23 @@ export default function MasterSetting() {
                     <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
                       {/* Column 1: Actions */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenEdit(u)}
-                          className="px-3.5 py-1.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Edit3 size={13} />
-                          <span>Edit</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenEdit(u)}
+                            className="px-3.5 py-1.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <Edit3 size={13} />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(u)}
+                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1 shadow-xs cursor-pointer"
+                            title="Delete User"
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
 
                       {/* Column 2: User Name */}

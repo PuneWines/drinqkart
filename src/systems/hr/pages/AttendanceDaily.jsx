@@ -398,7 +398,8 @@ const AttendanceDaily = () => {
         .from('hr_management_shift_roster')
         .select('*')
         .gte('date', startDayStr)
-        .lte('date', endDayStr);
+        .lte('date', endDayStr)
+        .order('id', { ascending: true });
 
       if (error) throw error;
       setRosterData(data || []);
@@ -407,13 +408,14 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Get roster for an employee on a specific date
+  // Get roster for an employee on a specific date (returns latest assigned entry if duplicates exist)
   const getEmployeeRoster = (employeeId, date) => {
     if (!rosterData || rosterData.length === 0) return null;
-    return rosterData.find(r =>
+    const matches = rosterData.filter(r =>
       (r.employee_id?.toString().toLowerCase() === employeeId?.toString().toLowerCase()) &&
       (r.date === date)
     );
+    return matches.length > 0 ? matches[matches.length - 1] : null;
   };
 
   // Fetch leaves from hr_management_leaves
@@ -733,7 +735,7 @@ const AttendanceDaily = () => {
       const inDate = parseISTToDate(inStr);
       const outDate = parseISTToDate(clampedOut);
       if (!inDate || !outDate || outDate <= inDate) return '00:00:00';
-      
+
       let totalMs = outDate - inDate;
       const lunchMs = parseDurationMs(lunchStr);
       const netWorkMs = Math.max(0, totalMs - lunchMs);
@@ -1395,7 +1397,7 @@ const AttendanceDaily = () => {
 
         const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNumeric ? 'Unknown' : code));
         const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (isNumeric ? code : 'Unknown'));
-        
+
         // Preserve actual hardware punch device store and serial number
         const matchedPunchDevice = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
         const displayStore = matchedPunchDevice ? matchedPunchDevice.name : (group.SourceDeviceName && group.SourceDeviceName !== 'ALL DEVICES' ? group.SourceDeviceName : (dMap ? dMap.storeName : (empMeta ? empMeta.store : '-')));
@@ -1707,8 +1709,9 @@ const AttendanceDaily = () => {
             .select('*')
             .eq('employee_id', employeeId)
             .eq('date', date)
-            .maybeSingle();
-          shiftEntry = shiftRows || null;
+            .order('id', { ascending: false })
+            .limit(1);
+          shiftEntry = shiftRows && shiftRows.length > 0 ? shiftRows[0] : null;
         } catch (shiftErr) {
           console.warn('Could not fetch shift roster for manual punch calculation:', shiftErr);
         }
@@ -3083,6 +3086,9 @@ const AttendanceDaily = () => {
                         }
                       }
 
+                      const rawPunchedShop = resolvePunchedStore(attendance, deviceMapping) || '';
+                      const punchedShopName = rawPunchedShop.toString().trim();
+
                       return (
                         <tr
                           key={employee.id}
@@ -3120,8 +3126,15 @@ const AttendanceDaily = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-900">{employee.name}</p>
+                                <div
+                                  className="cursor-pointer group flex flex-col"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPreviewWindow(employee);
+                                  }}
+                                  title="Click to view employee overview, timecard & timeline"
+                                >
+                                  <p className="text-xs font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">{employee.name}</p>
                                   <div className="flex items-center gap-1">
                                     <p className="text-[9px] text-gray-500">{employee.id}</p>
                                     {employeeRoster && employeeRoster.shift_type ? (
@@ -3129,7 +3142,7 @@ const AttendanceDaily = () => {
                                         className="inline-flex items-center px-1 rounded bg-indigo-50 border border-indigo-100 text-[8px] font-semibold text-indigo-700 leading-none py-0.5 cursor-help"
                                         title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5) || '10:00'} - ${employeeRoster.end_time?.substring(0, 5) || '19:30'})`}
                                       >
-                                        📅 {employeeRoster.shift_type?.substring(0, 12)}
+                                        📅 {employeeRoster.shift_type}
                                       </span>
                                     ) : (
                                       <span
@@ -3157,23 +3170,18 @@ const AttendanceDaily = () => {
                             {(() => {
                               const rawAssigned = employeeProfile?.joining_place || employee.store_name || '-';
                               const assignedStore = rawAssigned.toString().trim();
-                              const rawPunched = resolvePunchedStore(attendance, deviceMapping) || '';
-                              const punchedStore = rawPunched.toString().trim();
-                              const isDifferent = punchedStore && assignedStore !== '-' && punchedStore.toLowerCase() !== assignedStore.toLowerCase();
-
-                              if (punchedStore) {
-                                return (
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="font-semibold text-gray-900">
-                                      {assignedStore}
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-semibold text-gray-900">
+                                    {assignedStore !== '-' ? assignedStore : '-'}
+                                  </span>
+                                  {punchedShopName ? (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded leading-none w-fit" title={`Punched from biometric device at ${punchedShopName} (Serial: ${attendance.serial_number || 'N/A'})`}>
+                                      📍 Punched: {punchedShopName}
                                     </span>
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded leading-none w-fit" title={`Punched from biometric device at ${punchedStore} (Serial: ${attendance.serial_number || 'N/A'})`}>
-                                      📍 Punched: {punchedStore}
-                                    </span>
-                                  </div>
-                                );
-                              }
-                              return <span className="font-medium text-gray-700">{assignedStore !== '-' ? assignedStore : '-'}</span>;
+                                  ) : null}
+                                </div>
+                              );
                             })()}
                           </td>
                           <td className="px-2 py-1.5 text-center">
@@ -4136,6 +4144,7 @@ const AttendanceDaily = () => {
                             <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Date</th>
                             <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Day</th>
                             <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Roster / Shift</th>
+                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Punched Location</th>
                             <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Scheduled</th>
                             <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">In Time</th>
                             <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Out Time</th>
@@ -4152,15 +4161,16 @@ const AttendanceDaily = () => {
                             const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
                             // Highlight ONLY if Friday, Saturday, or Sunday AND absent/on leave
                             const isWeekendAbsentOrLeave = isWeekendDay && (isAbsent || isOnLeave);
+                            const hasPunches = Boolean(row.inTimeFormatted || row.outTimeFormatted);
+                            const punchedShopName = resolvePunchedStore(row.attendance, deviceMapping);
 
                             return (
                               <tr
                                 key={row.dayNum}
-                                className={`transition-colors ${
-                                  isWeekendAbsentOrLeave
+                                className={`transition-colors ${isWeekendAbsentOrLeave
                                     ? 'bg-red-100/80 hover:bg-red-200/80 border-l-4 border-l-red-500'
                                     : 'hover:bg-slate-50/80'
-                                }`}
+                                  }`}
                               >
                                 <td className="px-3 py-2 text-slate-900 font-bold font-mono">
                                   {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
@@ -4168,50 +4178,59 @@ const AttendanceDaily = () => {
                                 <td className={`px-3 py-2 font-bold ${isWeekendAbsentOrLeave ? 'text-red-700' : 'text-slate-500'}`}>
                                   {row.dayName}
                                 </td>
-                              <td className="px-3 py-2">
-                                {row.hasRoster ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
-                                    📅 {row.shiftName}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
-                                    Roster Not Available
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-center text-slate-600 font-mono">
-                                {row.scheduledStartStr} – {row.scheduledEndStr}
-                              </td>
-                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                                {row.inTimeFormatted || '-'}
-                              </td>
-                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                                {row.outTimeFormatted || '-'}
-                              </td>
-                              <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
-                              <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">
-                                {row.workHrsStr}
-                              </td>
-                              <td className="px-3 py-2 text-center font-mono">
-                                {row.lateMins > 0 ? (
-                                  <span className="text-orange-600 font-bold">{row.lateMins}m</span>
-                                ) : (
-                                  <span className="text-slate-400">0m</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                {(() => {
-                                  if (row.status === 'Present') return <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Present</span>;
-                                  if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
-                                  if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
-                                  if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
-                                  if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">On Leave</span>;
-                                  return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
-                                })()}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                <td className="px-3 py-2">
+                                  {row.hasRoster ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                      📅 {row.shiftName}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                      Roster Not Available
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {hasPunches && punchedShopName ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-semibold text-[10px]">
+                                      📍 {punchedShopName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px]">-</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center text-slate-600 font-mono">
+                                  {row.scheduledStartStr} – {row.scheduledEndStr}
+                                </td>
+                                <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                  {row.inTimeFormatted || '-'}
+                                </td>
+                                <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                  {row.outTimeFormatted || '-'}
+                                </td>
+                                <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
+                                <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">
+                                  {row.workHrsStr}
+                                </td>
+                                <td className="px-3 py-2 text-center font-mono">
+                                  {row.lateMins > 0 ? (
+                                    <span className="text-orange-600 font-bold">{row.lateMins}m</span>
+                                  ) : (
+                                    <span className="text-slate-400">0m</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {(() => {
+                                    if (row.status === 'Present') return <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Present</span>;
+                                    if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
+                                    if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
+                                    if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
+                                    if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">On Leave</span>;
+                                    return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
+                                  })()}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -4229,11 +4248,10 @@ const AttendanceDaily = () => {
                       return (
                         <div
                           key={row.dayNum}
-                          className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${
-                            isWeekendAbsentOrLeave
+                          className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${isWeekendAbsentOrLeave
                               ? 'bg-red-50/80 border-red-300 ring-1 ring-red-400/30'
                               : 'bg-white border-slate-200/80'
-                          }`}
+                            }`}
                         >
                           <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                             <div className="flex items-center gap-2">
