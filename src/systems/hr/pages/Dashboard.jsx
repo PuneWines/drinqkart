@@ -1,8 +1,62 @@
 import { useState, useEffect } from 'react'
 import { Users, UserCheck, Clock, UserX, UserMinus, Briefcase, Calendar, TrendingUp, Award, PieChart, Filter, Search, AlertCircle, Eye } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../../../context/AuthContext'
+
+// Location ↔ Shop mappings
+const LOCATION_TO_SHOP_MAP = {
+    'BAVDHAN': 'MADHURA',
+    'BAWDHAN': 'MADHURA',
+    'HINJEWADI': 'VISHAL',
+    'WAGHOLI': 'FRIENDS',
+    'AKOLE': 'BALAJI',
+    'MUMBAI': 'KUNAL',
+    'KHARGHAR': 'KUNAL KHARGHAR'
+};
+
+const SHOP_TO_LOCATION_MAP = {
+    'MADHURA': 'BAVDHAN',
+    'BAWDHAN': 'BAVDHAN',
+    'VISHAL': 'HINJEWADI',
+    'FRIENDS': 'WAGHOLI',
+    'BALAJI': 'AKOLE',
+    'KUNAL': 'MUMBAI',
+    'KUNAL KHARGHAR': 'KHARGHAR'
+};
 
 export default function Dashboard() {
+    const { user: currentUserObj } = useAuth();
+
+    // Helper: Determine if current logged-in user is unrestricted admin
+    const checkIsUnrestrictedAdmin = (u) => {
+        if (!u) return false;
+        const uName = (u.user_name || u.username || '').trim().toLowerCase();
+        if (uName === 'masteradmin') return true;
+        const role = (u.role || '').trim().toLowerCase();
+        if (role === 'admin') return true;
+        return false;
+    };
+
+    const isUnrestrictedAdmin = checkIsUnrestrictedAdmin(currentUserObj);
+
+    // Helper: Extract user's authorized shops & locations (Set of uppercase shop names/locations)
+    const getUserAuthorizedStores = () => {
+        if (isUnrestrictedAdmin) return null; // Null means unrestricted/all stores
+        const rawAccess = currentUserObj?.user_access || currentUserObj?.shop_name || localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '';
+        if (!rawAccess) return null;
+        if (rawAccess.toLowerCase().trim() === 'all') return null;
+
+        const shops = new Set();
+        const parts = rawAccess.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        parts.forEach(p => {
+            shops.add(p);
+            // Add mapped shop name or location
+            if (LOCATION_TO_SHOP_MAP[p]) shops.add(LOCATION_TO_SHOP_MAP[p].toUpperCase());
+            if (SHOP_TO_LOCATION_MAP[p]) shops.add(SHOP_TO_LOCATION_MAP[p].toUpperCase());
+        });
+        return shops.size > 0 ? shops : null;
+    };
+
     // Employee stats
     const [totalEmployee, setTotalEmployee] = useState(0)
     const [activeEmployee, setActiveEmployee] = useState(0)
@@ -55,11 +109,28 @@ export default function Dashboard() {
             const todayStr = `${yyyy}-${mm}-${dd}`
             setTodayDate(todayStr)
 
+            const authShops = getUserAuthorizedStores();
+
             // 1. Fetch employee records from hr_management_employees
-            const { data: hrData, error: hrError } = await supabase
+            let hrQuery = supabase
                 .from('hr_management_employees')
                 .select('*')
-                .order('created_at', { ascending: false })
+                .order('created_at', { ascending: false });
+
+            // Apply database query filter if restricted to specific shop(s)
+            if (authShops && authShops.size > 0) {
+                const shopValues = Array.from(authShops);
+                // Standardize query filtering across joining_place/store_name/shop_name
+                const orConditions = [];
+                shopValues.forEach(val => {
+                    orConditions.push(`joining_place.ilike.%${val}%`);
+                    orConditions.push(`store_name.ilike.%${val}%`);
+                    orConditions.push(`shop_name.ilike.%${val}%`);
+                });
+                hrQuery = hrQuery.or(orConditions.join(','));
+            }
+
+            const { data: hrData, error: hrError } = await hrQuery;
 
             if (hrError) throw hrError
 
@@ -83,7 +154,7 @@ export default function Dashboard() {
             })
 
             // Normalize all employee records and compute status
-            const mappedList = (hrData || []).map((emp, index) => {
+            let mappedList = (hrData || []).map((emp, index) => {
                 const cleanId = emp.employee_id ? String(emp.employee_id).trim() : ''
                 const empName = emp.name_as_per_aadhar ? String(emp.name_as_per_aadhar).trim() : ''
                 const empStore = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim()
@@ -107,6 +178,18 @@ export default function Dashboard() {
                     status: finalStatus
                 }
             })
+
+            // Double-check strictly in JS that no unauthorized employee bypasses query filter
+            if (authShops && authShops.size > 0) {
+                mappedList = mappedList.filter(emp => {
+                    const empStoreUpper = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim().toUpperCase();
+                    if (!empStoreUpper) return false;
+                    for (const shop of authShops) {
+                        if (empStoreUpper.includes(shop) || shop.includes(empStoreUpper)) return true;
+                    }
+                    return false;
+                });
+            }
 
             // Calculate Employee Statistics
             const total = mappedList.length
@@ -893,6 +976,14 @@ export default function Dashboard() {
                                 return matchesSearch && matchesStore;
                             });
 
+                            // Filter location options by user permissions if restricted
+                            const authStores = getUserAuthorizedStores();
+                            const availableLocations = dropDownLocations.filter(loc => {
+                                if (!authStores) return true;
+                                const mappedShop = (LOCATION_TO_SHOP_MAP[loc] || loc).toUpperCase();
+                                return authStores.has(loc.toUpperCase()) || authStores.has(mappedShop);
+                            });
+
                             return (
                                 <>
                                     <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
@@ -919,8 +1010,9 @@ export default function Dashboard() {
                                                     onChange={(e) => setModalSelectedStore(e.target.value)}
                                                     className="appearance-none bg-white border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                                 >
-                                                    <option value="ALL">All Stores</option>
-                                                    {dropDownLocations.map(locationName => (
+                                                    {isUnrestrictedAdmin && <option value="ALL">All Stores</option>}
+                                                    {!isUnrestrictedAdmin && availableLocations.length > 1 && <option value="ALL">Authorized Stores</option>}
+                                                    {availableLocations.map(locationName => (
                                                         <option key={locationName} value={locationName}>{locationName}</option>
                                                     ))}
                                                 </select>

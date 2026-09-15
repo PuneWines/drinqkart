@@ -660,8 +660,12 @@ export default function EmployeeManagement() {
         if (targetUser) {
           const uPayload = {
             role: targetRole,
-            shop_name: formData.joining_company_name || null
+            shop_name: formData.joining_company_name || null,
+            status: (formData.status || 'Active').toLowerCase() === 'inactive' ? 'inactive' : 'active'
           };
+          if (formData.mobile_no) {
+            uPayload.number = formData.mobile_no.toString().trim();
+          }
           if (empIdStr) uPayload.employee_id = empIdStr;
           await supabase.from('users').update(uPayload).eq('id', targetUser.id);
         }
@@ -787,6 +791,9 @@ export default function EmployeeManagement() {
             status: newStatus,
             role: targetRole
           };
+          if (editFormData.mobile_no) {
+            userPayload.number = editFormData.mobile_no.toString().trim();
+          }
           if (empIdStr) {
             userPayload.employee_id = empIdStr;
           }
@@ -1434,8 +1441,7 @@ export default function EmployeeManagement() {
                 paginatedEmployees.map((emp) => (
                   <tr
                     key={emp.id}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => handleViewDetails(emp)}
+                    className="hover:bg-gray-50 transition-colors"
                   >
                     <td className="px-4 py-3 text-gray-900">
                       {emp.employee_id}
@@ -1487,23 +1493,24 @@ export default function EmployeeManagement() {
                     </td>
 
 
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditPanel(emp);
-                          }}
+                          onClick={() => handleViewDetails(emp)}
+                          className="p-1 text-slate-600 hover:text-slate-800 transition-colors"
+                          title="View Details"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={() => openEditPanel(emp)}
                           className="p-1 text-blue-600 hover:text-blue-700 transition-colors"
                           title="Edit"
                         >
                           <Edit size={16} />
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(emp);
-                          }}
+                          onClick={() => handleDelete(emp)}
                           className="p-1 text-red-600 hover:text-red-700 transition-colors"
                           title="Delete"
                         >
@@ -2210,7 +2217,7 @@ export default function EmployeeManagement() {
                         </select>
                       </div>
 
-                      <div>
+                      <div className="hidden">
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Employee Status <span className="text-red-500">*</span></label>
                         <select
                           name="status"

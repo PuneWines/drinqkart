@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -200,6 +200,7 @@ export default function MasterSetting() {
   }, [currentUserObj]);
   const COLUMN_DEFINITIONS = [
     { key: 'employee_id', label: 'Employee ID' },
+    { key: 'emp_name', label: 'Emp Name' },
     { key: 'user_name', label: 'User Name' },
     { key: 'role', label: 'Role' },
     { key: 'shop_name', label: 'Shop Name' },
@@ -210,17 +211,33 @@ export default function MasterSetting() {
   ];
 
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const columnDropdownRef = useRef(null);
+
   const [visibleColumns, setVisibleColumns] = useState([
+    'employee_id',
+    'emp_name',
     'user_name',
     'role',
     'shop_name',
-    'password',
-    'page_access',
-    'counter_access'
+    'number'
   ]);
+
+  // Click outside listener for column selection dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (columnDropdownRef.current && !columnDropdownRef.current.contains(event.target)) {
+        setShowColumnDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [shopFilter, setShopFilter] = useState('');
   const [showPassword, setShowPassword] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
   const [availableShops, setAvailableShops] = useState([]);
@@ -229,6 +246,8 @@ export default function MasterSetting() {
   // Modal / Editing state
   const [editingUser, setEditingUser] = useState(null);
   const [userStatusInput, setUserStatusInput] = useState('active');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [mobileInput, setMobileInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [primaryShopInput, setPrimaryShopInput] = useState(''); // Primary assigned shop (single shop)
   const [shopNameInput, setShopNameInput] = useState(''); // Multi-shop permissions access list (comma-separated)
@@ -530,7 +549,22 @@ export default function MasterSetting() {
     }
   };
 
-  const handleDeleteUser = async (userId, username) => {
+  const handleDeleteUser = async (userObj) => {
+    const currentUserName = (currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim();
+    if (currentUserName !== 'masteradmin') {
+      showToast('Action restricted: Deleting users is only permitted for Master Admin.', 'error');
+      return;
+    }
+
+    const userId = userObj?.id;
+    const username = userObj?.user_name || userObj?.username || 'user';
+    const targetRole = (userObj?.role || '').toLowerCase().trim();
+
+    if (targetRole === 'admin') {
+      showToast('Action restricted: Admin role users cannot be deleted.', 'error');
+      return;
+    }
+
     if (!window.confirm(`Are you sure you want to delete user "${username}"?`)) return;
     try {
       const { error } = await supabase
@@ -550,20 +584,106 @@ export default function MasterSetting() {
     }
   };
 
-  // Fetch users on load
+  // Fetch users on load and enrich missing mobile numbers from hr_management_employees
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('user_name', { ascending: true });
+      const [{ data: usersData, error: usersErr }, { data: empData, error: empErr }] = await Promise.all([
+        supabase.from('users').select('*').order('user_name', { ascending: true }),
+        supabase.from('hr_management_employees').select('*')
+      ]);
 
-      if (error) {
-        console.error('Error fetching users:', error);
-        showToast(`Error fetching users: ${error.message}`, 'error');
+      if (usersErr) {
+        console.error('Error fetching users:', usersErr);
+        showToast(`Error fetching users: ${usersErr.message}`, 'error');
       } else {
-        setUsers(data || []);
+        const empMapByEmpId = new Map();
+        const empMapByName = new Map();
+        const empNameMapByEmpId = new Map();
+        const empNameMapByName = new Map();
+
+        if (empData && empData.length > 0) {
+          empData.forEach((emp) => {
+            const details = emp.HR_SYSTEM_employee_data || {};
+            const mobile = (
+              emp.candidate_mobile ||
+              emp.mobile_no ||
+              emp.mobile ||
+              emp.phone ||
+              details.candidate_mobile ||
+              details.mobile_no ||
+              details.mobile ||
+              details.phone ||
+              ''
+            ).toString().trim();
+
+            const fullName = (emp.name_as_per_aadhar || emp.candidate_name || details.name_as_per_aadhar || details.candidate_name || '').toString().trim();
+
+            const empId = emp.employee_id || details.employee_id;
+            if (empId) {
+              const cleanEmpId = empId.toString().trim().toLowerCase();
+              if (mobile && mobile !== '-' && mobile !== '—') empMapByEmpId.set(cleanEmpId, mobile);
+              if (fullName) empNameMapByEmpId.set(cleanEmpId, fullName);
+            }
+
+            const cleanAadharName = (emp.name_as_per_aadhar || details.name_as_per_aadhar || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cleanCandName = (emp.candidate_name || details.candidate_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanAadharName) {
+              if (mobile && mobile !== '-' && mobile !== '—') empMapByName.set(cleanAadharName, mobile);
+              if (fullName) empNameMapByName.set(cleanAadharName, fullName);
+            }
+            if (cleanCandName) {
+              if (mobile && mobile !== '-' && mobile !== '—') empMapByName.set(cleanCandName, mobile);
+              if (fullName) empNameMapByName.set(cleanCandName, fullName);
+            }
+          });
+        }
+
+        const enrichedUsers = (usersData || []).map((u) => {
+          let mobileNum = '';
+          let hrEmpName = '';
+          const uEmpId = u.employee_id ? u.employee_id.toString().trim().toLowerCase() : '';
+          const uName = (u.user_name || u.username || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          if (uEmpId && empMapByEmpId.has(uEmpId)) {
+            mobileNum = empMapByEmpId.get(uEmpId);
+          } else if (uName && empMapByName.has(uName)) {
+            mobileNum = empMapByName.get(uName);
+          } else {
+            // Partial match fallback if full clean name match fails
+            for (const [empNameClean, mobile] of empMapByName.entries()) {
+              if (empNameClean && uName && (empNameClean.includes(uName) || uName.includes(empNameClean))) {
+                mobileNum = mobile;
+                break;
+              }
+            }
+          }
+
+          if (uEmpId && empNameMapByEmpId.has(uEmpId)) {
+            hrEmpName = empNameMapByEmpId.get(uEmpId);
+          } else if (uName && empNameMapByName.has(uName)) {
+            hrEmpName = empNameMapByName.get(uName);
+          } else {
+            for (const [empNameClean, fName] of empNameMapByName.entries()) {
+              if (empNameClean && uName && (empNameClean.includes(uName) || uName.includes(empNameClean))) {
+                hrEmpName = fName;
+                break;
+              }
+            }
+          }
+
+          if (!mobileNum) {
+            mobileNum = (u.number || u.mobile || u.mobile_number || u.phone || '').toString().trim();
+          }
+
+          return {
+            ...u,
+            emp_name: hrEmpName || u.user_name || u.username || '—',
+            number: mobileNum || null
+          };
+        });
+
+        setUsers(enrichedUsers);
       }
     } catch (err) {
       console.error('Exception fetching users:', err);
@@ -655,6 +775,8 @@ export default function MasterSetting() {
       can_self_assign: Boolean(user.can_self_assign)
     });
     setUserStatusInput((user.status || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active');
+    setUsernameInput(user.user_name || user.username || '');
+    setMobileInput(user.number || user.mobile || user.phone || '');
     setPasswordInput(user.password || '');
     setPrimaryShopInput(user.shop_name || '');
     setShopNameInput(user.user_access || user.shop_name || '');
@@ -833,11 +955,15 @@ export default function MasterSetting() {
     const finalAccess = Object.keys(accessPermissions);
     const primaryShopVal = primaryShopInput.trim() || null;
     const shopAccessVal = shopNameInput.trim() || primaryShopVal || null;
+    const finalUserName = usernameInput.trim() || editingUser.user_name || editingUser.username;
+    const finalMobile = mobileInput.trim() || null;
 
     try {
       const { error } = await supabase
         .from('users')
         .update({
+          user_name: finalUserName,
+          number: finalMobile,
           status: userStatusInput,
           password: passwordInput,
           shop_name: primaryShopVal,
@@ -851,10 +977,10 @@ export default function MasterSetting() {
       if (error) {
         showToast(`Failed to update user: ${error.message}`, 'error');
       } else {
-        // Sync status and assigned primary shop to hr_management_employees table
+        // Sync status, assigned primary shop, name and mobile number to hr_management_employees table
         const hrStatusVal = userStatusInput === 'active' ? 'Active' : 'Inactive';
         const empIdStr = (editingUser.employee_id || '').toString().trim();
-        const userNameStr = (editingUser.user_name || editingUser.username || '').toString().trim();
+        const userNameStr = finalUserName;
 
         let targetEmpId = null;
 
@@ -904,13 +1030,21 @@ export default function MasterSetting() {
           else if (userRoleLower === 'hod') newDesignation = 'HOD';
           else if (userRoleLower === 'admin') newDesignation = 'Admin';
 
+          const hrUpdatePayload = {
+            status: hrStatusVal,
+            joining_company_name: primaryShopVal,
+            designation: newDesignation
+          };
+          if (finalMobile) {
+            hrUpdatePayload.candidate_mobile = finalMobile;
+            hrUpdatePayload.mobile_no = finalMobile;
+            hrUpdatePayload.mobile = finalMobile;
+            hrUpdatePayload.phone = finalMobile;
+          }
+
           const { error: hrErr } = await supabase
             .from('hr_management_employees')
-            .update({
-              status: hrStatusVal,
-              joining_company_name: primaryShopVal,
-              designation: newDesignation
-            })
+            .update(hrUpdatePayload)
             .eq('employee_id', targetEmpId);
 
           if (hrErr) {
@@ -940,8 +1074,21 @@ export default function MasterSetting() {
   };
 
   const filteredUsers = users.filter((u) => {
-    const name = (u.user_name || u.username || '').toLowerCase();
-    return name.includes(searchTerm.toLowerCase());
+    const termLower = searchTerm.toLowerCase().trim();
+    const uName = (u.user_name || u.username || '').toLowerCase();
+    const eName = (u.emp_name || '').toLowerCase();
+    const empId = (u.employee_id || '').toLowerCase();
+
+    const matchesSearch = !termLower || uName.includes(termLower) || eName.includes(termLower) || empId.includes(termLower);
+    if (!matchesSearch) return false;
+
+    if (shopFilter) {
+      const uShop = (u.shop_name || '').toLowerCase();
+      const uAccess = (u.user_access || '').toLowerCase();
+      const filterLower = shopFilter.toLowerCase();
+      return uShop.includes(filterLower) || uAccess.includes(filterLower);
+    }
+    return true;
   });
 
   // Helper to check permission level for a given Master Setting module: returns 'modify' | 'view' | 'none'
@@ -1098,13 +1245,30 @@ export default function MasterSetting() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by username..."
+              placeholder="Search by username, emp name, or ID..."
               className="w-full pl-10 pr-4 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs text-[#1A1A1A] placeholder-[#1A1A1A]/40 focus:outline-none focus:border-[#C9A84C] transition-colors shadow-inner font-medium"
             />
           </div>
 
+          {/* Shop Name Filter Dropdown */}
+          <div className="relative shrink-0 min-w-[170px]">
+            <select
+              value={shopFilter}
+              onChange={(e) => setShopFilter(e.target.value)}
+              className="w-full appearance-none pl-3.5 pr-8 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider text-[#1A1A1A] focus:outline-none focus:border-[#C9A84C] cursor-pointer shadow-xs"
+            >
+              <option value="">All Shops</option>
+              {availableShops.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/50 pointer-events-none" />
+          </div>
+
           {/* Select Columns Dropdown */}
-          <div className="relative shrink-0">
+          <div ref={columnDropdownRef} className="relative shrink-0">
             <button
               type="button"
               onClick={() => setShowColumnDropdown(!showColumnDropdown)}
@@ -1156,18 +1320,19 @@ export default function MasterSetting() {
       {/* Users Table with Actions in Column 1 */}
       <div className="bg-white border-[0.5px] border-[#1A1A1A]/10 shadow-sm overflow-hidden">
         <div className="overflow-auto max-h-[75vh] custom-scrollbar">
-          <table className="w-full min-w-[1500px] text-left border-collapse text-xs relative">
+          <table className="w-full text-left border-collapse text-xs relative">
             <thead className="sticky top-0 z-10 bg-[#1A1A1A]">
               <tr className="bg-[#1A1A1A] border-b border-[#1A1A1A] uppercase font-serif text-[#C9A84C] tracking-[0.15em] text-[10.5px]">
-                <th className="py-4 px-4 w-28">Actions</th>
-                {visibleColumns.includes('employee_id') && <th className="py-4 px-4">Employee ID</th>}
-                {visibleColumns.includes('user_name') && <th className="py-4 px-4">User Name</th>}
-                {visibleColumns.includes('role') && <th className="py-4 px-4">Role</th>}
-                {visibleColumns.includes('shop_name') && <th className="py-4 px-4">Shop Name</th>}
-                {visibleColumns.includes('number') && <th className="py-4 px-4">Mobile Number</th>}
-                {visibleColumns.includes('password') && <th className="py-4 px-4">Password</th>}
-                {visibleColumns.includes('page_access') && <th className="py-4 px-4">Master System Page Access</th>}
-                {visibleColumns.includes('counter_access') && <th className="py-4 px-4">MASTER SYSTEM COUNTER ACCESS</th>}
+                <th className="py-2.5 px-3 w-20">Actions</th>
+                {visibleColumns.includes('employee_id') && <th className="py-2.5 px-3">Emp ID</th>}
+                {visibleColumns.includes('emp_name') && <th className="py-2.5 px-3">Emp Name</th>}
+                {visibleColumns.includes('user_name') && <th className="py-2.5 px-3">User Name</th>}
+                {visibleColumns.includes('role') && <th className="py-2.5 px-3">Role</th>}
+                {visibleColumns.includes('shop_name') && <th className="py-2.5 px-3">Shop Name</th>}
+                {visibleColumns.includes('number') && <th className="py-2.5 px-3">Mobile Number</th>}
+                {visibleColumns.includes('password') && <th className="py-2.5 px-3">Password</th>}
+                {visibleColumns.includes('page_access') && <th className="py-2.5 px-3">Master System Page Access</th>}
+                {visibleColumns.includes('counter_access') && <th className="py-2.5 px-3">MASTER SYSTEM COUNTER ACCESS</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1A1A1A]/10">
@@ -1187,6 +1352,7 @@ export default function MasterSetting() {
               ) : (
                 filteredUsers.map((u) => {
                   const name = u.user_name || u.username || 'N/A';
+                  const empName = u.emp_name || '—';
                   const isPassVisible = !!showPassword[u.id];
 
                   // Parse master access tags
@@ -1206,16 +1372,25 @@ export default function MasterSetting() {
                   return (
                     <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
                       {/* Actions (Extreme Left Column) */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-2 px-3 whitespace-nowrap">
                         {isMasterSettingModifyAllowed ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleOpenEdit(u)}
-                              className="px-3 py-1 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] font-bold text-[10.5px] uppercase tracking-wider transition-colors inline-flex items-center gap-1 shadow-xs cursor-pointer"
+                              className="p-1 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] rounded transition-colors inline-flex items-center justify-center cursor-pointer"
+                              title="Edit User"
                             >
-                              <Edit3 size={12} />
-                              <span>Edit</span>
+                              <Edit3 size={13} />
                             </button>
+                            {(currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim() === 'masteradmin' && (u.role || '').toLowerCase().trim() !== 'admin' && (
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded transition-colors inline-flex items-center justify-center cursor-pointer"
+                                title="Delete User"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <span className="text-[11px] font-semibold text-slate-400 italic">View Only</span>
@@ -1224,36 +1399,43 @@ export default function MasterSetting() {
 
                       {/* Employee ID Column */}
                       {visibleColumns.includes('employee_id') && (
-                        <td className="py-3.5 px-4 font-mono font-bold text-[#1A1A1A]/80 text-xs">
+                        <td className="py-2 px-3 font-mono font-bold text-[#1A1A1A]/80 text-xs whitespace-nowrap">
                           {u.employee_id || '—'}
+                        </td>
+                      )}
+
+                      {/* Emp Name Column (from HR FMS) */}
+                      {visibleColumns.includes('emp_name') && (
+                        <td className="py-2 px-3 font-semibold text-[#1A1A1A] whitespace-nowrap">
+                          <span className="font-serif text-xs">{empName}</span>
                         </td>
                       )}
 
                       {/* User Name Column */}
                       {visibleColumns.includes('user_name') && (
-                        <td className="py-3.5 px-4 font-semibold text-[#1A1A1A]">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-full bg-[#1A1A1A] text-[#C9A84C] border border-[#C9A84C]/30 flex items-center justify-center font-bold text-[10px] uppercase">
+                        <td className="py-2 px-3 font-semibold text-[#1A1A1A] whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 rounded-full bg-[#1A1A1A] text-[#C9A84C] border border-[#C9A84C]/30 flex items-center justify-center font-bold text-[9px] uppercase shrink-0">
                               {name.slice(0, 2)}
                             </div>
-                            <span className="font-serif text-sm">{name}</span>
+                            <span className="font-sans text-xs">{name}</span>
                           </div>
                         </td>
                       )}
 
                       {/* Role Column */}
                       {visibleColumns.includes('role') && (
-                        <td className="py-3.5 px-4 capitalize font-medium text-[#1A1A1A]/70">
-                          <div className="flex flex-col gap-1 items-start">
-                            <span className="px-2.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[10px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                        <td className="py-2 px-3 capitalize font-medium text-[#1A1A1A]/70 whitespace-nowrap">
+                          <div className="flex flex-col gap-0.5 items-start">
+                            <span className="px-1.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[9.5px] font-bold uppercase tracking-wider text-[#1A1A1A]">
                               {u.role || 'user'}
                             </span>
                             {u.can_self_assign ? (
-                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[9px] font-bold uppercase tracking-wider">
+                              <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[8.5px] font-bold uppercase tracking-wider">
                                 Self Assign: Enabled
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 bg-slate-50 text-slate-400 border border-slate-200 rounded text-[9px] font-bold uppercase tracking-wider">
+                              <span className="px-1.5 py-0.5 bg-slate-50 text-slate-400 border border-slate-200 rounded text-[8.5px] font-bold uppercase tracking-wider">
                                 Self Assign: Disabled
                               </span>
                             )}
@@ -1261,15 +1443,15 @@ export default function MasterSetting() {
                         </td>
                       )}
 
-                      {/* Shop Name Column (Single Edit Button Removed) */}
+                      {/* Shop Name Column */}
                       {visibleColumns.includes('shop_name') && (
-                        <td className="py-3.5 px-4 font-sans text-xs">
+                        <td className="py-2 px-3 font-sans text-xs whitespace-nowrap">
                           <div className="flex flex-wrap gap-1 max-w-[200px]">
                             {u.shop_name ? (
                               u.shop_name.split(',').map((s, i) => (
                                 <span
                                   key={i}
-                                  className="px-2 py-0.5 bg-[#1A1A1A]/5 text-[#1A1A1A] border border-[#1A1A1A]/10 rounded text-[10px] font-medium font-mono truncate max-w-[150px]"
+                                  className="px-1.5 py-0.5 bg-[#1A1A1A]/5 text-[#1A1A1A] border border-[#1A1A1A]/10 rounded text-[9.5px] font-medium font-mono truncate max-w-[120px]"
                                   title={s.trim()}
                                 >
                                   {s.trim()}
@@ -1284,24 +1466,24 @@ export default function MasterSetting() {
 
                       {/* Mobile Number Column */}
                       {visibleColumns.includes('number') && (
-                        <td className="py-3.5 px-4 font-mono text-xs text-[#1A1A1A]">
+                        <td className="py-2 px-3 font-mono text-xs text-[#1A1A1A] whitespace-nowrap">
                           {u.number || '—'}
                         </td>
                       )}
 
                       {/* Password Column */}
                       {visibleColumns.includes('password') && (
-                        <td className="py-3.5 px-4 font-mono">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[#1A1A1A] font-medium">
+                        <td className="py-2 px-3 font-mono whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[#1A1A1A] font-medium text-xs">
                               {isPassVisible ? u.password : '••••••••'}
                             </span>
                             <button
                               onClick={() => togglePasswordVisibility(u.id)}
-                              className="text-[#1A1A1A]/40 hover:text-[#C9A84C] p-1 transition-colors"
+                              className="text-[#1A1A1A]/40 hover:text-[#C9A84C] p-0.5 transition-colors cursor-pointer"
                               title={isPassVisible ? 'Hide Password' : 'Show Password'}
                             >
-                              {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                              {isPassVisible ? <EyeOff size={13} /> : <Eye size={13} />}
                             </button>
                           </div>
                         </td>
@@ -1428,8 +1610,20 @@ export default function MasterSetting() {
                 </div>
               </div>
 
-              {/* Credentials Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#FAFAFA] p-5 rounded-none border border-[#1A1A1A]/10">
+              {/* User Identity Details & Credentials Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-[#FAFAFA] p-5 rounded-none border border-[#1A1A1A]/10">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/60 mb-1.5">
+                    Employee ID
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingUser.employee_id || '—'}
+                    className="w-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold cursor-not-allowed"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/60 mb-1.5">
                     User Name
@@ -1439,6 +1633,31 @@ export default function MasterSetting() {
                     disabled
                     value={editingUser.user_name || editingUser.username || ''}
                     className="w-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/60 mb-1.5">
+                    Role
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingUser.role || 'user'}
+                    className="w-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold uppercase cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/60 mb-1.5">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="text"
+                    value={mobileInput}
+                    onChange={(e) => setMobileInput(e.target.value)}
+                    placeholder="Enter 10-digit mobile number"
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-semibold focus:outline-none focus:border-[#C9A84C]"
                   />
                 </div>
 

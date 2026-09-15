@@ -168,16 +168,31 @@ const Roster = () => {
     const handleSaveShift = async (e) => {
         e.preventDefault();
         try {
-            if (!shiftForm.shift_name || !shiftForm.label) {
+            const cleanName = (shiftForm.shift_name || '').trim();
+            const cleanLabel = (shiftForm.label || '').trim().toUpperCase();
+
+            if (!cleanName || !cleanLabel) {
                 toast.error('Shift Name and Shorthand Label are required');
+                return;
+            }
+
+            // Check duplicate shift_name locally before database insertion
+            const isDuplicateName = customShifts.some(s =>
+                s.shift_name &&
+                s.shift_name.toLowerCase().trim() === cleanName.toLowerCase() &&
+                s.id !== editingShiftId
+            );
+
+            if (isDuplicateName) {
+                toast.error(`A shift with name "${cleanName}" already exists.`);
                 return;
             }
 
             const preset = COLOR_PRESETS.find(p => p.name === shiftForm.color_preset) || COLOR_PRESETS[0];
 
             const payload = {
-                shift_name: shiftForm.shift_name,
-                label: shiftForm.label,
+                shift_name: cleanName,
+                label: cleanLabel,
                 start_time: shiftForm.start_time || null,
                 end_time: shiftForm.end_time || null,
                 color: preset.color,
@@ -205,25 +220,32 @@ const Roster = () => {
             await fetchCustomShifts();
         } catch (error) {
             console.error('Error saving custom shift:', error);
-            toast.error(error.message || 'Failed to save shift');
+            if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
+                toast.error('A shift with this name already exists.');
+            } else {
+                toast.error(error.message || 'Failed to save shift');
+            }
         }
     };
 
     const handleDeleteCustomShift = async (id, shiftName) => {
-        if (shiftName === 'General Shift' || shiftName === 'Day Off' || shiftName === 'Holiday') {
-            toast.error('Standard system shifts cannot be deleted');
-            return;
-        }
-
         if (!confirm(`Are you sure you want to delete the shift "${shiftName}"?`)) return;
 
         try {
-            const { error } = await supabase
-                .from('hr_management_custom_shift')
-                .delete()
-                .eq('id', id);
+            const isSysId = typeof id === 'string' && id.startsWith('sys-');
 
-            if (error) throw error;
+            if (!isSysId) {
+                // Delete custom shift stored in Supabase database table
+                const { error } = await supabase
+                    .from('hr_management_custom_shift')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+            }
+
+            // Also remove from local state list if it was a default shift or DB shift
+            setCustomShifts(prev => prev.filter(s => s.id !== id && s.shift_name !== shiftName));
 
             toast.success('Shift deleted successfully');
             await fetchCustomShifts();
@@ -233,7 +255,7 @@ const Roster = () => {
             }
         } catch (error) {
             console.error('Error deleting custom shift:', error);
-            toast.error('Failed to delete shift');
+            toast.error('Failed to delete shift: ' + (error.message || ''));
         }
     };
 
@@ -278,7 +300,10 @@ const Roster = () => {
             if (error || !data || data.length === 0) {
                 setCustomShifts(DEFAULT_SHIFTS);
             } else {
-                setCustomShifts(data);
+                // Combine default shifts with user custom shifts from DB (filtering out duplicate shift names if overridden)
+                const dbShiftNames = new Set(data.map(d => (d.shift_name || '').toLowerCase()));
+                const filteredDefaults = DEFAULT_SHIFTS.filter(ds => !dbShiftNames.has((ds.shift_name || '').toLowerCase()));
+                setCustomShifts([...filteredDefaults, ...data]);
             }
         } catch (error) {
             console.error('Error fetching custom shifts:', error);
@@ -374,13 +399,15 @@ const Roster = () => {
                 .from('hr_management_shift_roster')
                 .select('*')
                 .gte('date', fromDate)
-                .lte('date', toDate);
+                .lte('date', toDate)
+                .order('id', { ascending: true });
 
             if (error) throw error;
 
             const rosterMap = new Map();
             data?.forEach((roster) => {
-                const key = `${roster.employee_id}-${roster.date}`;
+                const empIdClean = roster.employee_id ? String(roster.employee_id).trim().toLowerCase() : '';
+                const key = `${empIdClean}-${roster.date}`;
                 rosterMap.set(key, roster);
             });
             setRosterData(rosterMap);
@@ -412,7 +439,8 @@ const Roster = () => {
 
     const getEmployeeRosterForDay = (employeeId, date) => {
         const dateStr = formatDate(date, 'yyyy-MM-dd');
-        const key = `${employeeId}-${dateStr}`;
+        const empIdClean = employeeId ? String(employeeId).trim().toLowerCase() : '';
+        const key = `${empIdClean}-${dateStr}`;
         const roster = rosterData.get(key);
 
         if (roster) {
@@ -557,8 +585,9 @@ const Roster = () => {
 
     const handleOpenAssignModal = (employeeId, date) => {
         const dateStr = formatDate(date, 'yyyy-MM-dd');
-        const existing = rosterData.get(`${employeeId}-${dateStr}`);
-        const employee = employees.find(emp => emp.employee_id === employeeId);
+        const empIdClean = employeeId ? String(employeeId).trim().toLowerCase() : '';
+        const existing = rosterData.get(`${empIdClean}-${dateStr}`);
+        const employee = employees.find(emp => emp.employee_id && String(emp.employee_id).trim().toLowerCase() === empIdClean);
 
         setSelectedEmployee(employee);
         setSelectedDate(date);
@@ -575,7 +604,8 @@ const Roster = () => {
 
     const handleOpenSlidePanel = (employee, date) => {
         const dateStr = formatDate(date, 'yyyy-MM-dd');
-        const existing = rosterData.get(`${employee.employee_id}-${dateStr}`);
+        const empIdClean = employee.employee_id ? String(employee.employee_id).trim().toLowerCase() : '';
+        const existing = rosterData.get(`${empIdClean}-${dateStr}`);
 
         setSelectedEmployee({
             ...employee,
@@ -678,6 +708,17 @@ const Roster = () => {
                     remark: editSlideForm.remark
                 });
                 currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            const { error: deleteError } = await supabase
+                .from('hr_management_shift_roster')
+                .delete()
+                .eq('employee_id', editSlideForm.employee_id)
+                .gte('date', formatDate(startDate, 'yyyy-MM-dd'))
+                .lte('date', formatDate(endDate, 'yyyy-MM-dd'));
+
+            if (deleteError) {
+                console.warn('Warning deleting existing roster entries before assign:', deleteError);
             }
 
             const { error } = await supabase
@@ -890,7 +931,7 @@ const Roster = () => {
     };
 
     return (
-        <div className="p-3 pl-7 pr-5 pd-0">
+        <div className="p-3 pl-7 pr-5 pb-8 h-full overflow-y-auto scrollbar-thin">
             {/* Header */}
             <div className="flex justify-between items-center mb-3">
                 <div>
@@ -1399,7 +1440,7 @@ const Roster = () => {
                                                                 {config.label}
                                                             </span>
                                                         </div>
-                                                        {schedule.shift_type !== 'Not Assigned' && schedule.shift_type !== 'Holiday' && schedule.start_time && (
+                                                        {schedule.shift_type !== 'Not Assigned' && schedule.shift_type !== 'Holiday' && schedule.start_time && schedule.end_time && (
                                                             <div className="text-[8px] text-gray-400 mt-0.5">
                                                                 {schedule.start_time.slice(0, 5)} - {schedule.end_time.slice(0, 5)}
                                                             </div>
@@ -2087,7 +2128,6 @@ const Roster = () => {
                                 </h4>
                                 <div className="space-y-2">
                                     {customShifts.map((shift) => {
-                                        const isSystem = ['General Shift', 'Day Off', 'Holiday'].includes(shift.shift_name);
                                         return (
                                             <div key={shift.id} className="flex items-center justify-between p-2.5 bg-white border border-gray-200 rounded hover:border-gray-300 transition-colors">
                                                 <div className="flex items-center gap-3">
@@ -2097,7 +2137,7 @@ const Roster = () => {
                                                     <div>
                                                         <p className="text-xs font-semibold text-gray-800">{shift.shift_name}</p>
                                                         <p className="text-[10px] text-gray-500 font-mono mt-0.5">
-                                                            {shift.start_time ? `${shift.start_time.slice(0, 5)} - ${shift.end_time.slice(0, 5)}` : 'Non-timed (Day Off/Holiday)'}
+                                                            {shift.start_time && shift.end_time ? `${shift.start_time.slice(0, 5)} - ${shift.end_time.slice(0, 5)}` : 'Non-timed (Day Off/Holiday)'}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -2111,9 +2151,8 @@ const Roster = () => {
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteCustomShift(shift.id, shift.shift_name)}
-                                                        className={`p-1 rounded transition-colors ${isSystem ? 'text-gray-300 cursor-not-allowed' : 'text-slate-500 hover:text-red-600 hover:bg-red-50'}`}
-                                                        disabled={isSystem}
-                                                        title={isSystem ? 'System shifts cannot be deleted' : 'Delete Shift'}
+                                                        className="p-1 rounded transition-colors text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                                        title="Delete Shift"
                                                     >
                                                         <X size={12} />
                                                     </button>
