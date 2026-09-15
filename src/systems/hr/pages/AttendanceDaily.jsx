@@ -1211,10 +1211,13 @@ const AttendanceDaily = () => {
     setError(null);
 
     try {
-      let currentJoining = joiningData;
-      if (joiningData.length === 0) {
+      let currentJoining = joiningData || [];
+      if (currentJoining.length === 0) {
         try {
-          const jResponse = await fetch(JOINING_API_URL);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const jResponse = await fetch(JOINING_API_URL, { signal: controller.signal });
+          clearTimeout(timeoutId);
           if (jResponse.ok) {
             const jText = await jResponse.text();
             if (jText && !jText.trim().startsWith('<')) {
@@ -1241,20 +1244,24 @@ const AttendanceDaily = () => {
             }
           }
         } catch (e) {
-          console.warn('Could not fetch joining sheet:', e);
+          console.warn('Could not fetch joining sheet or timed out:', e);
         }
       }
 
+      let currentMapping = deviceMapping || [];
       const MASTER_MAP_URL = `https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=MASTER&action=fetch`;
       try {
-        const dmResponse = await fetch(MASTER_MAP_URL);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const dmResponse = await fetch(MASTER_MAP_URL, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (dmResponse.ok) {
           const dmText = await dmResponse.text();
           if (dmText && !dmText.trim().startsWith('<')) {
             const dmResult = JSON.parse(dmText);
             if (dmResult && dmResult.success) {
               const rows = dmResult.data.slice(1);
-              const currentMapping = rows.map(r => ({
+              currentMapping = rows.map(r => ({
                 userId: r[5]?.toString().trim(),
                 name: r[6]?.toString().trim(),
                 deviceId: r[7]?.toString().trim(),
@@ -1266,7 +1273,7 @@ const AttendanceDaily = () => {
           }
         }
       } catch (e) {
-        console.warn('Could not fetch master map sheet:', e);
+        console.warn('Could not fetch master map sheet or timed out:', e);
       }
 
       let rawLogsData = [];
@@ -1276,8 +1283,11 @@ const AttendanceDaily = () => {
         const allResponses = await Promise.all(
           otherDevices.map(async (device) => {
             try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 5000);
               const url = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${device.serial}&DeviceName=${device.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
-              const res = await fetch(url);
+              const res = await fetch(url, { signal: controller.signal });
+              clearTimeout(timeoutId);
               if (!res.ok) return [];
               const text = await res.text();
               if (!text || text.trim().startsWith('<')) return [];
@@ -1292,8 +1302,11 @@ const AttendanceDaily = () => {
         rawLogsData = allResponses.flat();
       } else {
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
           const API_URL = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${selectedDevice.serial}&DeviceName=${selectedDevice.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
-          const response = await fetch(API_URL);
+          const response = await fetch(API_URL, { signal: controller.signal });
+          clearTimeout(timeoutId);
           if (response.ok) {
             const text = await response.text();
             if (text && !text.trim().startsWith('<')) {
@@ -1372,11 +1385,12 @@ const AttendanceDaily = () => {
           (e.name && e.name.toLowerCase() === code.toLowerCase())
         );
 
-        let dMap = currentMapping.find(m => m.userId && m.userId.toString().toLowerCase() === code.toLowerCase());
+        const mappingList = Array.isArray(currentMapping) ? currentMapping : [];
+        let dMap = mappingList.find(m => m.userId && m.userId.toString().toLowerCase() === code.toLowerCase());
 
         if (!dMap) {
           const entryName = (empMeta?.name || code).toString().trim().toLowerCase();
-          dMap = currentMapping.find(m => m.name && m.name.toString().toLowerCase() === entryName);
+          dMap = mappingList.find(m => m.name && m.name.toString().toLowerCase() === entryName);
         }
 
         const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNumeric ? 'Unknown' : code));
@@ -4022,24 +4036,27 @@ const AttendanceDaily = () => {
                     {/* Month Picker */}
                     <div className="flex items-center gap-1 bg-white/10 border border-white/10 rounded-xl px-1.5 py-1">
                       <button
-                        onClick={() => {
-                          const newM = new Date(previewModal.month);
-                          newM.setMonth(newM.getMonth() - 1);
-                          setPreviewModal({ ...previewModal, month: newM });
+                        onClick={async () => {
+                          const newM = new Date(previewModal.month.getFullYear(), previewModal.month.getMonth() - 1, 1);
+                          setPreviewModal(prev => ({ ...prev, month: newM, loading: true }));
+                          await fetchAttendanceFromDB(newM);
+                          setPreviewModal(prev => ({ ...prev, loading: false }));
                         }}
                         className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
                         title="Previous Month"
                       >
                         <ChevronLeft size={14} />
                       </button>
-                      <span className="text-xs font-semibold text-white px-2 min-w-[110px] text-center">
+                      <span className="text-xs font-semibold text-white px-2 min-w-[110px] text-center flex items-center justify-center gap-1">
+                        {previewModal.loading && <Loader2 size={12} className="animate-spin text-indigo-300" />}
                         {monthNames[previewModal.month.getMonth()]} {previewModal.month.getFullYear()}
                       </span>
                       <button
-                        onClick={() => {
-                          const newM = new Date(previewModal.month);
-                          newM.setMonth(newM.getMonth() + 1);
-                          setPreviewModal({ ...previewModal, month: newM });
+                        onClick={async () => {
+                          const newM = new Date(previewModal.month.getFullYear(), previewModal.month.getMonth() + 1, 1);
+                          setPreviewModal(prev => ({ ...prev, month: newM, loading: true }));
+                          await fetchAttendanceFromDB(newM);
+                          setPreviewModal(prev => ({ ...prev, loading: false }));
                         }}
                         className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
                         title="Next Month"
@@ -4103,7 +4120,13 @@ const AttendanceDaily = () => {
 
               {/* Modal Body Content */}
               <div className="flex-1 overflow-y-auto p-5 bg-slate-50 min-h-0">
-                {previewModal.tab === 'timecard' ? (
+                {previewModal.loading ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                    <Loader2 size={32} className="animate-spin text-indigo-600 mb-3" />
+                    <p className="text-sm font-semibold text-slate-700">Loading attendance data...</p>
+                    <p className="text-xs text-slate-400 mt-1">Fetching logs & rosters for {monthNames[previewModal.month.getMonth()]} {previewModal.month.getFullYear()}</p>
+                  </div>
+                ) : previewModal.tab === 'timecard' ? (
                   /* PAGE 1: TIMECARD VIEW */
                   <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
@@ -4197,7 +4220,7 @@ const AttendanceDaily = () => {
                   /* PAGE 2: TIMELINE VIEW (Visual Work Progress & Segment Graphs) */
                   <div className="space-y-3">
                     {dayRows.map((row) => {
-                      const hasPunches = row.inTimeFormatted || row.outTimeFormatted;
+                      const hasPunches = Boolean(row.inTimeFormatted || row.outTimeFormatted);
                       const isAbsent = row.status === 'Absent';
                       const isOnLeave = row.status === 'On Leave';
                       const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
@@ -4246,26 +4269,26 @@ const AttendanceDaily = () => {
                             <div className="pt-1">
                               <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
                                 <span>Scheduled Start ({row.scheduledStartStr})</span>
-                                <span>Lunch Break ({row.lunchStr})</span>
+                                <span>Standard Lunch ({row.lunchStr})</span>
                                 <span>Scheduled End ({row.scheduledEndStr})</span>
                               </div>
                               <div className="h-6 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200">
-                                {/* Segment 1: Work Before Lunch */}
+                                {/* Segment 1: Morning Shift */}
                                 <div className="bg-emerald-500 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider shadow-inner">
-                                  WORK HOURS
+                                  MORNING SHIFT
                                 </div>
                                 {/* Segment 2: Lunch Break */}
                                 <div className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold border-x border-amber-300">
                                   LUNCH
                                 </div>
-                                {/* Segment 3: Work After Lunch or Incomplete */}
+                                {/* Segment 3: Evening Shift */}
                                 {row.outTimeFormatted ? (
                                   <div className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider shadow-inner">
-                                    WORK HOURS
+                                    EVENING SHIFT
                                   </div>
                                 ) : (
                                   <div className="bg-amber-500/30 border-l border-dashed border-amber-400 flex-1 flex items-center justify-center text-amber-900 text-[10px] font-semibold animate-pulse">
-                                    INCOMPLETE (Punch Out Missing)
+                                    PUNCH OUT PENDING
                                   </div>
                                 )}
                               </div>

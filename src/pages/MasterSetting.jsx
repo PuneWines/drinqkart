@@ -898,16 +898,23 @@ export default function MasterSetting() {
         }
 
         if (targetEmpId) {
+          const userRoleLower = (editingUser.role || '').toLowerCase().trim();
+          let newDesignation = 'Employee';
+          if (userRoleLower === 'manager') newDesignation = 'Manager';
+          else if (userRoleLower === 'hod') newDesignation = 'HOD';
+          else if (userRoleLower === 'admin') newDesignation = 'Admin';
+
           const { error: hrErr } = await supabase
             .from('hr_management_employees')
             .update({
               status: hrStatusVal,
-              joining_company_name: primaryShopVal
+              joining_company_name: primaryShopVal,
+              designation: newDesignation
             })
             .eq('employee_id', targetEmpId);
 
           if (hrErr) {
-            console.error('Could not sync status/shop to hr_management_employees:', hrErr);
+            console.error('Could not sync status/shop/designation to hr_management_employees:', hrErr);
           }
         }
 

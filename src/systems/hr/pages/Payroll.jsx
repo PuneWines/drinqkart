@@ -272,10 +272,10 @@ const Payroll = () => {
             // 4. Build data rows
             const headers = [
                 'Name',
-                'Basic salary',
+                'Salary',
                 'Total days',
                 'Attendance',
-                'Extra 2 days',
+                'Extra Days',
                 'Advance',
                 'Brakeges',
                 'Medical',
@@ -441,7 +441,7 @@ const Payroll = () => {
                 'Name',
                 'Month',
                 'Year',
-                'Basic Salary',
+                'Salary',
                 'Total Days',
                 'Present',
                 'Extra Days',
@@ -1169,7 +1169,8 @@ const Payroll = () => {
                                                 let cellClass = "px-4 py-2.5 text-slate-700 font-sans text-center";
                                                 let content = cell;
 
-                                                const isCurrency = headerName === 'basic salary' ||
+                                                const isCurrency = headerName === 'salary' ||
+                                                    headerName === 'basic salary' ||
                                                     headerName === 'basic salary (prorated)' ||
                                                     headerName === 'advance' ||
                                                     headerName === 'fix advance' ||
@@ -1188,7 +1189,7 @@ const Payroll = () => {
                                                 } else if (isCurrency) {
                                                     cellClass = "px-4 py-2.5 font-mono text-slate-600 text-right";
                                                     content = cell > 0 ? `₹${Number(cell).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}` : '-';
-                                                } else if (headerName === 'attendance' || headerName === 'extra 2 days') {
+                                                } else if (headerName === 'attendance' || headerName === 'extra days' || headerName === 'extra 2 days') {
                                                     cellClass = "px-4 py-2.5 text-indigo-600 font-bold text-center";
                                                 } else if (headerName === 'total days') {
                                                     cellClass = "px-4 py-2.5 text-center text-slate-500 font-mono";

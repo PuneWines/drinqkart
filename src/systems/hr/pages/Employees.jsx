@@ -626,6 +626,49 @@ export default function EmployeeManagement() {
         throw hrError
       }
 
+      // Sync created user if matching user exists in users table
+      try {
+        const empIdStr = (formData.employee_id || '').toString().trim();
+        const empNameStr = (formData.name_as_per_aadhar || '').toString().trim();
+        const desigLower = (formData.designation || '').toLowerCase().trim();
+        let targetRole = 'user';
+        if (desigLower === 'manager') targetRole = 'manager';
+        else if (desigLower === 'hod') targetRole = 'hod';
+        else if (desigLower === 'admin') targetRole = 'admin';
+
+        let targetUser = null;
+        if (empIdStr) {
+          const { data: uByEmp } = await supabase
+            .from('users')
+            .select('id')
+            .eq('employee_id', empIdStr)
+            .maybeSingle();
+          if (uByEmp) targetUser = uByEmp;
+        }
+
+        if (!targetUser && empNameStr) {
+          const { data: allUsers } = await supabase.from('users').select('id, user_name');
+          if (allUsers && allUsers.length > 0) {
+            const eClean = empNameStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+            targetUser = allUsers.find(u => {
+              const uNameClean = (u.user_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return uNameClean && eClean && (uNameClean === eClean || uNameClean.startsWith(eClean) || eClean.startsWith(uNameClean));
+            });
+          }
+        }
+
+        if (targetUser) {
+          const uPayload = {
+            role: targetRole,
+            shop_name: formData.joining_company_name || null
+          };
+          if (empIdStr) uPayload.employee_id = empIdStr;
+          await supabase.from('users').update(uPayload).eq('id', targetUser.id);
+        }
+      } catch (uSyncErr) {
+        console.warn('Could not sync new HR employee to users table:', uSyncErr);
+      }
+
       await fetchEmployees()
       alert(`Employee added successfully! ID: ${formData.employee_id}`)
       resetForm()
@@ -733,9 +776,16 @@ export default function EmployeeManagement() {
         }
 
         if (targetUser) {
+          const desigLower = (editFormData.designation || '').toLowerCase().trim();
+          let targetRole = 'user';
+          if (desigLower === 'manager') targetRole = 'manager';
+          else if (desigLower === 'hod') targetRole = 'hod';
+          else if (desigLower === 'admin') targetRole = 'admin';
+
           const userPayload = {
             shop_name: newShopName,
-            status: newStatus
+            status: newStatus,
+            role: targetRole
           };
           if (empIdStr) {
             userPayload.employee_id = empIdStr;

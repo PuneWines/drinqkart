@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, UserCheck, Clock, UserX, Briefcase, Calendar, TrendingUp, Award, PieChart, Filter, Search, AlertCircle, Eye } from 'lucide-react'
+import { Users, UserCheck, Clock, UserX, UserMinus, Briefcase, Calendar, TrendingUp, Award, PieChart, Filter, Search, AlertCircle, Eye } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function Dashboard() {
@@ -26,8 +26,10 @@ export default function Dashboard() {
     const [todayDate, setTodayDate] = useState('')
 
     // States for unified detailed employees modal and lists
+    const [allStoresList, setAllStoresList] = useState([])
     const [presentEmployeesList, setPresentEmployeesList] = useState([])
     const [absentEmployeesList, setAbsentEmployeesList] = useState([])
+    const [inactiveEmployeesList, setInactiveEmployeesList] = useState([])
     const [lateEmployeesList, setLateEmployeesList] = useState([])
     const [halfDayEmployeesList, setHalfDayEmployeesList] = useState([])
     // Modal filter states (search by name/id and filter by store)
@@ -42,44 +44,88 @@ export default function Dashboard() {
         type: 'Present'
     })
 
-    // Fetch employees and calculate stats
-    useEffect(() => {
-        const today = new Date()
-        const yyyy = today.getFullYear()
-        const mm = String(today.getMonth() + 1).padStart(2, '0')
-        const dd = String(today.getDate()).padStart(2, '0')
-        setTodayDate(`${yyyy}-${mm}-${dd}`)
-
-        fetchEmployees()
-        fetchTodayAttendance()
-    }, [])
-
-    const fetchEmployees = async () => {
+    // Centralized Data Fetch Routine (Single Source of Truth)
+    const fetchDashboardData = async () => {
         try {
             setLoading(true)
+            const today = new Date()
+            const yyyy = today.getFullYear()
+            const mm = String(today.getMonth() + 1).padStart(2, '0')
+            const dd = String(today.getDate()).padStart(2, '0')
+            const todayStr = `${yyyy}-${mm}-${dd}`
+            setTodayDate(todayStr)
 
-            // Fetch directly from hr_management_employees table
-            const { data: hrData, error } = await supabase
+            // 1. Fetch employee records from hr_management_employees
+            const { data: hrData, error: hrError } = await supabase
                 .from('hr_management_employees')
                 .select('*')
                 .order('created_at', { ascending: false })
 
-            if (error) throw error
-            const mappedList = hrData || []
+            if (hrError) throw hrError
 
-            // Calculate statistics
+            // 2. Fetch users table to cross-reference status set by Master Settings
+            const { data: usersData } = await supabase
+                .from('users')
+                .select('employee_id, user_name, username, status, shop_name')
+
+            const inactiveUsersMap = new Map()
+            usersData?.forEach(u => {
+                const uStatus = String(u.status || '').trim().toLowerCase()
+                if (uStatus === 'inactive') {
+                    if (u.employee_id) {
+                        inactiveUsersMap.set(String(u.employee_id).trim().toLowerCase(), u)
+                    }
+                    const uname = String(u.user_name || u.username || '').trim().toLowerCase()
+                    if (uname) {
+                        inactiveUsersMap.set(`name-${uname}`, u)
+                    }
+                }
+            })
+
+            // Normalize all employee records and compute status
+            const mappedList = (hrData || []).map((emp, index) => {
+                const cleanId = emp.employee_id ? String(emp.employee_id).trim() : ''
+                const empName = emp.name_as_per_aadhar ? String(emp.name_as_per_aadhar).trim() : ''
+                const empStore = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim()
+
+                let statusLower = String(emp.status || '').trim().toLowerCase()
+                if (cleanId && inactiveUsersMap.has(cleanId.toLowerCase())) {
+                    statusLower = 'inactive'
+                } else if (empName && inactiveUsersMap.has(`name-${empName.toLowerCase()}`)) {
+                    statusLower = 'inactive'
+                }
+
+                const isInactive = statusLower === 'inactive' || (statusLower !== 'active' && statusLower !== 'left')
+                const finalStatus = isInactive ? 'Inactive' : (statusLower === 'left' ? 'Left' : 'Active')
+
+                return {
+                    ...emp,
+                    employee_id: cleanId || '-',
+                    name_as_per_aadhar: emp.name_as_per_aadhar || 'Employee',
+                    designation: emp.designation || '',
+                    joining_place: empStore,
+                    status: finalStatus
+                }
+            })
+
+            // Calculate Employee Statistics
             const total = mappedList.length
-            const active = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'active').length
-            const inactive = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'inactive').length
-            const left = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'left').length
+            const activeList = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'active')
+            const inactiveList = mappedList.filter(emp => {
+                const s = String(emp.status || '').trim().toLowerCase()
+                return s === 'inactive' || (s !== 'active' && s !== 'left')
+            })
+            const leftList = mappedList.filter(emp => (emp.status || '').toLowerCase() === 'left')
 
-            // Calculate left this month
+            const active = activeList.length
+            const inactive = inactiveList.length
+            const left = leftList.length
+
             const currentDate = new Date()
             const currentMonth = currentDate.getMonth()
             const currentYear = currentDate.getFullYear()
 
-            const leftThisMonth = mappedList.filter(emp => {
-                if ((emp.status || '').toLowerCase() !== 'left') return false
+            const leftThisMonth = leftList.filter(emp => {
                 const leftDate = new Date(emp.updated_at || emp.created_at)
                 return leftDate.getMonth() === currentMonth && leftDate.getFullYear() === currentYear
             }).length
@@ -89,13 +135,13 @@ export default function Dashboard() {
             setInactiveEmployee(inactive)
             setLeftEmployee(left)
             setLeaveThisMonth(leftThisMonth)
+            setInactiveEmployeesList(inactiveList)
 
-            // Get recent employees (last 5)
-            const recent = mappedList.slice(0, 5)
-            setRecentEmployees(recent)
+            // Recent employees (last 5)
+            setRecentEmployees(mappedList.slice(0, 5))
 
-            // Calculate status distribution for pie chart
-            const statusData = [
+            // Pie chart status distribution
+            setStatusDistribution([
                 {
                     name: 'Active',
                     count: active,
@@ -123,50 +169,20 @@ export default function Dashboard() {
                     badgeColor: 'bg-red-100 text-red-700',
                     textColor: 'text-red-600'
                 }
-            ]
-            setStatusDistribution(statusData)
+            ])
 
-        } catch (error) {
-            console.error('Error fetching employees:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    // Fetch today's attendance statistics from hr_management_attendance_logs and categorize employees
-    const fetchTodayAttendance = async () => {
-        try {
-            const today = new Date()
-            const yyyy = today.getFullYear()
-            const mm = String(today.getMonth() + 1).padStart(2, '0')
-            const dd = String(today.getDate()).padStart(2, '0')
-            const todayStr = `${yyyy}-${mm}-${dd}`
-
-            // 1. Fetch active employees list from hr_management_employees table
+            // Build active employees map for attendance log matching
             const activeEmployeesMap = new Map()
+            const masterStores = new Set()
+            mappedList.forEach((emp, index) => {
+                if (emp.joining_place) masterStores.add(emp.joining_place)
+                if (emp.status === 'Active') {
+                    const cleanId = emp.employee_id !== '-' ? emp.employee_id : `no-id-${index}`
+                    activeEmployeesMap.set(cleanId.toLowerCase(), emp)
+                }
+            })
 
-            const { data: hrData } = await supabase
-                .from('hr_management_employees')
-                .select('employee_id, name_as_per_aadhar, designation, joining_place, status')
-
-            if (hrData) {
-                hrData.forEach(emp => {
-                    const statusLower = (emp.status || '').toLowerCase()
-                    if (emp.employee_id && (statusLower === 'active' || statusLower === '')) {
-                        const cleanId = emp.employee_id.toString().trim()
-                        if (!activeEmployeesMap.has(cleanId)) {
-                            activeEmployeesMap.set(cleanId, {
-                                employee_id: cleanId,
-                                name_as_per_aadhar: emp.name_as_per_aadhar || 'Employee',
-                                designation: emp.designation || '',
-                                joining_place: emp.joining_place || ''
-                            })
-                        }
-                    }
-                })
-            }
-
-            // 2. Fetch today's attendance logs from hr_management_attendance_logs
+            // 3. Fetch today's attendance logs
             const { data: attendanceLogs, error: attError } = await supabase
                 .from('hr_management_attendance_logs')
                 .select('*')
@@ -177,7 +193,7 @@ export default function Dashboard() {
             const logsMap = new Map()
             attendanceLogs?.forEach(log => {
                 if (log.employee_id) {
-                    logsMap.set(log.employee_id.toString().trim(), log)
+                    logsMap.set(String(log.employee_id).trim().toLowerCase(), log)
                 }
             })
 
@@ -187,7 +203,7 @@ export default function Dashboard() {
             const halfDayList = []
             const processedEmpIds = new Set()
 
-            // Process all active employees
+            // Categorize active employees against attendance logs
             activeEmployeesMap.forEach((emp, empId) => {
                 processedEmpIds.add(empId)
                 const log = logsMap.get(empId)
@@ -197,7 +213,7 @@ export default function Dashboard() {
                         ...emp,
                         name_as_per_aadhar: log.employee_name || emp.name_as_per_aadhar,
                         designation: log.designation || emp.designation,
-                        joining_place: log.store_name || emp.joining_place,
+                        joining_place: (log.store_name && log.store_name.trim()) ? log.store_name : emp.joining_place,
                         in_time: log.in_time,
                         out_time: log.out_time,
                         late_minute: log.late_minute || 0,
@@ -214,22 +230,21 @@ export default function Dashboard() {
                         presentList.push(empWithLog)
                     }
                 } else {
-                    const empAbsent = {
+                    absentList.push({
                         ...emp,
                         status: 'Absent',
                         in_time: null,
                         out_time: null,
                         late_minute: null
-                    }
-                    absentList.push(empAbsent)
+                    })
                 }
             })
 
-            // Process any additional logs from hr_management_attendance_logs not in active employees list
+            // Process any additional logs from hr_management_attendance_logs not in active map
             attendanceLogs?.forEach(log => {
-                const logEmpId = log.employee_id ? log.employee_id.toString().trim() : null
-                if (logEmpId && !processedEmpIds.has(logEmpId)) {
-                    processedEmpIds.add(logEmpId)
+                const logEmpId = log.employee_id ? String(log.employee_id).trim() : null
+                if (logEmpId && !processedEmpIds.has(logEmpId.toLowerCase())) {
+                    processedEmpIds.add(logEmpId.toLowerCase())
                     const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
                     const empFromLog = {
                         employee_id: logEmpId,
@@ -254,6 +269,22 @@ export default function Dashboard() {
                 }
             })
 
+            // Fetch shops from shop table as well to guarantee all store locations are listed
+            try {
+                const { data: shopsData } = await supabase.from('shop').select('shop_name')
+                if (shopsData) {
+                    shopsData.forEach(s => {
+                        if (s.shop_name && s.shop_name.trim()) masterStores.add(s.shop_name.trim())
+                    })
+                }
+            } catch (e) {
+                console.error('Error fetching shop table:', e)
+            }
+
+            const defaultMasterShops = ['AKOLE', 'BALAJI', 'BAWDHAN', 'FRIENDS', 'HINJEWADI', 'KHARGHAR', 'MADHURA', 'MUMBAI', 'OFFICE', 'TLS', 'WAGHOLI']
+            defaultMasterShops.forEach(s => masterStores.add(s))
+
+            setAllStoresList(Array.from(masterStores).sort())
             setPresentEmployeesList(presentList)
             setLateEmployeesList(lateList)
             setAbsentEmployeesList(absentList)
@@ -269,9 +300,15 @@ export default function Dashboard() {
             })
 
         } catch (error) {
-            console.error('Error fetching today\'s attendance:', error)
+            console.error('Error fetching dashboard data:', error)
+        } finally {
+            setLoading(false)
         }
     }
+
+    useEffect(() => {
+        fetchDashboardData()
+    }, [])
 
     const handleCardClick = (type) => {
         let title = ''
@@ -299,6 +336,11 @@ export default function Dashboard() {
                 subtitle = `Employees marked on half day for ${todayDate}`
                 employeesList = halfDayEmployeesList
                 break
+            case 'Inactive':
+                title = 'Inactive Employees'
+                subtitle = `Employees currently with Inactive status`
+                employeesList = inactiveEmployeesList
+                break
             default:
                 return
         }
@@ -315,10 +357,9 @@ export default function Dashboard() {
         })
     }
 
-    // Refresh attendance data (can be called after sync)
+    // Refresh attendance data (can be called after sync or manual click)
     const refreshAttendance = async () => {
-        await fetchTodayAttendance()
-        await fetchEmployees()
+        await fetchDashboardData()
     }
 
     const formatTimeIST = (timeStr) => {
@@ -500,7 +541,7 @@ export default function Dashboard() {
             ) : (
                 <>
                     {/* ── Today's Attendance Stat Cards ── */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
                         {/* Present */}
                         <div
                             onClick={() => handleCardClick('Present')}
@@ -553,7 +594,7 @@ export default function Dashboard() {
                                 <div className="space-y-1">
                                     <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Absent</p>
                                     <p className="text-3xl font-extrabold text-slate-900">{todayAttendance.absent}</p>
-                                    <p className="text-xs text-slate-400 font-medium">No log today</p>
+                                    <p className="text-xs text-slate-400 font-medium">Active emps absent</p>
                                 </div>
                                 <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-rose-400 to-red-500 flex items-center justify-center shadow-md shadow-red-200 group-hover:scale-110 transition-transform">
                                     <UserX size={20} className="text-white" />
@@ -575,6 +616,24 @@ export default function Dashboard() {
                                 </div>
                                 <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-md shadow-yellow-200 group-hover:scale-110 transition-transform">
                                     <AlertCircle size={20} className="text-white" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Inactive Employees */}
+                        <div
+                            onClick={() => handleCardClick('Inactive')}
+                            className="group relative bg-white rounded-2xl border border-slate-200/80 p-5 cursor-pointer hover:shadow-lg hover:shadow-amber-100/50 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                        >
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-slate-400 to-amber-500 rounded-l-2xl" />
+                            <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Inactive</p>
+                                    <p className="text-3xl font-extrabold text-slate-900">{inactiveEmployee}</p>
+                                    <p className="text-xs text-slate-400 font-medium">Inactive status</p>
+                                </div>
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-slate-400 to-amber-500 flex items-center justify-center shadow-md shadow-slate-200 group-hover:scale-110 transition-transform">
+                                    <UserMinus size={20} className="text-white" />
                                 </div>
                             </div>
                         </div>
@@ -762,6 +821,7 @@ export default function Dashboard() {
                                             'Late': <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center"><Clock size={18} className="text-orange-600" /></div>,
                                             'Absent': <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center"><UserX size={18} className="text-red-600" /></div>,
                                             'Half Day': <div className="w-8 h-8 rounded-lg bg-yellow-100 flex items-center justify-center"><AlertCircle size={18} className="text-yellow-600" /></div>,
+                                            'Inactive': <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center"><UserMinus size={18} className="text-amber-600" /></div>,
                                         };
                                         return iconMap[detailModal.type] || iconMap['Present'];
                                     })()}
@@ -788,13 +848,48 @@ export default function Dashboard() {
 
                         {/* Modal Filter Toolbar */}
                         {(() => {
-                            // Extract unique store names for dropdown
-                            const uniqueStores = Array.from(new Set(detailModal.employees.map(e => e.joining_place || e.shop_name).filter(Boolean))).sort();
+                            // Exact mapping requested by user:
+                            // Dropdown displays Location -> Internal filter maps to Shop Name
+                            const locationToShopMap = {
+                                'BAVDHAN': 'MADHURA',
+                                'BAWDHAN': 'MADHURA',
+                                'HINJEWADI': 'VISHAL',
+                                'WAGHOLI': 'FRIENDS',
+                                'AKOLE': 'BALAJI',
+                                'MUMBAI': 'KUNAL',
+                                'KHARGHAR': 'KUNAL KHARGHAR'
+                            };
+
+                            // Reverse lookup: Shop Name -> Location
+                            const shopToLocationMap = {
+                                'MADHURA': 'BAVDHAN',
+                                'VISHAL': 'HINJEWADI',
+                                'FRIENDS': 'WAGHOLI',
+                                'BALAJI': 'AKOLE',
+                                'KUNAL': 'MUMBAI',
+                                'KUNAL KHARGHAR': 'KHARGHAR'
+                            };
+
+                            // List of Location options to display in the dropdown
+                            const dropDownLocations = ['AKOLE', 'BAVDHAN', 'HINJEWADI', 'KHARGHAR', 'MUMBAI', 'WAGHOLI'];
+
                             const filteredModalEmps = detailModal.employees.filter(emp => {
                                 const nameOrId = `${emp.name_as_per_aadhar || ''} ${emp.employee_id || ''}`.toLowerCase();
                                 const matchesSearch = !modalSearchTerm || nameOrId.includes(modalSearchTerm.toLowerCase());
-                                const empStore = (emp.joining_place || emp.shop_name || '').trim();
-                                const matchesStore = modalSelectedStore === 'ALL' || empStore.toLowerCase() === modalSelectedStore.toLowerCase();
+                                const empStoreRaw = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim().toUpperCase();
+
+                                let matchesStore = true;
+                                if (modalSelectedStore !== 'ALL') {
+                                    const selectedLocationUpper = modalSelectedStore.trim().toUpperCase();
+                                    const targetShopUpper = (locationToShopMap[selectedLocationUpper] || selectedLocationUpper).toUpperCase();
+
+                                    // Match if employee record matches the mapped shop name OR the location directly
+                                    matchesStore = (
+                                        empStoreRaw === targetShopUpper ||
+                                        empStoreRaw === selectedLocationUpper ||
+                                        (selectedLocationUpper === 'BAVDHAN' && empStoreRaw === 'BAWDHAN')
+                                    );
+                                }
                                 return matchesSearch && matchesStore;
                             });
 
@@ -824,9 +919,9 @@ export default function Dashboard() {
                                                     onChange={(e) => setModalSelectedStore(e.target.value)}
                                                     className="appearance-none bg-white border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                                 >
-                                                    <option value="ALL">All Stores ({detailModal.employees.length})</option>
-                                                    {uniqueStores.map(store => (
-                                                        <option key={store} value={store}>{store}</option>
+                                                    <option value="ALL">All Stores</option>
+                                                    {dropDownLocations.map(locationName => (
+                                                        <option key={locationName} value={locationName}>{locationName}</option>
                                                     ))}
                                                 </select>
                                                 <Filter size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -860,13 +955,14 @@ export default function Dashboard() {
                                                     <tbody className="divide-y divide-slate-50">
                                                         {filteredModalEmps.map((emp, index) => (
                                                             <tr
-                                                                key={emp.employee_id}
+                                                                key={emp.employee_id ? `${emp.employee_id}-${index}` : `emp-${index}`}
                                                                 className={(() => {
                                                                     switch (detailModal.type) {
                                                                         case 'Present': return 'hover:bg-green-50/50 transition-colors';
                                                                         case 'Late': return 'hover:bg-orange-50/50 transition-colors';
                                                                         case 'Absent': return 'hover:bg-red-50/50 transition-colors';
                                                                         case 'Half Day': return 'hover:bg-yellow-50/50 transition-colors';
+                                                                        case 'Inactive': return 'hover:bg-amber-50/50 transition-colors';
                                                                         default: return 'hover:bg-slate-50 transition-colors';
                                                                     }
                                                                 })()}
@@ -878,8 +974,14 @@ export default function Dashboard() {
                                                                 <td className="px-4 py-3 text-slate-500">{emp.joining_place || '-'}</td>
                                                                 <td className="px-4 py-3">
                                                                     {(() => {
-                                                                        const currentStatus = emp.status || detailModal.type;
-                                                                        if (currentStatus === 'Late') {
+                                                                        const currentStatus = (emp.status || detailModal.type).toString();
+                                                                        if (detailModal.type === 'Inactive' || currentStatus.toLowerCase() === 'inactive') {
+                                                                            return (
+                                                                                <span className="text-xs text-amber-600 font-semibold flex items-center gap-1">
+                                                                                    <UserMinus size={12} /> Inactive
+                                                                                </span>
+                                                                            );
+                                                                        } else if (currentStatus === 'Late') {
                                                                             return (
                                                                                 <div className="flex flex-col">
                                                                                     <span className="text-xs text-orange-600 font-semibold flex items-center gap-1">
