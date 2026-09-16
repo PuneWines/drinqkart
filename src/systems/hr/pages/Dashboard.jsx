@@ -11,6 +11,8 @@ const LOCATION_TO_SHOP_MAP = {
     'WAGHOLI': 'FRIENDS',
     'AKOLE': 'BALAJI',
     'MUMBAI': 'KUNAL',
+    'ULWE': 'KUNAL ULWE',
+    'MUMBAI ULWE': 'KUNAL ULWE',
     'KHARGHAR': 'KUNAL KHARGHAR'
 };
 
@@ -21,6 +23,7 @@ const SHOP_TO_LOCATION_MAP = {
     'FRIENDS': 'WAGHOLI',
     'BALAJI': 'AKOLE',
     'KUNAL': 'MUMBAI',
+    'KUNAL ULWE': 'MUMBAI ULWE',
     'KUNAL KHARGHAR': 'KHARGHAR'
 };
 
@@ -42,17 +45,24 @@ export default function Dashboard() {
     // Helper: Extract user's authorized shops & locations (Set of uppercase shop names/locations)
     const getUserAuthorizedStores = () => {
         if (isUnrestrictedAdmin) return null; // Null means unrestricted/all stores
-        const rawAccess = currentUserObj?.user_access || currentUserObj?.shop_name || localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '';
-        if (!rawAccess) return null;
-        if (rawAccess.toLowerCase().trim() === 'all') return null;
+        const rawAccess = currentUserObj?.shop_name || currentUserObj?.user_access || localStorage.getItem('shop_name') || localStorage.getItem('user_access') || '';
+        if (!rawAccess || !rawAccess.trim()) return null;
+        const trimmed = rawAccess.toLowerCase().trim();
+        if (trimmed === 'all' || trimmed === 'no shop' || trimmed.includes('admin')) return null;
 
         const shops = new Set();
         const parts = rawAccess.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
         parts.forEach(p => {
-            shops.add(p);
-            // Add mapped shop name or location
-            if (LOCATION_TO_SHOP_MAP[p]) shops.add(LOCATION_TO_SHOP_MAP[p].toUpperCase());
-            if (SHOP_TO_LOCATION_MAP[p]) shops.add(SHOP_TO_LOCATION_MAP[p].toUpperCase());
+            if (p !== 'ALL' && p !== 'NO SHOP') {
+                shops.add(p);
+                if (LOCATION_TO_SHOP_MAP[p]) shops.add(LOCATION_TO_SHOP_MAP[p].toUpperCase());
+                if (SHOP_TO_LOCATION_MAP[p]) shops.add(SHOP_TO_LOCATION_MAP[p].toUpperCase());
+                if (p.includes(' ')) {
+                    p.split(' ').forEach(sub => {
+                        if (sub.length > 2) shops.add(sub.toUpperCase());
+                    });
+                }
+            }
         });
         return shops.size > 0 ? shops : null;
     };
@@ -111,24 +121,11 @@ export default function Dashboard() {
 
             const authShops = getUserAuthorizedStores();
 
-            // 1. Fetch employee records from hr_management_employees
+            // 1. Fetch all employee records from hr_management_employees
             let hrQuery = supabase
                 .from('hr_management_employees')
                 .select('*')
                 .order('created_at', { ascending: false });
-
-            // Apply database query filter if restricted to specific shop(s)
-            if (authShops && authShops.size > 0) {
-                const shopValues = Array.from(authShops);
-                // Standardize query filtering across joining_place/store_name/shop_name
-                const orConditions = [];
-                shopValues.forEach(val => {
-                    orConditions.push(`joining_place.ilike.%${val}%`);
-                    orConditions.push(`store_name.ilike.%${val}%`);
-                    orConditions.push(`shop_name.ilike.%${val}%`);
-                });
-                hrQuery = hrQuery.or(orConditions.join(','));
-            }
 
             const { data: hrData, error: hrError } = await hrQuery;
 
@@ -137,19 +134,21 @@ export default function Dashboard() {
             // 2. Fetch users table to cross-reference status set by Master Settings
             const { data: usersData } = await supabase
                 .from('users')
-                .select('employee_id, user_name, username, status, shop_name')
+                .select('*')
 
             const inactiveUsersMap = new Map()
             usersData?.forEach(u => {
                 const uStatus = String(u.status || '').trim().toLowerCase()
                 if (uStatus === 'inactive') {
-                    if (u.employee_id) {
-                        inactiveUsersMap.set(String(u.employee_id).trim().toLowerCase(), u)
-                    }
+                    const empId = u.employee_id ? String(u.employee_id).trim().toLowerCase() : ''
+                    const numId = parseInt(empId, 10)
                     const uname = String(u.user_name || u.username || '').trim().toLowerCase()
-                    if (uname) {
-                        inactiveUsersMap.set(`name-${uname}`, u)
-                    }
+                    const num = String(u.number || u.mobile || u.phone || '').trim().toLowerCase()
+
+                    if (empId) inactiveUsersMap.set(empId, u)
+                    if (!isNaN(numId)) inactiveUsersMap.set(String(numId), u)
+                    if (uname) inactiveUsersMap.set(`name-${uname}`, u)
+                    if (num) inactiveUsersMap.set(`num-${num}`, u)
                 }
             })
 
@@ -157,17 +156,27 @@ export default function Dashboard() {
             let mappedList = (hrData || []).map((emp, index) => {
                 const cleanId = emp.employee_id ? String(emp.employee_id).trim() : ''
                 const empName = emp.name_as_per_aadhar ? String(emp.name_as_per_aadhar).trim() : ''
+                const empMobile = (emp.candidate_mobile || emp.mobile_no || emp.mobile || '').toString().trim()
                 const empStore = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim()
 
-                let statusLower = String(emp.status || '').trim().toLowerCase()
+                let isUserInactive = false;
+                const numId = parseInt(cleanId, 10);
                 if (cleanId && inactiveUsersMap.has(cleanId.toLowerCase())) {
-                    statusLower = 'inactive'
+                    isUserInactive = true;
+                } else if (!isNaN(numId) && inactiveUsersMap.has(String(numId))) {
+                    isUserInactive = true;
                 } else if (empName && inactiveUsersMap.has(`name-${empName.toLowerCase()}`)) {
-                    statusLower = 'inactive'
+                    isUserInactive = true;
+                } else if (empMobile && inactiveUsersMap.has(`num-${empMobile.toLowerCase()}`)) {
+                    isUserInactive = true;
                 }
 
-                const isInactive = statusLower === 'inactive' || (statusLower !== 'active' && statusLower !== 'left')
-                const finalStatus = isInactive ? 'Inactive' : (statusLower === 'left' ? 'Left' : 'Active')
+                let finalStatus = 'Active';
+                if (isUserInactive) {
+                    finalStatus = 'Inactive';
+                } else if (String(emp.status || '').trim().toLowerCase() === 'left') {
+                    finalStatus = 'Left';
+                }
 
                 return {
                     ...emp,
@@ -179,13 +188,24 @@ export default function Dashboard() {
                 }
             })
 
-            // Double-check strictly in JS that no unauthorized employee bypasses query filter
-            if (authShops && authShops.size > 0) {
+            // Shop authorization filter: apply when non-admin user has specific assigned shops
+            if (authShops && authShops.size > 0 && !isUnrestrictedAdmin) {
                 mappedList = mappedList.filter(emp => {
-                    const empStoreUpper = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim().toUpperCase();
-                    if (!empStoreUpper) return false;
+                    const compUpper = (emp.joining_company_name || '').toString().trim().toUpperCase();
+                    const placeUpper = (emp.joining_place || '').toString().trim().toUpperCase();
+                    const transUpper = (emp.transferred_shop || '').toString().trim().toUpperCase();
+                    const fullUpper = `${compUpper} ${placeUpper} ${transUpper}`.trim();
+
+                    if (!fullUpper) return false;
+
                     for (const shop of authShops) {
-                        if (empStoreUpper.includes(shop) || shop.includes(empStoreUpper)) return true;
+                        const cleanShop = shop.toUpperCase();
+                        if (
+                            compUpper.includes(cleanShop) || cleanShop.includes(compUpper) ||
+                            placeUpper.includes(cleanShop) || cleanShop.includes(placeUpper) ||
+                            transUpper.includes(cleanShop) || cleanShop.includes(transUpper) ||
+                            fullUpper.includes(cleanShop)
+                        ) return true;
                     }
                     return false;
                 });
@@ -262,6 +282,9 @@ export default function Dashboard() {
                 if (emp.status === 'Active') {
                     const cleanId = emp.employee_id !== '-' ? emp.employee_id : `no-id-${index}`
                     activeEmployeesMap.set(cleanId.toLowerCase(), emp)
+                    if (emp.name_as_per_aadhar) {
+                        activeEmployeesMap.set(`name-${String(emp.name_as_per_aadhar).trim().toLowerCase()}`, emp)
+                    }
                 }
             })
 
@@ -276,7 +299,13 @@ export default function Dashboard() {
             const logsMap = new Map()
             attendanceLogs?.forEach(log => {
                 if (log.employee_id) {
-                    logsMap.set(String(log.employee_id).trim().toLowerCase(), log)
+                    const cleanLogId = String(log.employee_id).trim().toLowerCase()
+                    logsMap.set(cleanLogId, log)
+                    const numId = parseInt(cleanLogId, 10)
+                    if (!isNaN(numId)) logsMap.set(String(numId), log)
+                }
+                if (log.employee_name) {
+                    logsMap.set(`name-${String(log.employee_name).trim().toLowerCase()}`, log)
                 }
             })
 
@@ -287,9 +316,13 @@ export default function Dashboard() {
             const processedEmpIds = new Set()
 
             // Categorize active employees against attendance logs
-            activeEmployeesMap.forEach((emp, empId) => {
-                processedEmpIds.add(empId)
-                const log = logsMap.get(empId)
+            activeList.forEach((emp, index) => {
+                const cleanId = emp.employee_id !== '-' ? String(emp.employee_id).trim() : `no-id-${index}`
+                const empIdKey = cleanId.toLowerCase()
+                processedEmpIds.add(empIdKey)
+                const numId = parseInt(cleanId, 10)
+                const empName = emp.name_as_per_aadhar ? String(emp.name_as_per_aadhar).trim().toLowerCase() : ''
+                const log = logsMap.get(empIdKey) || (!isNaN(numId) ? logsMap.get(String(numId)) : null) || (empName ? logsMap.get(`name-${empName}`) : null)
                 if (log) {
                     const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
                     const empWithLog = {
@@ -326,7 +359,12 @@ export default function Dashboard() {
             // Process any additional logs from hr_management_attendance_logs not in active map
             attendanceLogs?.forEach(log => {
                 const logEmpId = log.employee_id ? String(log.employee_id).trim() : null
-                if (logEmpId && !processedEmpIds.has(logEmpId.toLowerCase())) {
+                const logEmpName = log.employee_name ? String(log.employee_name).trim().toLowerCase() : ''
+                
+                // Exclude if already processed or if user/employee is inactive
+                const isLogInactive = (logEmpId && inactiveUsersMap.has(logEmpId.toLowerCase())) || (logEmpName && inactiveUsersMap.has(`name-${logEmpName}`));
+                
+                if (logEmpId && !processedEmpIds.has(logEmpId.toLowerCase()) && !isLogInactive) {
                     processedEmpIds.add(logEmpId.toLowerCase())
                     const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
                     const empFromLog = {
@@ -391,7 +429,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         fetchDashboardData()
-    }, [])
+    }, [currentUserObj])
 
     const handleCardClick = (type) => {
         let title = ''
@@ -940,6 +978,8 @@ export default function Dashboard() {
                                 'WAGHOLI': 'FRIENDS',
                                 'AKOLE': 'BALAJI',
                                 'MUMBAI': 'KUNAL',
+                                'ULWE': 'KUNAL ULWE',
+                                'KUNAL ULWE': 'KUNAL ULWE',
                                 'KHARGHAR': 'KUNAL KHARGHAR'
                             };
 
@@ -950,11 +990,12 @@ export default function Dashboard() {
                                 'FRIENDS': 'WAGHOLI',
                                 'BALAJI': 'AKOLE',
                                 'KUNAL': 'MUMBAI',
+                                'KUNAL ULWE': 'ULWE',
                                 'KUNAL KHARGHAR': 'KHARGHAR'
                             };
 
                             // List of Location options to display in the dropdown
-                            const dropDownLocations = ['AKOLE', 'BAVDHAN', 'HINJEWADI', 'KHARGHAR', 'MUMBAI', 'WAGHOLI'];
+                            const dropDownLocations = ['AKOLE', 'BAVDHAN', 'HINJEWADI', 'KHARGHAR', 'MUMBAI', 'ULWE', 'KUNAL ULWE', 'WAGHOLI'];
 
                             const filteredModalEmps = detailModal.employees.filter(emp => {
                                 const nameOrId = `${emp.name_as_per_aadhar || ''} ${emp.employee_id || ''}`.toLowerCase();
@@ -984,6 +1025,21 @@ export default function Dashboard() {
                                 return authStores.has(loc.toUpperCase()) || authStores.has(mappedShop);
                             });
 
+                            // Helper function to get count of employees for a specific location/store option
+                            const getStoreEmpCount = (locationName) => {
+                                if (locationName === 'ALL') return detailModal.employees.length;
+                                const selectedLocationUpper = locationName.trim().toUpperCase();
+                                const targetShopUpper = (locationToShopMap[selectedLocationUpper] || selectedLocationUpper).toUpperCase();
+                                return detailModal.employees.filter(emp => {
+                                    const empStoreRaw = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim().toUpperCase();
+                                    return (
+                                        empStoreRaw === targetShopUpper ||
+                                        empStoreRaw === selectedLocationUpper ||
+                                        (selectedLocationUpper === 'BAVDHAN' && empStoreRaw === 'BAWDHAN')
+                                    );
+                                }).length;
+                            };
+
                             return (
                                 <>
                                     <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
@@ -1010,10 +1066,13 @@ export default function Dashboard() {
                                                     onChange={(e) => setModalSelectedStore(e.target.value)}
                                                     className="appearance-none bg-white border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                                 >
-                                                    {isUnrestrictedAdmin && <option value="ALL">All Stores</option>}
-                                                    {!isUnrestrictedAdmin && availableLocations.length > 1 && <option value="ALL">Authorized Stores</option>}
+                                                    <option value="ALL">
+                                                        {isUnrestrictedAdmin ? `All Stores (${getStoreEmpCount('ALL')})` : `Authorized Stores (${getStoreEmpCount('ALL')})`}
+                                                    </option>
                                                     {availableLocations.map(locationName => (
-                                                        <option key={locationName} value={locationName}>{locationName}</option>
+                                                        <option key={locationName} value={locationName}>
+                                                            {locationName} ({getStoreEmpCount(locationName)})
+                                                        </option>
                                                     ))}
                                                 </select>
                                                 <Filter size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

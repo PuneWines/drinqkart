@@ -370,7 +370,91 @@ export default function ProfilePage() {
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      let userQuery = supabase.from('users').select('*').ilike('user_name', userName).maybeSingle();
+      // Calculate current month range (e.g. 2026-09-01 to 2026-09-30)
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const firstDayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+      const lastDayNum = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const lastDayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`;
+
+      // 1. Fetch user data first
+      const { data: dbUser } = await supabase.from('users').select('*').ilike('user_name', userName).maybeSingle();
+
+      // 2. Resolve employee_id & name_as_per_aadhar & mobile_no from hr_management_employees
+      let empIdStr = (dbUser?.employee_id || profile?.employeeId || '').toString().trim();
+      let empAadharName = '';
+      let hrMobile = '';
+
+      if (empIdStr && empIdStr !== 'N/A') {
+        const { data: hrEmp } = await supabase
+          .from('hr_management_employees')
+          .select('employee_id, name_as_per_aadhar, mobile_no')
+          .eq('employee_id', empIdStr)
+          .maybeSingle();
+        if (hrEmp) {
+          empAadharName = hrEmp.name_as_per_aadhar || '';
+          hrMobile = (hrEmp.mobile_no || '').toString().trim();
+        }
+      }
+      if (!empAadharName && userName) {
+        const { data: hrEmpName } = await supabase
+          .from('hr_management_employees')
+          .select('employee_id, name_as_per_aadhar, mobile_no')
+          .ilike('name_as_per_aadhar', `%${userName}%`)
+          .maybeSingle();
+        if (hrEmpName) {
+          if (!empIdStr || empIdStr === 'N/A') empIdStr = hrEmpName.employee_id?.toString().trim();
+          empAadharName = hrEmpName.name_as_per_aadhar || '';
+          if (!hrMobile) hrMobile = (hrEmpName.mobile_no || '').toString().trim();
+        }
+      }
+
+      const finalMobile = hrMobile || (dbUser?.number || dbUser?.phone || dbUser?.mobile || '').toString().trim();
+
+      // Keep users table and localStorage in sync if mobile number changed
+      if (dbUser && finalMobile && dbUser.number !== finalMobile) {
+        supabase.from('users').update({ number: finalMobile }).eq('id', dbUser.id).then();
+      }
+
+      if (finalMobile) {
+        localStorage.setItem('number', finalMobile);
+        ['user', 'drinqkart_user', 'currentUser'].forEach(key => {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            try {
+              const obj = JSON.parse(raw);
+              obj.number = finalMobile;
+              obj.phone = finalMobile;
+              obj.mobile_no = finalMobile;
+              localStorage.setItem(key, JSON.stringify(obj));
+            } catch (e) {}
+          }
+        });
+      }
+
+      if (dbUser) {
+        const fetchedImage = dbUser.profile_image || dbUser.profile_pic || dbUser.image_url || '';
+        if (fetchedImage) localStorage.setItem('profile_image', fetchedImage);
+        setProfile(prev => ({
+          ...prev,
+          userName: dbUser.user_name || dbUser.username || dbUser.name || prev?.userName,
+          email: dbUser.email_id || dbUser.email || prev?.email,
+          number: finalMobile || prev?.number,
+          role: dbUser.role || prev?.role,
+          employeeId: dbUser.employee_id || dbUser.emp_id || dbUser.id?.toString() || prev?.employeeId,
+          primaryShop: dbUser.shop_name || prev?.primaryShop,
+          userAccess: dbUser.user_access || dbUser.user_Access || prev?.userAccess,
+          shopAccess: [dbUser.shop_name, dbUser.user_access, dbUser.user_Access].filter(Boolean).join(', ') || prev?.shopAccess,
+          counterAccess: dbUser.counter_access || dbUser.counterAccess || prev?.counterAccess,
+          accessStrings: dbUser.master_user_system_page_access || prev?.accessStrings
+        }));
+
+        if (dbUser.master_user_system_page_access) {
+          extractSystemsAccess(dbUser.master_user_system_page_access);
+        }
+      }
+
+      // 3. Prepare queries for tasks and attendance
       let checklistQuery = supabase.from('checklist').select('*').is('submission_date', null);
       if (!isAdmin) checklistQuery = checklistQuery.or(`name.ilike.${userName},given_by.ilike.${userName}`);
 
@@ -380,34 +464,33 @@ export default function ProfilePage() {
       let workQuery = supabase.from('work_task_new').select('*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required))').eq('current_date', todayStr).is('submission_date', null);
       if (!isAdmin) workQuery = workQuery.ilike('name', `%${userName}%`);
 
-      let attendanceQuery = supabase.from('hr_management_attendance_logs').select('*').order('attendance_date', { ascending: false });
-      if (!isAdmin) attendanceQuery = attendanceQuery.ilike('employee_name', userName);
-
-      const [userDbRes, checklistRes, delegationRes, workRes, attendanceRes] = await Promise.all([
-        userQuery, checklistQuery, delegationQuery, workQuery, attendanceQuery
-      ]);
-
-      if (userDbRes?.data) {
-        const dbUser = userDbRes.data;
-        const fetchedImage = dbUser.profile_image || dbUser.profile_pic || dbUser.image_url || '';
-        if (fetchedImage) localStorage.setItem('profile_image', fetchedImage);
-        setProfile(prev => ({
-          ...prev,
-          userName: dbUser.user_name || dbUser.username || dbUser.name || prev?.userName,
-          email: dbUser.email_id || dbUser.email || prev?.email,
-          number: dbUser.number || dbUser.phone || dbUser.mobile || prev?.number,
-          role: dbUser.role || prev?.role,
-          employeeId: dbUser.employee_id || dbUser.emp_id || dbUser.id?.toString() || prev?.employeeId,
-          profileImage: fetchedImage || prev?.profileImage,
-          shopAccess: dbUser.shop_name || dbUser.user_access || dbUser.user_Access || prev?.shopAccess,
-          counterAccess: dbUser.counter_access || dbUser.counterAccess || prev?.counterAccess,
-          accessStrings: dbUser.master_user_system_page_access || prev?.accessStrings
-        }));
-
-        if (dbUser.master_user_system_page_access) {
-          extractSystemsAccess(dbUser.master_user_system_page_access);
+      let attendanceQuery = supabase.from('hr_management_attendance_logs').select('*');
+      if (!isAdmin) {
+        const filters = [];
+        if (empIdStr && empIdStr !== 'N/A') {
+          filters.push(`employee_id.eq.${empIdStr}`);
+          const numericId = parseInt(empIdStr, 10);
+          if (!isNaN(numericId)) filters.push(`employee_id.eq.${numericId}`);
+        }
+        if (empAadharName) {
+          filters.push(`employee_name.ilike.%${empAadharName}%`);
+        }
+        if (userName) {
+          filters.push(`employee_name.ilike.%${userName}%`);
+        }
+        if (filters.length > 0) {
+          attendanceQuery = attendanceQuery.or(filters.join(','));
         }
       }
+
+      attendanceQuery = attendanceQuery
+        .gte('attendance_date', firstDayStr)
+        .lte('attendance_date', lastDayStr)
+        .order('attendance_date', { ascending: false });
+
+      const [checklistRes, delegationRes, workRes, attendanceRes] = await Promise.all([
+        checklistQuery, delegationQuery, workQuery, attendanceQuery
+      ]);
 
       const parseTaskDate = (str) => {
         if (!str) return null;
@@ -419,52 +502,37 @@ export default function ProfilePage() {
           }
           const d = new Date(str);
           if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); return d; }
-        } catch (e) {}
-        return null;
+          return null;
+        } catch (e) {
+          return null;
+        }
       };
 
+      const todayObj = todayStart;
+
       const checklistTasks = (checklistRes.data || []).map(t => {
-        const isExtended = t.status === 'extend' || t.status === 'extended';
-        const dateStr = (isExtended && t.next_extend_date) ? t.next_extend_date : (t.planned_date || t.task_start_date);
-        const taskDate = parseTaskDate(dateStr);
-        let dynamicTag = null, tagColor = '';
-        if (isExtended && taskDate && taskDate >= todayStart) {
-          dynamicTag = 'Extended'; tagColor = 'bg-purple-100 text-purple-800 border-purple-200';
-        } else if (taskDate && taskDate < todayStart) {
-          dynamicTag = 'Overdue'; tagColor = 'bg-rose-100 text-rose-800 border-rose-200';
-        } else if (taskDate && taskDate.getTime() === todayStart.getTime()) {
-          dynamicTag = 'Today'; tagColor = 'bg-amber-100 text-amber-900 border-amber-300';
-        }
-        if (!dynamicTag) return null;
+        const pDate = parseTaskDate(t.date || t.created_at);
+        if (pDate && pDate > todayObj) return null;
         return {
-          id: `chk-${t.id || t.task_id}`, systemType: 'Checklist', description: t.task_description || t.name || 'Checklist Task',
-          shop: t.shop_name || t.shop || 'N/A', assignedTo: t.name || 'N/A', givenBy: t.given_by || 'N/A', plannedDate: dateStr, dynamicTag, tagColor
+          id: t.id, task: t.task || 'Checklist Task', system: 'Checklist',
+          shop: t.shop_name || t.shop || 'N/A', assignedTo: t.name || 'N/A', givenBy: t.given_by || 'N/A', plannedDate: t.date, dynamicTag: 'Active', tagColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
         };
       }).filter(Boolean);
 
       const delegationTasks = (delegationRes.data || []).map(t => {
-        const isExtended = t.status === 'extend' || t.status === 'extended';
-        const dateStr = (isExtended && t.next_extend_date) ? t.next_extend_date : (t.planned_date || t.task_start_date);
-        const taskDate = parseTaskDate(dateStr);
-        let dynamicTag = null, tagColor = '';
-        if (isExtended && taskDate && taskDate >= todayStart) {
-          dynamicTag = 'Extended'; tagColor = 'bg-purple-100 text-purple-800 border-purple-200';
-        } else if (taskDate && taskDate < todayStart) {
-          dynamicTag = 'Overdue'; tagColor = 'bg-rose-100 text-rose-800 border-rose-200';
-        } else if (taskDate && taskDate.getTime() === todayStart.getTime()) {
-          dynamicTag = 'Today'; tagColor = 'bg-amber-100 text-amber-900 border-amber-300';
-        }
-        if (!dynamicTag) return null;
+        const pDate = parseTaskDate(t.task_date || t.created_at);
+        if (pDate && pDate > todayObj) return null;
         return {
-          id: `del-${t.id || t.task_id}`, systemType: 'Delegation', description: t.task_description || t.name || 'Delegation Task',
-          shop: t.shop_name || t.shop || 'N/A', assignedTo: t.name || t.assigned_person || 'N/A', givenBy: t.given_by || 'N/A', plannedDate: dateStr, dynamicTag, tagColor
+          id: t.id, task: t.task_description || t.task || 'Delegation Task', system: 'Delegation',
+          shop: t.shop_name || t.shop || 'N/A', assignedTo: t.assigned_person || t.name || 'N/A', givenBy: t.given_by || 'N/A', plannedDate: t.task_date, dynamicTag: 'Active', tagColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
         };
       }).filter(Boolean);
 
       const workTasks = (workRes.data || []).map(t => {
-        const master = t.task_assignments?.master_work_tasks || {};
+        const pDate = parseTaskDate(t.current_date || t.created_at);
+        if (pDate && pDate > todayObj) return null;
         return {
-          id: `work-${t.id}`, systemType: 'Work', description: t.task_description || master.task_name || 'Work Task',
+          id: t.id, task: t.task_description || t.task || 'Work Task', system: 'Work Details',
           shop: t.shop_name || t.shop || 'N/A', assignedTo: t.name || 'N/A', givenBy: t.manager_name || 'N/A', plannedDate: t.current_date, dynamicTag: 'Active', tagColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
         };
       }).filter(Boolean);
@@ -472,18 +540,49 @@ export default function ProfilePage() {
       const allCompiled = [...checklistTasks, ...delegationTasks, ...workTasks];
       setTasks(allCompiled);
 
-      const personalAttendance = attendanceRes.data || [];
+      let personalAttendance = attendanceRes.data || [];
+
+      // Fallback: If no logs found in month filter for non-admin, fetch all recent logs for employee
+      if (personalAttendance.length === 0 && !isAdmin) {
+        let fallbackQuery = supabase.from('hr_management_attendance_logs').select('*');
+        const filters = [];
+        if (empIdStr && empIdStr !== 'N/A') {
+          filters.push(`employee_id.eq.${empIdStr}`);
+          const numericId = parseInt(empIdStr, 10);
+          if (!isNaN(numericId)) filters.push(`employee_id.eq.${numericId}`);
+        }
+        if (empAadharName) filters.push(`employee_name.ilike.%${empAadharName}%`);
+        if (userName) filters.push(`employee_name.ilike.%${userName}%`);
+        if (filters.length > 0) fallbackQuery = fallbackQuery.or(filters.join(','));
+        const { data: fallbackData } = await fallbackQuery.order('attendance_date', { ascending: false }).limit(100);
+        if (fallbackData && fallbackData.length > 0) {
+          personalAttendance = fallbackData;
+        }
+      }
+
       setAttendanceLogs(personalAttendance);
 
       const totalLogs = personalAttendance.length;
-      const presentCount = personalAttendance.filter(log => ['present', 'late'].includes((log.status || '').toLowerCase())).length;
-      const absentCount = personalAttendance.filter(log => (log.status || '').toLowerCase() === 'absent').length;
-      const lateCount = personalAttendance.filter(log => (log.status || '').toLowerCase() === 'late').length;
+      const presentCount = personalAttendance.filter(log => {
+        const st = (log.status || '').toLowerCase();
+        return ['present', 'late', 'on time', 'half day', 'duty'].includes(st) || log.is_late;
+      }).length;
+
+      const absentCount = personalAttendance.filter(log => {
+        const st = (log.status || '').toLowerCase();
+        return st === 'absent' || st.includes('absent');
+      }).length;
+
+      const lateCount = personalAttendance.filter(log => {
+        const st = (log.status || '').toLowerCase();
+        return st === 'late' || st.includes('late') || log.is_late || (log.late_minute && log.late_minute > 0);
+      }).length;
+
       const missCount = personalAttendance.filter(log => (log.status || '').toLowerCase() === 'miss').length;
-      const attendancePercentage = totalLogs > 0 ? Math.round((presentCount / totalLogs) * 100) : 100;
+      const attendancePercentage = totalLogs > 0 ? Math.round(((presentCount - absentCount) / totalLogs) * 100) : 100;
 
       setAttendanceStats({
-        present: presentCount, absent: absentCount, late: lateCount, miss: missCount, total: totalLogs, percentage: attendancePercentage
+        present: presentCount, absent: absentCount, late: lateCount, miss: missCount, total: totalLogs, percentage: Math.max(0, attendancePercentage)
       });
 
     } catch (err) {
@@ -609,6 +708,8 @@ export default function ProfilePage() {
 
   if (!profile) return null;
 
+  const formattedPrimaryShops = formatList(profile.primaryShop);
+  const formattedUserAccess = formatList(profile.userAccess);
   const formattedShops = formatList(profile.shopAccess);
   const formattedCounters = formatList(profile.counterAccess);
 
@@ -883,16 +984,42 @@ export default function ProfilePage() {
                   {formattedShops.length} Shops
                 </span>
               </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {formattedShops.length === 0 ? (
-                  <span className="text-xs text-slate-500 italic">No shop access assigned</span>
-                ) : (
-                  formattedShops.map((shop, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-900 border border-slate-200/90 rounded-xl text-xs font-extrabold shadow-2xs hover:bg-slate-100 transition-colors">
-                      <Store className="w-3.5 h-3.5 text-slate-600" /> {shop}
-                    </span>
-                  ))
-                )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                {/* Column 1: Assigned Primary Shop Name */}
+                <div className="flex flex-col gap-2 p-3 bg-slate-50/80 rounded-xl border border-slate-200/70">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-slate-600" /> Assigned Shop Name
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {formattedPrimaryShops.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">No primary shop assigned</span>
+                    ) : (
+                      formattedPrimaryShops.map((shop, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-amber-400 rounded-lg text-xs font-black shadow-2xs">
+                          {shop}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Column 2: Assigned Access To (User Access) */}
+                <div className="flex flex-col gap-2 p-3 bg-slate-50/80 rounded-xl border border-slate-200/70">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-amber-600" /> Assigned Access To
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {formattedUserAccess.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">No additional shop access</span>
+                    ) : (
+                      formattedUserAccess.map((access, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-950 border border-amber-300 rounded-lg text-xs font-extrabold shadow-2xs">
+                          {access}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1053,6 +1180,59 @@ export default function ProfilePage() {
                 <span className="text-[10px] font-extrabold uppercase text-slate-700 block">Total Logs</span>
               </div>
             </div>
+
+            {/* Whole Month Attendance Detailed Logs Table */}
+            {attendanceLogs && attendanceLogs.length > 0 && (
+              <div className="mt-2 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                    Monthly Detailed Attendance Logs ({attendanceLogs.length} Days Recorded)
+                  </span>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto custom-scrollbar border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead className="bg-slate-100 text-slate-700 font-extrabold sticky top-0 border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5">Date</th>
+                        <th className="p-2.5">In Time</th>
+                        <th className="p-2.5">Out Time</th>
+                        <th className="p-2.5">Punched Location</th>
+                        <th className="p-2.5 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {attendanceLogs.map((log, idx) => {
+                        const st = (log.status || 'Present').toLowerCase();
+                        const isPresent = st.includes('present') || st.includes('on time') || st.includes('duty');
+                        const isLate = st.includes('late');
+                        const isAbsent = st.includes('absent');
+                        
+                        let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+                        if (isLate) badgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+                        else if (isPresent) badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                        else if (isAbsent) badgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
+
+                        const loc = log.store_name || log.punched_store_name || log.device_location || log.joining_place || '-';
+
+                        return (
+                          <tr key={log.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="p-2.5 font-bold text-slate-900">{log.attendance_date || '--'}</td>
+                            <td className="p-2.5 font-mono text-slate-700">{log.in_time || '--'}</td>
+                            <td className="p-2.5 font-mono text-slate-700">{log.out_time || '--'}</td>
+                            <td className="p-2.5 text-slate-600 font-medium">{loc}</td>
+                            <td className="p-2.5 text-right">
+                              <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${badgeClass}`}>
+                                {log.status || 'Present'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>

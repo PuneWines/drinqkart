@@ -640,21 +640,22 @@ export default function MasterSetting() {
         }
 
         const enrichedUsers = (usersData || []).map((u) => {
-          let mobileNum = '';
+          let mobileNum = (u.number || u.mobile || u.mobile_number || u.phone || '').toString().trim();
           let hrEmpName = '';
           const uEmpId = u.employee_id ? u.employee_id.toString().trim().toLowerCase() : '';
           const uName = (u.user_name || u.username || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-          if (uEmpId && empMapByEmpId.has(uEmpId)) {
-            mobileNum = empMapByEmpId.get(uEmpId);
-          } else if (uName && empMapByName.has(uName)) {
-            mobileNum = empMapByName.get(uName);
-          } else {
-            // Partial match fallback if full clean name match fails
-            for (const [empNameClean, mobile] of empMapByName.entries()) {
-              if (empNameClean && uName && (empNameClean.includes(uName) || uName.includes(empNameClean))) {
-                mobileNum = mobile;
-                break;
+          if (!mobileNum) {
+            if (uEmpId && empMapByEmpId.has(uEmpId)) {
+              mobileNum = empMapByEmpId.get(uEmpId);
+            } else if (uName && empMapByName.has(uName)) {
+              mobileNum = empMapByName.get(uName);
+            } else {
+              for (const [empNameClean, mobile] of empMapByName.entries()) {
+                if (empNameClean && uName && (empNameClean.includes(uName) || uName.includes(empNameClean))) {
+                  mobileNum = mobile;
+                  break;
+                }
               }
             }
           }
@@ -670,10 +671,6 @@ export default function MasterSetting() {
                 break;
               }
             }
-          }
-
-          if (!mobileNum) {
-            mobileNum = (u.number || u.mobile || u.mobile_number || u.phone || '').toString().trim();
           }
 
           return {
@@ -981,49 +978,53 @@ export default function MasterSetting() {
         const hrStatusVal = userStatusInput === 'active' ? 'Active' : 'Inactive';
         const empIdStr = (editingUser.employee_id || '').toString().trim();
         const userNameStr = finalUserName;
+        const oldMobile = (editingUser.number || editingUser.mobile || '').toString().trim();
 
         let targetEmpId = null;
 
-        // 1. Try matching by employee_id
-        if (empIdStr) {
-          const { data: hrByEmpId } = await supabase
-            .from('hr_management_employees')
-            .select('employee_id')
-            .eq('employee_id', empIdStr)
-            .maybeSingle();
+        // Query all employees to perform multi-stage matching
+        const { data: allEmps } = await supabase
+          .from('hr_management_employees')
+          .select('id, employee_id, name_as_per_aadhar, mobile_no, candidate_mobile');
 
-          if (hrByEmpId) {
-            targetEmpId = hrByEmpId.employee_id;
+        if (allEmps && allEmps.length > 0) {
+          // 1. Try matching by employee_id (string comparison)
+          if (empIdStr) {
+            const matched = allEmps.find(e => e.employee_id && String(e.employee_id).trim().toLowerCase() === empIdStr.toLowerCase());
+            if (matched) targetEmpId = matched.employee_id;
           }
-        }
 
-        // 2. Try matching by user_name vs name_as_per_aadhar
-        if (!targetEmpId && userNameStr) {
-          const { data: allEmps } = await supabase
-            .from('hr_management_employees')
-            .select('employee_id, name_as_per_aadhar');
+          // 2. Try matching by old or new mobile number
+          if (!targetEmpId && (oldMobile || finalMobile)) {
+            const cleanOld = oldMobile.replace(/[^0-9]/g, '');
+            const cleanNew = (finalMobile || '').replace(/[^0-9]/g, '');
+            const matched = allEmps.find(e => {
+              const eMob = String(e.mobile_no || e.candidate_mobile || '').replace(/[^0-9]/g, '');
+              return eMob && ((cleanOld && eMob === cleanOld) || (cleanNew && eMob === cleanNew));
+            });
+            if (matched) targetEmpId = matched.employee_id;
+          }
 
-          if (allEmps && allEmps.length > 0) {
+          // 3. Try matching by name
+          if (!targetEmpId && userNameStr) {
             const uClean = userNameStr.toLowerCase().replace(/[^a-z0-9]/g, '');
             const matched = allEmps.find(e => {
               const eNameClean = (e.name_as_per_aadhar || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              return eNameClean && uClean && (eNameClean === uClean || eNameClean.startsWith(uClean) || uClean.startsWith(eNameClean));
+              return eNameClean && uClean && (eNameClean === uClean || eNameClean.includes(uClean) || uClean.includes(eNameClean));
             });
-            if (matched) {
-              targetEmpId = matched.employee_id;
-
-              // Link employee_id back to users table if missing
-              if (!empIdStr) {
-                await supabase
-                  .from('users')
-                  .update({ employee_id: matched.employee_id })
-                  .eq('id', editingUser.id);
-              }
-            }
+            if (matched) targetEmpId = matched.employee_id;
           }
         }
 
         if (targetEmpId) {
+          // Link employee_id back to users table if missing
+          if (!empIdStr) {
+            await supabase
+              .from('users')
+              .update({ employee_id: targetEmpId })
+              .eq('id', editingUser.id);
+          }
+
           const userRoleLower = (editingUser.role || '').toLowerCase().trim();
           let newDesignation = 'Employee';
           if (userRoleLower === 'manager') newDesignation = 'Manager';
@@ -1036,10 +1037,7 @@ export default function MasterSetting() {
             designation: newDesignation
           };
           if (finalMobile) {
-            hrUpdatePayload.candidate_mobile = finalMobile;
             hrUpdatePayload.mobile_no = finalMobile;
-            hrUpdatePayload.mobile = finalMobile;
-            hrUpdatePayload.phone = finalMobile;
           }
 
           const { error: hrErr } = await supabase
@@ -1055,11 +1053,25 @@ export default function MasterSetting() {
         showToast(`User ${editingUser.user_name || editingUser.username} updated successfully!`, 'success');
 
         const isCurrentLoggedIn = currentUserObj && (
-          currentUserObj.id === editingUser.id ||
+          String(currentUserObj.id) === String(editingUser.id) ||
           (currentUserObj.user_name || currentUserObj.username) === (editingUser.user_name || editingUser.username)
         );
-        if (isCurrentLoggedIn && refreshUser) {
-          await refreshUser();
+        if (isCurrentLoggedIn) {
+          ['user', 'drinqkart_user', 'currentUser'].forEach(key => {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              try {
+                const obj = JSON.parse(raw);
+                if (finalMobile) {
+                  obj.number = finalMobile;
+                  obj.phone = finalMobile;
+                  obj.mobile_no = finalMobile;
+                  localStorage.setItem(key, JSON.stringify(obj));
+                }
+              } catch (e) {}
+            }
+          });
+          if (refreshUser) await refreshUser();
         }
 
         setEditingUser(null);
