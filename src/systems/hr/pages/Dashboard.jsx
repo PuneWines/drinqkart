@@ -45,22 +45,52 @@ export default function Dashboard() {
     // Helper: Extract user's authorized shops & locations (Set of uppercase shop names/locations)
     const getUserAuthorizedStores = () => {
         if (isUnrestrictedAdmin) return null; // Null means unrestricted/all stores
-        const rawAccess = currentUserObj?.shop_name || currentUserObj?.user_access || localStorage.getItem('shop_name') || localStorage.getItem('user_access') || '';
+        const accessParts = [
+            currentUserObj?.shop_name,
+            currentUserObj?.user_access,
+            localStorage.getItem('shop_name'),
+            localStorage.getItem('user_access')
+        ].filter(Boolean);
+
+        const rawAccess = accessParts.join(',');
         if (!rawAccess || !rawAccess.trim()) return null;
         const trimmed = rawAccess.toLowerCase().trim();
-        if (trimmed === 'all' || trimmed === 'no shop' || trimmed.includes('admin')) return null;
+        if (trimmed === 'all' || trimmed.includes('admin')) return null;
 
         const shops = new Set();
         const parts = rawAccess.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
         parts.forEach(p => {
             if (p !== 'ALL' && p !== 'NO SHOP') {
                 shops.add(p);
-                if (LOCATION_TO_SHOP_MAP[p]) shops.add(LOCATION_TO_SHOP_MAP[p].toUpperCase());
-                if (SHOP_TO_LOCATION_MAP[p]) shops.add(SHOP_TO_LOCATION_MAP[p].toUpperCase());
-                if (p.includes(' ')) {
-                    p.split(' ').forEach(sub => {
-                        if (sub.length > 2) shops.add(sub.toUpperCase());
-                    });
+                const mappedShop = LOCATION_TO_SHOP_MAP[p];
+                if (mappedShop) shops.add(mappedShop.toUpperCase());
+                const mappedLoc = SHOP_TO_LOCATION_MAP[p];
+                if (mappedLoc) shops.add(mappedLoc.toUpperCase());
+
+                // Exact synonym mappings for shops/locations
+                if (p === 'KUNAL ULWE' || p === 'ULWE' || p === 'MUMBAI ULWE') {
+                    shops.add('KUNAL ULWE');
+                    shops.add('ULWE');
+                    shops.add('MUMBAI ULWE');
+                } else if (p === 'KUNAL KHARGHAR' || p === 'KHARGHAR') {
+                    shops.add('KUNAL KHARGHAR');
+                    shops.add('KHARGHAR');
+                } else if (p === 'KUNAL' || p === 'MUMBAI') {
+                    shops.add('KUNAL');
+                    shops.add('MUMBAI');
+                } else if (p === 'MADHURA' || p === 'BAVDHAN' || p === 'BAWDHAN') {
+                    shops.add('MADHURA');
+                    shops.add('BAVDHAN');
+                    shops.add('BAWDHAN');
+                } else if (p === 'FRIENDS' || p === 'WAGHOLI') {
+                    shops.add('FRIENDS');
+                    shops.add('WAGHOLI');
+                } else if (p === 'BALAJI' || p === 'AKOLE') {
+                    shops.add('BALAJI');
+                    shops.add('AKOLE');
+                } else if (p === 'VISHAL' || p === 'HINJEWADI') {
+                    shops.add('VISHAL');
+                    shops.add('HINJEWADI');
                 }
             }
         });
@@ -194,20 +224,14 @@ export default function Dashboard() {
                     const compUpper = (emp.joining_company_name || '').toString().trim().toUpperCase();
                     const placeUpper = (emp.joining_place || '').toString().trim().toUpperCase();
                     const transUpper = (emp.transferred_shop || '').toString().trim().toUpperCase();
-                    const fullUpper = `${compUpper} ${placeUpper} ${transUpper}`.trim();
+                    const storeUpper = (emp.store_name || emp.shop_name || '').toString().trim().toUpperCase();
 
-                    if (!fullUpper) return false;
-
-                    for (const shop of authShops) {
-                        const cleanShop = shop.toUpperCase();
-                        if (
-                            compUpper.includes(cleanShop) || cleanShop.includes(compUpper) ||
-                            placeUpper.includes(cleanShop) || cleanShop.includes(placeUpper) ||
-                            transUpper.includes(cleanShop) || cleanShop.includes(transUpper) ||
-                            fullUpper.includes(cleanShop)
-                        ) return true;
-                    }
-                    return false;
+                    return (
+                        authShops.has(compUpper) ||
+                        authShops.has(placeUpper) ||
+                        authShops.has(transUpper) ||
+                        authShops.has(storeUpper)
+                    );
                 });
             }
 
@@ -360,11 +384,17 @@ export default function Dashboard() {
             attendanceLogs?.forEach(log => {
                 const logEmpId = log.employee_id ? String(log.employee_id).trim() : null
                 const logEmpName = log.employee_name ? String(log.employee_name).trim().toLowerCase() : ''
+                const logStore = (log.store_name || log.joining_place || log.shop_name || '').toString().trim().toUpperCase();
                 
-                // Exclude if already processed or if user/employee is inactive
+                // Exclude if already processed, if user/employee is inactive, or if store is not authorized for current user
                 const isLogInactive = (logEmpId && inactiveUsersMap.has(logEmpId.toLowerCase())) || (logEmpName && inactiveUsersMap.has(`name-${logEmpName}`));
                 
-                if (logEmpId && !processedEmpIds.has(logEmpId.toLowerCase()) && !isLogInactive) {
+                let isStoreAuth = true;
+                if (authShops && authShops.size > 0 && !isUnrestrictedAdmin) {
+                    isStoreAuth = Boolean(logStore && authShops.has(logStore));
+                }
+                
+                if (logEmpId && !processedEmpIds.has(logEmpId.toLowerCase()) && !isLogInactive && isStoreAuth) {
                     processedEmpIds.add(logEmpId.toLowerCase())
                     const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
                     const empFromLog = {
@@ -994,8 +1024,21 @@ export default function Dashboard() {
                                 'KUNAL KHARGHAR': 'KHARGHAR'
                             };
 
-                            // List of Location options to display in the dropdown
-                            const dropDownLocations = ['AKOLE', 'BAVDHAN', 'HINJEWADI', 'KHARGHAR', 'MUMBAI', 'ULWE', 'KUNAL ULWE', 'WAGHOLI'];
+                            // Standard location options to display in the dropdown
+                            const dropDownLocations = ['AKOLE', 'BAVDHAN', 'HINJEWADI', 'KHARGHAR', 'MUMBAI', 'ULWE', 'WAGHOLI'];
+
+                            const isEmpInLocation = (empStoreRaw, locUpper) => {
+                                const targetShopUpper = (locationToShopMap[locUpper] || locUpper).toUpperCase();
+                                if (empStoreRaw === targetShopUpper || empStoreRaw === locUpper) return true;
+                                if (locUpper === 'BAVDHAN' && (empStoreRaw === 'BAWDHAN' || empStoreRaw === 'MADHURA')) return true;
+                                if (locUpper === 'ULWE' && (empStoreRaw === 'KUNAL ULWE' || empStoreRaw === 'MUMBAI ULWE')) return true;
+                                if (locUpper === 'MUMBAI' && empStoreRaw === 'KUNAL') return true;
+                                if (locUpper === 'KHARGHAR' && empStoreRaw === 'KUNAL KHARGHAR') return true;
+                                if (locUpper === 'HINJEWADI' && empStoreRaw === 'VISHAL') return true;
+                                if (locUpper === 'WAGHOLI' && empStoreRaw === 'FRIENDS') return true;
+                                if (locUpper === 'AKOLE' && empStoreRaw === 'BALAJI') return true;
+                                return false;
+                            };
 
                             const filteredModalEmps = detailModal.employees.filter(emp => {
                                 const nameOrId = `${emp.name_as_per_aadhar || ''} ${emp.employee_id || ''}`.toLowerCase();
@@ -1005,14 +1048,7 @@ export default function Dashboard() {
                                 let matchesStore = true;
                                 if (modalSelectedStore !== 'ALL') {
                                     const selectedLocationUpper = modalSelectedStore.trim().toUpperCase();
-                                    const targetShopUpper = (locationToShopMap[selectedLocationUpper] || selectedLocationUpper).toUpperCase();
-
-                                    // Match if employee record matches the mapped shop name OR the location directly
-                                    matchesStore = (
-                                        empStoreRaw === targetShopUpper ||
-                                        empStoreRaw === selectedLocationUpper ||
-                                        (selectedLocationUpper === 'BAVDHAN' && empStoreRaw === 'BAWDHAN')
-                                    );
+                                    matchesStore = isEmpInLocation(empStoreRaw, selectedLocationUpper);
                                 }
                                 return matchesSearch && matchesStore;
                             });
@@ -1029,14 +1065,9 @@ export default function Dashboard() {
                             const getStoreEmpCount = (locationName) => {
                                 if (locationName === 'ALL') return detailModal.employees.length;
                                 const selectedLocationUpper = locationName.trim().toUpperCase();
-                                const targetShopUpper = (locationToShopMap[selectedLocationUpper] || selectedLocationUpper).toUpperCase();
                                 return detailModal.employees.filter(emp => {
                                     const empStoreRaw = (emp.joining_place || emp.store_name || emp.shop_name || '').toString().trim().toUpperCase();
-                                    return (
-                                        empStoreRaw === targetShopUpper ||
-                                        empStoreRaw === selectedLocationUpper ||
-                                        (selectedLocationUpper === 'BAVDHAN' && empStoreRaw === 'BAWDHAN')
-                                    );
+                                    return isEmpInLocation(empStoreRaw, selectedLocationUpper);
                                 }).length;
                             };
 

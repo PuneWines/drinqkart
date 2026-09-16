@@ -456,13 +456,31 @@ export default function ProfilePage() {
 
       // 3. Prepare queries for tasks and attendance
       let checklistQuery = supabase.from('checklist').select('*').is('submission_date', null);
-      if (!isAdmin) checklistQuery = checklistQuery.or(`name.ilike.${userName},given_by.ilike.${userName}`);
+      if (!isAdmin) {
+        const cFilters = [`name.ilike.%${userName}%`, `given_by.ilike.%${userName}%`];
+        if (empAadharName) {
+          cFilters.push(`name.ilike.%${empAadharName}%`, `given_by.ilike.%${empAadharName}%`);
+        }
+        checklistQuery = checklistQuery.or(cFilters.join(','));
+      }
 
       let delegationQuery = supabase.from('delegation').select('*').is('submission_date', null);
-      if (!isAdmin) delegationQuery = delegationQuery.or(`name.ilike.${userName},assigned_person.ilike.${userName}`);
+      if (!isAdmin) {
+        const dFilters = [`name.ilike.%${userName}%`, `assigned_person.ilike.%${userName}%`, `given_by.ilike.%${userName}%`];
+        if (empAadharName) {
+          dFilters.push(`name.ilike.%${empAadharName}%`, `assigned_person.ilike.%${empAadharName}%`, `given_by.ilike.%${empAadharName}%`);
+        }
+        delegationQuery = delegationQuery.or(dFilters.join(','));
+      }
 
       let workQuery = supabase.from('work_task_new').select('*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required))').eq('current_date', todayStr).is('submission_date', null);
-      if (!isAdmin) workQuery = workQuery.ilike('name', `%${userName}%`);
+      if (!isAdmin) {
+        if (empAadharName) {
+          workQuery = workQuery.or(`name.ilike.%${userName}%,name.ilike.%${empAadharName}%`);
+        } else {
+          workQuery = workQuery.ilike('name', `%${userName}%`);
+        }
+      }
 
       let attendanceQuery = supabase.from('hr_management_attendance_logs').select('*');
       if (!isAdmin) {
@@ -513,8 +531,9 @@ export default function ProfilePage() {
       const checklistTasks = (checklistRes.data || []).map(t => {
         const pDate = parseTaskDate(t.date || t.created_at);
         if (pDate && pDate > todayObj) return null;
+        const desc = t.task || t.checklist_task || t.description || 'Checklist Task';
         return {
-          id: t.id, task: t.task || 'Checklist Task', system: 'Checklist',
+          id: t.id, task: desc, description: desc, system: 'Checklist', systemType: 'Checklist',
           shop: t.shop_name || t.shop || 'N/A', assignedTo: t.name || 'N/A', givenBy: t.given_by || 'N/A', plannedDate: t.date, dynamicTag: 'Active', tagColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
         };
       }).filter(Boolean);
@@ -522,8 +541,9 @@ export default function ProfilePage() {
       const delegationTasks = (delegationRes.data || []).map(t => {
         const pDate = parseTaskDate(t.task_date || t.created_at);
         if (pDate && pDate > todayObj) return null;
+        const desc = t.task_description || t.task || t.description || 'Delegation Task';
         return {
-          id: t.id, task: t.task_description || t.task || 'Delegation Task', system: 'Delegation',
+          id: t.id, task: desc, description: desc, system: 'Delegation', systemType: 'Delegation',
           shop: t.shop_name || t.shop || 'N/A', assignedTo: t.assigned_person || t.name || 'N/A', givenBy: t.given_by || 'N/A', plannedDate: t.task_date, dynamicTag: 'Active', tagColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
         };
       }).filter(Boolean);
@@ -531,8 +551,9 @@ export default function ProfilePage() {
       const workTasks = (workRes.data || []).map(t => {
         const pDate = parseTaskDate(t.current_date || t.created_at);
         if (pDate && pDate > todayObj) return null;
+        const desc = t.task_description || t.task || t.description || 'Work Task';
         return {
-          id: t.id, task: t.task_description || t.task || 'Work Task', system: 'Work Details',
+          id: t.id, task: desc, description: desc, system: 'Work', systemType: 'Work',
           shop: t.shop_name || t.shop || 'N/A', assignedTo: t.name || 'N/A', givenBy: t.manager_name || 'N/A', plannedDate: t.current_date, dynamicTag: 'Active', tagColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
         };
       }).filter(Boolean);
@@ -560,29 +581,54 @@ export default function ProfilePage() {
         }
       }
 
-      setAttendanceLogs(personalAttendance);
+      // Generate missing absent entries for dates in current month up to today
+      const loggedDatesSet = new Set(personalAttendance.map(log => log.attendance_date).filter(Boolean));
+      const missingAbsentLogs = [];
+      let d = new Date(currentYear, currentMonth, 1);
+      const todayDateObj = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      const totalLogs = personalAttendance.length;
-      const presentCount = personalAttendance.filter(log => {
+      while (d <= todayDateObj) {
+        const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (!loggedDatesSet.has(dStr)) {
+          missingAbsentLogs.push({
+            id: `generated-absent-${dStr}`,
+            attendance_date: dStr,
+            in_time: '--',
+            out_time: '--',
+            punched_store_name: '-',
+            status: 'Absent',
+            is_generated: true
+          });
+        }
+        d.setDate(d.getDate() + 1);
+      }
+
+      const fullMonthAttendance = [...personalAttendance, ...missingAbsentLogs];
+      fullMonthAttendance.sort((a, b) => (b.attendance_date || '').localeCompare(a.attendance_date || ''));
+
+      setAttendanceLogs(fullMonthAttendance);
+
+      const totalLogs = fullMonthAttendance.length;
+      const presentCount = fullMonthAttendance.filter(log => {
         const st = (log.status || '').toLowerCase();
         return ['present', 'late', 'on time', 'half day', 'duty'].includes(st) || log.is_late;
       }).length;
 
-      const absentCount = personalAttendance.filter(log => {
+      const absentCount = fullMonthAttendance.filter(log => {
         const st = (log.status || '').toLowerCase();
         return st === 'absent' || st.includes('absent');
       }).length;
 
-      const lateCount = personalAttendance.filter(log => {
+      const lateCount = fullMonthAttendance.filter(log => {
         const st = (log.status || '').toLowerCase();
         return st === 'late' || st.includes('late') || log.is_late || (log.late_minute && log.late_minute > 0);
       }).length;
 
-      const missCount = personalAttendance.filter(log => (log.status || '').toLowerCase() === 'miss').length;
-      const attendancePercentage = totalLogs > 0 ? Math.round(((presentCount - absentCount) / totalLogs) * 100) : 100;
+      const missCount = fullMonthAttendance.filter(log => (log.status || '').toLowerCase() === 'miss').length;
+      const attendancePercentage = totalLogs > 0 ? Math.round((presentCount / totalLogs) * 100) : 100;
 
       setAttendanceStats({
-        present: presentCount, absent: absentCount, late: lateCount, miss: missCount, total: totalLogs, percentage: Math.max(0, attendancePercentage)
+        present: presentCount, absent: absentCount, late: lateCount, miss: missCount, total: totalLogs, percentage: Math.max(0, Math.min(100, attendancePercentage))
       });
 
     } catch (err) {
@@ -1123,10 +1169,10 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {tasks.length === 0 ? (
+            {tasks.filter(t => t.systemType === taskSystemFilter).length === 0 ? (
               <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-slate-200/70">
                 <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500 mb-2" />
-                <p className="text-xs font-bold text-slate-700">No active tasks found in directory.</p>
+                <p className="text-xs font-bold text-slate-700">No active {taskSystemFilter} tasks found.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2 max-h-[350px] overflow-y-auto custom-scrollbar">
