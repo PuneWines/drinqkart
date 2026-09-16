@@ -742,45 +742,49 @@ export default function EmployeeManagement() {
 
       if (hrUpdateErr) throw hrUpdateErr
 
-      // Sync updated shop_name & status back to users table (Master Settings / User & Permission)
+      // Sync updated shop_name, mobile number & status back to users table (Master Settings / User & Permission)
       try {
-        const empIdStr = (editFormData.employee_id || editingEmployee.employee_id || '').toString().trim();
-        const empNameStr = (editFormData.name_as_per_aadhar || editingEmployee.name_as_per_aadhar || '').toString().trim();
-        const newShopName = editFormData.joining_company_name || null;
-        const newStatus = (editFormData.status || 'Active').toLowerCase();
+        const empIdStr = (editFormData.employee_id || editingEmployee?.employee_id || '').toString().trim();
+        const empNameStr = (editFormData.name_as_per_aadhar || editingEmployee?.name_as_per_aadhar || '').toString().trim();
+        const oldMobileStr = (editingEmployee?.mobile_no || '').toString().trim();
+        const newMobileStr = (editFormData.mobile_no !== undefined ? editFormData.mobile_no : editingEmployee?.mobile_no || '').toString().trim();
+        const newShopName = editFormData.joining_company_name !== undefined ? editFormData.joining_company_name : (editingEmployee?.joining_company_name || null);
+        const newStatus = (editFormData.status || editingEmployee?.status || 'Active').toLowerCase();
+
+        const { data: allUsers } = await supabase
+          .from('users')
+          .select('id, user_name, employee_id, number');
 
         let targetUser = null;
 
-        // 1. Match user by employee_id
-        if (empIdStr) {
-          const { data: userByEmp } = await supabase
-            .from('users')
-            .select('id, user_name')
-            .eq('employee_id', empIdStr)
-            .maybeSingle();
-
-          if (userByEmp) {
-            targetUser = userByEmp;
+        if (allUsers && allUsers.length > 0) {
+          // 1. Match by employee_id
+          if (empIdStr) {
+            targetUser = allUsers.find(u => u.employee_id && String(u.employee_id).trim().toLowerCase() === empIdStr.toLowerCase());
           }
-        }
 
-        // 2. Fallback match user by name
-        if (!targetUser && empNameStr) {
-          const { data: allUsers } = await supabase
-            .from('users')
-            .select('id, user_name, employee_id');
+          // 2. Match by old or new mobile number
+          if (!targetUser && (oldMobileStr || newMobileStr)) {
+            const cleanOldMob = oldMobileStr.replace(/[^0-9]/g, '');
+            const cleanNewMob = newMobileStr.replace(/[^0-9]/g, '');
+            targetUser = allUsers.find(u => {
+              const uNum = String(u.number || '').replace(/[^0-9]/g, '');
+              return uNum && ((cleanOldMob && uNum === cleanOldMob) || (cleanNewMob && uNum === cleanNewMob));
+            });
+          }
 
-          if (allUsers && allUsers.length > 0) {
+          // 3. Fallback match by name
+          if (!targetUser && empNameStr) {
             const eClean = empNameStr.toLowerCase().replace(/[^a-z0-9]/g, '');
             targetUser = allUsers.find(u => {
               const uNameClean = (u.user_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              return uNameClean && eClean && (uNameClean === eClean || uNameClean.startsWith(eClean) || eClean.startsWith(uNameClean));
+              return uNameClean && eClean && (uNameClean === eClean || uNameClean.includes(eClean) || eClean.includes(uNameClean));
             });
           }
         }
 
         if (targetUser) {
-          const desigLower = (editFormData.designation || '').toLowerCase().trim();
+          const desigLower = (editFormData.designation || editingEmployee?.designation || '').toLowerCase().trim();
           let targetRole = 'user';
           if (desigLower === 'manager') targetRole = 'manager';
           else if (desigLower === 'hod') targetRole = 'hod';
@@ -791,16 +795,42 @@ export default function EmployeeManagement() {
             status: newStatus,
             role: targetRole
           };
-          if (editFormData.mobile_no) {
-            userPayload.number = editFormData.mobile_no.toString().trim();
+          if (newMobileStr) {
+            userPayload.number = newMobileStr;
           }
           if (empIdStr) {
             userPayload.employee_id = empIdStr;
           }
-          await supabase
+
+          const { error: userUpdateErr } = await supabase
             .from('users')
             .update(userPayload)
             .eq('id', targetUser.id);
+
+          if (userUpdateErr) {
+            console.error('Failed to sync employee update to users table:', userUpdateErr);
+          }
+        }
+
+        if (newMobileStr) {
+          ['user', 'drinqkart_user', 'currentUser'].forEach(key => {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              try {
+                const obj = JSON.parse(raw);
+                const uId = (obj.employee_id || obj.id || '').toString().trim();
+                const uName = (obj.user_name || obj.username || obj.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const eName = empNameStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                if ((empIdStr && uId === empIdStr) || (uName && eName && (uName.includes(eName) || eName.includes(uName)))) {
+                  obj.number = newMobileStr;
+                  obj.phone = newMobileStr;
+                  obj.mobile_no = newMobileStr;
+                  localStorage.setItem(key, JSON.stringify(obj));
+                }
+              } catch (e) {}
+            }
+          });
         }
       } catch (userSyncErr) {
         console.warn('Could not sync HR update to users table:', userSyncErr);
