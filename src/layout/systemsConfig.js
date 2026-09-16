@@ -138,6 +138,7 @@ export const systems = [
         ]
       },
       { label: 'Trader Invoices', to: '/systems/business-overview/trader-invoices' },
+      { label: 'Shop Visit', to: '/systems/business-overview/shop-visit' },
       {
         label: 'Help Center',
         to: '/systems/business-overview/help-center/all',
