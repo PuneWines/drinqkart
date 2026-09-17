@@ -15,6 +15,7 @@ export default function JoiningCompany({ readOnly = false }) {
   const [addForm, setAddForm] = useState({
     shop_name: '',
     full_name: '',
+    location: '',
     gstin: '',
     contact: '',
     email: '',
@@ -26,6 +27,7 @@ export default function JoiningCompany({ readOnly = false }) {
   const [editingCompany, setEditingCompany] = useState(null)
   const [editForm, setEditForm] = useState({
     full_name: '',
+    location: '',
     gstin: '',
     contact: '',
     email: '',
@@ -35,6 +37,22 @@ export default function JoiningCompany({ readOnly = false }) {
   const [editQrPreview, setEditQrPreview] = useState(null)
 
   const [qrModalShop, setQrModalShop] = useState(null)
+
+  const SHOP_NAME_TO_LOCATION = {
+    'MADHURA': 'BAVDHAN',
+    'TLS': 'HINJEWADI',
+    'FRIENDS': 'WAGHOLI',
+    'BALAJI': 'AKOLE',
+    'KUNAL ULWE': 'ULWE',
+    'KUNAL KHARGHAR': 'KHARGHAR'
+  }
+
+  const getShopLocation = (company) => {
+    if (!company) return ''
+    if (company.location && company.location.trim()) return company.location.trim()
+    const shopName = (company.shop_name || company.company_name || '').trim().toUpperCase()
+    return SHOP_NAME_TO_LOCATION[shopName] || ''
+  }
 
   useEffect(() => {
     fetchCompanies()
@@ -103,6 +121,7 @@ export default function JoiningCompany({ readOnly = false }) {
     setAddForm({
       shop_name: '',
       full_name: '',
+      location: '',
       gstin: '',
       contact: '',
       email: '',
@@ -129,9 +148,11 @@ export default function JoiningCompany({ readOnly = false }) {
         uploadedQrUrl = await uploadQrCodeFile(addForm.shop_name.trim(), addQrFile)
       }
 
+      const defaultLoc = getShopLocation({ shop_name: addForm.shop_name })
       const payload = {
         shop_name: addForm.shop_name.trim(),
         full_name: addForm.full_name.trim() || null,
+        location: addForm.location.trim() || defaultLoc || null,
         gstin: addForm.gstin.trim() || null,
         contact: addForm.contact.trim() || null,
         email: addForm.email.trim() || null,
@@ -160,6 +181,7 @@ export default function JoiningCompany({ readOnly = false }) {
     setEditingCompany(company)
     setEditForm({
       full_name: company.full_name || '',
+      location: getShopLocation(company),
       gstin: company.gstin || '',
       contact: company.contact || '',
       email: company.email || '',
@@ -181,6 +203,7 @@ export default function JoiningCompany({ readOnly = false }) {
 
       const payload = {
         full_name: editForm.full_name.trim() || null,
+        location: editForm.location.trim() || getShopLocation(editingCompany) || null,
         gstin: editForm.gstin.trim() || null,
         contact: editForm.contact.trim() || null,
         email: editForm.email.trim() || null,
@@ -209,11 +232,13 @@ export default function JoiningCompany({ readOnly = false }) {
     const s = searchTerm.toLowerCase()
     const nameMatch = (c.shop_name || c.company_name || '').toLowerCase().includes(s)
     const fullNameMatch = (c.full_name || '').toLowerCase().includes(s)
+    const locStr = getShopLocation(c)
+    const LocationMatch = locStr.toLowerCase().includes(s)
     const gstinMatch = (c.gstin || '').toLowerCase().includes(s)
     const contactMatch = (c.contact || '').toLowerCase().includes(s)
     const emailMatch = (c.email || '').toLowerCase().includes(s)
     const addressMatch = (c.address || '').toLowerCase().includes(s)
-    return nameMatch || fullNameMatch || gstinMatch || contactMatch || emailMatch || addressMatch
+    return nameMatch || fullNameMatch || gstinMatch || contactMatch || emailMatch || addressMatch || LocationMatch
   })
 
   return (
@@ -296,6 +321,7 @@ export default function JoiningCompany({ readOnly = false }) {
                   <th className="py-3.5 px-4 w-14"># ID</th>
                   <th className="py-3.5 px-4">Shop Name</th>
                   <th className="py-3.5 px-4">Full Name</th>
+                  <th className="py-3.5 px-4">Location</th>
                   <th className="py-3.5 px-4 min-w-[170px]">GSTIN</th>
                   <th className="py-3.5 px-4">Contact</th>
                   <th className="py-3.5 px-4">Email</th>
@@ -329,6 +355,11 @@ export default function JoiningCompany({ readOnly = false }) {
                       {/* Full Name */}
                       <td className="py-3 px-4 font-medium text-slate-800">
                         {company.full_name || <span className="text-slate-400 italic">—</span>}
+                      </td>
+
+                      {/* Location */}
+                      <td className="py-3 px-4 font-medium text-slate-800">
+                        {getShopLocation(company) || <span className="text-slate-400 italic">—</span>}
                       </td>
 
                       {/* GSTIN (Wider Column) */}
@@ -434,6 +465,19 @@ export default function JoiningCompany({ readOnly = false }) {
                   onChange={(e) => setAddForm({ ...addForm, shop_name: e.target.value })}
                   placeholder="e.g. Balaji Wines"
                   className="w-full px-3 py-2 text-xs border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] font-semibold text-slate-900 rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Location / Area
+                </label>
+                <input
+                  type="text"
+                  value={addForm.location}
+                  onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                  placeholder="e.g. AKOLE, BAVDHAN, HINJEWADI, ULWE"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] text-slate-900 rounded font-medium"
                 />
               </div>
 
@@ -604,6 +648,19 @@ export default function JoiningCompany({ readOnly = false }) {
                 <span className="text-[10px] text-slate-400 italic block mt-0.5">
                   The primary shop name cannot be altered during edit.
                 </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Location / Area
+                </label>
+                <input
+                  type="text"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                  placeholder="e.g. AKOLE, BAVDHAN, HINJEWADI, ULWE"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] text-slate-900 rounded font-medium"
+                />
               </div>
 
               <div>

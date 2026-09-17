@@ -754,10 +754,10 @@ export default function ProfilePage() {
 
   if (!profile) return null;
 
-  const formattedPrimaryShops = formatList(profile.primaryShop);
-  const formattedUserAccess = formatList(profile.userAccess);
-  const formattedShops = formatList(profile.shopAccess);
-  const formattedCounters = formatList(profile.counterAccess);
+  const formattedPrimaryShops = [...new Set(formatList(profile.primaryShop))];
+  const formattedUserAccess = [...new Set(formatList(profile.userAccess))];
+  const formattedShops = [...new Set([...formattedPrimaryShops, ...formattedUserAccess])];
+  const formattedCounters = [...new Set(formatList(profile.counterAccess))];
 
   const role = (profile.role || localStorage.getItem('role') || 'User').toLowerCase();
   const isAdmin = role === 'admin' || role === 'masteradmin' || profile.userName?.toLowerCase() === 'admin';

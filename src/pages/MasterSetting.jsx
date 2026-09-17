@@ -49,7 +49,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'HR SYSTEM MODULES',
-        pages: ['Dashboard', 'Employees', 'Joining shop', 'Leave Management', 'Daily Attendance', 'Payroll', 'Roster', 'Admin advanced']
+        pages: ['Dashboard','Employee Learning', 'Employees', 'Joining shop', 'Leave Management', 'Daily Attendance', 'Payroll', 'Roster', 'Admin advanced']
       }
     ]
   },

@@ -40,6 +40,7 @@ export const systems = [
     subtabs: [
       { label: 'Dashboard', to: '/systems/hr' },
       { label: 'Employees', to: '/systems/hr/employees' },
+      { label: 'Employee Learning', to: '/systems/hr/employee-learning' },
       // { label: 'Joining shop', to: '/systems/hr/joining-shop' },
       { label: 'Leave Management', to: '/systems/hr/leave' },
       {

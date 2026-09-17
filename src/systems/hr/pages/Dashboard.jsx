@@ -4,28 +4,52 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 
 // Location ↔ Shop mappings
+// const LOCATION_TO_SHOP_MAP = {
+//     'BAVDHAN': 'MADHURA',
+//     'BAWDHAN': 'MADHURA',
+//     'HINJEWADI': 'VISHAL',
+//     'WAGHOLI': 'FRIENDS',
+//     'AKOLE': 'BALAJI',
+//     'MUMBAI': 'KUNAL',
+//     'ULWE': 'KUNAL ULWE',
+//     'MUMBAI ULWE': 'KUNAL ULWE',
+//     'KHARGHAR': 'KUNAL KHARGHAR'
+// };
+
 const LOCATION_TO_SHOP_MAP = {
     'BAVDHAN': 'MADHURA',
     'BAWDHAN': 'MADHURA',
-    'HINJEWADI': 'VISHAL',
+    'HINJEWADI': 'TLS',
+    'HINJHWADI': 'TLS',
+    'VISHAL': 'TLS',
     'WAGHOLI': 'FRIENDS',
     'AKOLE': 'BALAJI',
-    'MUMBAI': 'KUNAL',
+    'MUMBAI': 'KUNAL ULWE',
     'ULWE': 'KUNAL ULWE',
+    'ULWE NAVI MUMBAI': 'KUNAL ULWE',
+    'NAVI MUMBAI': 'KUNAL ULWE',
     'MUMBAI ULWE': 'KUNAL ULWE',
     'KHARGHAR': 'KUNAL KHARGHAR'
 };
 
 const SHOP_TO_LOCATION_MAP = {
     'MADHURA': 'BAVDHAN',
-    'BAWDHAN': 'BAVDHAN',
-    'VISHAL': 'HINJEWADI',
+    'TLS': 'HINJEWADI',
     'FRIENDS': 'WAGHOLI',
     'BALAJI': 'AKOLE',
-    'KUNAL': 'MUMBAI',
-    'KUNAL ULWE': 'MUMBAI ULWE',
+    'KUNAL ULWE': 'ULWE',
     'KUNAL KHARGHAR': 'KHARGHAR'
 };
+// const SHOP_TO_LOCATION_MAP = {
+//     'MADHURA': 'BAVDHAN',
+//     'BAWDHAN': 'BAVDHAN',
+//     'VISHAL': 'HINJEWADI',
+//     'FRIENDS': 'WAGHOLI',
+//     'BALAJI': 'AKOLE',
+//     'KUNAL': 'MUMBAI',
+//     'KUNAL ULWE': 'MUMBAI ULWE',
+//     'KUNAL KHARGHAR': 'KHARGHAR'
+// };
 
 export default function Dashboard() {
     const { user: currentUserObj } = useAuth();
@@ -68,27 +92,24 @@ export default function Dashboard() {
                 if (mappedLoc) shops.add(mappedLoc.toUpperCase());
 
                 // Exact synonym mappings for shops/locations
-                if (p === 'KUNAL ULWE' || p === 'ULWE' || p === 'MUMBAI ULWE') {
+                if (p === 'KUNAL ULWE' || p === 'ULWE' || p === 'MUMBAI ULWE' || p === 'MUMBAI') {
                     shops.add('KUNAL ULWE');
                     shops.add('ULWE');
-                    shops.add('MUMBAI ULWE');
+                    shops.add('MUMBAI');
                 } else if (p === 'KUNAL KHARGHAR' || p === 'KHARGHAR') {
                     shops.add('KUNAL KHARGHAR');
                     shops.add('KHARGHAR');
-                } else if (p === 'KUNAL' || p === 'MUMBAI') {
-                    shops.add('KUNAL');
-                    shops.add('MUMBAI');
                 } else if (p === 'MADHURA' || p === 'BAVDHAN' || p === 'BAWDHAN') {
                     shops.add('MADHURA');
                     shops.add('BAVDHAN');
-                    shops.add('BAWDHAN');
                 } else if (p === 'FRIENDS' || p === 'WAGHOLI') {
                     shops.add('FRIENDS');
                     shops.add('WAGHOLI');
                 } else if (p === 'BALAJI' || p === 'AKOLE') {
                     shops.add('BALAJI');
                     shops.add('AKOLE');
-                } else if (p === 'VISHAL' || p === 'HINJEWADI') {
+                } else if (p === 'TLS' || p === 'VISHAL' || p === 'HINJEWADI') {
+                    shops.add('TLS');
                     shops.add('VISHAL');
                     shops.add('HINJEWADI');
                 }
@@ -348,35 +369,47 @@ export default function Dashboard() {
                 const empName = emp.name_as_per_aadhar ? String(emp.name_as_per_aadhar).trim().toLowerCase() : ''
                 const log = logsMap.get(empIdKey) || (!isNaN(numId) ? logsMap.get(String(numId)) : null) || (empName ? logsMap.get(`name-${empName}`) : null)
                 if (log) {
-                    const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
-                    const empWithLog = {
-                        ...emp,
-                        name_as_per_aadhar: log.employee_name || emp.name_as_per_aadhar,
-                        designation: log.designation || emp.designation,
-                        joining_place: (log.store_name && log.store_name.trim()) ? log.store_name : emp.joining_place,
-                        in_time: log.in_time,
-                        out_time: log.out_time,
-                        late_minute: log.late_minute || 0,
-                        status
-                    }
+                    const logStoreRaw = (log.store_name || log.joining_place || log.shop_name || '').toString().trim().toUpperCase();
+                    const logStoreMapped = LOCATION_TO_SHOP_MAP[logStoreRaw] || logStoreRaw;
+                    const isLogStoreAuth = !authShops || authShops.size === 0 || isUnrestrictedAdmin || authShops.has(logStoreRaw) || authShops.has(logStoreMapped);
 
-                    if (status === 'Late' || log.is_late) {
-                        lateList.push(empWithLog)
-                    } else if (status === 'Half Day' || log.half_day) {
-                        halfDayList.push(empWithLog)
-                    } else if (status === 'Absent') {
-                        absentList.push(empWithLog)
-                    } else {
-                        presentList.push(empWithLog)
+                    if (isLogStoreAuth) {
+                        const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
+                        const empWithLog = {
+                            ...emp,
+                            name_as_per_aadhar: log.employee_name || emp.name_as_per_aadhar,
+                            designation: log.designation || emp.designation,
+                            joining_place: (log.store_name && log.store_name.trim()) ? log.store_name : emp.joining_place,
+                            in_time: log.in_time,
+                            out_time: log.out_time,
+                            late_minute: log.late_minute || 0,
+                            status
+                        }
+
+                        if (status === 'Late' || log.is_late) {
+                            lateList.push(empWithLog)
+                        } else if (status === 'Half Day' || log.half_day) {
+                            halfDayList.push(empWithLog)
+                        } else if (status === 'Absent') {
+                            absentList.push(empWithLog)
+                        } else {
+                            presentList.push(empWithLog)
+                        }
                     }
                 } else {
-                    absentList.push({
-                        ...emp,
-                        status: 'Absent',
-                        in_time: null,
-                        out_time: null,
-                        late_minute: null
-                    })
+                    const empStoreRaw = (emp.joining_place || emp.store_name || '').toString().trim().toUpperCase();
+                    const empStoreMapped = LOCATION_TO_SHOP_MAP[empStoreRaw] || empStoreRaw;
+                    const isEmpStoreAuth = !authShops || authShops.size === 0 || isUnrestrictedAdmin || authShops.has(empStoreRaw) || authShops.has(empStoreMapped);
+
+                    if (isEmpStoreAuth) {
+                        absentList.push({
+                            ...emp,
+                            status: 'Absent',
+                            in_time: null,
+                            out_time: null,
+                            late_minute: null
+                        })
+                    }
                 }
             })
 
@@ -432,7 +465,7 @@ export default function Dashboard() {
                 console.error('Error fetching shop table:', e)
             }
 
-            const defaultMasterShops = ['AKOLE', 'BALAJI', 'BAWDHAN', 'FRIENDS', 'HINJEWADI', 'KHARGHAR', 'MADHURA', 'MUMBAI', 'OFFICE', 'TLS', 'WAGHOLI']
+            const defaultMasterShops = ['AKOLE', 'BALAJI', 'BAVDHAN', 'FRIENDS', 'HINJEWADI', 'KHARGHAR', 'MADHURA', 'MUMBAI', 'OFFICE', 'TLS', 'WAGHOLI']
             defaultMasterShops.forEach(s => masterStores.add(s))
 
             setAllStoresList(Array.from(masterStores).sort())
@@ -1025,16 +1058,15 @@ export default function Dashboard() {
                             };
 
                             // Standard location options to display in the dropdown
-                            const dropDownLocations = ['AKOLE', 'BAVDHAN', 'HINJEWADI', 'KHARGHAR', 'MUMBAI', 'ULWE', 'WAGHOLI'];
+                            const dropDownLocations = ['AKOLE', 'BAVDHAN', 'HINJEWADI', 'KHARGHAR', 'MUMBAI', 'WAGHOLI'];
 
                             const isEmpInLocation = (empStoreRaw, locUpper) => {
                                 const targetShopUpper = (locationToShopMap[locUpper] || locUpper).toUpperCase();
                                 if (empStoreRaw === targetShopUpper || empStoreRaw === locUpper) return true;
                                 if (locUpper === 'BAVDHAN' && (empStoreRaw === 'BAWDHAN' || empStoreRaw === 'MADHURA')) return true;
-                                if (locUpper === 'ULWE' && (empStoreRaw === 'KUNAL ULWE' || empStoreRaw === 'MUMBAI ULWE')) return true;
-                                if (locUpper === 'MUMBAI' && empStoreRaw === 'KUNAL') return true;
+                                if ((locUpper === 'ULWE' || locUpper === 'MUMBAI') && (empStoreRaw === 'KUNAL ULWE' || empStoreRaw === 'MUMBAI ULWE' || empStoreRaw === 'ULWE' || empStoreRaw === 'KUNAL')) return true;
                                 if (locUpper === 'KHARGHAR' && empStoreRaw === 'KUNAL KHARGHAR') return true;
-                                if (locUpper === 'HINJEWADI' && empStoreRaw === 'VISHAL') return true;
+                                if (locUpper === 'HINJEWADI' && (empStoreRaw === 'TLS' || empStoreRaw === 'VISHAL')) return true;
                                 if (locUpper === 'WAGHOLI' && empStoreRaw === 'FRIENDS') return true;
                                 if (locUpper === 'AKOLE' && empStoreRaw === 'BALAJI') return true;
                                 return false;

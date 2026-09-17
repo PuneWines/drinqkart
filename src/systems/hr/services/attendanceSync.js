@@ -315,12 +315,12 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
     });
 
     const DEVICES = [
-        { name: 'BAWDHAN', serial: 'C26238441B1E342D' },
-        { name: 'HINJEWADI', serial: 'AMDB25061400335' },
-        { name: 'WAGHOLI', serial: 'AMDB25061400343' },
-        { name: 'AKOLE', serial: 'C262CC13CF202038' },
-        { name: 'MUMBAI', serial: 'C2630450C32A2327' },
-        { name: 'KHARGHAR', serial: 'AMDB25120600859' }
+        { name: 'MADHURA', serial: 'C26238441B1E342D' },
+        { name: 'TLS', serial: 'AMDB25061400335' },
+        { name: 'FRIENDS', serial: 'AMDB25061400343' },
+        { name: 'BALAJI', serial: 'C262CC13CF202038' },
+        { name: 'KUNAL ULWE', serial: 'C2630450C32A2327' },
+        { name: 'KUNAL KHARGHAR', serial: 'AMDB25120600859' }
     ];
 
     const monthlyAgg = {};
