@@ -302,6 +302,7 @@ const Payroll = () => {
                 console.error("Failed to load saved payroll records from Supabase:", e);
             }
 
+
             // 4. Build data rows
             const headers = [
                 'Name',

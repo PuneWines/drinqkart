@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, X, Store, Loader2 } from 'lucide-react';
+import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, X, Store, Loader2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import html2pdf from 'html2pdf.js';
 
 const CHECKLIST_DATA = [
   {
@@ -100,6 +101,87 @@ const STATUS = {
   bad: { label: 'Not OK', color: '#d64545', bg: '#fceaea', border: '#d64545' },
   miss: { label: 'Missing', color: '#c98a1c', bg: '#fbf1de', border: '#c98a1c' },
 };
+
+const DB_COLUMN_MAP = {
+  cash: 'cash_counter',
+  barcode: 'barcode_scanner',
+  card: 'card_swipe_machine',
+  sale1: 'sale_point_1',
+  sale2: 'sale_point_2',
+  sale3: 'sale_point_3',
+  offer: 'offer_board',
+  chairs: 'chairs_tables',
+  server: 'main_server_computer',
+  billprint: 'billing_printer',
+  exciseprint: 'excise_printer',
+  wifi: 'wifi_device',
+  mobile: 'mobile_phone',
+  inverter: 'inverter',
+  cctv: 'cctv_camera',
+  alarm: 'alarm_system',
+  fire: 'fire_cylinder',
+  fridge_steel: 'fridge_steel',
+  fridge_bud: 'fridge_budweiser',
+  fridge_kf: 'fridge_kingfisher',
+  water_jar: 'water_jar',
+  cleaning: 'cleaning_items',
+  main_board: 'main_shop_board',
+  window_disp: 'window_display',
+  disp_stand: 'display_stand',
+  lighting: 'lighting',
+  shutter_door: 'shutter_door',
+  shutter_remote: 'shutter_sensor_remote',
+  main_key: 'main_shutter_key',
+  cash_key: 'cash_counter_key',
+  godown_key: 'godown_key',
+  showcase_key: 'showcase_key',
+  bike_activa: 'bike_activa',
+  bike_ev: 'bike_electric',
+  ev_charger: 'bike_charger',
+  helmet: 'helmet',
+  rto_cleared: 'rto_penalty_cleared',
+  shop_lic: 'shop_license',
+  fssai_lic: 'fssai_license',
+  shop_act: 'shop_act',
+  shop_map: 'shop_map',
+  vat_cert: 'vat_certificate',
+  tp_file: 'tp_file',
+  excise_reg: 'excise_register',
+  attendance_book: 'attendance_book',
+  nokarnama: 'nokarnama_id_proof',
+  visit_book: 'visit_book',
+  expense_book: 'expense_book',
+  wholesale_out: 'wholesale_outstanding',
+  license_rent: 'license_rent',
+  shop_rent: 'shop_rent',
+  excise_police: 'excise_police_monthly',
+  opening_cash: 'opening_cash'
+};
+
+const parseVisitChecks = (visit) => {
+  if (!visit) return {};
+  let res = {};
+  if (visit.checks) {
+    if (typeof visit.checks === 'string') {
+      try {
+        res = JSON.parse(visit.checks);
+      } catch (_) {
+        res = {};
+      }
+    } else if (typeof visit.checks === 'object') {
+      res = { ...visit.checks };
+    }
+  }
+
+  // Fallback / complement from individual columns
+  Object.entries(DB_COLUMN_MAP).forEach(([itemId, colName]) => {
+    if (!res[itemId] && visit[colName]) {
+      res[itemId] = visit[colName];
+    }
+  });
+
+  return res;
+};
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (iso) => { if (!iso) return '-'; const [y, m, d] = iso.split('T')[0].split('-'); return `${d}/${m}/${y}`; };
 const IS = { border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '9px 11px', fontSize: 13.5, background: '#fff', color: '#1e293b', width: '100%', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' };
@@ -131,7 +213,7 @@ function MultiSegmentPie({ ok, bad, miss, total }) {
     { count: miss, color: '#c98a1c', label: 'Missing' },
     { count: unchecked, color: '#e2e8f0', label: 'Pending' },
   ];
-
+ 
   let cumulativeOffset = 0;
 
   return (
@@ -252,7 +334,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
     if (done < TOTAL) { toast.error(`${TOTAL - done} item(s) unchecked.`); return; }
     setSaving(true);
     try {
-      const { error } = await supabase.from('shop_visit').insert([{
+      const payload = {
         visit_date: date,
         shop_name: shop,
         visitor_name: visitor,
@@ -265,7 +347,14 @@ function ChecklistModal({ shops, onClose, onSaved }) {
         all_ok: bad + miss === 0,
         checks: checks,
         report_summary: report()
-      }]);
+      };
+
+      // Map each checklist item to its corresponding database column
+      Object.entries(DB_COLUMN_MAP).forEach(([itemId, colName]) => {
+        payload[colName] = checks[itemId] || null;
+      });
+
+      const { error } = await supabase.from('shop_visit').insert([payload]);
 
       if (error) throw error;
       toast.success('Saved to Supabase ✓');
@@ -369,38 +458,295 @@ function ChecklistModal({ shops, onClose, onSaved }) {
   );
 }
 
+function FormattedReportView({ reportText, checks, visit }) {
+  const [filter, setFilter] = useState('all'); // 'all' | 'issues' | 'ok'
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(reportText);
+      setCopied(true);
+      toast.success('Report copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_) {
+      toast.error('Failed to copy');
+    }
+  };
+
+  // Group items by category from CHECKLIST_DATA
+  const groupedData = CHECKLIST_DATA.map(group => {
+    const items = group.items.map(it => {
+      const statusKey = checks ? checks[it.id] : null;
+      const statusObj = statusKey ? STATUS[statusKey] : null;
+      return {
+        ...it,
+        statusKey,
+        statusLabel: statusObj?.label || 'Not checked',
+        statusColor: statusObj?.color || '#94a3b8',
+        statusBg: statusObj?.bg || '#f1f5f9',
+        statusBorder: statusObj?.border || '#cbd5e1'
+      };
+    });
+
+    const okCount = items.filter(i => i.statusKey === 'ok').length;
+    const badCount = items.filter(i => i.statusKey === 'bad').length;
+    const missCount = items.filter(i => i.statusKey === 'miss').length;
+
+    return {
+      group: group.group,
+      items,
+      okCount,
+      badCount,
+      missCount,
+      issueCount: badCount + missCount
+    };
+  });
+
+  const totalBad = groupedData.reduce((acc, g) => acc + g.badCount, 0);
+  const totalMiss = groupedData.reduce((acc, g) => acc + g.missCount, 0);
+  const totalOk = groupedData.reduce((acc, g) => acc + g.okCount, 0);
+  const totalChecked = totalOk + totalBad + totalMiss;
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
+      <div style={{ padding: 18, background: '#f8fafc' }}>
+        {/* Quick Filters */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => setFilter('all')}
+              style={{
+                border: '1px solid #cbd5e1',
+                background: filter === 'all' ? '#0f4c81' : '#fff',
+                color: filter === 'all' ? '#fff' : '#475569',
+                padding: '4px 12px',
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              All Items ({TOTAL})
+            </button>
+            <button
+              onClick={() => setFilter('issues')}
+              style={{
+                border: '1px solid #fca5a5',
+                background: filter === 'issues' ? '#d64545' : '#fff',
+                color: filter === 'issues' ? '#fff' : '#d64545',
+                padding: '4px 12px',
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              ⚠️ Issues Only ({totalBad + totalMiss})
+            </button>
+            <button
+              onClick={() => setFilter('ok')}
+              style={{
+                border: '1px solid #86efac',
+                background: filter === 'ok' ? '#1a9e5c' : '#fff',
+                color: filter === 'ok' ? '#fff' : '#1a9e5c',
+                padding: '4px 12px',
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              ✅ Clear Only ({totalOk})
+            </button>
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
+            Checked: <span style={{ color: '#0f172a' }}>{totalChecked}/{TOTAL}</span>
+          </div>
+        </div>
+
+        {/* Grouped Checklist Display (Scrollable Container) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxHeight: 440, overflowY: 'auto', paddingRight: 6 }}>
+          {groupedData.every(g => g.items.filter(it => {
+            if (filter === 'issues') return it.statusKey === 'bad' || it.statusKey === 'miss';
+            if (filter === 'ok') return it.statusKey === 'ok';
+            return true;
+          }).length === 0) ? (
+            <div style={{ textAlign: 'center', padding: '36px 16px', background: '#fff', borderRadius: 12, border: '1px dashed #cbd5e1', color: '#64748b' }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>✨</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
+                {filter === 'issues' ? 'No issues found in this visit!' : filter === 'ok' ? 'No clear items found.' : 'No checklist items.'}
+              </div>
+            </div>
+          ) : (
+            groupedData.map(g => {
+              const filteredItems = g.items.filter(it => {
+                if (filter === 'issues') return it.statusKey === 'bad' || it.statusKey === 'miss';
+                if (filter === 'ok') return it.statusKey === 'ok';
+                return true;
+              });
+
+              if (filteredItems.length === 0) return null;
+
+              return (
+                <div key={g.group} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', letterSpacing: 0.2 }}>
+                      {g.group}
+                    </span>
+                    <div style={{ display: 'flex', gap: 6, fontSize: 11, fontWeight: 700 }}>
+                      {g.okCount > 0 && <span style={{ background: '#e5f7ee', color: '#1a9e5c', padding: '2px 8px', borderRadius: 12 }}>{g.okCount} OK</span>}
+                      {g.badCount > 0 && <span style={{ background: '#fceaea', color: '#d64545', padding: '2px 8px', borderRadius: 12 }}>{g.badCount} Not OK</span>}
+                      {g.missCount > 0 && <span style={{ background: '#fbf1de', color: '#c98a1c', padding: '2px 8px', borderRadius: 12 }}>{g.missCount} Missing</span>}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 8 }}>
+                    {filteredItems.map(it => {
+                      const iconStatus = it.statusKey === 'ok' ? '✅' : it.statusKey === 'bad' ? '❌' : it.statusKey === 'miss' ? '⚠️' : '⬜';
+                      return (
+                        <div
+                          key={it.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justify: 'space-between',
+                            padding: '8px 10px',
+                            background: it.statusBg,
+                            border: `1px solid ${it.statusBorder}`,
+                            borderRadius: 9,
+                            fontSize: 12.5
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', paddingRight: 6 }}>
+                            <span style={{ fontSize: 13 }}>{iconStatus}</span>
+                            <span style={{ fontSize: 13 }}>{it.icon}</span>
+                            <span style={{ fontWeight: 600, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {it.label}
+                            </span>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: it.statusKey ? '#fff' : '#64748b',
+                              background: it.statusColor,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {it.statusLabel}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer Summary Banner */}
+        <div style={{ marginTop: 14, background: '#0f172a', color: '#fff', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+            Summary: <b style={{ color: '#38bdf8' }}>{totalChecked}/{TOTAL}</b> checked | <b style={{ color: '#f87171' }}>{totalBad} Not OK</b> | <b style={{ color: '#fbbf24' }}>{totalMiss} Missing</b>
+          </div>
+          <button
+            onClick={handleCopy}
+            style={{
+              background: '#2563eb',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <Share2 size={13} /> Copy Report
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ViewModal({ visit, onClose }) {
   const rt = visit.report_summary;
   const shopName = visit.shop_name || 'Shop Visit';
   const visitDate = visit.visit_date ? fmtDate(visit.visit_date) : '—';
-  const checks = visit.checks || {};
+  const checks = parseVisitChecks(visit);
 
-  const allItems = CHECKLIST_DATA.flatMap(g => g.items);
+  const downloadPDF = () => {
+    const modalElem = document.getElementById('visit-report-modal-content');
+    if (!modalElem) {
+      toast.error('Report content not found');
+      return;
+    }
+    const opt = {
+      margin: [8, 8, 8, 8],
+      filename: `Shop_Visit_${shopName}_${visitDate}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    try {
+      toast.loading('Generating PDF…', { id: 'pdf-toast' });
+      html2pdf().set(opt).from(modalElem).save().then(() => {
+        toast.success('PDF Downloaded!', { id: 'pdf-toast' });
+      }).catch(err => {
+        toast.error('PDF export failed: ' + (err?.message || 'Error generating PDF'), { id: 'pdf-toast' });
+      });
+    } catch (e) {
+      toast.error('PDF export failed: ' + e.message, { id: 'pdf-toast' });
+    }
+  };
 
   return (
-    <div 
+    <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(10,20,40,0.65)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
     >
-      <div style={{ background: '#fff', borderRadius: 18, maxWidth: 620, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+      <div id="visit-report-modal-content" style={{ background: '#f8fafc', borderRadius: 18, maxWidth: 680, width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px', borderBottom: '1px solid #e2e8f0', background: '#fff' }}>
           <div>
-            <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>🏪 {shopName}</span>
-            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 10, fontWeight: 600 }}>📅 {visitDate}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Store size={18} color="#0f4c81" />
+              <span style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{shopName}</span>
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>
+              📅 Visit Date: <b>{visitDate}</b>
+            </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={18} /></button>
+          <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
         </div>
-        
-        <div style={{ overflowY: 'auto', padding: '18px 20px', flex: 1 }}>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16, fontSize: 13, color: '#475569', background: '#f1f5f9', padding: '10px 14px', borderRadius: 10 }}>
-            <span>👤 Visitor: <b>{visit.visitor_name || '—'}</b></span>
-            {visit.handover_by && <span>Handover: <b>{visit.handover_by}</b></span>}
-            {visit.takeover_by && <span>Takeover: <b>{visit.takeover_by}</b></span>}
+
+        <div style={{ overflowY: 'auto', padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Metadata Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Visitor</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginTop: 2 }}>{visit.visitor_name || '—'}</div>
+            </div>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Handover By</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginTop: 2 }}>{visit.handover_by || '—'}</div>
+            </div>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Takeover By</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginTop: 2 }}>{visit.takeover_by || '—'}</div>
+            </div>
           </div>
 
-          {/* Stats Summary Badges */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Inspection Summary</div>
+          {/* Quick Metrics Badges */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ background: '#e5f7ee', color: '#1a9e5c', border: '1px solid #1a9e5c', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
                 ✅ {visit.checked_count || 0}/{visit.total_items || TOTAL} Checked
@@ -415,55 +761,61 @@ function ViewModal({ visit, onClose }) {
                   ⚠️ {visit.missing_count} Missing
                 </span>
               )}
-              <span style={{ fontSize: 12, fontWeight: 600, color: visit.all_ok ? '#1a9e5c' : '#d64545', marginLeft: 'auto' }}>
-                Status: {visit.all_ok ? 'All Clear ✓' : `Issues Found (${(visit.not_ok_count || 0) + (visit.missing_count || 0)})`}
-              </span>
             </div>
+
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: visit.all_ok ? '#1a9e5c' : '#d64545' }}>
+              {visit.all_ok ? 'All Clear ✓' : `⚠️ ${(visit.not_ok_count || 0) + (visit.missing_count || 0)} Issue(s) Found`}
+            </span>
           </div>
 
-          {/* Full Checklist Items */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>📋 Inspection Checklist Items ({allItems.length})</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
-              {allItems.map((item) => {
-                const valStr = checks[item.id] ? STATUS[checks[item.id]]?.label || checks[item.id] : 'Not checked';
-                const lowerVal = valStr.toLowerCase();
-                const isOk = lowerVal === 'ok';
-                const isBad = lowerVal === 'not ok';
-                const isMiss = lowerVal === 'missing';
-                return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: isBad ? '#fceaea' : isMiss ? '#fbf1de' : isOk ? '#f8fafc' : '#ffffff', border: `1px solid ${isBad ? '#f87171' : isMiss ? '#facc15' : '#e2e8f0'}`, borderRadius: 8, fontSize: 12.5 }}>
-                    <span style={{ fontWeight: 600, color: '#334155', flex: 1, paddingRight: 12 }}>{item.icon} {item.label}</span>
-                    <span style={{ 
-                      fontWeight: 700, 
-                      fontSize: 11.5,
-                      padding: '2px 8px', 
-                      borderRadius: 6, 
-                      background: isOk ? '#e5f7ee' : isBad ? '#d64545' : isMiss ? '#c98a1c' : '#f1f5f9', 
-                      color: isOk ? '#1a9e5c' : isBad ? '#fff' : isMiss ? '#fff' : '#475569' 
-                    }}>
-                      {valStr}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {rt && (
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>Formatted Report</div>
-              <pre style={{ margin: 0, fontSize: 12, color: '#334155', background: '#f8fafc', borderRadius: 10, padding: 12, border: '1px solid #e2e8f0', whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.6 }}>{rt}</pre>
+          {/* Formatted Report Card View */}
+          {rt ? (
+            <FormattedReportView reportText={rt} checks={checks} visit={visit} />
+          ) : (
+            <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', background: '#fff', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
+              No report summary generated for this visit.
             </div>
           )}
         </div>
-        
-        <div style={{ padding: '12px 18px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10 }}>
-          {rt && (
-            <button onClick={async () => { try { await navigator.clipboard.writeText(rt); toast.success('Copied report!'); } catch (_) { toast.error('Cannot copy.'); } }}
-              style={{ flex: 1, background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}><Share2 size={14} /> Copy Report</button>
-          )}
-          <button onClick={onClose} style={{ flex: 1, background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)', color: '#fff', border: 'none', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Close</button>
+
+        {/* Modal Footer */}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', background: '#fff', display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+          <button
+            onClick={downloadPDF}
+            style={{
+              background: '#2563eb',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 10,
+              padding: '10px 18px',
+              fontSize: 13.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: 'inherit',
+              boxShadow: '0 2px 8px rgba(37,99,235,0.25)'
+            }}
+          >
+            <Download size={15} /> Download PDF
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 10,
+              padding: '10px 24px',
+              fontSize: 13.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: 'inherit'
+            }}
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
