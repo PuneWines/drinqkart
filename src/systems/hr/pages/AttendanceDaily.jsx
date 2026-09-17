@@ -296,6 +296,35 @@ const AttendanceDaily = () => {
       tab: 'timecard',
       loading: false
     });
+    fetchEmployeePayroll(employee);
+  };
+
+  // Employee Payroll History state
+  const [payrollRecords, setPayrollRecords] = useState([]);
+  const [payrollLoading, setPayrollLoading] = useState(false);
+
+  const fetchEmployeePayroll = async (emp) => {
+    if (!emp) return;
+    setPayrollLoading(true);
+    try {
+      const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
+      const { data, error } = await supabase
+        .from('hr_management_payroll')
+        .select('*');
+
+      if (error) throw error;
+
+      const filtered = (data || []).filter(r => {
+        const idCol = String(r.employee_id || r.employee_code || '').trim().toLowerCase();
+        return idCol === empIdStr || (idCol && empIdStr && (idCol.includes(empIdStr) || empIdStr.includes(idCol)));
+      });
+      setPayrollRecords(filtered);
+    } catch (e) {
+      console.error("Failed to fetch employee payroll records:", e);
+      setPayrollRecords([]);
+    } finally {
+      setPayrollLoading(false);
+    }
   };
 
   // Manual attendance marking state
@@ -622,6 +651,10 @@ const AttendanceDaily = () => {
         .filter(Boolean)
         .map(p => map1130PMTo11PM(p));
     }
+
+
+
+
 
     // Filter valid day punches (>= 9:00 AM) - logs between 12 AM to 9 AM are invalid
     const validDayPunches = punchList.filter(p => !isBefore9AM(p));
@@ -4093,6 +4126,18 @@ const AttendanceDaily = () => {
                       >
                         📈 Timeline
                       </button>
+                      <button
+                        onClick={() => {
+                          setPreviewModal(prev => ({ ...prev, tab: 'payslip' }));
+                          fetchEmployeePayroll(previewModal.employee);
+                        }}
+                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'payslip'
+                          ? 'bg-white text-indigo-950 shadow-md font-bold'
+                          : 'text-indigo-200 hover:text-white'
+                          }`}
+                      >
+                        💳 Payslip
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -4168,8 +4213,8 @@ const AttendanceDaily = () => {
                               <tr
                                 key={row.dayNum}
                                 className={`transition-colors ${isWeekendAbsentOrLeave
-                                    ? 'bg-red-100/80 hover:bg-red-200/80 border-l-4 border-l-red-500'
-                                    : 'hover:bg-slate-50/80'
+                                  ? 'bg-red-100/80 hover:bg-red-200/80 border-l-4 border-l-red-500'
+                                  : 'hover:bg-slate-50/80'
                                   }`}
                               >
                                 <td className="px-3 py-2 text-slate-900 font-bold font-mono">
@@ -4235,7 +4280,7 @@ const AttendanceDaily = () => {
                       </table>
                     </div>
                   </div>
-                ) : (
+                ) : previewModal.tab === 'timeline' ? (
                   /* PAGE 2: TIMELINE VIEW (Visual Work Progress & Segment Graphs) */
                   <div className="space-y-3">
                     {dayRows.map((row) => {
@@ -4249,8 +4294,8 @@ const AttendanceDaily = () => {
                         <div
                           key={row.dayNum}
                           className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${isWeekendAbsentOrLeave
-                              ? 'bg-red-50/80 border-red-300 ring-1 ring-red-400/30'
-                              : 'bg-white border-slate-200/80'
+                            ? 'bg-red-50/80 border-red-300 ring-1 ring-red-400/30'
+                            : 'bg-white border-slate-200/80'
                             }`}
                         >
                           <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
@@ -4319,6 +4364,92 @@ const AttendanceDaily = () => {
                         </div>
                       );
                     })}
+                  </div>
+                ) : (
+                  /* PAGE 3: PAYSLIP & PAYROLL HISTORY VIEW */
+                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                          💳 Employee Payslip & Payroll History
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Historical payout records, salary breakdown & deductions for <span className="font-semibold text-indigo-900">{emp?.name || 'Employee'}</span> ({emp?.code || 'ID: ' + (emp?.id || '—')})
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* ========================================================================
+                        STATEMENT FOR FETCH & MAP CODE:
+                        Historical payout records and table mapping for employee.
+                        Table structure ready below for mapping.
+                       ======================================================================== */}
+
+
+                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
+                          <tr>
+                            <th className="px-3.5 py-2.5">Month / Year</th>
+                            <th className="px-3.5 py-2.5">Base Salary</th>
+                            <th className="px-3.5 py-2.5">Present Days</th>
+                            <th className="px-3.5 py-2.5">Advances / Deductions</th>
+                            <th className="px-3.5 py-2.5">Net Payable</th>
+                            <th className="px-3.5 py-2.5 text-center">Status</th>
+                            <th className="px-3.5 py-2.5 text-right">Payment Info</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+
+                          {payrollLoading ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Loader2 size={16} className="animate-spin text-indigo-600" />
+                                  <span className="text-xs font-semibold">Loading payslip history...</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : payrollRecords && payrollRecords.length > 0 ? (
+                            payrollRecords.map((payRecord) => (
+                              <tr key={payRecord.id || `${payRecord.year}-${payRecord.month}`} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-3.5 py-2.5 font-bold text-slate-900">{payRecord.month} {payRecord.year}</td>
+                                <td className="px-3.5 py-2.5">₹{Number(payRecord.base_salary || payRecord.salary || 0).toLocaleString()}</td>
+                                <td className="px-3.5 py-2.5">{payRecord.present_days || payRecord.working_days || 0} Days</td>
+                                <td className="px-3.5 py-2.5 text-red-600">-₹{Number(payRecord.advance_deduction || payRecord.deduction || 0).toLocaleString()}</td>
+                                <td className="px-3.5 py-2.5 font-bold text-emerald-600">₹{Number(payRecord.net_salary || payRecord.net_payable || 0).toLocaleString()}</td>
+                                <td className="px-3.5 py-2.5 text-center">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    (payRecord.payout_status || payRecord.status)?.toLowerCase() === 'paid'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : (payRecord.payout_status || payRecord.status)?.toLowerCase() === 'hold'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {payRecord.payout_status || payRecord.status || 'Paid'}
+                                  </span>
+                                </td>
+                                <td className="px-3.5 py-2.5 text-right text-slate-500">{payRecord.payment_date || payRecord.created_at?.slice(0, 10) || '—'}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                                <div className="flex flex-col items-center justify-center gap-2">
+                                  <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 text-lg">
+                                    💳
+                                  </div>
+                                  <p className="text-xs font-bold text-slate-700">No Payroll History Found</p>
+                                  <p className="text-[11px] text-slate-400 max-w-md">
+                                    No saved payout records found in <code className="text-indigo-600 font-mono font-semibold">hr_management_payroll</code> for <span className="font-semibold text-slate-600">{emp?.name || 'this employee'}</span>.
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>

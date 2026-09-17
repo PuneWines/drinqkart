@@ -7,5 +7,6 @@ export default defineConfig({
   envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   server: {
     port: 5180,
+    host: true
   },
 })
