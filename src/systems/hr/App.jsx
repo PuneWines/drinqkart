@@ -10,6 +10,7 @@ import { Recruitment, Reports, Settings } from './pages/StubPages'
 import { Toaster } from 'react-hot-toast'
 import JoiningCompany from './pages/JoiningCompany'
 import Roaster from './pages/Roaster'
+import EmployeeLearning from './pages/EmployeeLearning'
 import './index.css'
 
 // Mounted under /systems/hr/* by the root router (see src/App.jsx). Auth,
@@ -23,6 +24,7 @@ function HrApp() {
           <Routes>
             <Route path="" element={<Dashboard />} />
             <Route path="employees" element={<Employees />} />
+            <Route path="employee-learning" element={<EmployeeLearning />} />
             <Route path="joining-shop" element={<JoiningCompany />} />
             <Route path="attendance" element={<Navigate to="daily" replace />} />
             <Route path="attendance/daily" element={<Attendance />} />

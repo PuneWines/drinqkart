@@ -5,12 +5,12 @@ import { getMonthlyAttendanceFromSupabase, syncMonthlyAttendanceFromApi } from '
 import { supabase } from '../lib/supabase';
 
 const DEVICES = [
-    { name: 'BAWDHAN', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-    { name: 'HINJEWADI', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-    { name: 'WAGHOLI', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-    { name: 'AKOLE', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-    { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-    { name: 'KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
+    { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
+    { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
+    { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
+    { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
+    { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+    { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const ALL_DEVICES_OPTION = { name: 'ALL DEVICES', apiName: 'ALL', serial: 'ALL' };

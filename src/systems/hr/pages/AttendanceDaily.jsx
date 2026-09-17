@@ -5,12 +5,12 @@ import { supabase } from '../lib/supabase';
 
 const DEVICES = [
   { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' },
-  { name: 'BAWDHAN', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-  { name: 'HINJEWADI', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-  { name: 'WAGHOLI', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-  { name: 'AKOLE', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-  { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-  { name: 'KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
+  { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
+  { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
+  { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
+  { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
+  { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+  { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
@@ -2157,13 +2157,28 @@ const AttendanceDaily = () => {
     setSelectedDate(`${yyyy}-${mm}-${dd}`);
   };
 
-  // Shop Name -> Location Mapping
+  const LOCATION_TO_SHOP_MAP = {
+    'BAVDHAN': 'MADHURA',
+    'BAWDHAN': 'MADHURA',
+    'HINJEWADI': 'TLS',
+    'HINJHWADI': 'TLS',
+    'VISHAL': 'TLS',
+    'WAGHOLI': 'FRIENDS',
+    'AKOLE': 'BALAJI',
+    'MUMBAI': 'KUNAL ULWE',
+    'ULWE': 'KUNAL ULWE',
+    'ULWE NAVI MUMBAI': 'KUNAL ULWE',
+    'NAVI MUMBAI': 'KUNAL ULWE',
+    'MUMBAI ULWE': 'KUNAL ULWE',
+    'KHARGHAR': 'KUNAL KHARGHAR'
+  };
+
   const SHOP_NAME_TO_LOCATION = {
     'MADHURA': 'BAVDHAN',
-    'VISHAL': 'HINJEWADI',
+    'TLS': 'HINJEWADI',
     'FRIENDS': 'WAGHOLI',
     'BALAJI': 'AKOLE',
-    'KUNAL': 'MUMBAI',
+    'KUNAL ULWE': 'ULWE',
     'KUNAL KHARGHAR': 'KHARGHAR'
   };
 
@@ -2194,21 +2209,14 @@ const AttendanceDaily = () => {
         const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           emp.id?.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const targetLocation = getMappedLocation(selectedStore);
-
         const punchedLoc = (resolvePunchedStore(emp) || '').trim().toUpperCase();
-        const assignedLoc = (emp.store_name || '').trim().toUpperCase();
-
-        // Normalize BAWDHAN / BAVDHAN spelling variations if present
-        const normalizeLoc = (loc) => loc.replace('BAWDHAN', 'BAVDHAN');
-
-        const normTargetLoc = normalizeLoc(targetLocation);
-        const normPunchedLoc = normalizeLoc(punchedLoc);
-        const normAssignedLoc = normalizeLoc(assignedLoc);
+        const rawAssigned = (emp.store_name || emp.joining_place || '').trim().toUpperCase();
+        const mappedShopName = LOCATION_TO_SHOP_MAP[rawAssigned] || rawAssigned;
 
         const matchesStore = selectedStore === 'ALL' ||
-          normAssignedLoc.includes(normTargetLoc) ||
-          normPunchedLoc.includes(normTargetLoc);
+          selectedStore === mappedShopName ||
+          selectedStore === rawAssigned ||
+          selectedStore === punchedLoc;
 
         const isMatched = isEmployeeInTable(emp.id);
 
@@ -3202,11 +3210,19 @@ const AttendanceDaily = () => {
                           <td className="px-2 py-1.5 text-[10px] text-gray-600">
                             {(() => {
                               const rawAssigned = employeeProfile?.joining_place || employee.store_name || '-';
-                              const assignedStore = rawAssigned.toString().trim();
+                              const cleanAssigned = rawAssigned.toString().trim().toUpperCase();
+                              const assignedStore = LOCATION_TO_SHOP_MAP[cleanAssigned] ||
+                                (cleanAssigned.includes('HINJ') || cleanAssigned.includes('VISHAL') ? 'TLS' :
+                                 cleanAssigned.includes('ULWE') || cleanAssigned.includes('MUMBAI') ? 'KUNAL ULWE' :
+                                 cleanAssigned.includes('BAVD') || cleanAssigned.includes('BAWD') ? 'MADHURA' :
+                                 cleanAssigned.includes('WAGH') ? 'FRIENDS' :
+                                 cleanAssigned.includes('AKOL') ? 'BALAJI' :
+                                 cleanAssigned.includes('KHARG') ? 'KUNAL KHARGHAR' :
+                                 (cleanAssigned !== '-' ? rawAssigned.toString().trim() : '-'));
                               return (
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-semibold text-gray-900">
-                                    {assignedStore !== '-' ? assignedStore : '-'}
+                                    {assignedStore}
                                   </span>
                                   {punchedShopName ? (
                                     <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded leading-none w-fit" title={`Punched from biometric device at ${punchedShopName} (Serial: ${attendance.serial_number || 'N/A'})`}>
@@ -4419,13 +4435,12 @@ const AttendanceDaily = () => {
                                 <td className="px-3.5 py-2.5 text-red-600">-₹{Number(payRecord.advance_deduction || payRecord.deduction || 0).toLocaleString()}</td>
                                 <td className="px-3.5 py-2.5 font-bold text-emerald-600">₹{Number(payRecord.net_salary || payRecord.net_payable || 0).toLocaleString()}</td>
                                 <td className="px-3.5 py-2.5 text-center">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                    (payRecord.payout_status || payRecord.status)?.toLowerCase() === 'paid'
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${(payRecord.payout_status || payRecord.status)?.toLowerCase() === 'paid'
                                       ? 'bg-emerald-100 text-emerald-800'
                                       : (payRecord.payout_status || payRecord.status)?.toLowerCase() === 'hold'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : 'bg-slate-100 text-slate-700'
-                                  }`}>
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-slate-100 text-slate-700'
+                                    }`}>
                                     {payRecord.payout_status || payRecord.status || 'Paid'}
                                   </span>
                                 </td>

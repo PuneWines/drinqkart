@@ -93,8 +93,8 @@ const Payroll = () => {
     const getAdvanceDeductionForPeriod = (adv, targetYear, targetMonth) => {
         const apprAmount = Number(adv.approved_amount) || Number(adv.amount) || 0;
         const apprMonthlyDeduction = Number(adv.approved_monthly_deduction) || Number(adv.monthly_deduction) || 0;
-        const currentRemaining = adv.remaining_amount !== null && adv.remaining_amount !== undefined 
-            ? Number(adv.remaining_amount) 
+        const currentRemaining = adv.remaining_amount !== null && adv.remaining_amount !== undefined
+            ? Number(adv.remaining_amount)
             : apprAmount;
 
         if (apprAmount <= 0 || apprMonthlyDeduction <= 0 || currentRemaining <= 0) {
@@ -354,7 +354,7 @@ const Payroll = () => {
                 const proratedSalary = (savedPayroll && savedPayroll.prorated_salary !== null && savedPayroll.prorated_salary !== undefined)
                     ? Number(savedPayroll.prorated_salary)
                     : calculatedProrated;
-                const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction - wayOff));
+                const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction + wayOff));
 
                 return [
                     empId,                     // 0: Emp ID
@@ -406,7 +406,7 @@ const Payroll = () => {
 
                 const savedProrated = savedPayroll ? Number(savedPayroll.prorated_salary) : null;
                 const proratedSalary = (savedProrated !== null && savedProrated !== undefined && savedPayroll) ? savedProrated : 0;
-                const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction - wayOff));
+                const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction + wayOff));
 
                 return [
                     emp.id,                    // 0: Emp ID
@@ -745,8 +745,8 @@ const Payroll = () => {
                     if (advInfo && advInfo.advancesList && advInfo.advancesList.length > 0) {
                         for (const { adv, deduction } of advInfo.advancesList) {
                             if (deduction > 0 && adv.id) {
-                                const currentRem = adv.remaining_amount !== null && adv.remaining_amount !== undefined 
-                                    ? Number(adv.remaining_amount) 
+                                const currentRem = adv.remaining_amount !== null && adv.remaining_amount !== undefined
+                                    ? Number(adv.remaining_amount)
                                     : (Number(adv.approved_amount) || Number(adv.amount) || 0);
                                 const newRem = Math.max(0, currentRem - deduction);
                                 const updatePayload = { remaining_amount: newRem };
@@ -1082,7 +1082,7 @@ const Payroll = () => {
                     const rto = Number(newRow[10]) || 0;
                     const wayOff = Number(newRow[14]) || 0;
 
-                    newRow[15] = Math.round(Math.max(0, prorated - breakage - medical - rto + seasonal + referral - advance - wayOff));
+                    newRow[15] = Math.round(Math.max(0, prorated - breakage - medical - rto + seasonal + referral - advance + wayOff));
                     return newRow;
                 }
                 return r;
@@ -1408,14 +1408,16 @@ const Payroll = () => {
                                         Unhold
                                     </button>
                                 )}
-                                <button
-                                    onClick={() => handleMarkAsHold()}
-                                    disabled={isSavingToDB}
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
-                                >
-                                    {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <Bookmark size={12} />}
-                                    Mark as Hold
-                                </button>
+                                {activeTab !== 'hold' && (
+                                    <button
+                                        onClick={() => handleMarkAsHold()}
+                                        disabled={isSavingToDB}
+                                        className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
+                                    >
+                                        {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <Bookmark size={12} />}
+                                        Mark as Hold
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => handleMarkAsPaid()}
                                     disabled={isSavingToDB}
@@ -1506,177 +1508,177 @@ const Payroll = () => {
                                             {cellsToRender
                                                 .filter(({ header }) => !hiddenColumns.has(header))
                                                 .map(({ header, cell }, j) => {
-                                                const headerName = header?.toLowerCase() || '';
+                                                    const headerName = header?.toLowerCase() || '';
 
-                                                // Highlight cells based on their data type
-                                                let cellClass = "px-4 py-2.5 text-slate-700 font-sans text-center";
-                                                let content = cell;
+                                                    // Highlight cells based on their data type
+                                                    let cellClass = "px-4 py-2.5 text-slate-700 font-sans text-center";
+                                                    let content = cell;
 
-                                                const isCurrency = headerName === 'salary' ||
-                                                    headerName === 'basic salary' ||
-                                                    headerName === 'basic salary (prorated)' ||
-                                                    headerName === 'advance' ||
-                                                    headerName === 'monthly advance' ||
-                                                    headerName === 'fixed advance' ||
-                                                    headerName === 'fix advance' ||
-                                                    headerName === 'brakeges' ||
-                                                    headerName === 'medical' ||
-                                                    headerName === 'rto' ||
-                                                    headerName === 'way off' ||
-                                                    headerName === 'seasonal bonus' ||
-                                                    headerName === 'refferal bonus';
+                                                    const isCurrency = headerName === 'salary' ||
+                                                        headerName === 'basic salary' ||
+                                                        headerName === 'basic salary (prorated)' ||
+                                                        headerName === 'advance' ||
+                                                        headerName === 'monthly advance' ||
+                                                        headerName === 'fixed advance' ||
+                                                        headerName === 'fix advance' ||
+                                                        headerName === 'brakeges' ||
+                                                        headerName === 'medical' ||
+                                                        headerName === 'rto' ||
+                                                        headerName === 'way off' ||
+                                                        headerName === 'seasonal bonus' ||
+                                                        headerName === 'refferal bonus';
 
-                                                if (headerName === 'emp id' || headerName.includes('id')) {
-                                                    cellClass = "px-4 py-2.5 font-mono text-gray-500 font-medium text-center border-r border-gray-100";
-                                                } else if (headerName === 'final salary') {
-                                                    cellClass = "px-4 py-2.5 text-green-600 font-bold font-mono text-right";
-                                                    content = `₹${Math.round(Number(cell) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-                                                } else if (isCurrency) {
-                                                    cellClass = "px-4 py-2.5 font-mono text-slate-600 text-right";
-                                                    content = cell > 0 ? `₹${Number(cell).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}` : '-';
-                                                } else if (headerName === 'attendance' || headerName === 'extra days' || headerName === 'extra 2 days') {
-                                                    cellClass = "px-4 py-2.5 text-indigo-600 font-bold text-center";
-                                                } else if (headerName === 'total days') {
-                                                    cellClass = "px-4 py-2.5 text-center text-slate-500 font-mono";
-                                                }
+                                                    if (headerName === 'emp id' || headerName.includes('id')) {
+                                                        cellClass = "px-4 py-2.5 font-mono text-gray-500 font-medium text-center border-r border-gray-100";
+                                                    } else if (headerName === 'final salary') {
+                                                        cellClass = "px-4 py-2.5 text-green-600 font-bold font-mono text-right";
+                                                        content = `₹${Math.round(Number(cell) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+                                                    } else if (isCurrency) {
+                                                        cellClass = "px-4 py-2.5 font-mono text-slate-600 text-right";
+                                                        content = cell > 0 ? `₹${Number(cell).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}` : '-';
+                                                    } else if (headerName === 'attendance' || headerName === 'extra days' || headerName === 'extra 2 days') {
+                                                        cellClass = "px-4 py-2.5 text-indigo-600 font-bold text-center";
+                                                    } else if (headerName === 'total days') {
+                                                        cellClass = "px-4 py-2.5 text-center text-slate-500 font-mono";
+                                                    }
 
-                                                if (headerName === 'name') {
-                                                    cellClass = "px-4 py-2.5 text-slate-700 font-sans text-left";
-                                                    content = (
-                                                        <div className="flex flex-col">
-                                                            <span>{cell}</span>
-                                                            {!isVerified && (
-                                                                <span className="text-[9px] text-amber-600 font-semibold block mt-0.5">⚠️ Unverified</span>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                } else if (headerName === 'extra days' || headerName === 'extra 2 days') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '0' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 5, e.target.value)}
-                                                            className="w-16 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-center font-bold text-xs bg-white text-indigo-600 disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'monthly advance') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 6, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'fixed advance') {
-                                                    cellClass = "px-4 py-2.5 font-mono text-slate-600 text-right";
-                                                    content = cell > 0 ? `₹${Number(cell).toLocaleString()}` : '-';
-                                                } else if (headerName === 'brakeges') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 8, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'medical') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 9, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'rto') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 10, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'basic salary (prorated)') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 11, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'seasonal bonus') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 12, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'refferal bonus') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 13, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'way off') {
-                                                    cellClass = "px-4 py-2.5 text-center";
-                                                    content = (
-                                                        <input
-                                                            type="number"
-                                                            disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                            value={cell === 0 ? '' : cell}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleManualInputChange(row[0], 14, e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                        />
-                                                    );
-                                                } else if (headerName === 'action') {
-                                                    cellClass = "px-4 py-2.5 text-center whitespace-nowrap";
-                                                    if (typeof cell === 'object' && cell !== null && cell.type === 'action') {
+                                                    if (headerName === 'name') {
+                                                        cellClass = "px-4 py-2.5 text-slate-700 font-sans text-left";
                                                         content = (
-                                                            <button
-                                                                onClick={() => setSelectedPayslip(cell)}
-                                                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded transition-colors flex items-center gap-1.5 mx-auto cursor-pointer shadow-2xs"
-                                                            >
-                                                                <FileText size={12} />
-                                                                View PDF
-                                                            </button>
+                                                            <div className="flex flex-col">
+                                                                <span>{cell}</span>
+                                                                {!isVerified && (
+                                                                    <span className="text-[9px] text-amber-600 font-semibold block mt-0.5">⚠️ Unverified</span>
+                                                                )}
+                                                            </div>
                                                         );
-                                                    } else {
+                                                    } else if (headerName === 'extra days' || headerName === 'extra 2 days') {
+                                                        cellClass = "px-4 py-2.5 text-center";
                                                         content = (
-                                                            <div className="flex items-center justify-center gap-1.5 hide">
-                                                                {/* {activeTab === 'salary' && (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '0' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 5, e.target.value)}
+                                                                className="w-16 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-center font-bold text-xs bg-white text-indigo-600 disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'monthly advance') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 6, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'fixed advance') {
+                                                        cellClass = "px-4 py-2.5 font-mono text-slate-600 text-right";
+                                                        content = cell > 0 ? `₹${Number(cell).toLocaleString()}` : '-';
+                                                    } else if (headerName === 'brakeges') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 8, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'medical') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 9, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'rto') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 10, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'basic salary (prorated)') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 11, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'seasonal bonus') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 12, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'refferal bonus') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 13, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'way off') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 14, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'action') {
+                                                        cellClass = "px-4 py-2.5 text-center whitespace-nowrap";
+                                                        if (typeof cell === 'object' && cell !== null && cell.type === 'action') {
+                                                            content = (
+                                                                <button
+                                                                    onClick={() => setSelectedPayslip(cell)}
+                                                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded transition-colors flex items-center gap-1.5 mx-auto cursor-pointer shadow-2xs"
+                                                                >
+                                                                    <FileText size={12} />
+                                                                    View PDF
+                                                                </button>
+                                                            );
+                                                        } else {
+                                                            content = (
+                                                                <div className="flex items-center justify-center gap-1.5 hide">
+                                                                    {/* {activeTab === 'salary' && (
                                                                     <button
                                                                         onClick={() => handleSavePayrollToDB(row)}
                                                                         disabled={isSavingToDB}
@@ -1687,18 +1689,18 @@ const Payroll = () => {
                                                                         Save
                                                                     </button>
                                                                 )} */}
-                                                                {activeTab === 'hold' && (
-                                                                    <button
-                                                                        onClick={() => handleUnhold(row)}
-                                                                        disabled={isSavingToDB}
-                                                                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded border border-slate-300 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                                                        title="Move held record back to active Salary Sheet"
-                                                                    >
-                                                                        <RefreshCw size={11} />
-                                                                        Unhold
-                                                                    </button>
-                                                                )}
-                                                                {/* {activeTab !== 'hold' && (
+                                                                    {activeTab === 'hold' && (
+                                                                        <button
+                                                                            onClick={() => handleUnhold(row)}
+                                                                            disabled={isSavingToDB}
+                                                                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded border border-slate-300 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                                                            title="Move held record back to active Salary Sheet"
+                                                                        >
+                                                                            <RefreshCw size={11} />
+                                                                            Unhold
+                                                                        </button>
+                                                                    )}
+                                                                    {/* {activeTab !== 'hold' && (
                                                                     <button
                                                                         onClick={() => handleMarkAsHold(row)}
                                                                         disabled={isSavingToDB}
@@ -1709,7 +1711,7 @@ const Payroll = () => {
                                                                         Hold
                                                                     </button>
                                                                 )} */}
-                                                                {/* <button
+                                                                    {/* <button
                                                                     onClick={() => handleMarkAsPaid(row)}
                                                                     disabled={isSavingToDB}
                                                                     className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded transition-colors flex items-center gap-1 cursor-pointer shadow-xs disabled:opacity-50"
@@ -1718,17 +1720,17 @@ const Payroll = () => {
                                                                     <CheckCircle2 size={11} />
                                                                     Mark as Paid
                                                                 </button> */}
-                                                            </div>
-                                                        );
+                                                                </div>
+                                                            );
+                                                        }
                                                     }
-                                                }
 
-                                                return (
-                                                    <td key={j} className={cellClass}>
-                                                        {content}
-                                                    </td>
-                                                );
-                                            })}
+                                                    return (
+                                                        <td key={j} className={cellClass}>
+                                                            {content}
+                                                        </td>
+                                                    );
+                                                })}
                                         </tr>
                                     );
                                 })}

@@ -6,12 +6,12 @@ import { supabase } from '../lib/supabase'
 const STORAGE_BUCKET = 'HR_System_employee_documents'
 
 const DEVICES = [
-  { name: 'BAVDHAN', serial: 'C26238441B1E342D' },
-  { name: 'HINJEWADI', serial: 'AMDB25061400335' },
-  { name: 'WAGHOLI', serial: 'AMDB25061400343' },
-  { name: 'AKOLE', serial: 'C262CC13CF202038' },
-  { name: 'MUMBAI', serial: 'C2630450C32A2327' },
-  { name: 'KHARGHAR', serial: 'AMDB25120600859' }
+    { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
+    { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
+    { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
+    { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
+    { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+    { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const resolveDeviceStore = (log) => {
