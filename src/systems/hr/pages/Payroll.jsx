@@ -197,7 +197,7 @@ const Payroll = () => {
 
                 const empIdLower = empId.toLowerCase();
                 const status = log.status?.toString().trim().toLowerCase() || '';
-                const isPresent = status === 'present' || status === 'late' || status === 'half day';
+                const isPresent = status === 'present' || status === 'late' || status === 'half day' || status === 'weekly off' || status === 'day off' || status === 'wo' || status === 'do';
 
                 const dayOfWeek = getLocalDayOfWeek(log.attendance_date);
                 const isFriday = dayOfWeek === 5;
@@ -280,6 +280,43 @@ const Payroll = () => {
                 console.error("Failed to load advances from Supabase:", e);
             }
 
+            // 3a. Fetch approved payable leaves from Supabase hr_management_leaves table
+            const payableLeavesMap = {};
+            try {
+                const { data: dbLeaves, error: leavesError } = await supabase
+                    .from('hr_management_leaves')
+                    .select('employee_id, from_date, to_date, leave_type, is_payable, status')
+                    .eq('status', 'Approved')
+                    .gte('to_date', startDateStr)
+                    .lte('from_date', endDateStr);
+
+                if (!leavesError && dbLeaves) {
+                    dbLeaves.forEach(leave => {
+                        const empId = leave.employee_id?.toString().trim().toLowerCase();
+                        if (!empId) return;
+
+                        const isPayable = leave.is_payable === 'Payable' || leave.leave_type === 'Sick Leave';
+                        if (!isPayable) return;
+
+                        // Calculate overlapping days within the selected month
+                        const leaveFrom = new Date(leave.from_date);
+                        const leaveTo = new Date(leave.to_date);
+                        const monthStart = new Date(startDateStr);
+                        const monthEnd = new Date(endDateStr);
+
+                        const overlapStart = leaveFrom > monthStart ? leaveFrom : monthStart;
+                        const overlapEnd = leaveTo < monthEnd ? leaveTo : monthEnd;
+
+                        if (overlapEnd >= overlapStart) {
+                            const diffDays = Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
+                            payableLeavesMap[empId] = (payableLeavesMap[empId] || 0) + diffDays;
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to load approved leaves from Supabase:", e);
+            }
+
             // 3b. Fetch saved payroll overrides from Supabase
             const payrollMap = {};
             try {
@@ -343,7 +380,7 @@ const Payroll = () => {
                 const referralBonus = savedPayroll ? (Number(savedPayroll.referral_bonus) || 0) : 0;
                 const wayOff = savedPayroll ? (Number(savedPayroll.way_off) || Number(savedPayroll.way_off_deduction) || 0) : 0;
 
-                const present = originalPresent;
+                const present = originalPresent + (payableLeavesMap[empIdLower] || 0);
 
                 const adv = advanceMap[empIdLower] || { advanceDeduction: 0, fixedAdvanceAmount: 0, fixedAdvanceDeduction: 0 };
                 const advDeduction = adv.advanceDeduction;
@@ -396,7 +433,7 @@ const Payroll = () => {
                 const referralBonus = savedPayroll ? (Number(savedPayroll.referral_bonus) || 0) : 0;
                 const wayOff = savedPayroll ? (Number(savedPayroll.way_off) || Number(savedPayroll.way_off_deduction) || 0) : 0;
 
-                const present = emp.present;
+                const present = emp.present + (payableLeavesMap[empIdLower] || 0);
                 const extraDays = (emp.hasFriday && emp.hasSaturday && emp.hasSunday) ? 2 : 0;
                 const salary = 0;
 

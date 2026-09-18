@@ -512,6 +512,30 @@ export default function EmployeeLearning() {
 
   const saveSubmissionToSupabase = async (newSub) => {
     try {
+      // Check if submission record already exists for this employee_id or employee_name
+      let existingId = null;
+      if (newSub.employee_id) {
+        const { data: existingByEmpId } = await supabase
+          .from('hr_learning_submissions')
+          .select('id')
+          .eq('employee_id', newSub.employee_id)
+          .limit(1);
+        if (existingByEmpId && existingByEmpId.length > 0) {
+          existingId = existingByEmpId[0].id;
+        }
+      }
+
+      if (!existingId && newSub.employee) {
+        const { data: existingByName } = await supabase
+          .from('hr_learning_submissions')
+          .select('id')
+          .eq('employee_name', newSub.employee)
+          .limit(1);
+        if (existingByName && existingByName.length > 0) {
+          existingId = existingByName[0].id;
+        }
+      }
+
       const payload = {
         submission_date: newSub.date,
         shop_name: newSub.shop,
@@ -520,19 +544,29 @@ export default function EmployeeLearning() {
         tasks_data: newSub.tasks
       };
 
-      const { data, error } = await supabase
-        .from('hr_learning_submissions')
-        .insert([payload])
-        .select();
+      if (existingId) {
+        payload.id = existingId;
+        const { error } = await supabase
+          .from('hr_learning_submissions')
+          .upsert([payload]);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('hr_learning_submissions')
+          .insert([payload]);
+        if (error) throw error;
+      }
 
-      if (error) throw error;
-      const updated = [newSub, ...submissions];
-      setSubmissions(updated);
-      localStorage.setItem('drinqkart_employee_learning_submissions', JSON.stringify(updated));
       await loadSubmissionsFromSupabase();
     } catch (e) {
       console.warn('Fallback to local storage submission save:', e.message || e);
-      const updated = [newSub, ...submissions];
+      // Filter out existing sub for this employee in local storage array
+      const filteredOld = submissions.filter(s => {
+        const sameId = s.employee_id && newSub.employee_id && (s.employee_id.toString().trim() === newSub.employee_id.toString().trim());
+        const sameName = s.employee && newSub.employee && (s.employee.toString().trim().toLowerCase() === newSub.employee.toString().trim().toLowerCase());
+        return !(sameId || sameName);
+      });
+      const updated = [newSub, ...filteredOld];
       setSubmissions(updated);
       localStorage.setItem('drinqkart_employee_learning_submissions', JSON.stringify(updated));
     }
@@ -575,8 +609,42 @@ export default function EmployeeLearning() {
   };
 
   const handleEmployeeChange = (e) => {
-    setSelectedEmployee(e.target.value);
-    setCheckedTasks({});
+    const empVal = e.target.value;
+    setSelectedEmployee(empVal);
+
+    if (!empVal) {
+      setCheckedTasks({});
+      return;
+    }
+
+    const empObj = filteredEmployees.find(
+      (emp) =>
+        (emp.employee_id && emp.employee_id.toString().trim() === empVal.toString().trim()) ||
+        (emp.id && emp.id.toString().trim() === empVal.toString().trim()) ||
+        (emp.name_as_per_aadhar && emp.name_as_per_aadhar.trim() === empVal.trim())
+    );
+
+    const empId = empObj?.employee_id || empObj?.id || empVal;
+    const empName = empObj?.name_as_per_aadhar || empVal;
+
+    // Search existing submission for this employee
+    const existingSub = submissions.find((s) => {
+      const sameId = s.employee_id && empId && (s.employee_id.toString().trim() === empId.toString().trim());
+      const sameName = s.employee && empName && (s.employee.toString().trim().toLowerCase() === empName.toString().trim().toLowerCase());
+      return sameId || sameName;
+    });
+
+    if (existingSub && Array.isArray(existingSub.tasks)) {
+      const initialChecked = {};
+      existingSub.tasks.forEach((t) => {
+        if (t.checked) {
+          initialChecked[t.id] = true;
+        }
+      });
+      setCheckedTasks(initialChecked);
+    } else {
+      setCheckedTasks({});
+    }
   };
 
   const toggleTask = (id) => {
@@ -656,6 +724,7 @@ export default function EmployeeLearning() {
   const totalSubs = submissions.length;
   const totalTasksTicked = submissions.reduce((sum, s) => sum + s.tasks.filter(t => t.checked).length, 0);
   const activeEmployeesSet = new Set(submissions.map(s => s.employee)).size;
+  const [searchTerm, setSearchTerm] = useState('');
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -871,15 +940,8 @@ export default function EmployeeLearning() {
         ) : (
           /* Dashboard View */
           <section className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-5 shadow-sm">
-              <div>
-                <h1 className="text-xl sm:text-2xl font-serif font-bold text-slate-900">Dashboard Overview</h1>
-                <p className="text-xs text-slate-500 mt-1">
-                  Department and level-wise view of every employee's completed learning tasks. Click an employee to open their profile.
-                </p>
-              </div>
-
-              {canCreateChecklist && (
+            {canCreateChecklist && (
+              <div className="flex justify-end hidden">
                 <button
                   onClick={() => setShowNewChecklistModal(true)}
                   className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#d4b457] hover:bg-[#c3a346] text-slate-950 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer rounded shrink-0"
@@ -887,8 +949,8 @@ export default function EmployeeLearning() {
                   <span className="text-base font-bold">+</span>
                   <span>New Checklist</span>
                 </button>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Stat Row */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -905,6 +967,11 @@ export default function EmployeeLearning() {
                 <div className="text-[11px] text-slate-500 mt-1 uppercase tracking-wider font-mono font-bold">EMPLOYEES WITH RECORDS</div>
               </div>
             </div>
+
+            <div className='pb-4'>
+              <input type="search" className='w-full' placeholder='Search' value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+            
 
             {/* Active Employees Directory Table */}
             <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded">
@@ -1124,70 +1191,132 @@ export default function EmployeeLearning() {
                   );
                 }
 
-                const deptMap = {};
-                empSubs.forEach((s) => {
-                  s.tasks.forEach((t) => {
-                    if (!deptMap[t.dept]) deptMap[t.dept] = {};
-                    if (!deptMap[t.dept][t.level]) deptMap[t.dept][t.level] = {};
-                    if (!deptMap[t.dept][t.level][t.id])
-                      deptMap[t.dept][t.level][t.id] = { en: t.en, everDone: false };
-                    if (t.checked) deptMap[t.dept][t.level][t.id].everDone = true;
-                  });
-                });
+                const latestSub = empSubs[0];
+                const checkedSet = new Set((latestSub?.tasks || []).filter(t => t.checked).map(t => t.id));
+                const totalTicked = checkedSet.size;
 
                 return (
-                  <>
-                    {Object.keys(deptMap).map((dept) => (
-                      <div key={dept} className="border-b border-slate-200 pb-4">
-                        <h3 className="text-sm font-bold text-emerald-700 mb-2">{dept}</h3>
-                        {Object.keys(deptMap[dept])
-                          .sort((a, b) => Number(a) - Number(b))
-                          .map((lvl) => {
-                            const entries = Object.values(deptMap[dept][lvl]);
-                            const done = entries.filter((t) => t.everDone).length;
-                            const pct = Math.round((done / entries.length) * 100);
-                            return (
-                              <div key={lvl} className="mb-3">
-                                <div className="flex justify-between text-xs mb-1 font-medium">
-                                  <span className="text-slate-700">Level {lvl}</span>
-                                  <span className="text-slate-500">
-                                    {done}/{entries.length}
-                                  </span>
-                                </div>
-                                <div className="h-1.5 bg-slate-200 rounded overflow-hidden mb-2">
-                                  <div className="h-full bg-[#d4b457]" style={{ width: `${pct}%` }} />
-                                </div>
-                                <div className="space-y-1">
-                                  {entries.map((t, i) => (
-                                    <div
-                                      key={i}
-                                      className={`text-xs ${t.everDone ? 'text-slate-900 font-semibold' : 'text-slate-400 line-through'
-                                        }`}
-                                    >
-                                      {t.everDone ? '✓' : '—'} {t.en}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
+                  <div className="space-y-6">
+                    {/* Summary Banner */}
+                    <div className="bg-slate-50 border border-slate-200 p-4 rounded flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Learning Progress Summary</div>
+                        <div className="text-lg font-serif font-bold text-slate-900 mt-0.5">
+                          {totalTicked} of {TASKS.length} Tasks Completed ({Math.round((totalTicked / TASKS.length) * 100)}%)
+                        </div>
                       </div>
-                    ))}
-
-                    <div>
-                      <h3 className="text-sm font-bold text-emerald-700 mb-2">Submission History</h3>
-                      <div className="space-y-1">
-                        {empSubs.map((s, idx) => {
-                          const d = s.tasks.filter((t) => t.checked).length;
+                      <div className="flex gap-2 text-xs font-semibold">
+                        {[1, 2, 3, 4].map(lvl => {
+                          const lvlTotal = TASKS.filter(t => t.level === lvl).length;
+                          const lvlDone = TASKS.filter(t => t.level === lvl && checkedSet.has(t.id)).length;
                           return (
-                            <div key={idx} className="text-xs text-slate-700 font-medium">
-                              {s.date} — {d}/{s.tasks.length} completed — {s.shop}
+                            <div key={lvl} className="bg-white border border-slate-200 px-3 py-1.5 rounded text-center">
+                              <span className="text-slate-400 block text-[10px] uppercase">L{lvl}</span>
+                              <span className="text-slate-800 font-bold">{lvlDone}/{lvlTotal}</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
-                  </>
+
+                    {/* Matrix Checklist Report */}
+                    <div className="bg-white border border-slate-200 shadow-xs overflow-x-auto rounded">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-[#1C120C] text-[#d4b457] text-[10px] uppercase font-serif tracking-wider border-b border-[#1C120C]">
+                            <th className="py-2.5 px-2 w-[110px]">DEPT</th>
+                            <th className="py-2.5 px-2 font-bold">LEVEL 1</th>
+                            <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                            <th className="py-2.5 px-2 font-bold">LEVEL 2</th>
+                            <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                            <th className="py-2.5 px-2 font-bold">LEVEL 3</th>
+                            <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                            <th className="py-2.5 px-2 font-bold">LEVEL 4</th>
+                            <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-800">
+                          {deptOrder().map((dept) => {
+                            const tasksByLevel = {
+                              1: TASKS.filter((t) => t.dept === dept && t.level === 1),
+                              2: TASKS.filter((t) => t.dept === dept && t.level === 2),
+                              3: TASKS.filter((t) => t.dept === dept && t.level === 3),
+                              4: TASKS.filter((t) => t.dept === dept && t.level === 4),
+                            };
+                            const maxRows = Math.max(
+                              tasksByLevel[1].length,
+                              tasksByLevel[2].length,
+                              tasksByLevel[3].length,
+                              tasksByLevel[4].length,
+                              1
+                            );
+
+                            return Array.from({ length: maxRows }).map((_, rowIdx) => (
+                              <tr
+                                key={`${dept}-${rowIdx}`}
+                                className={rowIdx === 0 ? 'border-t-2 border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}
+                              >
+                                <td className="py-2 px-2 text-emerald-700 font-bold text-[11px] whitespace-nowrap align-top">
+                                  {rowIdx === 0 ? dept : ''}
+                                </td>
+
+                                {[1, 2, 3, 4].map((lvl) => {
+                                  const task = tasksByLevel[lvl][rowIdx];
+                                  if (!task) {
+                                    return (
+                                      <React.Fragment key={lvl}>
+                                        <td className="py-2 px-2"></td>
+                                        <td className="py-2 px-1 text-center"></td>
+                                      </React.Fragment>
+                                    );
+                                  }
+
+                                  const isChecked = checkedSet.has(task.id);
+                                  return (
+                                    <React.Fragment key={lvl}>
+                                      <td className={`py-2 px-2 align-top max-w-[180px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 rounded-sm' : ''}`}>
+                                        <p className={`text-xs font-semibold leading-tight ${isChecked ? 'text-emerald-950 font-bold' : 'text-slate-800'}`}>
+                                          {task.en}
+                                        </p>
+                                        {task.hi && <p className={`text-[10px] mt-0.5 leading-tight ${isChecked ? 'text-emerald-800' : 'text-slate-500'}`}>{task.hi}</p>}
+                                      </td>
+                                      <td className="py-2 px-1 text-center align-top">
+                                        <div
+                                          className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs mx-auto ${
+                                            isChecked
+                                              ? 'bg-emerald-600 text-white shadow-xs'
+                                              : 'bg-red-50 text-red-500 border border-red-200'
+                                          }`}
+                                        >
+                                          {isChecked ? '✓' : '✕'}
+                                        </div>
+                                      </td>
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tr>
+                            ));
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Submission History */}
+                    <div className="pt-2">
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Submission Log & History</h3>
+                      <div className="space-y-1">
+                        {empSubs.map((s, idx) => {
+                          const d = s.tasks.filter((t) => t.checked).length;
+                          return (
+                            <div key={idx} className="text-xs text-slate-700 font-medium bg-slate-50 border border-slate-200 p-2 rounded flex justify-between">
+                              <span>📅 {s.date} — {s.shop}</span>
+                              <span className="font-bold text-emerald-700">{d}/{s.tasks.length} completed</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 );
               })()}
             </div>

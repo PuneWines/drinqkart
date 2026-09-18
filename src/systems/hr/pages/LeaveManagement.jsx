@@ -21,6 +21,7 @@ export default function LeaveManagement() {
     to_date: '',
     days: 0,
     leave_type: 'Casual Leave',
+    is_payable: 'Non Payable',
     reason: ''
   })
 
@@ -215,7 +216,12 @@ export default function LeaveManagement() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    if (name === 'leave_type') {
+      const autoPayable = value === 'Sick Leave' ? 'Payable' : 'Non Payable'
+      setFormData(prev => ({ ...prev, leave_type: value, is_payable: autoPayable }))
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }))
+    }
   }
 
   const handleEmployeeChange = (e) => {
@@ -262,6 +268,7 @@ export default function LeaveManagement() {
         to_date: formData.to_date,
         days: parseInt(formData.days, 10),
         leave_type: formData.leave_type,
+        is_payable: formData.is_payable || (formData.leave_type === 'Sick Leave' ? 'Payable' : 'Non Payable'),
         reason: formData.reason || '',
         status: 'Pending'
       }
@@ -283,6 +290,7 @@ export default function LeaveManagement() {
         to_date: '',
         days: 0,
         leave_type: 'Casual Leave',
+        is_payable: 'Non Payable',
         reason: ''
       })
       alert('Leave request submitted successfully!')
@@ -391,6 +399,7 @@ export default function LeaveManagement() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">Employee ID</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Employee Name</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Leave Type</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Payable Status</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">From Date</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">To Date</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Days</th>
@@ -429,6 +438,15 @@ export default function LeaveManagement() {
                   <td className="px-4 py-3">
                     <span className="inline-block px-2 py-1 bg-gray-100 text-gray-700  text-xs">
                       {leave.leave_type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                      leave.is_payable === 'Payable' || leave.leave_type === 'Sick Leave'
+                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}>
+                      {leave.is_payable || (leave.leave_type === 'Sick Leave' ? 'Payable' : 'Non Payable')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600">{leave.from_date}</td>
@@ -558,6 +576,32 @@ export default function LeaveManagement() {
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payable Status <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="is_payable"
+                    value={formData.is_payable}
+                    onChange={handleInputChange}
+                    disabled
+                    className={`w-full px-3 py-2 border text-sm font-medium focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 ${
+                      formData.is_payable === 'Payable'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : 'bg-slate-50 text-slate-700 border-gray-300'
+                    }`}
+                    required
+                  >
+                    <option value="Payable">Payable (Paid Leave)</option>
+                    <option value="Non Payable">Non Payable (Unpaid Leave)</option>
+                  </select>
+                  {/* <p className="text-xs text-gray-500 mt-1">
+                    {formData.leave_type === 'Sick Leave' 
+                      ? '✓ Sick leave is automatically marked as Payable (Paid).'
+                      : 'ℹ Selected leave type defaults to Non Payable.'}
+                  </p> */}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -667,6 +711,18 @@ export default function LeaveManagement() {
                 <div>
                   <label className="text-xs text-gray-500">Leave Type</label>
                   <p><span className="inline-block px-2 py-1 bg-gray-100 text-gray-700  text-xs mt-1">{detailsLeave.leave_type}</span></p>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">Payable Status</label>
+                  <p>
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold mt-1 ${
+                      detailsLeave.is_payable === 'Payable' || detailsLeave.leave_type === 'Sick Leave'
+                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}>
+                      {detailsLeave.is_payable || (detailsLeave.leave_type === 'Sick Leave' ? 'Payable' : 'Non Payable')}
+                    </span>
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Total Duration</label>
