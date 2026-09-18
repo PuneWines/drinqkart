@@ -200,12 +200,22 @@ const Roster = () => {
             };
 
             if (editingShiftId) {
-                const { error } = await supabase
-                    .from('hr_management_custom_shift')
-                    .update(payload)
-                    .eq('id', editingShiftId);
+                const isSysId = typeof editingShiftId === 'string' && editingShiftId.startsWith('sys-');
+                if (isSysId) {
+                    // System default shift updated by user -> upsert by shift_name or insert new custom shift
+                    const { error } = await supabase
+                        .from('hr_management_custom_shift')
+                        .upsert(payload, { onConflict: 'shift_name' });
 
-                if (error) throw error;
+                    if (error) throw error;
+                } else {
+                    const { error } = await supabase
+                        .from('hr_management_custom_shift')
+                        .update(payload)
+                        .eq('id', editingShiftId);
+
+                    if (error) throw error;
+                }
                 toast.success('Shift updated successfully');
             } else {
                 const { error } = await supabase
@@ -234,7 +244,24 @@ const Roster = () => {
         try {
             const isSysId = typeof id === 'string' && id.startsWith('sys-');
 
-            if (!isSysId) {
+            if (isSysId) {
+                // Store deleted system shift ID / name in localStorage to persist deletion across refreshes
+                try {
+                    const saved = JSON.parse(localStorage.getItem('deleted_system_shifts') || '[]');
+                    if (!saved.includes(id)) {
+                        saved.push(id);
+                        localStorage.setItem('deleted_system_shifts', JSON.stringify(saved));
+                    }
+                } catch (e) {
+                    console.error('Error saving deleted system shift to localStorage:', e);
+                }
+
+                // Also delete from DB if an entry with this shift_name was created/upserted
+                await supabase
+                    .from('hr_management_custom_shift')
+                    .delete()
+                    .eq('shift_name', shiftName);
+            } else {
                 // Delete custom shift stored in Supabase database table
                 const { error } = await supabase
                     .from('hr_management_custom_shift')
@@ -243,9 +270,6 @@ const Roster = () => {
 
                 if (error) throw error;
             }
-
-            // Also remove from local state list if it was a default shift or DB shift
-            setCustomShifts(prev => prev.filter(s => s.id !== id && s.shift_name !== shiftName));
 
             toast.success('Shift deleted successfully');
             await fetchCustomShifts();
@@ -292,22 +316,31 @@ const Roster = () => {
             { id: 'sys-hol', shift_name: 'Holiday', start_time: null, end_time: null, label: 'Hol', color: 'bg-red-100 text-red-700', bg_color: 'bg-red-200' }
         ];
 
+        let deletedSysIds = [];
+        try {
+            deletedSysIds = JSON.parse(localStorage.getItem('deleted_system_shifts') || '[]');
+        } catch (e) {
+            deletedSysIds = [];
+        }
+
+        const activeDefaults = DEFAULT_SHIFTS.filter(ds => !deletedSysIds.includes(ds.id));
+
         try {
             const { data, error } = await supabase
                 .from('hr_management_custom_shift')
                 .select('*')
                 .order('id');
             if (error || !data || data.length === 0) {
-                setCustomShifts(DEFAULT_SHIFTS);
+                setCustomShifts(activeDefaults);
             } else {
                 // Combine default shifts with user custom shifts from DB (filtering out duplicate shift names if overridden)
                 const dbShiftNames = new Set(data.map(d => (d.shift_name || '').toLowerCase()));
-                const filteredDefaults = DEFAULT_SHIFTS.filter(ds => !dbShiftNames.has((ds.shift_name || '').toLowerCase()));
+                const filteredDefaults = activeDefaults.filter(ds => !dbShiftNames.has((ds.shift_name || '').toLowerCase()));
                 setCustomShifts([...filteredDefaults, ...data]);
             }
         } catch (error) {
             console.error('Error fetching custom shifts:', error);
-            setCustomShifts(DEFAULT_SHIFTS);
+            setCustomShifts(activeDefaults);
         }
     };
 
@@ -634,31 +667,89 @@ const Roster = () => {
             endDate = dateRange.toDate;
         }
 
+        // Find existing assigned shifts for employee in the current view period
+        const empIdClean = employee.employee_id ? String(employee.employee_id).trim().toLowerCase() : '';
+        let existingShiftType = '';
+        let existingStartTime = '';
+        let existingEndTime = '';
+        let existingRemark = '';
+
+        let currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+            const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
+            const roster = rosterData.get(`${empIdClean}-${dateStr}`);
+            if (roster && roster.shift_type && roster.shift_type !== 'Not Assigned') {
+                existingShiftType = roster.shift_type;
+                existingStartTime = roster.start_time ? roster.start_time.slice(0, 5) : '';
+                existingEndTime = roster.end_time ? roster.end_time.slice(0, 5) : '';
+                existingRemark = roster.remark || '';
+                break; // Use first found shift in range
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        // If no shift in range, fallback to default or first custom shift
+        if (!existingShiftType) {
+            existingShiftType = customShifts[0]?.shift_name || 'General Shift';
+            const matchedShift = customShifts.find(s => s.shift_name === existingShiftType);
+            existingStartTime = matchedShift?.start_time ? matchedShift.start_time.slice(0, 5) : '09:30';
+            existingEndTime = matchedShift?.end_time ? matchedShift.end_time.slice(0, 5) : '19:30';
+        }
+
         setEditSlideForm({
             employee_id: employee.employee_id,
             employee_name: employee.name_as_per_aadhar || employee.name || '',
             start_date: formatDate(startDate, 'yyyy-MM-dd'),
             end_date: formatDate(endDate, 'yyyy-MM-dd'),
-            shift_type: 'General Shift',
-            start_time: '09:30',
-            end_time: '19:30',
-            remark: ''
+            shift_type: existingShiftType,
+            start_time: existingStartTime,
+            end_time: existingEndTime,
+            remark: existingRemark
         });
         setIsEditSlidePanelOpen(true);
     };
 
-    // Delete all roster entries for an employee between firstAssigned and lastAssigned dates
-    const handleDeleteRosterRange = async (employee, firstAssigned, lastAssigned) => {
-        if (!firstAssigned) {
-            toast.error('No shifts assigned for this employee in the current period.');
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteEmployee, setDeleteEmployee] = useState(null);
+    const [employeeShiftsList, setEmployeeShiftsList] = useState([]);
+    const [selectedShiftIdsToDelete, setSelectedShiftIdsToDelete] = useState(new Set());
+    const [isDeletingShifts, setIsDeletingShifts] = useState(false);
+
+    // Open custom delete modal to fetch and display ALL assigned shifts for an employee
+    const handleOpenDeleteModal = async (employee) => {
+        setDeleteEmployee(employee);
+        setSelectedShiftIdsToDelete(new Set());
+        setShowDeleteModal(true);
+        setIsDeletingShifts(true);
+        try {
+            const { data, error } = await supabase
+                .from('hr_management_shift_roster')
+                .select('*')
+                .eq('employee_id', employee.employee_id)
+                .order('date', { ascending: true });
+
+            if (error) throw error;
+            setEmployeeShiftsList(data || []);
+            // Select all by default
+            setSelectedShiftIdsToDelete(new Set((data || []).map(s => s.id)));
+        } catch (err) {
+            console.error('Error fetching employee shifts for deletion:', err);
+            toast.error('Failed to load employee shifts');
+        } finally {
+            setIsDeletingShifts(false);
+        }
+    };
+
+    // Delete selected shift entries from modal
+    const handleDeleteSelectedShifts = async () => {
+        if (selectedShiftIdsToDelete.size === 0) {
+            toast.error('Please select at least one shift to delete');
             return;
         }
 
-        const startStr = formatDate(firstAssigned, 'yyyy-MM-dd');
-        const endStr = lastAssigned ? formatDate(lastAssigned, 'yyyy-MM-dd') : startStr;
-
+        const idsToDelete = Array.from(selectedShiftIdsToDelete);
         const confirmed = window.confirm(
-            `Delete ALL roster entries for ${employee.name_as_per_aadhar || employee.employee_id}\nfrom ${startStr} to ${endStr}?\n\nThis action cannot be undone.`
+            `Delete ${idsToDelete.length} selected shift(s) for ${deleteEmployee?.name_as_per_aadhar || deleteEmployee?.employee_id}?\n\nThis action cannot be undone.`
         );
         if (!confirmed) return;
 
@@ -666,17 +757,19 @@ const Roster = () => {
             const { error } = await supabase
                 .from('hr_management_shift_roster')
                 .delete()
-                .eq('employee_id', employee.employee_id)
-                .gte('date', startStr)
-                .lte('date', endStr);
+                .in('id', idsToDelete);
 
             if (error) throw error;
 
-            toast.success(`Deleted roster for ${employee.name_as_per_aadhar || employee.employee_id} (${startStr} → ${endStr})`);
+            toast.success(`Successfully deleted ${idsToDelete.length} shift(s)`);
+            setShowDeleteModal(false);
+            setDeleteEmployee(null);
+            setEmployeeShiftsList([]);
+            setSelectedShiftIdsToDelete(new Set());
             await fetchRosterData();
         } catch (err) {
-            console.error('Error deleting roster range:', err);
-            toast.error('Failed to delete roster entries. Please try again.');
+            console.error('Error deleting selected shifts:', err);
+            toast.error('Failed to delete shifts');
         }
     };
 
@@ -1324,8 +1417,8 @@ const Roster = () => {
                                                         </button>
                                                         {hasShift && (
                                                             <button
-                                                                onClick={() => handleDeleteRosterRange(employee, firstAssigned, lastAssigned)}
-                                                                title={`Delete roster from ${startDateDisplay} to ${endDateDisplay}`}
+                                                                onClick={() => handleOpenDeleteModal(employee)}
+                                                                title="Delete assigned shifts"
                                                                 className="flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-700 transition-colors border border-red-200 px-2 py-1 rounded hover:bg-red-50"
                                                             >
                                                                 <Trash2 size={11} />
@@ -2267,6 +2360,134 @@ const Roster = () => {
                                         </button>
                                     </div>
                                 </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Delete Shifts Modal */}
+            {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowDeleteModal(false); setDeleteEmployee(null); }}>
+                    <div className="bg-white max-w-xl w-full shadow-2xl border border-slate-100 flex flex-col max-h-[85vh] rounded-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="flex justify-between items-center p-4 border-b bg-gray-50">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                    <Trash2 size={16} className="text-red-500" />
+                                    Delete Assigned Shifts
+                                </h3>
+                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                    Employee: <span className="font-semibold text-gray-800">{deleteEmployee?.name_as_per_aadhar}</span> ({deleteEmployee?.employee_id})
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => { setShowDeleteModal(false); setDeleteEmployee(null); }}
+                                className="p-1 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* List of Shifts */}
+                        <div className="flex-1 p-4 overflow-y-auto max-h-[400px] space-y-2 bg-gray-50/50">
+                            {isDeletingShifts ? (
+                                <div className="flex items-center justify-center py-8 gap-2 text-gray-500 text-xs">
+                                    <Loader2 size={16} className="animate-spin text-indigo-600" />
+                                    Loading assigned shifts...
+                                </div>
+                            ) : employeeShiftsList.length > 0 ? (
+                                <>
+                                    <div className="flex items-center justify-between pb-2 border-b text-xs text-gray-600">
+                                        <span className="font-semibold">
+                                            Total Shifts Found: {employeeShiftsList.length}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedShiftIdsToDelete(new Set(employeeShiftsList.map(s => s.id)))}
+                                                className="text-indigo-600 hover:underline text-[11px] font-medium"
+                                            >
+                                                Select All
+                                            </button>
+                                            <span className="text-gray-300">|</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedShiftIdsToDelete(new Set())}
+                                                className="text-gray-500 hover:underline text-[11px] font-medium"
+                                            >
+                                                Deselect All
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5 pt-1">
+                                        {employeeShiftsList.map((shift) => {
+                                            const isChecked = selectedShiftIdsToDelete.has(shift.id);
+                                            return (
+                                                <div
+                                                    key={shift.id}
+                                                    onClick={() => {
+                                                        const next = new Set(selectedShiftIdsToDelete);
+                                                        if (isChecked) next.delete(shift.id);
+                                                        else next.add(shift.id);
+                                                        setSelectedShiftIdsToDelete(next);
+                                                    }}
+                                                    className={`flex items-center justify-between p-2.5 rounded border text-xs cursor-pointer transition-colors ${isChecked ? 'bg-red-50/80 border-red-200 text-red-900' : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isChecked}
+                                                            onChange={() => { }} // Managed by parent div onClick
+                                                            className="rounded text-red-600 focus:ring-red-500 h-4 w-4"
+                                                        />
+                                                        <div>
+                                                            <p className="font-semibold text-xs">
+                                                                {shift.date} ({formatDate(new Date(shift.date), 'EEE')})
+                                                            </p>
+                                                            <p className="text-[10px] text-gray-500 font-mono mt-0.5">
+                                                                {shift.shift_type} {shift.start_time && shift.end_time ? `(${shift.start_time.slice(0, 5)} - ${shift.end_time.slice(0, 5)})` : ''}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    {shift.remark && (
+                                                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">
+                                                            {shift.remark}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="text-center py-8 text-gray-400 text-xs">
+                                    No active assigned shifts found for this employee.
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-between p-3 border-t bg-gray-50">
+                            <span className="text-xs text-gray-500 font-medium">
+                                {selectedShiftIdsToDelete.size} shift(s) selected
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowDeleteModal(false); setDeleteEmployee(null); }}
+                                    className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleDeleteSelectedShifts}
+                                    disabled={selectedShiftIdsToDelete.size === 0 || isDeletingShifts}
+                                    className="px-4 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded transition-colors flex items-center gap-1.5"
+                                >
+                                    <Trash2 size={13} />
+                                    Delete Selected
+                                </button>
                             </div>
                         </div>
                     </div>

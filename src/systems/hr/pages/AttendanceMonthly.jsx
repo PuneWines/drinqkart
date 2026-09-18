@@ -491,31 +491,31 @@ const AttendanceMonthly = () => {
             </div>
 
 
-            {/* Table - Compact */}
-            <div className="bg-white rounded-md border border-gray-200 overflow-hidden ">
-                <div className="overflow-x-auto h-[60vh] overflow-y-auto scrollbar-thin">
-                    <table className="w-full text-xs relative border-collapse">
+            {/* Table - Fixed Height & Width Container */}
+            <div className="bg-white rounded-md border border-gray-200 overflow-hidden flex flex-col h-[calc(88vh-220px)] min-h-[500px] shadow-sm">
+                <div className="overflow-x-auto overflow-y-auto flex-1 scrollbar-thin">
+                    <table className="w-full min-w-[1100px] text-xs relative border-collapse">
                         <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 shadow-sm">
                             <tr>
-                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-12 z-10">#</th>
-                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] min-w-24 z-10">Month/Year</th>
-                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] min-w-24 z-10">Employee Id</th>
-                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] min-w-32 z-10">Employee Name</th>
+                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-12 min-w-[48px] z-10">#</th>
+                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-28 min-w-[100px] z-10">Month/Year</th>
+                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-28 min-w-[100px] z-10">Employee Id</th>
+                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-48 min-w-[180px] z-10">Employee Name</th>
 
-                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] min-w-24 z-10">Store</th>
-                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] min-w-20 z-10">Device ID</th>
-                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] min-w-28 z-10">Serial No</th>
-                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-20 z-10">Present</th>
-                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-20 z-10">Absent</th>
-                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-16 z-10">Late</th>
-                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-24 z-10">Avg Work Hrs</th>
-                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-24 z-10">Avg Lunch Time</th>
+                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-32 min-w-[120px] z-10">Store</th>
+                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-28 min-w-[100px] z-10">Device ID</th>
+                                <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-36 min-w-[130px] z-10">Serial No</th>
+                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-20 min-w-[70px] z-10">Present</th>
+                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-20 min-w-[70px] z-10">Absent</th>
+                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-16 min-w-[60px] z-10">Late</th>
+                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-24 min-w-[90px] z-10">Avg Work Hrs</th>
+                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-24 min-w-[90px] z-10">Avg Lunch Time</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan="13" className="text-center py-8">
+                                    <td colSpan="13" className="text-center py-24 h-[400px]">
                                         <div className="flex items-center justify-center gap-1.5 text-gray-500 text-xs">
                                             <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                                             Loading...
@@ -524,7 +524,7 @@ const AttendanceMonthly = () => {
                                 </tr>
                             ) : error ? (
                                 <tr>
-                                    <td colSpan="13" className="text-center py-8">
+                                    <td colSpan="13" className="text-center py-24 h-[400px]">
                                         <p className="text-red-600 text-xs mb-2">{error}</p>
                                         <button
                                             onClick={() => fetchAttendanceData()}
@@ -543,7 +543,7 @@ const AttendanceMonthly = () => {
                                     return (
                                         <tr
                                             key={index}
-                                            className={`transition-colors ${item.isRemaining ? 'bg-blue-100 hover:bg-blue-200' : isInEmployeesTable ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50 bg-white'}`}
+                                            className={`transition-colors h-11 ${item.isRemaining ? 'bg-blue-100 hover:bg-blue-200' : isInEmployeesTable ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50 bg-white'}`}
                                         >
                                             <td className="px-2 py-1.5 text-[10px] text-gray-500">{actualIndex + 1}</td>
                                             <td className="px-2 py-1.5 text-[10px] font-medium text-gray-700">{item.month} {item.year}</td>
@@ -597,7 +597,7 @@ const AttendanceMonthly = () => {
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan="13" className="text-center py-8">
+                                    <td colSpan="13" className="text-center py-24 h-[400px]">
                                         <div className="flex flex-col items-center justify-center text-gray-400">
                                             <Search size={28} className="mb-2" />
                                             <p className="text-xs font-medium">No records found</p>

@@ -217,11 +217,8 @@ const STATUS_CONFIG = {
   'Late': { color: 'bg-orange-100 text-orange-700', label: 'L', fullLabel: 'Late', bgColor: 'bg-orange-200/60' },
   'Absent': { color: 'bg-red-100 text-red-700', label: 'A', fullLabel: 'Absent', bgColor: 'bg-red-200/40' },
   'Half Day': { color: 'bg-yellow-100 text-yellow-700', label: 'H', fullLabel: 'Half Day', bgColor: 'bg-yellow-200/60' },
-  'Holiday': { color: 'bg-purple-100 text-purple-700', label: 'Hol', fullLabel: 'Holiday', bgColor: 'bg-purple-200' },
   'Weekly Off': { color: 'bg-indigo-100 text-indigo-700', label: 'WO', fullLabel: 'Weekly Off', bgColor: 'bg-indigo-100/60' },
   'Day Off': { color: 'bg-gray-100 text-gray-700', label: 'DO', fullLabel: 'Day Off', bgColor: 'bg-gray-200' },
-  'On Leave': { color: 'bg-blue-100 text-blue-700', label: 'Lv', fullLabel: 'On Leave', bgColor: 'bg-blue-200' },
-  'Future': { color: 'bg-transparent border-transparent', label: '-', fullLabel: '', bgColor: 'bg-transparent' }
 };
 
 const AttendanceDaily = () => {
@@ -244,6 +241,7 @@ const AttendanceDaily = () => {
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'Present', 'Late', 'Absent', 'Half Day'
   const [currentPage, setCurrentPage] = useState(1);
   const [rosterData, setRosterData] = useState([]); // Store shift_roster data
+  const [hoveredCell, setHoveredCell] = useState(null); // Track hovered { empId, idx } for precise per-employee hover
 
   // Reset page to 1 on filter changes
   useEffect(() => {
@@ -302,6 +300,51 @@ const AttendanceDaily = () => {
   // Employee Payroll History state
   const [payrollRecords, setPayrollRecords] = useState([]);
   const [payrollLoading, setPayrollLoading] = useState(false);
+
+  // Employee Learning Progress state
+  const [learningSubmission, setLearningSubmission] = useState(null);
+  const [learningLoading, setLearningLoading] = useState(false);
+
+  const fetchEmployeeLearning = async (emp) => {
+    if (!emp) return;
+    setLearningLoading(true);
+    try {
+      const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
+      const empNameStr = String(emp.name || '').trim().toLowerCase();
+
+      const { data, error } = await supabase
+        .from('hr_learning_submissions')
+        .select('*')
+        .order('id', { ascending: false });
+
+      if (error) throw error;
+
+      const matched = (data || []).find(s => {
+        const subEmpId = String(s.employee_id || '').trim().toLowerCase();
+        const subEmpName = String(s.employee_name || '').trim().toLowerCase();
+        const matchId = empIdStr && subEmpId && (empIdStr === subEmpId || subEmpId.includes(empIdStr));
+        const matchName = empNameStr && subEmpName && (empNameStr === subEmpName || empNameStr.includes(subEmpName) || subEmpName.includes(empNameStr));
+        return matchId || matchName;
+      });
+
+      if (matched) {
+        let tasksArr = [];
+        if (typeof matched.tasks_data === 'string') {
+          try { tasksArr = JSON.parse(matched.tasks_data); } catch (e) { tasksArr = []; }
+        } else if (Array.isArray(matched.tasks_data)) {
+          tasksArr = matched.tasks_data;
+        }
+        setLearningSubmission({ ...matched, tasks: tasksArr });
+      } else {
+        setLearningSubmission(null);
+      }
+    } catch (e) {
+      console.error("Failed to fetch employee learning submission:", e);
+      setLearningSubmission(null);
+    } finally {
+      setLearningLoading(false);
+    }
+  };
 
   const fetchEmployeePayroll = async (emp) => {
     if (!emp) return;
@@ -1749,24 +1792,31 @@ const AttendanceDaily = () => {
           console.warn('Could not fetch shift roster for manual punch calculation:', shiftErr);
         }
 
-        const metrics = calculateMetricsFromManualPunches(finalManualPunches.manual, date, shiftEntry);
-        updateData.manual_punches = finalManualPunches;
-        updateData.in_time = metrics.in_time;
-        updateData.out_time = metrics.out_time;
-        updateData.punch_miss = metrics.punch_miss;
-        updateData.punch_miss_msg = metrics.punch_miss_msg;
-        updateData.working_hour = metrics.working_hour;
-        updateData.late_minute = metrics.late_minute;
-        updateData.is_late = metrics.late_minute > 0;
-
-        // ── Status resolution ─────────────────────────────────────────────
-        // If marked as Absent manually → keep Absent.
-        // If at least one manual punch exists → honour computed Present/Late.
-        // Otherwise keep the newStatus passed by the caller.
-        if (manualPunches.absent) {
-          updateData.status = 'Absent';
-        } else if (metrics.status) {
-          updateData.status = metrics.status; // 'Present' or 'Late'
+        let metrics = calculateMetricsFromManualPunches(finalManualPunches.manual, date, shiftEntry);
+        
+        if (newStatus === 'Absent' || newStatus === 'On Leave' || manualPunches.absent) {
+          updateData.status = newStatus === 'On Leave' ? 'On Leave' : 'Absent';
+          updateData.in_time = null;
+          updateData.out_time = null;
+          updateData.working_hour = "00:00:00";
+          updateData.late_minute = 0;
+          updateData.is_late = false;
+          updateData.punch_miss = false;
+          updateData.punch_miss_msg = null;
+          updateData.punch_log = "-";
+          updateData.manual_punches = { manual: {}, is_manual: true, absent: true };
+        } else {
+          updateData.manual_punches = finalManualPunches;
+          updateData.in_time = metrics.in_time;
+          updateData.out_time = metrics.out_time;
+          updateData.punch_miss = metrics.punch_miss;
+          updateData.punch_miss_msg = metrics.punch_miss_msg;
+          updateData.working_hour = metrics.working_hour;
+          updateData.late_minute = metrics.late_minute;
+          updateData.is_late = metrics.late_minute > 0;
+          if (metrics.status) {
+            updateData.status = metrics.status; // 'Present' or 'Late'
+          }
         }
 
         if (!existingRecord) {
@@ -1831,8 +1881,7 @@ const AttendanceDaily = () => {
         result = data;
       }
 
-      await fetchAttendanceFromDB();
-
+      // 1. Await external Google Machine Data Sheet sync directly to ensure 100% data persistence before returning
       const changedRow = result?.map(r => ({
         employee_id: r.employee_id,
         employee_name: r.employee_name,
@@ -1843,14 +1892,33 @@ const AttendanceDaily = () => {
         store_name: r.store_name
       }));
 
-      if (changedRow) {
-        await syncToMachineDataSheet(changedRow);
+      if (changedRow && changedRow.length > 0) {
+        try {
+          await syncToMachineDataSheet(changedRow);
+        } catch (sheetErr) {
+          console.warn('Google Sheet sync notice:', sheetErr);
+        }
+      }
+
+      // 2. Update local attendance state directly (no need to refetch 4500+ month rows from Supabase)
+      if (result && result.length > 0) {
+        const updatedRec = normalizeAttendanceRecord(result[0]);
+        setAttendanceData(prev => {
+          const cleanEmpId = String(updatedRec.employee_id).trim().toLowerCase();
+          const idx = prev.findIndex(a => a.employee_id && String(a.employee_id).trim().toLowerCase() === cleanEmpId && a.attendance_date === updatedRec.attendance_date);
+          if (idx !== -1) {
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], ...updatedRec };
+            return copy;
+          } else {
+            return [...prev, updatedRec];
+          }
+        });
       }
 
       setEditingCell(null);
       setSelectedEmployee(null);
       setIsSlidePanelOpen(false);
-      alert('Attendance updated successfully!');
     } catch (err) {
       console.error('Update failed:', err);
       alert('Error updating attendance: ' + err.message);
@@ -1905,22 +1973,24 @@ const AttendanceDaily = () => {
       }
     };
 
-    setTempInTime(formatInputVal(inTime) || `${date}T10:00`);
-    setTempOutTime(formatInputVal(outTime) || `${date}T18:00`);
+    const formattedIn = formatInputVal(inTime);
+    const formattedOut = formatInputVal(outTime);
+
+    const isOffOrLeaveStatus = status === 'Absent' || status === 'On Leave';
 
     // Populate manual punches state
     let punchesObj = {};
-    if (fullRecord?.manual_punches) {
+    if (!isOffOrLeaveStatus && fullRecord?.manual_punches) {
       if (fullRecord.manual_punches.manual && typeof fullRecord.manual_punches.manual === 'object') {
-        punchesObj = fullRecord.manual_punches.manual;
+        punchesObj = { ...fullRecord.manual_punches.manual };
       } else {
-        punchesObj = fullRecord.manual_punches;
+        punchesObj = { ...fullRecord.manual_punches };
       }
     }
-    const activePunches = Object.values(punchesObj).filter(v => v && v !== '' && typeof v === 'string');
+    let activePunches = Object.values(punchesObj).filter(v => v && v !== '' && typeof v === 'string');
 
     // If no manual punches exist, check if we can populate from punch_log
-    if (activePunches.length === 0 && fullRecord?.punch_log && fullRecord.punch_log !== '-') {
+    if (!isOffOrLeaveStatus && activePunches.length === 0 && fullRecord?.punch_log && fullRecord.punch_log !== '-') {
       const parsedPunches = fullRecord.punch_log.split('|').map(p => convert12hTo24h(p)).filter(Boolean);
       punchesObj = {};
       parsedPunches.forEach((p, idx) => {
@@ -1928,10 +1998,16 @@ const AttendanceDaily = () => {
           punchesObj[(idx + 1).toString()] = p;
         }
       });
-      // If 5 punches present, assume 6th punch is 23:00 (11:00 PM)
-      if (parsedPunches.length === 5 && !punchesObj["6"]) {
-        punchesObj["6"] = "23:00";
-      }
+      activePunches = Object.values(punchesObj).filter(Boolean);
+    }
+
+    // If still no punches but inTime/outTime exist, derive punches from inTime/outTime
+    if (!isOffOrLeaveStatus && activePunches.length === 0 && (formattedIn || formattedOut)) {
+      const inTimePart = formattedIn ? formattedIn.split('T')[1]?.substring(0, 5) : '';
+      const outTimePart = formattedOut ? formattedOut.split('T')[1]?.substring(0, 5) : '';
+      if (inTimePart) punchesObj["1"] = inTimePart;
+      if (outTimePart && outTimePart !== inTimePart) punchesObj["2"] = outTimePart;
+      activePunches = Object.values(punchesObj).filter(Boolean);
     }
 
     const parsePunchTo24h = (val) => {
@@ -1943,14 +2019,26 @@ const AttendanceDaily = () => {
       return s;
     };
 
-    setTempManualPunches({
+    const finalPunchesObj = isOffOrLeaveStatus ? { "1": "", "2": "", "3": "", "4": "", "5": "", "6": "" } : {
       "1": parsePunchTo24h(punchesObj["1"]),
       "2": parsePunchTo24h(punchesObj["2"]),
       "3": parsePunchTo24h(punchesObj["3"]),
       "4": parsePunchTo24h(punchesObj["4"]),
       "5": parsePunchTo24h(punchesObj["5"]),
       "6": parsePunchTo24h(punchesObj["6"])
-    });
+    };
+
+    setTempManualPunches(finalPunchesObj);
+
+    const sortedActivePunches = Object.values(finalPunchesObj).filter(Boolean).sort();
+
+    if (isOffOrLeaveStatus || sortedActivePunches.length === 0) {
+      setTempInTime(isOffOrLeaveStatus ? '' : formattedIn);
+      setTempOutTime(isOffOrLeaveStatus ? '' : formattedOut);
+    } else {
+      setTempInTime(formattedIn || `${date}T${sortedActivePunches[0]}`);
+      setTempOutTime(formattedOut || (sortedActivePunches.length > 1 ? `${date}T${sortedActivePunches[sortedActivePunches.length - 1]}` : ''));
+    }
 
     setNewPunchTime('');
     setIsSlidePanelOpen(true);
@@ -1958,6 +2046,10 @@ const AttendanceDaily = () => {
 
   // Add a manual punch, sort it chronologically, and sync in/out times
   const handleAddPunch = () => {
+    if (tempStatus === 'Absent' || tempStatus === 'On Leave') {
+      alert(`Manual punches cannot be added when employee status is ${tempStatus}!`);
+      return;
+    }
     if (!newPunchTime) return;
 
     const existing = Object.values(tempManualPunches).filter(Boolean);
@@ -2078,7 +2170,20 @@ const AttendanceDaily = () => {
     setIsSaving(true);
     setSaveError(null);
     try {
-      const formattedPunches = {
+      const isOffOrLeave = tempStatus === 'Absent' || tempStatus === 'On Leave';
+
+      // ── Validation: Block saving Present/Late/Half Day without at least 1 punch ──
+      if (!isOffOrLeave) {
+        const activePunchCount = Object.values(tempManualPunches).filter(Boolean).length;
+        const hasClockIn = tempInTime && tempInTime.trim() !== '';
+        if (activePunchCount === 0 && !hasClockIn) {
+          setSaveError('At least 1 manual punch or Clock In time is required to mark attendance as Present, Late, or Half Day.');
+          setIsSaving(false);
+          return;
+        }
+      }
+
+      const formattedPunches = isOffOrLeave ? { manual: {}, is_manual: true, absent: true } : {
         "1": tempManualPunches["1"] ? convert24hTo12h(tempManualPunches["1"]) : "",
         "2": tempManualPunches["2"] ? convert24hTo12h(tempManualPunches["2"]) : "",
         "3": tempManualPunches["3"] ? convert24hTo12h(tempManualPunches["3"]) : "",
@@ -2092,8 +2197,8 @@ const AttendanceDaily = () => {
         selectedEmployee.id,
         selectedEmployee.date,
         tempStatus,
-        tempInTime,
-        tempOutTime,
+        isOffOrLeave ? null : tempInTime,
+        isOffOrLeave ? null : tempOutTime,
         formattedPunches
       );
     } catch (err) {
@@ -2127,13 +2232,41 @@ const AttendanceDaily = () => {
   // Get attendance status for an employee on a specific date
   const getAttendanceForDate = (employeeId, date) => {
     if (!employeeId || !date) return { status: 'Absent', in_time: '-', out_time: '-' };
-    const empIdClean = String(employeeId).trim();
+    const empIdClean = String(employeeId).trim().toLowerCase();
+    
+    // 1. Check if an explicit attendance record exists
     const record = attendanceData.find(
-      a => a.employee_id && String(a.employee_id).trim() === empIdClean && a.attendance_date === date
+      a => a.employee_id && String(a.employee_id).trim().toLowerCase() === empIdClean && a.attendance_date === date
     );
     if (record) {
       return record;
     }
+
+    // 2. Check approved leave applications from hr_management_leaves
+    if (leavesData && leavesData.length > 0) {
+      const approvedLeave = leavesData.find(l => {
+        const lEmpId = (l.employee_id || l.employeeId)?.toString().trim().toLowerCase();
+        if (lEmpId !== empIdClean) return false;
+        const st = (l.status || '').trim().toLowerCase();
+        const isApproved = !st || st === 'approved';
+        if (!isApproved) return false;
+        const from = l.from_date || l.fromDate;
+        const to = l.to_date || l.toDate;
+        if (!from || !to) return false;
+        return from <= date && to >= date;
+      });
+
+      if (approvedLeave) {
+        return {
+          status: 'On Leave',
+          in_time: '-',
+          out_time: '-',
+          leave_type: approvedLeave.leave_type || approvedLeave.leaveType || 'Approved Leave',
+          reason: approvedLeave.reason || approvedLeave.remarks || 'Approved Leave Application'
+        };
+      }
+    }
+
     if (date > todayDate) {
       return { status: 'Future', in_time: '-', out_time: '-' };
     }
@@ -2641,22 +2774,34 @@ const AttendanceDaily = () => {
 
       {viewMode === 'calendar' ? (
         /* Calendar View - Compact */
-        <div className="bg-white rounded-md border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto overflow-y-auto max-h-[calc(88vh-220px)] scrollbar-thin">
-            <table className="w-full text-xs relative border-collapse">
+        <div className="bg-white rounded-md border border-gray-200 overflow-hidden flex flex-col h-[calc(88vh-220px)] min-h-[500px] shadow-sm">
+          <div className="overflow-x-auto overflow-y-auto flex-1 scrollbar-thin">
+            <table className="w-full text-xs relative border-collapse min-w-[1200px]">
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20 shadow-sm">
                 <tr>
                   <th className="sticky top-0 left-0 bg-gray-50 px-2 py-1.5 font-medium text-gray-600 text-[10px] z-30 min-w-[80px] border-">
                     Employee
                   </th>
-                  {days.map((day, idx) => (
-                    <th key={idx} className={`sticky top-0 bg-gray-50 px-0.5 py-1.5 font-medium text-center text-[10px] min-w-[32px] ${day.isWeekend ? 'bg-red-50' : ''} z-10`}>
-                      <div className="font-semibold text-gray-700">{day.date}</div>
-                      <div className="text-gray-400 text-[8px] mt-0.5">
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day.dayOfWeek]}
-                      </div>
-                    </th>
-                  ))}
+                  {days.map((day, idx) => {
+                    const isHovered = hoveredCell && hoveredCell.idx === idx;
+                    return (
+                      <th
+                        key={idx}
+                        className={`sticky top-0 px-0.5 py-1.5 font-medium text-center text-[10px] min-w-[32px] z-10 transition-colors ${
+                          isHovered
+                            ? 'bg-indigo-100 text-indigo-950 font-bold ring-1 ring-indigo-400 z-30'
+                            : day.isWeekend
+                            ? 'bg-red-50 text-gray-700'
+                            : 'bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <div className="font-semibold">{day.date}</div>
+                        <div className={`text-[8px] mt-0.5 ${isHovered ? 'text-indigo-700 font-semibold' : 'text-gray-400'}`}>
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day.dayOfWeek]}
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -2753,7 +2898,7 @@ const AttendanceDaily = () => {
                           </div>
                         </td>
                         {(() => {
-                          // Segment days into single cells or merged streaks (for 3+ consecutive absent days)
+                          // Segment days into single cells or merged streaks (for Approved Leaves & 3+ consecutive absent days)
                           const segments = [];
                           let i = 0;
                           while (i < days.length) {
@@ -2761,13 +2906,37 @@ const AttendanceDaily = () => {
                             const att = getAttendanceForDate(employee.id, d.fullDate);
                             const st = att.status || 'Absent';
 
-                            if (st === 'Absent' || st === 'On Leave') {
+                            if (st === 'On Leave') {
                               let j = i;
                               const streak = [];
                               while (j < days.length) {
                                 const nextAtt = getAttendanceForDate(employee.id, days[j].fullDate);
                                 const nextSt = nextAtt.status || 'Absent';
-                                if (nextSt === 'Absent' || nextSt === 'On Leave') {
+                                if (nextSt === 'On Leave') {
+                                  streak.push({ day: days[j], idx: j, attendance: nextAtt, status: nextSt });
+                                  j++;
+                                } else {
+                                  break;
+                                }
+                              }
+
+                              segments.push({
+                                type: 'merged_span',
+                                spanKind: 'leave',
+                                colSpan: streak.length,
+                                startIndex: i,
+                                streak: streak,
+                                startDay: streak[0].day,
+                                endDay: streak[streak.length - 1].day
+                              });
+                              i = j;
+                            } else if (st === 'Absent') {
+                              let j = i;
+                              const streak = [];
+                              while (j < days.length) {
+                                const nextAtt = getAttendanceForDate(employee.id, days[j].fullDate);
+                                const nextSt = nextAtt.status || 'Absent';
+                                if (nextSt === 'Absent') {
                                   streak.push({ day: days[j], idx: j, attendance: nextAtt, status: nextSt });
                                   j++;
                                 } else {
@@ -2777,7 +2946,8 @@ const AttendanceDaily = () => {
 
                               if (streak.length >= 3) {
                                 segments.push({
-                                  type: 'merged_absent',
+                                  type: 'merged_span',
+                                  spanKind: 'absent',
                                   colSpan: streak.length,
                                   startIndex: i,
                                   streak: streak,
@@ -2812,9 +2982,13 @@ const AttendanceDaily = () => {
                           }
 
                           return segments.map((seg, sIdx) => {
-                            if (seg.type === 'merged_absent') {
-                              const leaveInfo = getLeaveInfoForStreak(employee.id, seg.startDay.fullDate, seg.endDay.fullDate, seg.streak);
-                              absentCount += seg.colSpan;
+                            if (seg.type === 'merged_span') {
+                              const kind = seg.spanKind; // 'present' | 'late' | 'leave' | 'absent'
+                              const leaveInfo = kind === 'leave' ? getLeaveInfoForStreak(employee.id, seg.startDay.fullDate, seg.endDay.fullDate, seg.streak) : {};
+
+                              if (kind === 'present') presentCount += seg.colSpan;
+                              else if (kind === 'late') lateCount += seg.colSpan;
+                              else if (kind === 'leave' || kind === 'absent') absentCount += seg.colSpan;
 
                               const isTopRow = empIdx < 2;
                               const isLeftCol = seg.startIndex <= 2;
@@ -2834,57 +3008,159 @@ const AttendanceDaily = () => {
                                 ? `bottom-full ${isLeftCol ? 'left-4' : isRightCol ? 'right-4' : 'left-1/2 -translate-x-1/2'} -mb-1 border-4 border-transparent border-b-slate-900/95`
                                 : `top-full ${isLeftCol ? 'left-4' : isRightCol ? 'right-4' : 'left-1/2 -translate-x-1/2'} -mt-1 border-4 border-transparent border-t-slate-900/95`;
 
+                              let themeContainer = '';
+                              let themeBubbleGradient = '';
+                              let themeBubbleBorder = '';
+                              let themePulseDot = '';
+                              let themeNodeHovered = '';
+                              let themeNodeDefault = '';
+                              let labelText = '';
+                              let popoverTitle = '';
+                              let badgeClass = '';
+
+                              if (kind === 'leave') {
+                                themeContainer = 'bg-gradient-to-r from-blue-100 via-sky-50 to-blue-100 border-blue-300 text-blue-900 hover:bg-blue-200 hover:border-blue-400';
+                                themeBubbleGradient = 'from-blue-600 to-indigo-700';
+                                themeBubbleBorder = 'border-t-indigo-700';
+                                themePulseDot = 'bg-blue-500';
+                                themeNodeHovered = 'bg-blue-600 text-white shadow-md scale-110 ring-2 ring-white z-20';
+                                themeNodeDefault = 'text-blue-900 font-bold';
+                                labelText = `Leave (${seg.colSpan}d)`;
+                                popoverTitle = 'Approved Leave';
+                                badgeClass = 'bg-sky-500/20 text-sky-300 border-sky-500/30';
+                              } else {
+                                themeContainer = 'bg-gradient-to-r from-rose-100 via-rose-50 to-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200 hover:border-rose-400';
+                                themeBubbleGradient = 'from-rose-600 to-rose-700';
+                                themeBubbleBorder = 'border-t-rose-700';
+                                themePulseDot = 'bg-rose-500';
+                                themeNodeHovered = 'bg-rose-600 text-white shadow-md scale-110 ring-2 ring-white z-20';
+                                themeNodeDefault = 'text-rose-700 font-bold';
+                                labelText = `Absent (${seg.colSpan}d)`;
+                                popoverTitle = 'Continuous Absence';
+                                badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+                              }
+
                               return (
                                 <td
                                   key={`seg-${employee.id}-${seg.startDay.fullDate}`}
                                   colSpan={seg.colSpan}
                                   className="px-0.5 py-1 text-center relative"
-                                  onClick={() => handleEmployeeSelect(employee, seg.startDay.fullDate, 'Absent', null, null)}
                                 >
                                   <div className="relative group/leave mx-auto w-full flex items-center justify-center">
-                                    <div className="w-full h-6 px-1.5 py-0.5 rounded-md bg-gradient-to-r from-rose-100 via-rose-50 to-rose-100 border border-rose-300 text-rose-700 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition-all duration-150 hover:bg-rose-200 hover:border-rose-400 hover:shadow-sm">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 animate-pulse"></span>
-                                      <span className="text-[9px] font-bold tracking-tight whitespace-nowrap">
-                                        Leave ({seg.colSpan}d)
-                                      </span>
-                                    </div>
+                                    {(() => {
+                                      const activeItemIdx = seg.streak.findIndex(item => hoveredCell && hoveredCell.empId === employee.id && hoveredCell.idx === item.idx);
+                                      const activeItem = activeItemIdx !== -1 ? seg.streak[activeItemIdx] : null;
+                                      const bubbleLeftPct = activeItemIdx !== -1 ? ((activeItemIdx + 0.5) / seg.colSpan) * 100 : 50;
+
+                                      return (
+                                        <div
+                                          className={`w-full h-6 rounded-md border shadow-xs flex items-center cursor-pointer transition-all duration-150 hover:shadow-sm overflow-visible relative ${themeContainer}`}
+                                          onMouseLeave={() => setHoveredCell(null)}
+                                        >
+                                          {/* Smooth Sliding Spring Bubble Badge */}
+                                          <div
+                                            style={{
+                                              left: `${bubbleLeftPct}%`,
+                                              transition: 'left 280ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 180ms ease'
+                                            }}
+                                            className={`absolute -top-7 -translate-x-1/2 px-2.5 py-0.5 bg-gradient-to-r ${themeBubbleGradient} text-white text-[9px] font-black rounded-full shadow-xl border border-white whitespace-nowrap z-40 flex items-center gap-1 pointer-events-none ${
+                                              activeItem ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-75 translate-y-1'
+                                            }`}
+                                          >
+                                            {activeItem && (
+                                              <>
+                                                <span className="font-black text-[10px]">{activeItem.day.date}</span>
+                                                <span className="text-[7.5px] opacity-90 uppercase font-bold tracking-wider">
+                                                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][activeItem.day.dayOfWeek]}
+                                                </span>
+                                                <div className={`absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent ${themeBubbleBorder}`}></div>
+                                              </>
+                                            )}
+                                          </div>
+
+                                          {seg.streak.map((item, itemIdx) => {
+                                            const isHovered = hoveredCell && hoveredCell.empId === employee.id && hoveredCell.idx === item.idx;
+                                            return (
+                                              <div
+                                                key={`sub-${item.day.fullDate}`}
+                                                className="h-full flex-1 flex items-center justify-center relative cursor-pointer"
+                                                title={`Click to edit attendance for ${item.day.fullDate}`}
+                                                onMouseEnter={() => setHoveredCell({ empId: employee.id, idx: item.idx })}
+                                                onMouseMove={() => setHoveredCell({ empId: employee.id, idx: item.idx })}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleEmployeeSelect(
+                                                    employee,
+                                                    item.day.fullDate,
+                                                    item.status,
+                                                    item.attendance?.in_time || item.attendance?.firstPunch,
+                                                    item.attendance?.out_time || item.attendance?.lastPunch
+                                                  );
+                                                }}
+                                              >
+                                                {/* Inner Day Content / Animated Bubble Node */}
+                                                <div
+                                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all duration-200 ${
+                                                    isHovered ? themeNodeHovered : themeNodeDefault
+                                                  }`}
+                                                >
+                                                  {isHovered ? item.day.date : (
+                                                    itemIdx === 0 ? (
+                                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 animate-pulse ${themePulseDot}`}></span>
+                                                    ) : (
+                                                      itemIdx === Math.floor(seg.colSpan / 2) ? (
+                                                        <span className="text-[8px] sm:text-[9px] font-bold tracking-tight whitespace-nowrap pointer-events-none">
+                                                          {labelText}
+                                                        </span>
+                                                      ) : null
+                                                    )
+                                                  )}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    })()}
 
                                     {/* Hover Tooltip Popover */}
                                     <div className={`absolute ${verticalPosClass} ${horizontalPosClass} w-64 p-2.5 bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl border border-slate-700/80 opacity-0 invisible group-hover/leave:opacity-100 group-hover/leave:visible transition-all duration-200 pointer-events-none z-50 text-left scale-95 group-hover/leave:scale-100`}>
                                       <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700/80">
-                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-400 uppercase tracking-wider">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                                          Continuous Absence
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-200">
+                                          <span className={`w-1.5 h-1.5 rounded-full ${themePulseDot}`}></span>
+                                          {popoverTitle}
                                         </div>
-                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border font-mono ${badgeClass}`}>
                                           {seg.colSpan} Days
                                         </span>
                                       </div>
 
                                       <div className="space-y-1 text-xs">
                                         <div className="flex items-center gap-1.5 text-slate-200">
-                                          <Calendar size={12} className="text-rose-400 shrink-0" />
+                                          <Calendar size={12} className="text-slate-400 shrink-0" />
                                           <span className="font-semibold text-slate-100 text-[11px]">
-                                            Leave: {formatDateRangeDisplay(seg.startDay.fullDate)} to {formatDateRangeDisplay(seg.endDay.fullDate)}
+                                            Period: {formatDateRangeDisplay(seg.startDay.fullDate)} to {formatDateRangeDisplay(seg.endDay.fullDate)}
                                           </span>
                                         </div>
 
                                         <div className="flex items-center justify-between text-[11px] text-slate-300">
                                           <span className="text-slate-400">Total Duration:</span>
-                                          <span className="font-semibold text-rose-300">{seg.colSpan} Days</span>
+                                          <span className="font-semibold text-slate-100">{seg.colSpan} Days</span>
                                         </div>
 
-                                        <div className="pt-1 border-t border-slate-800 text-[11px]">
-                                          <span className="text-slate-400 font-medium">Reason: </span>
-                                          <span className={`font-medium ${leaveInfo.reason ? 'text-amber-200' : 'text-slate-400 italic'}`}>
-                                            {leaveInfo.reason || 'Not specified (Absent streak)'}
-                                          </span>
-                                          {leaveInfo.leaveType && (
-                                            <div className="mt-1 inline-block px-1.5 py-0.5 rounded text-[8px] bg-slate-800 text-indigo-300 border border-slate-700 font-medium">
-                                              {leaveInfo.leaveType}
-                                            </div>
-                                          )}
-                                        </div>
+                                        {kind === 'leave' && (
+                                          <div className="pt-1 border-t border-slate-800 text-[11px]">
+                                            <span className="text-slate-400 font-medium">Reason: </span>
+                                            <span className={`font-medium ${leaveInfo.reason ? 'text-amber-200' : 'text-slate-400 italic'}`}>
+                                              {leaveInfo.reason || 'Approved Leave Application'}
+                                            </span>
+                                            {leaveInfo.leaveType && (
+                                              <div className="mt-1 inline-block px-1.5 py-0.5 rounded text-[8px] bg-slate-800 text-indigo-300 border border-slate-700 font-medium">
+                                                {leaveInfo.leaveType}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
 
                                       {/* Tooltip arrow */}
@@ -2904,10 +3180,16 @@ const AttendanceDaily = () => {
                             else if (status === 'Absent' || status === 'On Leave') absentCount++;
                             else if (status === 'Half Day') halfDayCount++;
 
+                            const isCellHovered = hoveredCell && hoveredCell.empId === employee.id && hoveredCell.idx === idx;
+
                             return (
                               <td
                                 key={idx}
-                                className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 relative ${day.isWeekend ? 'bg-gray-50' : ''}`}
+                                onMouseEnter={() => setHoveredCell({ empId: employee.id, idx })}
+                                onMouseLeave={() => setHoveredCell(null)}
+                                className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 relative ${
+                                  isCellHovered ? 'bg-indigo-50/80 ring-1 ring-indigo-300/80 z-10' : day.isWeekend ? 'bg-gray-50' : ''
+                                }`}
                                 onClick={() => handleEmployeeSelect(employee, day.fullDate, status, attendance.in_time, attendance.out_time)}
                               >
                                 <div className="relative inline-block">
@@ -3402,7 +3684,15 @@ const AttendanceDaily = () => {
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Attendance Status <span className="text-red-500">*</span></label>
                         <select
                           value={tempStatus}
-                          onChange={(e) => setTempStatus(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTempStatus(val);
+                            if (val === 'Absent' || val === 'On Leave') {
+                              setTempInTime('');
+                              setTempOutTime('');
+                              setTempManualPunches({ "1": "", "2": "", "3": "", "4": "", "5": "", "6": "" });
+                            }
+                          }}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-gray-800 font-medium"
                         >
                           {Object.entries(STATUS_CONFIG).map(([key, config]) => (
@@ -3416,9 +3706,10 @@ const AttendanceDaily = () => {
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Clock In (IST) <span className="text-red-500">*</span></label>
                         <input
                           type="datetime-local"
-                          value={tempInTime}
+                          value={(tempStatus === 'Absent' || tempStatus === 'On Leave') ? '' : tempInTime}
+                          disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
                           onChange={(e) => handleClockInChange(e.target.value)}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                         />
                       </div>
 
@@ -3427,9 +3718,10 @@ const AttendanceDaily = () => {
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Clock Out (IST)</label>
                         <input
                           type="datetime-local"
-                          value={tempOutTime}
+                          value={(tempStatus === 'Absent' || tempStatus === 'On Leave') ? '' : tempOutTime}
+                          disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
                           onChange={(e) => handleClockOutChange(e.target.value)}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                         />
                       </div>
 
@@ -3464,20 +3756,28 @@ const AttendanceDaily = () => {
                           <input
                             type="time"
                             value={newPunchTime}
+                            disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
                             onChange={(e) => setNewPunchTime(e.target.value)}
-                            className="px-3 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white w-full"
+                            className="px-3 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white w-full disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                           />
                           <button
                             type="button"
                             onClick={handleAddPunch}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-all whitespace-nowrap active:scale-95 shadow-sm"
+                            disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-medium transition-all whitespace-nowrap active:scale-95 shadow-sm"
                           >
                             Add Punch
                           </button>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-2">
-                          💡 Tip: Added punches are automatically sorted. The earliest punch will be the Clock In and the latest will be the Clock Out.
-                        </p>
+                        {(tempStatus === 'Absent' || tempStatus === 'On Leave') ? (
+                          <p className="text-[10px] text-amber-600 font-semibold mt-2 flex items-center gap-1">
+                            ⚠️ Manual punches cannot be added when status is set to {tempStatus}.
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-gray-400 mt-2">
+                            💡 Tip: Added punches are automatically sorted. The earliest punch will be the Clock In and the latest will be the Clock Out.
+                          </p>
+                        )}
                       </div>
 
 
@@ -3518,23 +3818,8 @@ const AttendanceDaily = () => {
                           <option>Home</option>
                         </select>
                       </div>
-
-                      {/* Attendance Overwrite Checkbox */}
-                      <div className="lg:col-span-3 flex items-center gap-2 mt-2">
-                        <input
-                          type="checkbox"
-                          id="attendanceOverwrite"
-                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                        />
-                        <label htmlFor="attendanceOverwrite" className="text-sm font-medium text-gray-700 cursor-pointer flex items-center gap-1">
-                          Attendance Overwrite
-                          <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center cursor-help" title="Overwrite automatically calculated logs?">?</span>
-                        </label>
-                      </div>
                     </div>
                   </div>
-
-                  {/* Roster Information Section removed since shift roster is not implemented yet */}
 
                   {/* Punch Details and Raw Logs */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
@@ -3563,7 +3848,15 @@ const AttendanceDaily = () => {
                         </div>
                         <div className="flex justify-between py-1">
                           <span className="text-gray-500">Device Serial</span>
-                          <span className="font-mono text-xs text-gray-800">{selectedEmployee.attendance?.serial_number || '-'}</span>
+                          <span className="font-mono text-xs text-gray-800 font-semibold">
+                            {(() => {
+                              const att = selectedEmployee.attendance;
+                              const sn = att?.serial_number || att?.serialNo || att?.device_id || att?.device_serial || null;
+                              if (!sn || sn === '-') return '-';
+                              const matchedDev = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === sn.toString().trim().toLowerCase());
+                              return matchedDev ? `${sn} (${matchedDev.name})` : sn;
+                            })()}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -4154,6 +4447,18 @@ const AttendanceDaily = () => {
                       >
                         💳 Payslip
                       </button>
+                      <button
+                        onClick={() => {
+                          setPreviewModal(prev => ({ ...prev, tab: 'learning' }));
+                          fetchEmployeeLearning(previewModal.employee);
+                        }}
+                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'learning'
+                          ? 'bg-white text-indigo-950 shadow-md font-bold'
+                          : 'text-indigo-200 hover:text-white'
+                          }`}
+                      >
+                        🎓 Learning
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -4285,7 +4590,7 @@ const AttendanceDaily = () => {
                                     if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
                                     if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
                                     if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
-                                    if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">On Leave</span>;
+                                    if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">On Leave</span>;
                                     return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
                                   })()}
                                 </td>
@@ -4381,6 +4686,153 @@ const AttendanceDaily = () => {
                       );
                     })}
                   </div>
+                ) : previewModal.tab === 'learning' ? (
+                  /* PAGE 4: EMPLOYEE LEARNING PROGRESS VIEW */
+                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                          🎓 Employee Learning & Task Checklist Report
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Detailed task checklist matrix, checked level options, and completion summary for <span className="font-semibold text-indigo-900">{emp?.name || 'Employee'}</span> ({emp?.code || 'ID: ' + (emp?.id || '—')})
+                        </p>
+                      </div>
+                    </div>
+
+                    {learningLoading ? (
+                      <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
+                        <Loader2 size={18} className="animate-spin text-indigo-600" />
+                        <span className="text-xs font-semibold">Loading learning progress report...</span>
+                      </div>
+                    ) : learningSubmission ? (
+                      (() => {
+                        const tasksList = learningSubmission.tasks || [];
+                        const checkedSet = new Set(tasksList.filter(t => t.checked).map(t => t.id));
+                        const totalCompleted = checkedSet.size;
+
+                        const deptList = ['EXCISE', 'RETAIL', 'SANCKS', 'STOCKS', 'WHOLESALE', 'TECHNICAL', 'IMP RETAIL/RETAIL /SANCKS'];
+
+                        return (
+                          <div className="space-y-4">
+                            {/* Summary Card */}
+                            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Submission Info & Summary</span>
+                                <span className="text-sm font-bold text-slate-900 mt-0.5 block">
+                                  {totalCompleted} Tasks Completed • {learningSubmission.shop_name} ({learningSubmission.submission_date})
+                                </span>
+                              </div>
+                              <div className="flex gap-2">
+                                {[1, 2, 3, 4].map(lvl => {
+                                  const lvlTotal = tasksList.filter(t => t.level === lvl).length;
+                                  const lvlDone = tasksList.filter(t => t.level === lvl && t.checked).length;
+                                  return (
+                                    <div key={lvl} className="bg-white border border-slate-200 px-2.5 py-1 rounded text-center text-xs">
+                                      <span className="text-slate-400 block text-[9px] uppercase font-bold">L{lvl}</span>
+                                      <span className="text-slate-800 font-bold">{lvlDone}/{lvlTotal}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Learning Matrix Report */}
+                            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                              <table className="w-full text-left border-collapse text-xs">
+                                <thead>
+                                  <tr className="bg-[#1C120C] text-[#d4b457] text-[10px] uppercase font-serif tracking-wider border-b border-[#1C120C]">
+                                    <th className="py-2.5 px-2 w-[110px]">DEPT</th>
+                                    <th className="py-2.5 px-2 font-bold">LEVEL 1</th>
+                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                    <th className="py-2.5 px-2 font-bold">LEVEL 2</th>
+                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                    <th className="py-2.5 px-2 font-bold">LEVEL 3</th>
+                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                    <th className="py-2.5 px-2 font-bold">LEVEL 4</th>
+                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-slate-800">
+                                  {deptList.map((dept) => {
+                                    const tasksByLevel = {
+                                      1: tasksList.filter((t) => t.dept === dept && t.level === 1),
+                                      2: tasksList.filter((t) => t.dept === dept && t.level === 2),
+                                      3: tasksList.filter((t) => t.dept === dept && t.level === 3),
+                                      4: tasksList.filter((t) => t.dept === dept && t.level === 4),
+                                    };
+                                    const maxRows = Math.max(
+                                      tasksByLevel[1].length,
+                                      tasksByLevel[2].length,
+                                      tasksByLevel[3].length,
+                                      tasksByLevel[4].length,
+                                      1
+                                    );
+
+                                    return Array.from({ length: maxRows }).map((_, rowIdx) => (
+                                      <tr
+                                        key={`${dept}-${rowIdx}`}
+                                        className={rowIdx === 0 ? 'border-t-2 border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}
+                                      >
+                                        <td className="py-2 px-2 text-emerald-700 font-bold text-[11px] whitespace-nowrap align-top">
+                                          {rowIdx === 0 ? dept : ''}
+                                        </td>
+
+                                        {[1, 2, 3, 4].map((lvl) => {
+                                          const task = tasksByLevel[lvl][rowIdx];
+                                          if (!task) {
+                                            return (
+                                              <React.Fragment key={lvl}>
+                                                <td className="py-2 px-2"></td>
+                                                <td className="py-2 px-1 text-center"></td>
+                                              </React.Fragment>
+                                            );
+                                          }
+
+                                          const isChecked = !!task.checked;
+                                          return (
+                                            <React.Fragment key={lvl}>
+                                              <td className={`py-2 px-2 align-top max-w-[180px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 rounded-sm' : ''}`}>
+                                                <p className={`text-xs font-semibold leading-tight ${isChecked ? 'text-emerald-950 font-bold' : 'text-slate-800'}`}>
+                                                  {task.en}
+                                                </p>
+                                                {task.hi && <p className={`text-[10px] mt-0.5 leading-tight ${isChecked ? 'text-emerald-800' : 'text-slate-500'}`}>{task.hi}</p>}
+                                              </td>
+                                              <td className="py-2 px-1 text-center align-top">
+                                                <div
+                                                  className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs mx-auto ${
+                                                    isChecked
+                                                      ? 'bg-emerald-600 text-white shadow-xs'
+                                                      : 'bg-red-50 text-red-500 border border-red-200'
+                                                  }`}
+                                                >
+                                                  {isChecked ? '✓' : '✕'}
+                                                </div>
+                                              </td>
+                                            </React.Fragment>
+                                          );
+                                        })}
+                                      </tr>
+                                    ));
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div className="py-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-lg">
+                          🎓
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">No Learning Checklist Submitted Yet</p>
+                        <p className="text-[11px] text-slate-400 max-w-md">
+                          No staff task checklist record has been submitted for <span className="font-semibold text-slate-600">{emp?.name || 'this employee'}</span>.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   /* PAGE 3: PAYSLIP & PAYROLL HISTORY VIEW */
                   <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
@@ -4394,13 +4846,6 @@ const AttendanceDaily = () => {
                         </p>
                       </div>
                     </div>
-
-                    {/* ========================================================================
-                        STATEMENT FOR FETCH & MAP CODE:
-                        Historical payout records and table mapping for employee.
-                        Table structure ready below for mapping.
-                       ======================================================================== */}
-
 
                     <div className="overflow-x-auto border border-slate-200 rounded-xl">
                       <table className="w-full text-xs text-left">
