@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
 import { Search, Download, Calendar, Loader2, CheckCircle, X, Clock, Pencil, Filter, Users, User, Clock as ClockIcon, TrendingUp, Database, RefreshCw, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Plus, ChevronDown, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
@@ -219,6 +220,7 @@ const STATUS_CONFIG = {
   'Half Day': { color: 'bg-yellow-100 text-yellow-700', label: 'H', fullLabel: 'Half Day', bgColor: 'bg-yellow-200/60' },
   'Weekly Off': { color: 'bg-indigo-100 text-indigo-700', label: 'WO', fullLabel: 'Weekly Off', bgColor: 'bg-indigo-100/60' },
   'Day Off': { color: 'bg-gray-100 text-gray-700', label: 'DO', fullLabel: 'Day Off', bgColor: 'bg-gray-200' },
+  'Future': { color: 'text-gray-300 font-normal', label: '-', fullLabel: 'Future Date', bgColor: 'transparent' },
 };
 
 const AttendanceDaily = () => {
@@ -1794,8 +1796,8 @@ const AttendanceDaily = () => {
 
         let metrics = calculateMetricsFromManualPunches(finalManualPunches.manual, date, shiftEntry);
         
-        if (newStatus === 'Absent' || newStatus === 'On Leave' || manualPunches.absent) {
-          updateData.status = newStatus === 'On Leave' ? 'On Leave' : 'Absent';
+        if (newStatus === 'Absent' || newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off' || manualPunches.absent) {
+          updateData.status = (newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off') ? newStatus : 'Absent';
           updateData.in_time = null;
           updateData.out_time = null;
           updateData.working_hour = "00:00:00";
@@ -1976,38 +1978,23 @@ const AttendanceDaily = () => {
     const formattedIn = formatInputVal(inTime);
     const formattedOut = formatInputVal(outTime);
 
-    const isOffOrLeaveStatus = status === 'Absent' || status === 'On Leave';
+    const isOffOrLeaveStatus = status === 'Absent' || status === 'On Leave' || status === 'Weekly Off' || status === 'Day Off';
 
-    // Populate manual punches state
+    // Populate manual punches state (if user-saved manual punches exist, use them; otherwise derive from valid In/Out times)
     let punchesObj = {};
-    if (!isOffOrLeaveStatus && fullRecord?.manual_punches) {
-      if (fullRecord.manual_punches.manual && typeof fullRecord.manual_punches.manual === 'object') {
-        punchesObj = { ...fullRecord.manual_punches.manual };
-      } else {
-        punchesObj = { ...fullRecord.manual_punches };
-      }
-    }
-    let activePunches = Object.values(punchesObj).filter(v => v && v !== '' && typeof v === 'string');
-
-    // If no manual punches exist, check if we can populate from punch_log
-    if (!isOffOrLeaveStatus && activePunches.length === 0 && fullRecord?.punch_log && fullRecord.punch_log !== '-') {
-      const parsedPunches = fullRecord.punch_log.split('|').map(p => convert12hTo24h(p)).filter(Boolean);
-      punchesObj = {};
-      parsedPunches.forEach((p, idx) => {
-        if (idx < 6) {
-          punchesObj[(idx + 1).toString()] = p;
+    if (!isOffOrLeaveStatus) {
+      if (fullRecord?.manual_punches && fullRecord.manual_punches.is_manual) {
+        if (fullRecord.manual_punches.manual && typeof fullRecord.manual_punches.manual === 'object') {
+          punchesObj = { ...fullRecord.manual_punches.manual };
+        } else {
+          punchesObj = { ...fullRecord.manual_punches };
         }
-      });
-      activePunches = Object.values(punchesObj).filter(Boolean);
-    }
-
-    // If still no punches but inTime/outTime exist, derive punches from inTime/outTime
-    if (!isOffOrLeaveStatus && activePunches.length === 0 && (formattedIn || formattedOut)) {
-      const inTimePart = formattedIn ? formattedIn.split('T')[1]?.substring(0, 5) : '';
-      const outTimePart = formattedOut ? formattedOut.split('T')[1]?.substring(0, 5) : '';
-      if (inTimePart) punchesObj["1"] = inTimePart;
-      if (outTimePart && outTimePart !== inTimePart) punchesObj["2"] = outTimePart;
-      activePunches = Object.values(punchesObj).filter(Boolean);
+      } else {
+        const inTimePart = formattedIn ? formattedIn.split('T')[1]?.substring(0, 5) : '';
+        const outTimePart = formattedOut ? formattedOut.split('T')[1]?.substring(0, 5) : '';
+        if (inTimePart) punchesObj["1"] = inTimePart;
+        if (outTimePart && outTimePart !== inTimePart) punchesObj["2"] = outTimePart;
+      }
     }
 
     const parsePunchTo24h = (val) => {
@@ -2046,7 +2033,7 @@ const AttendanceDaily = () => {
 
   // Add a manual punch, sort it chronologically, and sync in/out times
   const handleAddPunch = () => {
-    if (tempStatus === 'Absent' || tempStatus === 'On Leave') {
+    if (tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off') {
       alert(`Manual punches cannot be added when employee status is ${tempStatus}!`);
       return;
     }
@@ -2170,7 +2157,7 @@ const AttendanceDaily = () => {
     setIsSaving(true);
     setSaveError(null);
     try {
-      const isOffOrLeave = tempStatus === 'Absent' || tempStatus === 'On Leave';
+      const isOffOrLeave = tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off';
 
       // ── Validation: Block saving Present/Late/Half Day without at least 1 punch ──
       if (!isOffOrLeave) {
@@ -2480,10 +2467,8 @@ const AttendanceDaily = () => {
   }, []);
 
   useEffect(() => {
-    if (viewMode === 'daily') {
-      fetchRosterData(null, selectedDate);
-    }
-  }, [selectedDate, viewMode]);
+    fetchRosterData(null, selectedDate);
+  }, [selectedDate, currentMonth, viewMode]);
 
   useEffect(() => {
     fetchAttendanceFromDB();
@@ -2863,7 +2848,11 @@ const AttendanceDaily = () => {
                               {employeeRoster && (
                                 <span
                                   className="absolute -top-1 -left-1 w-3 h-3 bg-indigo-600 rounded-full border border-white flex items-center justify-center text-[7px] text-white font-bold leading-none select-none shadow-sm cursor-help animate-pulse"
-                                  title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5)} - ${employeeRoster.end_time?.substring(0, 5)})`}
+                                  title={(() => {
+                                    const sType = employeeRoster.shift_type?.trim().toLowerCase();
+                                    const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'do';
+                                    return isOff ? `Shift Assigned: ${employeeRoster.shift_type}` : `Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5)} - ${employeeRoster.end_time?.substring(0, 5)})`;
+                                  })()}
                                 >
                                   S
                                 </span>
@@ -2876,7 +2865,11 @@ const AttendanceDaily = () => {
                                 {employeeRoster && employeeRoster.shift_type ? (
                                   <span
                                     className="inline-flex items-center px-1 rounded bg-indigo-50 border border-indigo-100 text-[8px] font-semibold text-indigo-700 leading-none py-0.5 cursor-help"
-                                    title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5) || '10:00'} - ${employeeRoster.end_time?.substring(0, 5) || '19:30'})`}
+                                    title={(() => {
+                                      const sType = employeeRoster.shift_type?.trim().toLowerCase();
+                                      const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'do';
+                                      return isOff ? `Shift Assigned: ${employeeRoster.shift_type}` : `Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5) || '10:00'} - ${employeeRoster.end_time?.substring(0, 5) || '19:30'})`;
+                                    })()}
                                   >
                                     📅 {employeeRoster.shift_type?.substring(0, 12)}
                                   </span>
@@ -2904,7 +2897,24 @@ const AttendanceDaily = () => {
                           while (i < days.length) {
                             const d = days[i];
                             const att = getAttendanceForDate(employee.id, d.fullDate);
-                            const st = att.status || 'Absent';
+                            let dayRoster = rosterData.find(r => 
+                              String(r.employee_id).trim() === String(employee.id).trim() && 
+                              r.date === d.fullDate
+                            );
+                            let rawStatus = att.status;
+                            let isFuture = d.fullDate > getLocalDateString(new Date());
+
+                            if (isFuture && (!rawStatus || rawStatus === 'Absent')) {
+                              rawStatus = 'Future';
+                            } else if ((!rawStatus || rawStatus === 'Absent') && dayRoster) {
+                              const sType = dayRoster.shift_type?.trim().toLowerCase();
+                              if (sType === 'day off' || sType === 'do') {
+                                rawStatus = 'Day Off';
+                              } else if (sType === 'weekly off' || sType === 'wo' || sType === 'off') {
+                                rawStatus = 'Weekly Off';
+                              }
+                            }
+                            const st = rawStatus || 'Absent';
 
                             if (st === 'On Leave') {
                               let j = i;
@@ -2935,7 +2945,25 @@ const AttendanceDaily = () => {
                               const streak = [];
                               while (j < days.length) {
                                 const nextAtt = getAttendanceForDate(employee.id, days[j].fullDate);
-                                const nextSt = nextAtt.status || 'Absent';
+                                let nextDayRoster = rosterData.find(r => 
+                                  String(r.employee_id).trim() === String(employee.id).trim() && 
+                                  r.date === days[j].fullDate
+                                );
+                                let nextRawStatus = nextAtt.status;
+                                let isNextFuture = days[j].fullDate > getLocalDateString(new Date());
+
+                                if (isNextFuture && (!nextRawStatus || nextRawStatus === 'Absent')) {
+                                  nextRawStatus = 'Future';
+                                } else if ((!nextRawStatus || nextRawStatus === 'Absent') && nextDayRoster) {
+                                  const sType = nextDayRoster.shift_type?.trim().toLowerCase();
+                                  if (sType === 'day off' || sType === 'do') {
+                                    nextRawStatus = 'Day Off';
+                                  } else if (sType === 'weekly off' || sType === 'wo' || sType === 'off') {
+                                    nextRawStatus = 'Weekly Off';
+                                  }
+                                }
+                                const nextSt = nextRawStatus || 'Absent';
+
                                 if (nextSt === 'Absent') {
                                   streak.push({ day: days[j], idx: j, attendance: nextAtt, status: nextSt });
                                   j++;
@@ -3100,7 +3128,7 @@ const AttendanceDaily = () => {
                                               >
                                                 {/* Inner Day Content / Animated Bubble Node */}
                                                 <div
-                                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all duration-200 ${
+                                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all duration-200 relative ${
                                                     isHovered ? themeNodeHovered : themeNodeDefault
                                                   }`}
                                                 >
@@ -3115,6 +3143,18 @@ const AttendanceDaily = () => {
                                                       ) : null
                                                     )
                                                   )}
+                                                  {(() => {
+                                                    const dayRoster = rosterData.find(r => 
+                                                      String(r.employee_id).trim() === String(employee.id).trim() && 
+                                                      r.date === item.day.fullDate
+                                                    ) || getEmployeeRoster(employee.id, item.day.fullDate);
+                                                    return dayRoster ? (
+                                                      <span
+                                                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-indigo-600 rounded-full border border-white z-20 cursor-help"
+                                                        title={`Shift: ${dayRoster.shift_type}`}
+                                                      />
+                                                    ) : null;
+                                                  })()}
                                                 </div>
                                               </div>
                                             );
@@ -3207,11 +3247,18 @@ const AttendanceDaily = () => {
                                     ) : null;
                                   })()}
                                   {(() => {
-                                    const dayRoster = getEmployeeRoster(employee.id, day.fullDate);
+                                    const dayRoster = rosterData.find(r => 
+                                      String(r.employee_id).trim() === String(employee.id).trim() && 
+                                      r.date === day.fullDate
+                                    ) || getEmployeeRoster(employee.id, day.fullDate);
                                     return dayRoster ? (
                                       <span
-                                        className="absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 bg-indigo-600 rounded-full border border-white cursor-help"
-                                        title={`Shift: ${dayRoster.shift_type} (${dayRoster.start_time?.substring(0, 5)} - ${dayRoster.end_time?.substring(0, 5)})`}
+                                        className="absolute -bottom-0.5 -left-0.5 w-2 h-2 bg-indigo-600 rounded-full border border-white cursor-help shadow-xs"
+                                        title={(() => {
+                                          const sType = dayRoster.shift_type?.trim().toLowerCase();
+                                          const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'do';
+                                          return isOff ? `Shift: ${dayRoster.shift_type}` : `Shift: ${dayRoster.shift_type} ${dayRoster.start_time ? `(${dayRoster.start_time?.substring(0, 5)} - ${dayRoster.end_time?.substring(0, 5)})` : ''}`;
+                                        })()}
                                       />
                                     ) : null;
                                   })()}
@@ -3325,7 +3372,9 @@ const AttendanceDaily = () => {
                             const rawManual = Object.values(punchesObj.manual)
                               .filter(value => value && value !== '' && typeof value === 'string');
                             if (rawManual.length > 0) {
-                              const sortedManual = [...rawManual].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
+                              const sortedManual = [...rawManual]
+                                .sort((a, b) => parseToMinutes(a) - parseToMinutes(b))
+                                .map(t => convert24hTo12h(t));
                               manualPunchesDisplay = sortedManual.join(' | ');
                             }
                           }
@@ -3334,7 +3383,9 @@ const AttendanceDaily = () => {
                             const rawApi = Object.values(punchesObj.api)
                               .filter(value => value && value !== '' && typeof value === 'string');
                             if (rawApi.length > 0) {
-                              const sortedApi = [...rawApi].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
+                              const sortedApi = [...rawApi]
+                                .sort((a, b) => parseToMinutes(a) - parseToMinutes(b))
+                                .map(t => convert24hTo12h(t));
                               apiPunchesDisplay = sortedApi.join(' | ');
                             }
                           }
@@ -3344,10 +3395,17 @@ const AttendanceDaily = () => {
                             .map(key => punchesObj[key])
                             .filter(value => value && value !== '' && typeof value === 'string');
                           if (rawManual.length > 0) {
-                            const sortedManual = [...rawManual].sort((a, b) => parseToMinutes(a) - parseToMinutes(b));
+                            const sortedManual = [...rawManual]
+                              .sort((a, b) => parseToMinutes(a) - parseToMinutes(b))
+                              .map(t => convert24hTo12h(t));
                             manualPunchesDisplay = sortedManual.join(' | ');
                           }
                         }
+                      }
+
+                      // Fallback: If apiPunchesDisplay is still '-', populate from biometric punch_log
+                      if (apiPunchesDisplay === '-' && attendance?.punch_log && attendance.punch_log !== '-') {
+                        apiPunchesDisplay = attendance.punch_log;
                       }
 
                       // Function to render colored punch logs (pre-9 AM invalid punches are filtered out completely)
@@ -3394,19 +3452,24 @@ const AttendanceDaily = () => {
                       const candidatePhoto = employeeProfile?.candidate_photo || employee.candidate_photo;
                       const employeeRoster = getEmployeeRoster(employee.id, selectedDate);
 
-                      let totalPunches = 0;
+                      // Calculate valid punch count (filtering out pre-9 AM punches)
+                      let totalValidPunches = 0;
                       if (attendance?.manual_punches) {
                         const punchesObj = attendance.manual_punches;
                         if (punchesObj.manual || punchesObj.api) {
-                          const manualCount = punchesObj.manual ? Object.values(punchesObj.manual).filter(v => v && v !== '' && typeof v === 'string').length : 0;
-                          const apiCount = punchesObj.api ? Object.values(punchesObj.api).filter(v => v && v !== '' && typeof v === 'string').length : 0;
-                          totalPunches = manualCount + apiCount;
+                          const manualCount = punchesObj.manual ? Object.values(punchesObj.manual).filter(v => v && v !== '' && typeof v === 'string' && !isBefore9AM(v)).length : 0;
+                          const apiCount = punchesObj.api ? Object.values(punchesObj.api).filter(v => v && v !== '' && typeof v === 'string' && !isBefore9AM(v)).length : 0;
+                          totalValidPunches = manualCount + apiCount;
                         } else {
-                          const oldManualCount = ["1", "2", "3", "4", "5", "6"]
+                          totalValidPunches = ["1", "2", "3", "4", "5", "6"]
                             .map(key => punchesObj[key])
-                            .filter(v => v && v !== '' && typeof v === 'string').length;
-                          totalPunches = oldManualCount;
+                            .filter(v => v && v !== '' && typeof v === 'string' && !isBefore9AM(v)).length;
                         }
+                      } else if (attendance?.punch_log && attendance.punch_log !== '-') {
+                        totalValidPunches = attendance.punch_log
+                          .split(/\s*\|\s*/)
+                          .map(p => p.trim())
+                          .filter(p => Boolean(p) && !isBefore9AM(p)).length;
                       }
 
                       const rawPunchedShop = resolvePunchedStore(attendance, deviceMapping) || '';
@@ -3463,7 +3526,11 @@ const AttendanceDaily = () => {
                                     {employeeRoster && employeeRoster.shift_type ? (
                                       <span
                                         className="inline-flex items-center px-1 rounded bg-indigo-50 border border-indigo-100 text-[8px] font-semibold text-indigo-700 leading-none py-0.5 cursor-help"
-                                        title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5) || '10:00'} - ${employeeRoster.end_time?.substring(0, 5) || '19:30'})`}
+                                        title={(() => {
+                                          const sType = employeeRoster.shift_type?.trim().toLowerCase();
+                                          const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'do';
+                                          return isOff ? `Shift Assigned: ${employeeRoster.shift_type}` : `Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5) || '10:00'} - ${employeeRoster.end_time?.substring(0, 5) || '19:30'})`;
+                                        })()}
                                       >
                                         📅 {employeeRoster.shift_type}
                                       </span>
@@ -3484,8 +3551,8 @@ const AttendanceDaily = () => {
                                 </div>
                               </div>
                               <span
-                                className={`w-1.5 h-1.5 rounded-full shrink-0 mr-1 ${totalPunches % 2 === 1 ? 'bg-green-500' : 'bg-red-500'}`}
-                                title={`${totalPunches} punch(es)`}
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 mr-1 ${totalValidPunches % 2 === 1 ? 'bg-green-500' : 'bg-red-500'}`}
+                                title={`${totalValidPunches} valid punch(es)`}
                               />
                             </div>
                           </td>
@@ -3687,7 +3754,7 @@ const AttendanceDaily = () => {
                           onChange={(e) => {
                             const val = e.target.value;
                             setTempStatus(val);
-                            if (val === 'Absent' || val === 'On Leave') {
+                            if (val === 'Absent' || val === 'On Leave' || val === 'Weekly Off' || val === 'Day Off') {
                               setTempInTime('');
                               setTempOutTime('');
                               setTempManualPunches({ "1": "", "2": "", "3": "", "4": "", "5": "", "6": "" });
@@ -3703,11 +3770,11 @@ const AttendanceDaily = () => {
 
                       {/* Clock In */}
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Clock In (IST) <span className="text-red-500">*</span></label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Clock In (IST) <span className="text-red-500">{(tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off') ? '' : '*'}</span></label>
                         <input
                           type="datetime-local"
-                          value={(tempStatus === 'Absent' || tempStatus === 'On Leave') ? '' : tempInTime}
-                          disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
+                          value={(tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off') ? '' : tempInTime}
+                          disabled={tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off'}
                           onChange={(e) => handleClockInChange(e.target.value)}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                         />
@@ -3718,8 +3785,8 @@ const AttendanceDaily = () => {
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Clock Out (IST)</label>
                         <input
                           type="datetime-local"
-                          value={(tempStatus === 'Absent' || tempStatus === 'On Leave') ? '' : tempOutTime}
-                          disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
+                          value={(tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off') ? '' : tempOutTime}
+                          disabled={tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off'}
                           onChange={(e) => handleClockOutChange(e.target.value)}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                         />
@@ -3756,20 +3823,20 @@ const AttendanceDaily = () => {
                           <input
                             type="time"
                             value={newPunchTime}
-                            disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
+                            disabled={tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off'}
                             onChange={(e) => setNewPunchTime(e.target.value)}
                             className="px-3 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white w-full disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                           />
                           <button
                             type="button"
                             onClick={handleAddPunch}
-                            disabled={tempStatus === 'Absent' || tempStatus === 'On Leave'}
+                            disabled={tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off'}
                             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-medium transition-all whitespace-nowrap active:scale-95 shadow-sm"
                           >
                             Add Punch
                           </button>
                         </div>
-                        {(tempStatus === 'Absent' || tempStatus === 'On Leave') ? (
+                        {(tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off') ? (
                           <p className="text-[10px] text-amber-600 font-semibold mt-2 flex items-center gap-1">
                             ⚠️ Manual punches cannot be added when status is set to {tempStatus}.
                           </p>
@@ -4189,734 +4256,13 @@ const AttendanceDaily = () => {
         </div>
       )}
       {/* Employee Attendance Overview Preview Window Modal */}
-      {previewModal.isOpen && previewModal.employee && (() => {
-        const emp = previewModal.employee;
-        const empProfile = employeesData.find(e => e.employee_id === emp.id || e.id === emp.id);
-        const avatar = empProfile?.candidate_photo || emp.candidate_photo;
-        const empDesignation = empProfile?.designation || emp.designation || '-';
-        const empStore = empProfile?.joining_place || emp.store_name || '-';
-
-        // Selected month dates
-        const pMonth = previewModal.month;
-        const pYear = pMonth.getFullYear();
-        const pMonthIdx = pMonth.getMonth();
-        const daysInPMonth = new Date(pYear, pMonthIdx + 1, 0).getDate();
-
-        const todayObj = new Date();
-        const isCurrentMonth = pYear === todayObj.getFullYear() && pMonthIdx === todayObj.getMonth();
-        const maxDay = isCurrentMonth ? Math.min(todayObj.getDate(), daysInPMonth) : daysInPMonth;
-
-        // Build list of days for selected month up to maxDay
-        const dayRows = [];
-        let totalPresent = 0;
-        let totalAbsent = 0;
-        let totalLate = 0;
-        let totalLateMins = 0;
-        let totalWorkMs = 0;
-        let totalLunchMs = 0;
-
-        for (let d = 1; d <= maxDay; d++) {
-          const dateStr = `${pYear}-${String(pMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-          const dateObj = new Date(pYear, pMonthIdx, d);
-          const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
-
-          // Date-specific roster lookup
-          const rEntry = getEmployeeRoster(emp.id, dateStr);
-          const hasRoster = !!(rEntry && rEntry.shift_type);
-          const shiftName = hasRoster ? rEntry.shift_type : 'Roster Not Available';
-
-          // Scheduled start/end
-          let scheduledStartStr = '10:00';
-          let scheduledEndStr = '19:30';
-          if (hasRoster && rEntry.start_time) {
-            scheduledStartStr = rEntry.start_time.substring(0, 5);
-          }
-          if (hasRoster && rEntry.end_time) {
-            scheduledEndStr = rEntry.end_time.substring(0, 5);
-          }
-
-          // Attendance record & Leave status check
-          const att = getAttendanceForDate(emp.id, dateStr);
-          const inTime = att.in_time;
-          const outTime = att.out_time;
-
-          const empLeaveInfo = getLeaveInfoForStreak(emp.id, dateStr, dateStr);
-          const isOnLeaveInTable = !!(empLeaveInfo && (empLeaveInfo.reason || empLeaveInfo.leaveType));
-
-          // Compute late minutes against date-specific roster
-          const lateMins = inTime ? calculateLateMinutes(inTime, dateStr, rEntry) : 0;
-
-          let status = att.status;
-          if (!status || status === 'Absent') {
-            if (!inTime || inTime === '-') {
-              if (isOnLeaveInTable) {
-                status = 'On Leave';
-              } else {
-                status = 'Absent';
-              }
-            } else {
-              status = lateMins > 0 ? 'Late' : 'Present';
-            }
-          }
-
-          // Lunch duration
-          const lunchStr = att.standard_lunch || '-';
-
-          // Compute working hours (deducting lunch duration)
-          const workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : (inTime && outTime ? calculateWorkHours(inTime, outTime, dateStr, lunchStr) : '00:00:00');
-          const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
-          const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;
-
-          // Parse timestamps for timeline visualization
-          let inTimeFormatted = inTime ? formatTimeIST(inTime) : null;
-          let outTimeFormatted = outTime ? formatTimeIST(outTime) : null;
-
-          // Stats counters
-          if (status === 'Present' || status === 'Late') {
-            totalPresent++;
-            if (lateMins > 0 || status === 'Late') {
-              totalLate++;
-              totalLateMins += lateMins;
-            }
-          } else if (status === 'Absent') {
-            totalAbsent++;
-          }
-
-          totalWorkMs += dayWorkMs;
-
-          dayRows.push({
-            dayNum: d,
-            dateStr,
-            dayName,
-            shiftName,
-            hasRoster,
-            scheduledStartStr,
-            scheduledEndStr,
-            inTimeFormatted,
-            outTimeFormatted,
-            inTime,
-            outTime,
-            lunchStr,
-            workHrsStr,
-            dayWorkMs,
-            lateMins,
-            status,
-            attendance: att,
-            rEntry
-          });
-        }
-
-        const totalWorkHrsDec = totalWorkMs / (3600 * 1000);
-        const avgWorkHrsDec = totalPresent > 0 ? (totalWorkHrsDec / totalPresent).toFixed(1) : '0.0';
-
-        // Format total work hours string
-        const totalWorkHrsInt = Math.floor(totalWorkHrsDec);
-        const totalWorkMinsInt = Math.round((totalWorkHrsDec - totalWorkHrsInt) * 60);
-        const totalWorkFormatted = `${totalWorkHrsInt}h ${totalWorkMinsInt}m`;
-
-        return (
-          <div
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}
-          >
-            <div
-              className="bg-white max-w-5xl w-full rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header & Employee Overview */}
-              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 pr-14 relative">
-                <button
-                  onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}
-                  className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all border border-white/10 shadow-sm active:scale-95"
-                  title="Close preview"
-                >
-                  <X size={18} />
-                </button>
-
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      {avatar ? (
-                        <img
-                          src={avatar}
-                          alt={emp.name}
-                          className="w-14 h-14 rounded-2xl object-cover border-2 border-white/20 shadow-md"
-                        />
-                      ) : (
-                        <div className="w-14 h-14 rounded-2xl bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-xl font-bold text-white shadow-md">
-                          {emp.name ? emp.name.charAt(0).toUpperCase() : '?'}
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-lg font-bold text-white tracking-tight">{emp.name}</h2>
-                        <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-indigo-200 border border-white/10">
-                          ID: {emp.id}
-                        </span>
-                      </div>
-                      <p className="text-xs text-indigo-200 mt-0.5 font-medium">
-                        {empDesignation} • {empStore}
-                      </p>
-
-                      {/* Current Roster Info */}
-                      <div className="flex items-center gap-2 mt-2">
-                        {(() => {
-                          const todayRoster = getEmployeeRoster(emp.id, selectedDate);
-                          if (todayRoster && todayRoster.shift_type) {
-                            return (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[11px] font-semibold">
-                                📅 {todayRoster.shift_type} ({todayRoster.start_time?.substring(0, 5) || '10:00'} – {todayRoster.end_time?.substring(0, 5) || '19:30'})
-                              </span>
-                            );
-                          }
-                          return (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-medium">
-                              Roster Not Available (10:00 AM – 7:30 PM Fallback)
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Month Selection & View Tab Switcher */}
-                  <div className="flex flex-wrap items-center gap-3">
-                    {/* Month Picker */}
-                    <div className="flex items-center gap-1 bg-white/10 border border-white/10 rounded-xl px-1.5 py-1">
-                      <button
-                        onClick={async () => {
-                          const newM = new Date(previewModal.month.getFullYear(), previewModal.month.getMonth() - 1, 1);
-                          setPreviewModal(prev => ({ ...prev, month: newM, loading: true }));
-                          await fetchAttendanceFromDB(newM);
-                          setPreviewModal(prev => ({ ...prev, loading: false }));
-                        }}
-                        className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
-                        title="Previous Month"
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <span className="text-xs font-semibold text-white px-2 min-w-[110px] text-center flex items-center justify-center gap-1">
-                        {previewModal.loading && <Loader2 size={12} className="animate-spin text-indigo-300" />}
-                        {monthNames[previewModal.month.getMonth()]} {previewModal.month.getFullYear()}
-                      </span>
-                      <button
-                        onClick={async () => {
-                          const newM = new Date(previewModal.month.getFullYear(), previewModal.month.getMonth() + 1, 1);
-                          setPreviewModal(prev => ({ ...prev, month: newM, loading: true }));
-                          await fetchAttendanceFromDB(newM);
-                          setPreviewModal(prev => ({ ...prev, loading: false }));
-                        }}
-                        className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
-                        title="Next Month"
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-
-                    {/* View Mode Toggle: Timecard vs Timeline */}
-                    <div className="flex bg-white/10 p-1 rounded-xl border border-white/10">
-                      <button
-                        onClick={() => setPreviewModal({ ...previewModal, tab: 'timecard' })}
-                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'timecard'
-                          ? 'bg-white text-indigo-950 shadow-md font-bold'
-                          : 'text-indigo-200 hover:text-white'
-                          }`}
-                      >
-                        📊 Timecard
-                      </button>
-                      <button
-                        onClick={() => setPreviewModal({ ...previewModal, tab: 'timeline' })}
-                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'timeline'
-                          ? 'bg-white text-indigo-950 shadow-md font-bold'
-                          : 'text-indigo-200 hover:text-white'
-                          }`}
-                      >
-                        📈 Timeline
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPreviewModal(prev => ({ ...prev, tab: 'payslip' }));
-                          fetchEmployeePayroll(previewModal.employee);
-                        }}
-                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'payslip'
-                          ? 'bg-white text-indigo-950 shadow-md font-bold'
-                          : 'text-indigo-200 hover:text-white'
-                          }`}
-                      >
-                        💳 Payslip
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPreviewModal(prev => ({ ...prev, tab: 'learning' }));
-                          fetchEmployeeLearning(previewModal.employee);
-                        }}
-                        className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${previewModal.tab === 'learning'
-                          ? 'bg-white text-indigo-950 shadow-md font-bold'
-                          : 'text-indigo-200 hover:text-white'
-                          }`}
-                      >
-                        🎓 Learning
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Summary Stat Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-4 pt-4 border-t border-white/10">
-                  <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
-                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
-                    <p className="text-base font-bold text-white mt-0.5">{dayRows.length}</p>
-                  </div>
-                  <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
-                    <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
-                    <p className="text-base font-bold text-emerald-400 mt-0.5">{totalPresent}</p>
-                  </div>
-                  <div className="bg-red-500/10 rounded-xl p-2 border border-red-500/20 text-center">
-                    <p className="text-[10px] font-medium text-red-300 uppercase tracking-wider">Absent</p>
-                    <p className="text-base font-bold text-red-400 mt-0.5">{totalAbsent}</p>
-                  </div>
-                  <div className="bg-amber-500/10 rounded-xl p-2 border border-amber-500/20 text-center">
-                    <p className="text-[10px] font-medium text-amber-300 uppercase tracking-wider">Late Days / Mins</p>
-                    <p className="text-base font-bold text-amber-400 mt-0.5">{totalLate} <span className="text-xs font-normal">({totalLateMins}m)</span></p>
-                  </div>
-                  <div className="bg-indigo-500/10 rounded-xl p-2 border border-indigo-500/20 text-center">
-                    <p className="text-[10px] font-medium text-indigo-300 uppercase tracking-wider">Total Work Hours</p>
-                    <p className="text-base font-bold text-indigo-300 mt-0.5">{totalWorkFormatted}</p>
-                  </div>
-                  <div className="bg-purple-500/10 rounded-xl p-2 border border-purple-500/20 text-center">
-                    <p className="text-[10px] font-medium text-purple-300 uppercase tracking-wider">Avg Daily Hours</p>
-                    <p className="text-base font-bold text-purple-300 mt-0.5">{avgWorkHrsDec}h</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Body Content */}
-              <div className="flex-1 overflow-y-auto p-5 bg-slate-50 min-h-0">
-                {previewModal.loading ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-                    <Loader2 size={32} className="animate-spin text-indigo-600 mb-3" />
-                    <p className="text-sm font-semibold text-slate-700">Loading attendance data...</p>
-                    <p className="text-xs text-slate-400 mt-1">Fetching logs & rosters for {monthNames[previewModal.month.getMonth()]} {previewModal.month.getFullYear()}</p>
-                  </div>
-                ) : previewModal.tab === 'timecard' ? (
-                  /* PAGE 1: TIMECARD VIEW */
-                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                          <tr>
-                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Date</th>
-                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Day</th>
-                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Roster / Shift</th>
-                            <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Punched Location</th>
-                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Scheduled</th>
-                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">In Time</th>
-                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Out Time</th>
-                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Lunch</th>
-                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Work Hours</th>
-                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Late</th>
-                            <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-medium">
-                          {dayRows.map((row) => {
-                            const isAbsent = row.status === 'Absent';
-                            const isOnLeave = row.status === 'On Leave';
-                            const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
-                            // Highlight ONLY if Friday, Saturday, or Sunday AND absent/on leave
-                            const isWeekendAbsentOrLeave = isWeekendDay && (isAbsent || isOnLeave);
-                            const hasPunches = Boolean(row.inTimeFormatted || row.outTimeFormatted);
-                            const punchedShopName = resolvePunchedStore(row.attendance, deviceMapping);
-
-                            return (
-                              <tr
-                                key={row.dayNum}
-                                className={`transition-colors ${isWeekendAbsentOrLeave
-                                  ? 'bg-red-100/80 hover:bg-red-200/80 border-l-4 border-l-red-500'
-                                  : 'hover:bg-slate-50/80'
-                                  }`}
-                              >
-                                <td className="px-3 py-2 text-slate-900 font-bold font-mono">
-                                  {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
-                                </td>
-                                <td className={`px-3 py-2 font-bold ${isWeekendAbsentOrLeave ? 'text-red-700' : 'text-slate-500'}`}>
-                                  {row.dayName}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {row.hasRoster ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
-                                      📅 {row.shiftName}
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
-                                      Roster Not Available
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {hasPunches && punchedShopName ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-semibold text-[10px]">
-                                      📍 {punchedShopName}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 text-[10px]">-</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-center text-slate-600 font-mono">
-                                  {row.scheduledStartStr} – {row.scheduledEndStr}
-                                </td>
-                                <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                                  {row.inTimeFormatted || '-'}
-                                </td>
-                                <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                                  {row.outTimeFormatted || '-'}
-                                </td>
-                                <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
-                                <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">
-                                  {row.workHrsStr}
-                                </td>
-                                <td className="px-3 py-2 text-center font-mono">
-                                  {row.lateMins > 0 ? (
-                                    <span className="text-orange-600 font-bold">{row.lateMins}m</span>
-                                  ) : (
-                                    <span className="text-slate-400">0m</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                  {(() => {
-                                    if (row.status === 'Present') return <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Present</span>;
-                                    if (row.status === 'Late') return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Late</span>;
-                                    if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold">Half Day</span>;
-                                    if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Weekly Off</span>;
-                                    if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">On Leave</span>;
-                                    return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Absent</span>;
-                                  })()}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : previewModal.tab === 'timeline' ? (
-                  /* PAGE 2: TIMELINE VIEW (Visual Work Progress & Segment Graphs) */
-                  <div className="space-y-3">
-                    {dayRows.map((row) => {
-                      const hasPunches = Boolean(row.inTimeFormatted || row.outTimeFormatted);
-                      const isAbsent = row.status === 'Absent';
-                      const isOnLeave = row.status === 'On Leave';
-                      const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
-                      const isWeekendAbsentOrLeave = isWeekendDay && (isAbsent || isOnLeave);
-
-                      return (
-                        <div
-                          key={row.dayNum}
-                          className={`rounded-2xl p-3.5 border shadow-sm flex flex-col gap-2 ${isWeekendAbsentOrLeave
-                            ? 'bg-red-50/80 border-red-300 ring-1 ring-red-400/30'
-                            : 'bg-white border-slate-200/80'
-                            }`}
-                        >
-                          <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs font-bold font-mono ${isWeekendAbsentOrLeave ? 'text-red-700' : 'text-slate-900'}`}>
-                                {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)} ({row.dayName})
-                              </span>
-                              {row.hasRoster ? (
-                                <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
-                                  📅 {row.shiftName} ({row.scheduledStartStr} – {row.scheduledEndStr})
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
-                                  Roster N/A ({row.scheduledStartStr} – {row.scheduledEndStr})
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-3 text-xs font-mono">
-                              {row.inTimeFormatted && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
-                              {row.outTimeFormatted && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
-                              {!row.outTimeFormatted && row.inTimeFormatted && (
-                                <span className="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
-                                  ⚠️ Missing Punch Out
-                                </span>
-                              )}
-                              <span className="font-bold text-slate-900">Total: {row.workHrsStr}</span>
-                              {row.lateMins > 0 && <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Late by {row.lateMins}m</span>}
-                            </div>
-                          </div>
-
-                          {/* Visual Horizontal Timeline Bar */}
-                          {hasPunches ? (
-                            <div className="pt-1">
-                              <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
-                                <span>Scheduled Start ({row.scheduledStartStr})</span>
-                                <span>Standard Lunch ({row.lunchStr})</span>
-                                <span>Scheduled End ({row.scheduledEndStr})</span>
-                              </div>
-                              <div className="h-6 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200">
-                                {/* Segment 1: Morning Shift */}
-                                <div className="bg-emerald-500 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider shadow-inner">
-                                  MORNING SHIFT
-                                </div>
-                                {/* Segment 2: Lunch Break */}
-                                <div className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold border-x border-amber-300">
-                                  LUNCH
-                                </div>
-                                {/* Segment 3: Evening Shift */}
-                                {row.outTimeFormatted ? (
-                                  <div className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider shadow-inner">
-                                    EVENING SHIFT
-                                  </div>
-                                ) : (
-                                  <div className="bg-amber-500/30 border-l border-dashed border-amber-400 flex-1 flex items-center justify-center text-amber-900 text-[10px] font-semibold animate-pulse">
-                                    PUNCH OUT PENDING
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className={`py-2 text-center rounded-xl border border-dashed ${isWeekendAbsentOrLeave ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>
-                              <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : previewModal.tab === 'learning' ? (
-                  /* PAGE 4: EMPLOYEE LEARNING PROGRESS VIEW */
-                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                      <div>
-                        <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                          🎓 Employee Learning & Task Checklist Report
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Detailed task checklist matrix, checked level options, and completion summary for <span className="font-semibold text-indigo-900">{emp?.name || 'Employee'}</span> ({emp?.code || 'ID: ' + (emp?.id || '—')})
-                        </p>
-                      </div>
-                    </div>
-
-                    {learningLoading ? (
-                      <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
-                        <Loader2 size={18} className="animate-spin text-indigo-600" />
-                        <span className="text-xs font-semibold">Loading learning progress report...</span>
-                      </div>
-                    ) : learningSubmission ? (
-                      (() => {
-                        const tasksList = learningSubmission.tasks || [];
-                        const checkedSet = new Set(tasksList.filter(t => t.checked).map(t => t.id));
-                        const totalCompleted = checkedSet.size;
-
-                        const deptList = ['EXCISE', 'RETAIL', 'SANCKS', 'STOCKS', 'WHOLESALE', 'TECHNICAL', 'IMP RETAIL/RETAIL /SANCKS'];
-
-                        return (
-                          <div className="space-y-4">
-                            {/* Summary Card */}
-                            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Submission Info & Summary</span>
-                                <span className="text-sm font-bold text-slate-900 mt-0.5 block">
-                                  {totalCompleted} Tasks Completed • {learningSubmission.shop_name} ({learningSubmission.submission_date})
-                                </span>
-                              </div>
-                              <div className="flex gap-2">
-                                {[1, 2, 3, 4].map(lvl => {
-                                  const lvlTotal = tasksList.filter(t => t.level === lvl).length;
-                                  const lvlDone = tasksList.filter(t => t.level === lvl && t.checked).length;
-                                  return (
-                                    <div key={lvl} className="bg-white border border-slate-200 px-2.5 py-1 rounded text-center text-xs">
-                                      <span className="text-slate-400 block text-[9px] uppercase font-bold">L{lvl}</span>
-                                      <span className="text-slate-800 font-bold">{lvlDone}/{lvlTotal}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Learning Matrix Report */}
-                            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                              <table className="w-full text-left border-collapse text-xs">
-                                <thead>
-                                  <tr className="bg-[#1C120C] text-[#d4b457] text-[10px] uppercase font-serif tracking-wider border-b border-[#1C120C]">
-                                    <th className="py-2.5 px-2 w-[110px]">DEPT</th>
-                                    <th className="py-2.5 px-2 font-bold">LEVEL 1</th>
-                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                                    <th className="py-2.5 px-2 font-bold">LEVEL 2</th>
-                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                                    <th className="py-2.5 px-2 font-bold">LEVEL 3</th>
-                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                                    <th className="py-2.5 px-2 font-bold">LEVEL 4</th>
-                                    <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-slate-800">
-                                  {deptList.map((dept) => {
-                                    const tasksByLevel = {
-                                      1: tasksList.filter((t) => t.dept === dept && t.level === 1),
-                                      2: tasksList.filter((t) => t.dept === dept && t.level === 2),
-                                      3: tasksList.filter((t) => t.dept === dept && t.level === 3),
-                                      4: tasksList.filter((t) => t.dept === dept && t.level === 4),
-                                    };
-                                    const maxRows = Math.max(
-                                      tasksByLevel[1].length,
-                                      tasksByLevel[2].length,
-                                      tasksByLevel[3].length,
-                                      tasksByLevel[4].length,
-                                      1
-                                    );
-
-                                    return Array.from({ length: maxRows }).map((_, rowIdx) => (
-                                      <tr
-                                        key={`${dept}-${rowIdx}`}
-                                        className={rowIdx === 0 ? 'border-t-2 border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}
-                                      >
-                                        <td className="py-2 px-2 text-emerald-700 font-bold text-[11px] whitespace-nowrap align-top">
-                                          {rowIdx === 0 ? dept : ''}
-                                        </td>
-
-                                        {[1, 2, 3, 4].map((lvl) => {
-                                          const task = tasksByLevel[lvl][rowIdx];
-                                          if (!task) {
-                                            return (
-                                              <React.Fragment key={lvl}>
-                                                <td className="py-2 px-2"></td>
-                                                <td className="py-2 px-1 text-center"></td>
-                                              </React.Fragment>
-                                            );
-                                          }
-
-                                          const isChecked = !!task.checked;
-                                          return (
-                                            <React.Fragment key={lvl}>
-                                              <td className={`py-2 px-2 align-top max-w-[180px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 rounded-sm' : ''}`}>
-                                                <p className={`text-xs font-semibold leading-tight ${isChecked ? 'text-emerald-950 font-bold' : 'text-slate-800'}`}>
-                                                  {task.en}
-                                                </p>
-                                                {task.hi && <p className={`text-[10px] mt-0.5 leading-tight ${isChecked ? 'text-emerald-800' : 'text-slate-500'}`}>{task.hi}</p>}
-                                              </td>
-                                              <td className="py-2 px-1 text-center align-top">
-                                                <div
-                                                  className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs mx-auto ${
-                                                    isChecked
-                                                      ? 'bg-emerald-600 text-white shadow-xs'
-                                                      : 'bg-red-50 text-red-500 border border-red-200'
-                                                  }`}
-                                                >
-                                                  {isChecked ? '✓' : '✕'}
-                                                </div>
-                                              </td>
-                                            </React.Fragment>
-                                          );
-                                        })}
-                                      </tr>
-                                    ));
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <div className="py-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-lg">
-                          🎓
-                        </div>
-                        <p className="text-xs font-bold text-slate-700">No Learning Checklist Submitted Yet</p>
-                        <p className="text-[11px] text-slate-400 max-w-md">
-                          No staff task checklist record has been submitted for <span className="font-semibold text-slate-600">{emp?.name || 'this employee'}</span>.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* PAGE 3: PAYSLIP & PAYROLL HISTORY VIEW */
-                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
-                    <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                      <div>
-                        <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                          💳 Employee Payslip & Payroll History
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Historical payout records, salary breakdown & deductions for <span className="font-semibold text-indigo-900">{emp?.name || 'Employee'}</span> ({emp?.code || 'ID: ' + (emp?.id || '—')})
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                      <table className="w-full text-xs text-left">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
-                          <tr>
-                            <th className="px-3.5 py-2.5">Month / Year</th>
-                            <th className="px-3.5 py-2.5">Base Salary</th>
-                            <th className="px-3.5 py-2.5">Present Days</th>
-                            <th className="px-3.5 py-2.5">Advances / Deductions</th>
-                            <th className="px-3.5 py-2.5">Net Payable</th>
-                            <th className="px-3.5 py-2.5 text-center">Status</th>
-                            <th className="px-3.5 py-2.5 text-right">Payment Info</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-
-                          {payrollLoading ? (
-                            <tr>
-                              <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Loader2 size={16} className="animate-spin text-indigo-600" />
-                                  <span className="text-xs font-semibold">Loading payslip history...</span>
-                                </div>
-                              </td>
-                            </tr>
-                          ) : payrollRecords && payrollRecords.length > 0 ? (
-                            payrollRecords.map((payRecord) => (
-                              <tr key={payRecord.id || `${payRecord.year}-${payRecord.month}`} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-3.5 py-2.5 font-bold text-slate-900">{payRecord.month} {payRecord.year}</td>
-                                <td className="px-3.5 py-2.5">₹{Number(payRecord.base_salary || payRecord.salary || 0).toLocaleString()}</td>
-                                <td className="px-3.5 py-2.5">{payRecord.present_days || payRecord.working_days || 0} Days</td>
-                                <td className="px-3.5 py-2.5 text-red-600">-₹{Number(payRecord.advance_deduction || payRecord.deduction || 0).toLocaleString()}</td>
-                                <td className="px-3.5 py-2.5 font-bold text-emerald-600">₹{Number(payRecord.net_salary || payRecord.net_payable || 0).toLocaleString()}</td>
-                                <td className="px-3.5 py-2.5 text-center">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${(payRecord.payout_status || payRecord.status)?.toLowerCase() === 'paid'
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : (payRecord.payout_status || payRecord.status)?.toLowerCase() === 'hold'
-                                        ? 'bg-amber-100 text-amber-800'
-                                        : 'bg-slate-100 text-slate-700'
-                                    }`}>
-                                    {payRecord.payout_status || payRecord.status || 'Paid'}
-                                  </span>
-                                </td>
-                                <td className="px-3.5 py-2.5 text-right text-slate-500">{payRecord.payment_date || payRecord.created_at?.slice(0, 10) || '—'}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
-                                <div className="flex flex-col items-center justify-center gap-2">
-                                  <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 text-lg">
-                                    💳
-                                  </div>
-                                  <p className="text-xs font-bold text-slate-700">No Payroll History Found</p>
-                                  <p className="text-[11px] text-slate-400 max-w-md">
-                                    No saved payout records found in <code className="text-indigo-600 font-mono font-semibold">hr_management_payroll</code> for <span className="font-semibold text-slate-600">{emp?.name || 'this employee'}</span>.
-                                  </p>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <EmployeeOverviewModal
+        isOpen={previewModal.isOpen}
+        onClose={() => setPreviewModal(prev => ({ ...prev, isOpen: false }))}
+        employee={previewModal.employee}
+        initialMonth={previewModal.month}
+        initialTab={previewModal.tab}
+      />
     </div>
   );
 };

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Download, Calendar, Save, Users, DollarSign, TrendingUp, HelpCircle, Database, X, ChevronDown, Pencil, RefreshCw, CheckCircle2, Check, Columns, Bookmark, PauseCircle, Printer, FileText } from 'lucide-react';
+import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
+import {
+    Search, Users, Download, Eye, Calendar, DollarSign, ArrowUpRight, ChevronLeft, ChevronRight, Filter, Settings, FileSpreadsheet, Send, HelpCircle, UserX, Clock, Sliders, Play, CheckCircle2, RotateCcw, AlertTriangle, AlertCircle, FileText, Check, ChevronDown, RefreshCw, X, ShieldAlert, CheckCircle, Info, Lock, Columns, Bookmark, TrendingUp, Loader2, Pencil, Save, Edit, Printer
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
@@ -31,6 +34,149 @@ const Payroll = () => {
     const [pendingPaidRows, setPendingPaidRows] = useState([]);
     const [modalShopSelection, setModalShopSelection] = useState('');
     const [advanceMapState, setAdvanceMapState] = useState({});
+    const [empPhotoMap, setEmpPhotoMap] = useState({});
+
+    // Employee Overview Modal State (Attendance / Timecard / Timeline / Payslip / Learning)
+    const [previewModal, setPreviewModal] = useState({
+        isOpen: false,
+        employee: null,
+        month: new Date(),
+        tab: 'timecard',
+        loading: false
+    });
+    const [payrollRecordsModal, setPayrollRecordsModal] = useState([]);
+    const [learningSubmissionModal, setLearningSubmissionModal] = useState(null);
+    const [attendanceLogsModal, setAttendanceLogsModal] = useState([]);
+
+    const fetchAttendanceLogsForModal = async (emp, month) => {
+        try {
+            const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
+            const empNameStr = String(emp.name || '').trim().toLowerCase();
+            const year = month.getFullYear();
+            const monthNum = month.getMonth() + 1;
+            const startDate = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+            const lastDay = new Date(year, monthNum, 0).getDate();
+            const endDate = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+            const { data, error } = await supabase
+                .from('hr_attendance_daily')
+                .select('*')
+                .gte('date', startDate)
+                .lte('date', endDate);
+
+            if (!error && data) {
+                const filtered = data.filter(d => {
+                    const idCol = String(d.employee_id || d.emp_id || '').trim().toLowerCase();
+                    const nameCol = String(d.employee_name || d.name || '').trim().toLowerCase();
+                    return (empIdStr && idCol.includes(empIdStr)) || (empNameStr && nameCol.includes(empNameStr));
+                });
+                setAttendanceLogsModal(filtered);
+            } else {
+                setAttendanceLogsModal([]);
+            }
+        } catch (e) {
+            console.error('Error fetching attendance logs for modal:', e);
+            setAttendanceLogsModal([]);
+        }
+    };
+
+    const fetchEmployeePayrollForModal = async (emp) => {
+        try {
+            const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
+            const empNameStr = String(emp.name || '').trim().toLowerCase();
+
+            const { data, error } = await supabase
+                .from('hr_management_payroll')
+                .select('*');
+
+            if (!error && data) {
+                const filtered = data.filter(r => {
+                    const idCol = String(r.employee_id || r.employee_code || '').trim().toLowerCase();
+                    const nameCol = String(r.employee_name || r.name || '').trim().toLowerCase();
+                    return (empIdStr && idCol.includes(empIdStr)) || (empNameStr && nameCol.includes(empNameStr));
+                });
+                setPayrollRecordsModal(filtered);
+            } else {
+                setPayrollRecordsModal([]);
+            }
+        } catch (e) {
+            console.error('Error fetching payroll records for modal:', e);
+            setPayrollRecordsModal([]);
+        }
+    };
+
+    const fetchEmployeeLearningForModal = async (emp) => {
+        try {
+            const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
+            const empNameStr = String(emp.name || '').trim().toLowerCase();
+
+            const { data, error } = await supabase
+                .from('hr_learning_submissions')
+                .select('*')
+                .order('id', { ascending: false });
+
+            if (!error && data) {
+                const matched = data.find(s => {
+                    const subEmpId = String(s.employee_id || '').trim().toLowerCase();
+                    const subEmpName = String(s.employee || s.employee_name || '').trim().toLowerCase();
+                    const matchId = empIdStr && subEmpId && (empIdStr === subEmpId || subEmpId.includes(empIdStr));
+                    const matchName = empNameStr && subEmpName && (empNameStr === subEmpName || empNameStr.includes(subEmpName) || subEmpName.includes(empNameStr));
+                    return matchId || matchName;
+                });
+
+                if (matched) {
+                    let tasksArr = [];
+                    if (typeof matched.tasks_data === 'string') {
+                        try { tasksArr = JSON.parse(matched.tasks_data); } catch (e) { tasksArr = []; }
+                    } else if (Array.isArray(matched.tasks_data)) {
+                        tasksArr = matched.tasks_data;
+                    } else if (Array.isArray(matched.tasks)) {
+                        tasksArr = matched.tasks;
+                    }
+                    setLearningSubmissionModal({ ...matched, tasks: tasksArr });
+                } else {
+                    setLearningSubmissionModal(null);
+                }
+            } else {
+                setLearningSubmissionModal(null);
+            }
+        } catch (e) {
+            console.error('Error fetching learning submission for modal:', e);
+            setLearningSubmissionModal(null);
+        }
+    };
+
+    const openPreviewWindow = (row, initialTab = 'timecard') => {
+        const empId = row[0]?.toString() || '';
+        const empName = row[1]?.toString() || '';
+        const empShop = row[24]?.toString() || row[2]?.toString() || '';
+        const photo = row[25] || empPhotoMap[empId.toLowerCase()] || empPhotoMap[empName.toLowerCase()] || null;
+
+        const empObj = {
+            id: empId,
+            code: empId,
+            name: empName,
+            candidate_name: empName,
+            joining_place: empShop,
+            shop_name: empShop,
+            designation: 'Staff',
+            candidate_photo: photo
+        };
+
+        const modalMonth = new Date(selectedYear, selectedMonth - 1, 1);
+
+        setPreviewModal({
+            isOpen: true,
+            employee: empObj,
+            month: modalMonth,
+            tab: initialTab,
+            loading: false
+        });
+
+        fetchAttendanceLogsForModal(empObj, modalMonth);
+        fetchEmployeePayrollForModal(empObj);
+        fetchEmployeeLearningForModal(empObj);
+    };
 
     const PAYROLL_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby1QHKttecIhZwoyh8-xo_wzqHgxIuFr9Tci8L803T1q0nKkjA1w26soUXSffkMY4E0sQ/exec';
     const SPREADSHEET_ID = '1lg8cvRaYHpnR75bWxHoh-a30-gGL94-_WAnE7Zue6r8';
@@ -151,9 +297,20 @@ const Payroll = () => {
             // 1. Fetch employees from Supabase
             const { data: dbEmployees, error: empError } = await supabase
                 .from('hr_management_employees')
-                .select('employee_id, name_as_per_aadhar, date_of_joining, salary, status, mobile_no, current_account_no, ifsc_code, beneficiary_name, joining_company_name');
+                .select('employee_id, name_as_per_aadhar, date_of_joining, salary, status, mobile_no, current_account_no, ifsc_code, beneficiary_name, joining_company_name, candidate_photo');
 
             if (empError) throw empError;
+
+            const photoMap = {};
+            (dbEmployees || []).forEach(emp => {
+                if (emp.employee_id && emp.candidate_photo) {
+                    photoMap[emp.employee_id.toString().trim().toLowerCase()] = emp.candidate_photo;
+                }
+                if (emp.name_as_per_aadhar && emp.candidate_photo) {
+                    photoMap[emp.name_as_per_aadhar.toString().trim().toLowerCase()] = emp.candidate_photo;
+                }
+            });
+            setEmpPhotoMap(photoMap);
 
             const activeEmployees = (dbEmployees || []).filter(emp => {
                 if (!emp.status) return true;
@@ -175,6 +332,13 @@ const Payroll = () => {
 
             if (logsError) throw logsError;
 
+            // Fetch roster entries for the month to count assigned Weekly Off (WO) & Day Off (DO)
+            const { data: dbRosters } = await supabase
+                .from('hr_management_shift_roster')
+                .select('employee_id, date, shift_type')
+                .gte('date', startDateStr)
+                .lte('date', endDateStr);
+
             const getLocalDayOfWeek = (dateStr) => {
                 if (!dateStr) return -1;
                 const parts = dateStr.split('-');
@@ -189,13 +353,38 @@ const Payroll = () => {
 
             const attendanceMap = {};
             const unmatchedMap = {};
-            const verifiedIds = new Set((dbEmployees || []).map(e => e.employee_id?.toString().trim().toLowerCase()));
+            
+            // Build matching sets for employee_id and employee_name
+            const verifiedIds = new Set();
+            const empIdToKeyMap = {};
+            (dbEmployees || []).forEach(e => {
+                const code = e.employee_id?.toString().trim().toLowerCase();
+                const name = e.name_as_per_aadhar?.toString().trim().toLowerCase();
+                if (code) {
+                    verifiedIds.add(code);
+                    empIdToKeyMap[code] = code;
+                }
+                if (name) {
+                    verifiedIds.add(name);
+                    if (code) empIdToKeyMap[name] = code;
+                }
+            });
+
+            // Track logged dates per employee key to prevent duplicate roster addition
+            const loggedDatesMap = {};
 
             (dbLogs || []).forEach(log => {
                 const empId = log.employee_id?.toString().trim();
-                if (!empId) return;
+                const empName = log.employee_name?.toString().trim();
+                if (!empId && !empName) return;
 
-                const empIdLower = empId.toLowerCase();
+                const empIdLower = empId ? empId.toLowerCase() : '';
+                const empNameLower = empName ? empName.toLowerCase() : '';
+                const matchedKey = empIdToKeyMap[empIdLower] || empIdToKeyMap[empNameLower] || empIdLower || empNameLower;
+
+                if (!loggedDatesMap[matchedKey]) loggedDatesMap[matchedKey] = new Set();
+                loggedDatesMap[matchedKey].add(log.attendance_date);
+
                 const status = log.status?.toString().trim().toLowerCase() || '';
                 const isPresent = status === 'present' || status === 'late' || status === 'half day' || status === 'weekly off' || status === 'day off' || status === 'wo' || status === 'do';
 
@@ -204,22 +393,23 @@ const Payroll = () => {
                 const isSaturday = dayOfWeek === 6;
                 const isSunday = dayOfWeek === 0;
 
-                if (verifiedIds.has(empIdLower)) {
-                    if (!attendanceMap[empIdLower]) {
-                        attendanceMap[empIdLower] = { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
+                if (verifiedIds.has(empIdLower) || verifiedIds.has(empNameLower)) {
+                    if (!attendanceMap[matchedKey]) {
+                        attendanceMap[matchedKey] = { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
                     }
                     if (isPresent) {
-                        attendanceMap[empIdLower].present++;
-                        if (isFriday) attendanceMap[empIdLower].hasFriday = true;
-                        if (isSaturday) attendanceMap[empIdLower].hasSaturday = true;
-                        if (isSunday) attendanceMap[empIdLower].hasSunday = true;
+                        attendanceMap[matchedKey].present += (status === 'half day' ? 0.5 : 1);
+                        if (isFriday) attendanceMap[matchedKey].hasFriday = true;
+                        if (isSaturday) attendanceMap[matchedKey].hasSaturday = true;
+                        if (isSunday) attendanceMap[matchedKey].hasSunday = true;
                     } else if (status === 'absent') {
-                        attendanceMap[empIdLower].absent++;
+                        attendanceMap[matchedKey].absent++;
                     }
                 } else {
-                    if (!unmatchedMap[empId]) {
-                        unmatchedMap[empId] = {
-                            id: empId,
+                    const unKey = empId || empName;
+                    if (!unmatchedMap[unKey]) {
+                        unmatchedMap[unKey] = {
+                            id: unKey,
                             name: log.employee_name || 'Unmatched Employee',
                             present: 0,
                             absent: 0,
@@ -229,12 +419,57 @@ const Payroll = () => {
                         };
                     }
                     if (isPresent) {
-                        unmatchedMap[empId].present++;
-                        if (isFriday) unmatchedMap[empId].hasFriday = true;
-                        if (isSaturday) unmatchedMap[empId].hasSaturday = true;
-                        if (isSunday) unmatchedMap[empId].hasSunday = true;
+                        unmatchedMap[unKey].present += (status === 'half day' ? 0.5 : 1);
+                        if (isFriday) unmatchedMap[unKey].hasFriday = true;
+                        if (isSaturday) unmatchedMap[unKey].hasSaturday = true;
+                        if (isSunday) unmatchedMap[unKey].hasSunday = true;
                     } else if (status === 'absent') {
-                        unmatchedMap[empId].absent++;
+                        unmatchedMap[unKey].absent++;
+                    }
+                }
+            });
+
+            // Process Roster Weekly Off / Day Off for dates where no punch log overrides it
+            (dbRosters || []).forEach(r => {
+                const empId = r.employee_id?.toString().trim();
+                if (!empId) return;
+                const empIdLower = empId.toLowerCase();
+                const matchedKey = empIdToKeyMap[empIdLower] || empIdLower;
+                const sType = r.shift_type?.toString().trim().toLowerCase() || '';
+
+                if (sType === 'weekly off' || sType === 'wo' || sType === 'day off' || sType === 'do' || sType === 'off') {
+                    // Check if date was already logged in attendance_logs
+                    if (!loggedDatesMap[matchedKey] || !loggedDatesMap[matchedKey].has(r.date)) {
+                        const dayOfWeek = getLocalDayOfWeek(r.date);
+                        const isFriday = dayOfWeek === 5;
+                        const isSaturday = dayOfWeek === 6;
+                        const isSunday = dayOfWeek === 0;
+
+                        if (verifiedIds.has(empIdLower)) {
+                            if (!attendanceMap[matchedKey]) {
+                                attendanceMap[matchedKey] = { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
+                            }
+                            attendanceMap[matchedKey].present++;
+                            if (isFriday) attendanceMap[matchedKey].hasFriday = true;
+                            if (isSaturday) attendanceMap[matchedKey].hasSaturday = true;
+                            if (isSunday) attendanceMap[matchedKey].hasSunday = true;
+                        } else {
+                            if (!unmatchedMap[empId]) {
+                                unmatchedMap[empId] = {
+                                    id: empId,
+                                    name: 'Unmatched Employee',
+                                    present: 0,
+                                    absent: 0,
+                                    hasFriday: false,
+                                    hasSaturday: false,
+                                    hasSunday: false
+                                };
+                            }
+                            unmatchedMap[empId].present++;
+                            if (isFriday) unmatchedMap[empId].hasFriday = true;
+                            if (isSaturday) unmatchedMap[empId].hasSaturday = true;
+                            if (isSunday) unmatchedMap[empId].hasSunday = true;
+                        }
                     }
                 }
             });
@@ -295,8 +530,22 @@ const Payroll = () => {
                         const empId = leave.employee_id?.toString().trim().toLowerCase();
                         if (!empId) return;
 
-                        const isPayable = leave.is_payable === 'Payable' || leave.leave_type === 'Sick Leave';
-                        if (!isPayable) return;
+                        // Check payable status: Exclude Non-Payable (Loss of Pay / Unpaid Leave)
+                        // Check payable status strictly based on is_payable property:
+                        // "Payable" (or "Paid", "Paid Leave", "Sick Leave", "Payable Leave") is included (+1.0 day/day).
+                        // "Non Payable", "Unpaid", "Loss of Pay" status is excluded (+0.0 day).
+                        const status = leave.status?.toString().trim().toLowerCase();
+                        if (status !== 'approved') return;
+
+                        const isPayableVal = leave.is_payable?.toString().trim().toLowerCase() || '';
+                        const leaveTypeVal = leave.leave_type?.toString().trim().toLowerCase() || '';
+
+                        // If is_payable explicitly indicates non-payable / unpaid / loss of pay, skip.
+                        const isExplicitlyNonPayable = isPayableVal.includes('non') || isPayableVal.includes('unpaid') || isPayableVal.includes('loss');
+                        const isExplicitlyPayable = isPayableVal.includes('payable') || isPayableVal.includes('paid') || isPayableVal === 'yes' || isPayableVal === 'true';
+
+                        if (isExplicitlyNonPayable) return;
+                        if (!isExplicitlyPayable && (leaveTypeVal.includes('unpaid') || leaveTypeVal.includes('loss of pay'))) return;
 
                         // Calculate overlapping days within the selected month
                         const leaveFrom = new Date(leave.from_date);
@@ -347,12 +596,12 @@ const Payroll = () => {
                 'Total days',
                 'Attendance',
                 'Extra Days',
+                'Basic salary (Prorated)',
                 'Monthly Advance',
                 'Fixed Advance',
                 'Brakeges',
                 'Medical',
                 'RTO',
-                'Basic salary (Prorated)',
                 'Seasonal Bonus',
                 'Refferal Bonus',
                 'Way Off',
@@ -367,12 +616,15 @@ const Payroll = () => {
                 const salary = Number(emp.salary) || 0;
 
                 const empIdLower = empId.toLowerCase();
-                const att = attendanceMap[empIdLower] || { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
+                const empNameLower = name.toLowerCase();
+                const matchedKey = empIdToKeyMap[empIdLower] || empIdToKeyMap[empNameLower] || empIdLower || empNameLower;
+
+                const att = attendanceMap[matchedKey] || attendanceMap[empIdLower] || attendanceMap[empNameLower] || { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
                 const originalPresent = att.present;
                 const extraDays = (att.hasFriday && att.hasSaturday && att.hasSunday) ? 2 : 0;
 
                 // Load saved overrides
-                const savedPayroll = payrollMap[empIdLower];
+                const savedPayroll = payrollMap[matchedKey] || payrollMap[empIdLower] || payrollMap[empNameLower];
                 const breakageDeduction = savedPayroll ? (Number(savedPayroll.breakage_deduction) || 0) : 0;
                 const medicalDeduction = savedPayroll ? (Number(savedPayroll.medical_deduction) || 0) : 0;
                 const rtoDeduction = savedPayroll ? (Number(savedPayroll.rto_deduction) || 0) : 0;
@@ -380,9 +632,10 @@ const Payroll = () => {
                 const referralBonus = savedPayroll ? (Number(savedPayroll.referral_bonus) || 0) : 0;
                 const wayOff = savedPayroll ? (Number(savedPayroll.way_off) || Number(savedPayroll.way_off_deduction) || 0) : 0;
 
-                const present = originalPresent + (payableLeavesMap[empIdLower] || 0);
+                const leaveDays = (payableLeavesMap[matchedKey] || 0) || (payableLeavesMap[empIdLower] || 0) || (payableLeavesMap[empNameLower] || 0);
+                const present = originalPresent + leaveDays;
 
-                const adv = advanceMap[empIdLower] || { advanceDeduction: 0, fixedAdvanceAmount: 0, fixedAdvanceDeduction: 0 };
+                const adv = advanceMap[matchedKey] || advanceMap[empIdLower] || advanceMap[empNameLower] || { advanceDeduction: 0, fixedAdvanceAmount: 0, fixedAdvanceDeduction: 0 };
                 const advDeduction = adv.advanceDeduction;
                 const fixedAdvBalance = adv.fixedAdvanceAmount || (savedPayroll ? Number(savedPayroll.fixed_advance) || 0 : 0);
 
@@ -399,13 +652,13 @@ const Payroll = () => {
                     salary,                    // 2: Basic salary
                     totalDays,                 // 3: Total days
                     present,                   // 4: Attendance
-                    extraDays,                 // 5: Extra 2 days
-                    advDeduction,              // 6: Monthly Advance
-                    fixedAdvBalance,           // 7: Fixed Advance (NON-EDITABLE)
-                    breakageDeduction,         // 8: Brakeges
-                    medicalDeduction,          // 9: Medical
-                    rtoDeduction,              // 10: RTO
-                    proratedSalary,            // 11: Basic salary (Prorated)
+                    extraDays,                 // 5: Extra Days
+                    proratedSalary,            // 6: Basic salary (Prorated)
+                    advDeduction,              // 7: Monthly Advance
+                    fixedAdvBalance,           // 8: Fixed Advance (NON-EDITABLE)
+                    breakageDeduction,         // 9: Brakeges
+                    medicalDeduction,          // 10: Medical
+                    rtoDeduction,              // 11: RTO
                     seasonalBonus,             // 12: Seasonal Bonus
                     referralBonus,             // 13: Refferal Bonus
                     wayOff,                    // 14: Way Off
@@ -418,7 +671,8 @@ const Payroll = () => {
                     emp.current_account_no || '', // 21: current_account_no
                     emp.ifsc_code || '',       // 22: ifsc_code
                     emp.beneficiary_name || '', // 23: beneficiary_name
-                    emp.joining_company_name || '' // 24: shop_name
+                    emp.joining_company_name || '', // 24: shop_name
+                    emp.candidate_photo || null // 25: candidate_photo
                 ];
             });
 
@@ -1097,12 +1351,12 @@ const Payroll = () => {
                     const newRow = [...r];
                     newRow[colIndex] = numVal;
 
-                    if (colIndex === 5) {
-                        // Recalculate Prorated Salary when Extra Days changes
-                        const salary = Number(newRow[2]) || 0;
+                    if (colIndex === 2 || colIndex === 5) {
+                        // Recalculate Prorated Salary when Base Salary or Extra Days changes
+                        const salary = colIndex === 2 ? numVal : (Number(newRow[2]) || 0);
                         const totalDays = Number(newRow[3]) || 30;
                         const present = Number(newRow[4]) || 0;
-                        const extraDays = numVal;
+                        const extraDays = colIndex === 5 ? numVal : (Number(newRow[5]) || 0);
                         const dailyRate = totalDays > 0 ? salary / totalDays : 0;
                         newRow[11] = Math.round(dailyRate * (present + extraDays));
                     }
@@ -1146,118 +1400,6 @@ const Payroll = () => {
                     <p className="text-gray-500 text-xs mt-0.5">
                         Dynamic payroll generated directly from employees table and attendance monthly database logs
                     </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="relative">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search records..."
-                            className="pl-9 pr-3 py-1.5 border border-gray-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 w-60 bg-white"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-
-                    {/* Column Checklist Selector */}
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowColumnDropdown(prev => !prev)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-slate-700 font-semibold text-xs hover:bg-gray-50 transition-colors rounded shadow-xs cursor-pointer"
-                        >
-                            <Columns size={14} className="text-gray-500" />
-                            Select Columns
-                            <ChevronDown size={12} className="text-gray-400" />
-                        </button>
-                        {showColumnDropdown && (
-                            <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50 p-3 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-150">
-                                <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Toggle Columns</span>
-                                    <button
-                                        onClick={() => setHiddenColumns(new Set())}
-                                        className="text-[10px] text-indigo-600 font-bold hover:underline"
-                                    >
-                                        Select All
-                                    </button>
-                                </div>
-                                <div className="max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-1.5">
-                                    {(activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers).map(col => {
-                                        const isHidden = hiddenColumns.has(col);
-                                        return (
-                                            <label key={col} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50 p-1 rounded">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={!isHidden}
-                                                    onChange={(e) => {
-                                                        const next = new Set(hiddenColumns);
-                                                        if (e.target.checked) next.delete(col);
-                                                        else next.add(col);
-                                                        setHiddenColumns(next);
-                                                    }}
-                                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                                />
-                                                <span>{col}</span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {(activeTab === 'salary' || activeTab === 'hold') && (
-                        <div className="relative">
-                            <select
-                                value={sortOrder}
-                                onChange={(e) => setSortOrder(e.target.value)}
-                                className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700 rounded cursor-pointer"
-                            >
-                                <option value="ASC">Sort: ID Ascending</option>
-                                <option value="DESC">Sort: ID Descending</option>
-                                <option value="DEFAULT">Sort: Default</option>
-                            </select>
-                            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                        </div>
-                    )}
-                    <button
-                        onClick={handleExportExcel}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-medium text-xs transition-colors rounded shadow-sm cursor-pointer"
-                    >
-                        <Download size={14} />
-                        Export Excel
-                    </button>
-                    {(activeTab === 'salary' || activeTab === 'hold') && (
-                        <button
-                            onClick={handleExportBankCSV}
-                            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs transition-colors rounded shadow-sm cursor-pointer"
-                        >
-                            <Download size={14} />
-                            Export Bank CSV
-                        </button>
-                    )}
-                    {(activeTab === 'salary' || activeTab === 'hold') && (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={fetchPayrollData}
-                                disabled={loading}
-                                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
-                            >
-                                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-                                {loading ? 'Refreshing...' : 'Refresh'}
-                            </button>
-                            {activeTab === 'hold' && (
-                                <button
-                                    onClick={() => handleUnhold()}
-                                    disabled={isSavingToDB || !holdData?.rows?.length}
-                                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
-                                    title="Move held records back to active Salary Sheet"
-                                >
-                                    {isSavingToDB ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                                    Unhold Selected
-                                </button>
-                            )}
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -1313,6 +1455,120 @@ const Payroll = () => {
                     </div>
                 </div>
             )}
+
+            {/* Action Bar & Controls */}
+            <div className="flex flex-wrap items-center justify-end gap-3 mb-6">
+                <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search records..."
+                        className="pl-9 pr-3 py-1.5 border border-gray-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 w-60 bg-white"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
+                {/* Column Checklist Selector */}
+                <div className="relative">
+                    <button
+                        onClick={() => setShowColumnDropdown(prev => !prev)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-slate-700 font-semibold text-xs hover:bg-gray-50 transition-colors rounded shadow-xs cursor-pointer"
+                    >
+                        <Columns size={14} className="text-gray-500" />
+                        Select Columns
+                        <ChevronDown size={12} className="text-gray-400" />
+                    </button>
+                    {showColumnDropdown && (
+                        <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50 p-3 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-150">
+                            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Toggle Columns</span>
+                                <button
+                                    onClick={() => setHiddenColumns(new Set())}
+                                    className="text-[10px] text-indigo-600 font-bold hover:underline"
+                                >
+                                    Select All
+                                </button>
+                            </div>
+                            <div className="max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-1.5">
+                                {(activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers).map(col => {
+                                    const isHidden = hiddenColumns.has(col);
+                                    return (
+                                        <label key={col} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                            <input
+                                                type="checkbox"
+                                                checked={!isHidden}
+                                                onChange={(e) => {
+                                                    const next = new Set(hiddenColumns);
+                                                    if (e.target.checked) next.delete(col);
+                                                    else next.add(col);
+                                                    setHiddenColumns(next);
+                                                }}
+                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                            />
+                                            <span>{col}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {(activeTab === 'salary' || activeTab === 'hold') && (
+                    <div className="relative">
+                        <select
+                            value={sortOrder}
+                            onChange={(e) => setSortOrder(e.target.value)}
+                            className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700 rounded cursor-pointer"
+                        >
+                            <option value="ASC">Sort: ID Ascending</option>
+                            <option value="DESC">Sort: ID Descending</option>
+                            <option value="DEFAULT">Sort: Default</option>
+                        </select>
+                        <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                    </div>
+                )}
+                <button
+                    onClick={handleExportExcel}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-medium text-xs transition-colors rounded shadow-sm cursor-pointer"
+                >
+                    <Download size={14} />
+                    Export Excel
+                </button>
+                {(activeTab === 'salary' || activeTab === 'hold') && (
+                    <button
+                        onClick={handleExportBankCSV}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs transition-colors rounded shadow-sm cursor-pointer"
+                    >
+                        <Download size={14} />
+                        Export Bank CSV
+                    </button>
+                )}
+                {(activeTab === 'salary' || activeTab === 'hold') && (
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={fetchPayrollData}
+                            disabled={loading}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
+                        >
+                            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                            {loading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                        {activeTab === 'hold' && (
+                            <button
+                                onClick={() => handleUnhold()}
+                                disabled={isSavingToDB || !holdData?.rows?.length}
+                                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
+                                title="Move held records back to active Salary Sheet"
+                            >
+                                {isSavingToDB ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                                Unhold Selected
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Navigation Tabs & Date Filters */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-gray-200 mb-5">
@@ -1499,7 +1755,6 @@ const Payroll = () => {
                                             />
                                         </th>
                                     )}
-                                    <th className="px-4 py-2.5 font-semibold text-gray-600 w-12 text-center">S.no</th>
                                     {(activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers)
                                         .filter(header => !hiddenColumns.has(header))
                                         .map((header, idx) => (
@@ -1541,7 +1796,6 @@ const Payroll = () => {
                                                     />
                                                 </td>
                                             )}
-                                            <td className="px-4 py-2.5 text-center text-gray-400 font-mono border-r border-gray-100">{(activePage - 1) * pageSize + idx + 1}</td>
                                             {cellsToRender
                                                 .filter(({ header }) => !hiddenColumns.has(header))
                                                 .map(({ header, cell }, j) => {
@@ -1580,14 +1834,68 @@ const Payroll = () => {
                                                     }
 
                                                     if (headerName === 'name') {
-                                                        cellClass = "px-4 py-2.5 text-slate-700 font-sans text-left";
+                                                        cellClass = "px-4 py-2 text-slate-700 font-sans text-left";
+                                                        const empIdKey = row[0]?.toString()?.trim()?.toLowerCase();
+                                                        const empNameKey = String(cell)?.trim()?.toLowerCase();
+                                                        const candidatePhoto = row[25] || (empIdKey && empPhotoMap[empIdKey]) || (empNameKey && empPhotoMap[empNameKey]) || null;
+
                                                         content = (
-                                                            <div className="flex flex-col">
-                                                                <span>{cell}</span>
-                                                                {!isVerified && (
-                                                                    <span className="text-[9px] text-amber-600 font-semibold block mt-0.5">⚠️ Unverified</span>
-                                                                )}
-                                                            </div>
+                                                            <div className="flex items-center justify-between gap-3 group min-w-[200px]">
+                                                                <div className="flex items-center gap-2">
+                                                                    {/* Profile Overview Avatar */}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => openPreviewWindow(row, 'timecard')}
+                                                                        className="relative flex-shrink-0 cursor-pointer group"
+                                                                        title="Click to view employee profile overview"
+                                                                    >
+                                                                        {candidatePhoto ? (
+                                                                            <img
+                                                                                src={candidatePhoto}
+                                                                                alt={cell}
+                                                                                className="w-6 h-6 rounded-full object-cover border border-gray-200 flex-shrink-0 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-xs"
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-xs">
+                                                                                {cell ? String(cell).charAt(0).toUpperCase() : '?'}
+                                                                            </div>
+                                                                        )}
+                                                                    </button>
+                                                                    <div className="flex flex-col">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => openPreviewWindow(row, 'timecard')}
+                                                                            className="font-bold text-slate-900 hover:text-indigo-600 text-left transition-colors cursor-pointer text-xs"
+                                                                            title="Click to view employee overview & timecard"
+                                                                        >
+                                                                            {cell}
+                                                                        </button>
+                                                                        {!isVerified && (
+                                                                            <span className="text-[9px] text-amber-600 font-semibold block mt-0.5">⚠️ Unverified</span>
+                                                                        )}
+                                                                    </div>
+                                                                    {/* Timeline Icon */}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => openPreviewWindow(row, 'timeline')}
+                                                                        className="p-1.5 rounded-md bg-slate-50 hover:bg-indigo-100 text-slate-400 hover:text-indigo-700 transition-all cursor-pointer shrink-0 border border-slate-200"
+                                                                        title="Click to view employee timeline & daily log"
+                                                                    >
+                                                                        <Clock size={13} />
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        } else if (headerName === 'salary' || headerName === 'basic salary') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 2, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                            />
                                                         );
                                                     } else if (headerName === 'extra days' || headerName === 'extra 2 days') {
                                                         cellClass = "px-4 py-2.5 text-center";
@@ -2203,6 +2511,14 @@ UNIQUE (employee_id, year, month);`}
                     </div>
                 </div>
             )}
+            {/* Employee Overview Modal */}
+            <EmployeeOverviewModal
+                isOpen={previewModal.isOpen}
+                onClose={() => setPreviewModal(prev => ({ ...prev, isOpen: false }))}
+                employee={previewModal.employee}
+                initialMonth={previewModal.month}
+                initialTab={previewModal.tab}
+            />
         </div>
     );
 };

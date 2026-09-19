@@ -375,23 +375,130 @@ export default function Dashboard() {
 
                     if (isLogStoreAuth) {
                         const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
+                        
+                        const isBefore9AM = (timeStr) => {
+                            if (!timeStr || timeStr === '-') return false;
+                            try {
+                                const clean = timeStr.trim();
+                                if (clean.includes('T') || (clean.includes('-') && clean.includes(' '))) {
+                                    const dateObj = new Date(clean.includes(' ') && !clean.includes('T') ? clean.replace(' ', 'T') : clean);
+                                    if (!isNaN(dateObj.getTime())) {
+                                        const parts = new Intl.DateTimeFormat('en-US', {
+                                            timeZone: 'Asia/Kolkata',
+                                            hour: 'numeric',
+                                            hour12: false
+                                        }).formatToParts(dateObj);
+                                        const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+                                        return h < 9;
+                                    }
+                                }
+                                const upper = clean.toUpperCase();
+                                const isAM = upper.endsWith('AM');
+                                const isPM = upper.endsWith('PM');
+                                let timePart = upper;
+                                if (isAM || isPM) timePart = upper.slice(0, -2).trim();
+                                if (timePart.includes(' ')) timePart = timePart.split(' ')[1] || timePart;
+                                const [hStr] = timePart.split(':');
+                                let h = parseInt(hStr, 10);
+                                if (isNaN(h)) return false;
+                                if (isAM && h === 12) h = 0;
+                                if (isPM && h < 12) h += 12;
+                                return h < 9;
+                            } catch (e) {
+                                return false;
+                            }
+                        };
+
+                        let effectiveInTime = log.in_time;
+                        if (effectiveInTime && isBefore9AM(effectiveInTime)) {
+                            effectiveInTime = null;
+                        }
+
+                        if (!effectiveInTime || effectiveInTime === '-') {
+                            if (log.punch_log && log.punch_log !== '-') {
+                                const validPunches = log.punch_log.split('|').map(p => p.trim()).filter(p => p && !isBefore9AM(p));
+                                if (validPunches.length > 0) effectiveInTime = validPunches[0];
+                            } else if (log.manual_punches && typeof log.manual_punches === 'object') {
+                                const activePunches = [
+                                    log.manual_punches["1"] || log.manual_punches.manual?.["1"],
+                                    log.manual_punches["2"] || log.manual_punches.manual?.["2"],
+                                    log.manual_punches["3"] || log.manual_punches.manual?.["3"],
+                                    log.manual_punches["4"] || log.manual_punches.manual?.["4"],
+                                    log.manual_punches["5"] || log.manual_punches.manual?.["5"]
+                                ].filter(p => p && !isBefore9AM(p));
+                                if (activePunches.length > 0) effectiveInTime = activePunches[0];
+                            }
+                        }
+
+                        const calculateLateFromInTime = (timeVal) => {
+                            if (!timeVal || timeVal === '-') return 0;
+                            try {
+                                const clean = timeVal.trim();
+                                let h = 0, m = 0;
+                                if (clean.includes('T') || (clean.includes('-') && clean.includes(' '))) {
+                                    const dateObj = new Date(clean.includes(' ') && !clean.includes('T') ? clean.replace(' ', 'T') : clean);
+                                    if (!isNaN(dateObj.getTime())) {
+                                        const parts = new Intl.DateTimeFormat('en-US', {
+                                            timeZone: 'Asia/Kolkata',
+                                            hour: 'numeric',
+                                            minute: 'numeric',
+                                            hour12: false
+                                        }).formatToParts(dateObj);
+                                        h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+                                        m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+                                    }
+                                } else {
+                                    const upper = clean.toUpperCase();
+                                    const isAM = upper.endsWith('AM');
+                                    const isPM = upper.endsWith('PM');
+                                    let timePart = upper;
+                                    if (isAM || isPM) timePart = upper.slice(0, -2).trim();
+                                    if (timePart.includes(' ')) timePart = timePart.split(' ')[1] || timePart;
+                                    const [hStr, mStr] = timePart.split(':');
+                                    h = parseInt(hStr, 10);
+                                    m = parseInt(mStr, 10) || 0;
+                                    if (isAM && h === 12) h = 0;
+                                    if (isPM && h < 12) h += 12;
+                                }
+                                const totalMins = h * 60 + m;
+                                const graceThreshold = 10 * 60 + 10; // 10:10 AM
+                                const officialStart = 10 * 60;      // 10:00 AM
+                                return totalMins >= graceThreshold ? (totalMins - officialStart) : 0;
+                            } catch (e) {
+                                return 0;
+                            }
+                        };
+
+                        let effectiveStatus = status;
+                        let effectiveLateMins = log.late_minute || 0;
+
+                        if (!effectiveInTime || effectiveInTime === '-') {
+                            effectiveStatus = 'Absent';
+                        } else {
+                            const calculatedLate = calculateLateFromInTime(effectiveInTime);
+                            if (calculatedLate > 0) {
+                                effectiveStatus = 'Late';
+                                effectiveLateMins = calculatedLate;
+                            }
+                        }
+
                         const empWithLog = {
                             ...emp,
                             name_as_per_aadhar: log.employee_name || emp.name_as_per_aadhar,
                             designation: log.designation || emp.designation,
                             joining_place: (log.store_name && log.store_name.trim()) ? log.store_name : emp.joining_place,
-                            in_time: log.in_time,
+                            in_time: effectiveInTime,
                             out_time: log.out_time,
-                            late_minute: log.late_minute || 0,
-                            status
+                            late_minute: effectiveLateMins,
+                            status: effectiveStatus
                         }
 
-                        if (status === 'Late' || log.is_late) {
-                            lateList.push(empWithLog)
-                        } else if (status === 'Half Day' || log.half_day) {
-                            halfDayList.push(empWithLog)
-                        } else if (status === 'Absent') {
+                        if (effectiveStatus === 'Absent') {
                             absentList.push(empWithLog)
+                        } else if (effectiveStatus === 'Late' || log.is_late) {
+                            lateList.push(empWithLog)
+                        } else if (effectiveStatus === 'Half Day' || log.half_day) {
+                            halfDayList.push(empWithLog)
                         } else {
                             presentList.push(empWithLog)
                         }
@@ -430,23 +537,130 @@ export default function Dashboard() {
                 if (logEmpId && !processedEmpIds.has(logEmpId.toLowerCase()) && !isLogInactive && isStoreAuth) {
                     processedEmpIds.add(logEmpId.toLowerCase())
                     const status = log.status || (log.half_day ? 'Half Day' : log.is_late ? 'Late' : 'Present')
+                    
+                    const isBefore9AM = (timeStr) => {
+                        if (!timeStr || timeStr === '-') return false;
+                        try {
+                            const clean = timeStr.trim();
+                            if (clean.includes('T') || (clean.includes('-') && clean.includes(' '))) {
+                                const dateObj = new Date(clean.includes(' ') && !clean.includes('T') ? clean.replace(' ', 'T') : clean);
+                                if (!isNaN(dateObj.getTime())) {
+                                    const parts = new Intl.DateTimeFormat('en-US', {
+                                        timeZone: 'Asia/Kolkata',
+                                        hour: 'numeric',
+                                        hour12: false
+                                    }).formatToParts(dateObj);
+                                    const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+                                    return h < 9;
+                                }
+                            }
+                            const upper = clean.toUpperCase();
+                            const isAM = upper.endsWith('AM');
+                            const isPM = upper.endsWith('PM');
+                            let timePart = upper;
+                            if (isAM || isPM) timePart = upper.slice(0, -2).trim();
+                            if (timePart.includes(' ')) timePart = timePart.split(' ')[1] || timePart;
+                            const [hStr] = timePart.split(':');
+                            let h = parseInt(hStr, 10);
+                            if (isNaN(h)) return false;
+                            if (isAM && h === 12) h = 0;
+                            if (isPM && h < 12) h += 12;
+                            return h < 9;
+                        } catch (e) {
+                            return false;
+                        }
+                    };
+
+                    let effectiveInTime = log.in_time;
+                    if (effectiveInTime && isBefore9AM(effectiveInTime)) {
+                        effectiveInTime = null;
+                    }
+
+                    if (!effectiveInTime || effectiveInTime === '-') {
+                        if (log.punch_log && log.punch_log !== '-') {
+                            const validPunches = log.punch_log.split('|').map(p => p.trim()).filter(p => p && !isBefore9AM(p));
+                            if (validPunches.length > 0) effectiveInTime = validPunches[0];
+                        } else if (log.manual_punches && typeof log.manual_punches === 'object') {
+                            const activePunches = [
+                                log.manual_punches["1"] || log.manual_punches.manual?.["1"],
+                                log.manual_punches["2"] || log.manual_punches.manual?.["2"],
+                                log.manual_punches["3"] || log.manual_punches.manual?.["3"],
+                                log.manual_punches["4"] || log.manual_punches.manual?.["4"],
+                                log.manual_punches["5"] || log.manual_punches.manual?.["5"]
+                            ].filter(p => p && !isBefore9AM(p));
+                            if (activePunches.length > 0) effectiveInTime = activePunches[0];
+                        }
+                    }
+
+                    const calculateLateFromInTime = (timeVal) => {
+                        if (!timeVal || timeVal === '-') return 0;
+                        try {
+                            const clean = timeVal.trim();
+                            let h = 0, m = 0;
+                            if (clean.includes('T') || (clean.includes('-') && clean.includes(' '))) {
+                                const dateObj = new Date(clean.includes(' ') && !clean.includes('T') ? clean.replace(' ', 'T') : clean);
+                                if (!isNaN(dateObj.getTime())) {
+                                    const parts = new Intl.DateTimeFormat('en-US', {
+                                        timeZone: 'Asia/Kolkata',
+                                        hour: 'numeric',
+                                        minute: 'numeric',
+                                        hour12: false
+                                    }).formatToParts(dateObj);
+                                    h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+                                    m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+                                }
+                            } else {
+                                const upper = clean.toUpperCase();
+                                const isAM = upper.endsWith('AM');
+                                const isPM = upper.endsWith('PM');
+                                let timePart = upper;
+                                if (isAM || isPM) timePart = upper.slice(0, -2).trim();
+                                if (timePart.includes(' ')) timePart = timePart.split(' ')[1] || timePart;
+                                const [hStr, mStr] = timePart.split(':');
+                                h = parseInt(hStr, 10);
+                                m = parseInt(mStr, 10) || 0;
+                                if (isAM && h === 12) h = 0;
+                                if (isPM && h < 12) h += 12;
+                            }
+                            const totalMins = h * 60 + m;
+                            const graceThreshold = 10 * 60 + 10; // 10:10 AM
+                            const officialStart = 10 * 60;      // 10:00 AM
+                            return totalMins >= graceThreshold ? (totalMins - officialStart) : 0;
+                        } catch (e) {
+                            return 0;
+                        }
+                    };
+
+                    let effectiveStatus = status;
+                    let effectiveLateMins = log.late_minute || 0;
+
+                    if (!effectiveInTime || effectiveInTime === '-') {
+                        effectiveStatus = 'Absent';
+                    } else {
+                        const calculatedLate = calculateLateFromInTime(effectiveInTime);
+                        if (calculatedLate > 0) {
+                            effectiveStatus = 'Late';
+                            effectiveLateMins = calculatedLate;
+                        }
+                    }
+
                     const empFromLog = {
                         employee_id: logEmpId,
                         name_as_per_aadhar: log.employee_name || `Employee ${logEmpId}`,
                         designation: log.designation || '',
                         joining_place: log.store_name || '',
-                        in_time: log.in_time,
+                        in_time: effectiveInTime,
                         out_time: log.out_time,
-                        late_minute: log.late_minute || 0,
-                        status
+                        late_minute: effectiveLateMins,
+                        status: effectiveStatus
                     }
 
-                    if (status === 'Late' || log.is_late) {
-                        lateList.push(empFromLog)
-                    } else if (status === 'Half Day' || log.half_day) {
-                        halfDayList.push(empFromLog)
-                    } else if (status === 'Absent') {
+                    if (effectiveStatus === 'Absent') {
                         absentList.push(empFromLog)
+                    } else if (effectiveStatus === 'Late' || log.is_late) {
+                        lateList.push(empFromLog)
+                    } else if (effectiveStatus === 'Half Day' || log.half_day) {
+                        halfDayList.push(empFromLog)
                     } else {
                         presentList.push(empFromLog)
                     }
@@ -547,11 +761,11 @@ export default function Dashboard() {
     }
 
     const formatTimeIST = (timeStr) => {
-        if (!timeStr) return '-'
+        if (!timeStr || timeStr === '-') return '-'
         try {
             let formatted = timeStr.trim();
-            if (formatted.includes('T')) {
-                const date = new Date(formatted);
+            if (formatted.includes('T') || formatted.includes(' ')) {
+                const date = new Date(formatted.includes(' ') && !formatted.includes('T') ? formatted.replace(' ', 'T') : formatted);
                 if (!isNaN(date.getTime())) {
                     return new Intl.DateTimeFormat('en-US', {
                         timeZone: 'Asia/Kolkata',
@@ -560,9 +774,14 @@ export default function Dashboard() {
                         hour12: true
                     }).format(date);
                 }
-            } else if (formatted.match(/^\d{1,2}:\d{2}(:\d{2})?$/)) {
+            }
+            const clean = formatted.toUpperCase();
+            if (clean.endsWith('AM') || clean.endsWith('PM')) {
+                return formatted;
+            }
+            if (formatted.match(/^\d{1,2}:\d{2}(:\d{2})?$/)) {
                 const [hStr, mStr] = formatted.split(':');
-                const h = parseInt(hStr, 10);
+                let h = parseInt(hStr, 10);
                 const ampm = h >= 12 ? 'PM' : 'AM';
                 const displayH = h % 12 === 0 ? 12 : h % 12;
                 return `${displayH}:${mStr} ${ampm}`;
@@ -1202,7 +1421,7 @@ export default function Dashboard() {
                                                                                         <Clock size={12} />
                                                                                         Late ({emp.late_minute || 0}m)
                                                                                     </span>
-                                                                                    {emp.in_time && (
+                                                                                    {emp.in_time && formatTimeIST(emp.in_time) !== '-' && (
                                                                                         <span className="text-[10px] text-slate-400 font-mono mt-0.5">
                                                                                             In: {formatTimeIST(emp.in_time)}
                                                                                         </span>
@@ -1215,7 +1434,7 @@ export default function Dashboard() {
                                                                                     <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
                                                                                         <UserCheck size={12} /> Present
                                                                                     </span>
-                                                                                    {emp.in_time && (
+                                                                                    {emp.in_time && formatTimeIST(emp.in_time) !== '-' && (
                                                                                         <span className="text-[10px] text-slate-400 font-mono mt-0.5">
                                                                                             In: {formatTimeIST(emp.in_time)}
                                                                                         </span>
