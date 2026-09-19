@@ -593,11 +593,11 @@ const MyAttendance = () => {
                     lateMinutes: '-',
                     totalWithLunchDuration: '-',
                     lunchTime: '-',
-                    status: isWeekendLeaveDay ? 'Weekend Leave' : isSunday ? 'Weekly Off' : 'Absent',
+                    status: isWeekendLeaveDay ? 'Weekend Leave' : (rosterShift && String(rosterShift).toLowerCase().includes('weekly off')) ? 'Weekly Off' : 'Absent',
                     month: selectedMonth,
                     year: selectedYear,
                     punchMiss: false
-                });
+                })
             }
         }
     }

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
-import { Check, CheckCircle2, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { Check, CheckCircle2, Clock, AlertCircle, RefreshCw, Search, Filter, X } from 'lucide-react';
 
 /* ---------------- Task Catalogue ---------------- */
 const TASKS = [
@@ -102,11 +102,11 @@ export default function EmployeeLearning() {
   // Role & Permission Checks for Checklist Creation
   const userRole = (currentUserObj?.role || '').toLowerCase().trim();
   const userNameClean = (currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim();
-  
+
   // Explicit Admin / Master / MasterAdmin check
   const isAdminUser = userRole === 'admin' || userRole === 'master' || userNameClean === 'masteradmin' || userNameClean === 'testadmin';
   const isManagerUser = userRole === 'manager';
-  
+
   // Check if Manager has explicit modify permission for Employee Learning or HR system
   const hasModifyPermission = React.useMemo(() => {
     if (isAdminUser) return true;
@@ -144,7 +144,7 @@ export default function EmployeeLearning() {
     // Default to false for manager if no explicit modify permission string exists
     return false;
   }, [currentUserObj, isAdminUser, isManagerUser]);
-  
+
   const canCreateChecklist = isAdminUser || (isManagerUser && hasModifyPermission);
 
   useEffect(() => {
@@ -164,7 +164,7 @@ export default function EmployeeLearning() {
         .from('shop')
         .select('*')
         .order('shop_name', { ascending: true });
-      
+
       let allShops = shopData || [];
 
       // Filter shops for non-admin manager
@@ -172,7 +172,7 @@ export default function EmployeeLearning() {
         const uRole = (currentUserObj.role || '').toLowerCase().trim();
         const uName = (currentUserObj.user_name || currentUserObj.username || '').toLowerCase().trim();
         const isAdm = uRole === 'admin' || uRole === 'master' || uName === 'masteradmin' || uName === 'testadmin';
-        
+
         if (!isAdm) {
           const userShopsStr = (currentUserObj.shop_name || currentUserObj.user_access || '').toString().trim().toLowerCase();
           const userShopsList = userShopsStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -203,11 +203,11 @@ export default function EmployeeLearning() {
 
       (masterUsersData || []).forEach(u => {
         const rawStatus = u.status ?? u.is_active ?? 'active';
-        const isInactive = 
+        const isInactive =
           rawStatus === false ||
           rawStatus === 0 ||
           ['inactive', 'resigned', 'terminated', 'left', 'disabled', 'false', '0'].includes(String(rawStatus).toLowerCase().trim());
-        
+
         const empId = (u.employee_id || '').toString().trim().toLowerCase();
         const uname = (u.user_name || u.username || u.emp_name || '').toString().trim().toLowerCase();
 
@@ -228,7 +228,7 @@ export default function EmployeeLearning() {
         const name = emp.name_as_per_aadhar || details.name_as_per_aadhar || emp.name || emp.employee_name || emp.candidate_name;
         const id = (emp.employee_id || details.employee_id || emp.id || '').toString().trim();
         const shop = emp.joining_company_name || details.joining_company_name || emp.joining_place || details.joining_place || '';
-        
+
         const normId = id.toLowerCase();
         const normName = (name || '').toLowerCase().trim();
 
@@ -241,7 +241,7 @@ export default function EmployeeLearning() {
 
         // Check local record status
         const rawStatus = emp.status ?? details.status ?? emp.is_active ?? details.is_active ?? 'Active';
-        const isInactive = 
+        const isInactive =
           rawStatus === false ||
           rawStatus === 0 ||
           ['inactive', 'resigned', 'terminated', 'left', 'disabled', 'false', '0'].includes(String(rawStatus).toLowerCase().trim());
@@ -270,11 +270,11 @@ export default function EmployeeLearning() {
       // 2. Add users table entries only if employee_id or name doesn't already exist
       (masterUsersData || []).forEach(u => {
         const rawStatus = u.status ?? u.is_active ?? 'active';
-        const isInactive = 
+        const isInactive =
           rawStatus === false ||
           rawStatus === 0 ||
           ['inactive', 'resigned', 'terminated', 'left', 'disabled', 'false', '0'].includes(String(rawStatus).toLowerCase().trim());
-        
+
         if (!isInactive) {
           const name = u.emp_name || u.user_name || u.username;
           const id = (u.employee_id || u.id || '').toString().trim();
@@ -328,7 +328,7 @@ export default function EmployeeLearning() {
             scopedList = combinedList.filter(emp => {
               const empIdNorm = (emp.employee_id || '').toString().trim().toLowerCase();
               const empNameNorm = (emp.name_as_per_aadhar || '').toString().trim().toLowerCase();
-              
+
               const matchId = currentEmpId && empIdNorm && (currentEmpId === empIdNorm || empIdNorm.includes(currentEmpId));
               const matchName = currentUserName && empNameNorm && (
                 currentUserName === empNameNorm ||
@@ -584,7 +584,7 @@ export default function EmployeeLearning() {
     }
 
     const shopLower = shopVal.toLowerCase().trim();
-    
+
     // Filter employees assigned to this specific shop
     const matched = employees.filter(emp => {
       const empShop = (
@@ -725,6 +725,63 @@ export default function EmployeeLearning() {
   const totalTasksTicked = submissions.reduce((sum, s) => sum + s.tasks.filter(t => t.checked).length, 0);
   const activeEmployeesSet = new Set(submissions.map(s => s.employee)).size;
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFilterShop, setSelectedFilterShop] = useState('');
+  const [isSubmissionLogOpen, setIsSubmissionLogOpen] = useState(false);
+
+  const filteredEmps = useMemo(() => {
+    return employees.filter((emp) => {
+      if (selectedFilterShop) {
+        const empShop = (
+          emp.joining_company_name ||
+          emp.joining_place ||
+          emp.shop_name ||
+          ''
+        ).toLowerCase().trim();
+        const filterShop = selectedFilterShop.toLowerCase().trim();
+        const matchShop = empShop === filterShop || empShop.includes(filterShop) || filterShop.includes(empShop);
+        if (!matchShop) return false;
+      }
+
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase().trim();
+      const empName = (
+        emp.name_as_per_aadhar ||
+        emp.name ||
+        emp.employee_name ||
+        emp.candidate_name ||
+        ''
+      ).toLowerCase();
+      const empId = (emp.employee_id || emp.id || '').toString().toLowerCase();
+      const empShop = (
+        emp.joining_company_name ||
+        emp.joining_place ||
+        emp.shop_name ||
+        ''
+      ).toLowerCase();
+
+      return empName.includes(term) || empId.includes(term) || empShop.includes(term);
+    });
+  }, [employees, searchTerm, selectedFilterShop]);
+
+  const filteredSubs = useMemo(() => {
+    return submissions.filter((s) => {
+      if (selectedFilterShop) {
+        const subShop = (s.shop || '').toLowerCase().trim();
+        const filterShop = selectedFilterShop.toLowerCase().trim();
+        const matchShop = subShop === filterShop || subShop.includes(filterShop) || filterShop.includes(subShop);
+        if (!matchShop) return false;
+      }
+
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase().trim();
+      const emp = (s.employee || '').toLowerCase();
+      const empId = (s.employee_id || '').toString().toLowerCase();
+      const shop = (s.shop || '').toLowerCase();
+      const date = (s.date || '').toLowerCase();
+
+      return emp.includes(term) || empId.includes(term) || shop.includes(term) || date.includes(term);
+    });
+  }, [submissions, searchTerm, selectedFilterShop]);
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -812,8 +869,8 @@ export default function EmployeeLearning() {
                     {!selectedShop
                       ? 'Select shop first…'
                       : filteredEmployees.length === 0
-                      ? 'No employees registered for this shop'
-                      : 'Select employee…'}
+                        ? 'No employees registered for this shop'
+                        : 'Select employee…'}
                   </option>
                   {filteredEmployees.map((emp, idx) => {
                     const empName = emp.name_as_per_aadhar || emp.name || emp.employee_name || emp.candidate_name || `Employee #${emp.employee_id || emp.id || idx + 1}`;
@@ -877,8 +934,8 @@ export default function EmployeeLearning() {
                                       <button
                                         onClick={() => toggleTask(t.id)}
                                         className={`w-5 h-5 rounded border border-slate-300 flex items-center justify-center transition-all cursor-pointer ${checked
-                                            ? 'bg-[#d4b457] border-[#d4b457] text-slate-950 font-bold'
-                                            : 'bg-white text-transparent hover:border-[#d4b457]'
+                                          ? 'bg-[#d4b457] border-[#d4b457] text-slate-950 font-bold'
+                                          : 'bg-white text-transparent hover:border-[#d4b457]'
                                           }`}
                                       >
                                         ✓
@@ -968,17 +1025,201 @@ export default function EmployeeLearning() {
               </div>
             </div>
 
-            <div className='pb-4'>
-              <input type="search" className='w-full' placeholder='Search' value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            {/* Filter & Search Bar */}
+            <div className="bg-white border border-slate-200 p-3 sm:p-4 rounded shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search by employee name, ID, or shop location..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] transition-all"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 text-xs cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter by Shop */}
+              <div className="relative md:w-64 shrink-0">
+                <select
+                  value={selectedFilterShop}
+                  onChange={(e) => setSelectedFilterShop(e.target.value)}
+                  className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] cursor-pointer font-medium"
+                >
+                  <option value="">All Shops ({shops.length})</option>
+                  {shops.map((s) => (
+                    <option key={s.id || s.shop_name} value={s.shop_name}>
+                      {s.shop_name}
+                    </option>
+                  ))}
+                </select>
+                <Filter size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+
+              {/* Reset Filters */}
+              {(searchTerm || selectedFilterShop) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedFilterShop('');
+                  }}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded border border-slate-300 transition-colors whitespace-nowrap cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw size={12} />
+                  <span>Reset</span>
+                </button>
+              )}
             </div>
-            
+
+            {/* Submission Log & History (Collapsible Section, placed above Active Employees Directory) */}
+            <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded">
+              <button
+                type="button"
+                onClick={() => setIsSubmissionLogOpen((prev) => !prev)}
+                className="w-full p-4 bg-slate-50 hover:bg-slate-100 border-b border-slate-200 flex items-center justify-between cursor-pointer transition-colors text-left select-none"
+              >
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                    <span>Submission Log & History</span>
+                    <span className="text-xs font-mono font-normal text-slate-500">
+                      ({filteredSubs.length}{filteredSubs.length !== submissions.length ? ` of ${submissions.length}` : ''})
+                    </span>
+                  </h2>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#1C120C] text-[#d4b457] border border-[#d4b457]/30">
+                    {isSubmissionLogOpen ? 'Expanded' : 'Collapsed — Click to View'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-600 text-xs font-semibold">
+                  <span>{isSubmissionLogOpen ? 'Hide' : 'Show'}</span>
+                  <svg
+                    className={`w-4 h-4 transform transition-transform duration-200 text-[#d4b457] ${
+                      isSubmissionLogOpen ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {isSubmissionLogOpen && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#1C120C] text-[#d4b457] uppercase font-serif text-[11px] tracking-wider border-b border-[#1C120C]">
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Shop</th>
+                        <th className="py-3 px-4">Employee</th>
+                        <th className="py-3 px-4 text-center">Total</th>
+                        <th className="py-3 px-4 text-center">Completed</th>
+                        <th className="py-3 px-4 text-center">Learning</th>
+                        <th className="py-3 px-4 text-center">By level</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {filteredSubs.length === 0 ? (
+                        <tr>
+                          <td colSpan="7" className="py-8 text-center text-slate-400 italic">
+                            <p>{submissions.length === 0 ? 'No checklists submitted yet.' : 'No submissions match your search or filter criteria.'}</p>
+                            {(searchTerm || selectedFilterShop) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSearchTerm('');
+                                  setSelectedFilterShop('');
+                                }}
+                                className="mt-2 inline-flex items-center gap-1 text-xs text-[#d4b457] hover:underline font-bold"
+                              >
+                                Clear filters
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredSubs.map((s, idx) => {
+                          const totalTasks = s.tasks?.length || 0;
+                          const done = s.tasks ? s.tasks.filter((t) => t.checked).length : 0;
+                          const pct = totalTasks > 0 ? Math.round((done / totalTasks) * 100) : 0;
+                          return (
+                            <tr key={s.id || idx} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-slate-500 whitespace-nowrap">{s.date}</td>
+                              <td className="py-3 px-4 font-medium text-slate-900">{s.shop}</td>
+                              <td className="py-3 px-4 text-slate-950 font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedModalEmp(s.employee)}
+                                  className="hover:underline hover:text-[#c3a346] text-left cursor-pointer"
+                                >
+                                  {s.employee}
+                                </button>
+                              </td>
+                              <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">
+                                {totalTasks}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="inline-block font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
+                                  {done}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center whitespace-nowrap">
+                                <div className="inline-flex items-center gap-2">
+                                  <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full ${pct === 100 ? 'bg-emerald-500' : 'bg-[#d4b457]'}`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-mono font-bold text-slate-800 text-[11px]">{pct}%</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {[1, 2, 3, 4].map((lvl) => {
+                                  const total = s.tasks ? s.tasks.filter((t) => t.level === lvl).length : 0;
+                                  const d = s.tasks ? s.tasks.filter((t) => t.level === lvl && t.checked).length : 0;
+                                  return (
+                                    <span
+                                      key={lvl}
+                                      className={`inline-block text-[10px] font-mono px-2 py-0.5 rounded border mr-1 ${
+                                        d === 0
+                                          ? 'border-slate-200 bg-slate-50 text-slate-400'
+                                          : 'border-[#d4b457]/40 bg-[#1C120C] text-[#d4b457] font-bold'
+                                      }`}
+                                    >
+                                      L{lvl} {d}/{total}
+                                    </span>
+                                  );
+                                })}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             {/* Active Employees Directory Table */}
             <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded">
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
                   <span>Active Employees Directory</span>
-                  <span className="text-xs font-mono font-normal text-slate-500">({employees.length})</span>
+                  <span className="text-xs font-mono font-normal text-slate-500">
+                    ({filteredEmps.length}{filteredEmps.length !== employees.length ? ` of ${employees.length}` : ''})
+                  </span>
                 </h2>
               </div>
 
@@ -995,14 +1236,26 @@ export default function EmployeeLearning() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {employees.length === 0 ? (
+                    {filteredEmps.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="py-6 text-center text-slate-400 italic">
-                          No active employees found.
+                        <td colSpan="6" className="py-8 text-center text-slate-400 italic">
+                          <p>{employees.length === 0 ? 'No active employees found.' : 'No active employees match your search or filter criteria.'}</p>
+                          {(searchTerm || selectedFilterShop) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearchTerm('');
+                                setSelectedFilterShop('');
+                              }}
+                              className="mt-2 inline-flex items-center gap-1 text-xs text-[#d4b457] hover:underline font-bold"
+                            >
+                              Clear filters
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ) : (
-                      employees.map((emp) => {
+                      filteredEmps.map((emp) => {
                         const empName = emp.name_as_per_aadhar || emp.name || 'Employee';
                         const empId = (emp.employee_id || emp.id || '').toString().trim();
                         const empIdNorm = empId.toLowerCase();
@@ -1062,73 +1315,6 @@ export default function EmployeeLearning() {
                 </table>
               </div>
             </div>
-
-            {/* Submission Log Table */}
-            <div className="bg-white border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 bg-slate-50 border-b border-slate-200">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  Submission Log & History
-                </h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-[#1C120C] text-[#d4b457] uppercase font-serif text-[11px] tracking-wider border-b border-[#1C120C]">
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4">Shop</th>
-                      <th className="py-3 px-4">Employee</th>
-                      <th className="py-3 px-4">Completed</th>
-                      <th className="py-3 px-4">By level</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {submissions.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="py-8 text-center text-slate-400 italic">
-                          No checklists submitted yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      submissions.map((s, idx) => {
-                        const done = s.tasks.filter((t) => t.checked).length;
-                        const pct = Math.round((done / s.tasks.length) * 100);
-                        return (
-                          <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-3 px-4 font-mono font-bold text-slate-500">{s.date}</td>
-                            <td className="py-3 px-4 font-medium text-slate-900">{s.shop}</td>
-                            <td className="py-3 px-4 text-slate-950 font-bold">{s.employee}</td>
-                            <td className="py-3 px-4 whitespace-nowrap">
-                              <span className="w-16 h-1.5 bg-slate-200 rounded inline-block align-middle mr-2 overflow-hidden">
-                                <span className="h-full bg-emerald-600 block" style={{ width: `${pct}%` }} />
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">{done}/{s.tasks.length}</span>
-                            </td>
-                            <td className="py-3 px-4 whitespace-nowrap">
-                              {[1, 2, 3, 4].map((lvl) => {
-                                const total = s.tasks.filter((t) => t.level === lvl).length;
-                                const d = s.tasks.filter((t) => t.level === lvl && t.checked).length;
-                                return (
-                                  <span
-                                    key={lvl}
-                                    className={`inline-block text-[10px] font-mono px-2 py-0.5 rounded border mr-1 ${
-                                      d === 0
-                                        ? 'border-slate-200 bg-slate-50 text-slate-400'
-                                        : 'border-[#d4b457]/40 bg-[#1C120C] text-[#d4b457] font-bold'
-                                    }`}
-                                  >
-                                    L{lvl} {d}/{total}
-                                  </span>
-                                );
-                              })}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </section>
         )}
       </div>
@@ -1140,7 +1326,7 @@ export default function EmployeeLearning() {
           onClick={() => setSelectedModalEmp(null)}
         >
           <div
-            className="bg-white border border-slate-300 rounded-lg max-w-2xl w-full my-10 overflow-hidden shadow-2xl"
+            className="bg-white border border-slate-300 rounded-lg max-w-6xl xl:max-w-7xl w-full my-6 overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -1163,7 +1349,7 @@ export default function EmployeeLearning() {
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 max-h-[70vh] overflow-y-auto space-y-6 text-slate-800">
+            <div className="p-5 max-h-[85vh] overflow-y-auto space-y-6 text-slate-800">
               {(() => {
                 const modalEmpObj = employees.find(e => e.name_as_per_aadhar === selectedModalEmp);
                 const modalEmpId = (modalEmpObj?.employee_id || '').toString().trim().toLowerCase();
@@ -1172,14 +1358,14 @@ export default function EmployeeLearning() {
                 const empSubs = submissions.filter((s) => {
                   const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
                   const subEmpName = (s.employee || '').toString().trim().toLowerCase();
-                  
+
                   if (modalEmpId && subEmpId) {
                     return modalEmpId === subEmpId;
                   }
                   if (modalEmpNameNorm && subEmpName) {
                     return modalEmpNameNorm === subEmpName ||
-                           modalEmpNameNorm.includes(subEmpName) ||
-                           subEmpName.includes(modalEmpNameNorm);
+                      modalEmpNameNorm.includes(subEmpName) ||
+                      subEmpName.includes(modalEmpNameNorm);
                   }
                   return false;
                 });
@@ -1205,14 +1391,27 @@ export default function EmployeeLearning() {
                           {totalTicked} of {TASKS.length} Tasks Completed ({Math.round((totalTicked / TASKS.length) * 100)}%)
                         </div>
                       </div>
-                      <div className="flex gap-2 text-xs font-semibold">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                        {/* Total Learning */}
+                        <div className="bg-[#1C120C] text-[#d4b457] border border-[#d4b457]/30 px-3 py-1.5 rounded text-center shadow-2xs">
+                          <span className="text-[#d4b457]/80 block text-[10px] uppercase font-bold tracking-wider">TOTAL LEARNING</span>
+                          <span className="font-bold text-sm font-mono">{TASKS.length}</span>
+                        </div>
+
+                        {/* Done Learning */}
+                        <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded text-center shadow-2xs">
+                          <span className="text-emerald-700 block text-[10px] uppercase font-bold tracking-wider">DONE LEARNING</span>
+                          <span className="text-emerald-950 font-bold text-sm font-mono">{totalTicked}</span>
+                        </div>
+
+                        {/* Level Breakdown */}
                         {[1, 2, 3, 4].map(lvl => {
                           const lvlTotal = TASKS.filter(t => t.level === lvl).length;
                           const lvlDone = TASKS.filter(t => t.level === lvl && checkedSet.has(t.id)).length;
                           return (
-                            <div key={lvl} className="bg-white border border-slate-200 px-3 py-1.5 rounded text-center">
-                              <span className="text-slate-400 block text-[10px] uppercase">L{lvl}</span>
-                              <span className="text-slate-800 font-bold">{lvlDone}/{lvlTotal}</span>
+                            <div key={lvl} className="bg-white border border-slate-200 px-3 py-1.5 rounded text-center shadow-2xs">
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold">L{lvl}</span>
+                              <span className="text-slate-800 font-bold font-mono">{lvlDone}/{lvlTotal}</span>
                             </div>
                           );
                         })}
@@ -1274,7 +1473,7 @@ export default function EmployeeLearning() {
                                   const isChecked = checkedSet.has(task.id);
                                   return (
                                     <React.Fragment key={lvl}>
-                                      <td className={`py-2 px-2 align-top max-w-[180px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 rounded-sm' : ''}`}>
+                                      <td className={`py-2 px-2 align-top min-w-[150px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 rounded-sm' : ''}`}>
                                         <p className={`text-xs font-semibold leading-tight ${isChecked ? 'text-emerald-950 font-bold' : 'text-slate-800'}`}>
                                           {task.en}
                                         </p>
@@ -1282,11 +1481,10 @@ export default function EmployeeLearning() {
                                       </td>
                                       <td className="py-2 px-1 text-center align-top">
                                         <div
-                                          className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs mx-auto ${
-                                            isChecked
-                                              ? 'bg-emerald-600 text-white shadow-xs'
-                                              : 'bg-red-50 text-red-500 border border-red-200'
-                                          }`}
+                                          className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs mx-auto ${isChecked
+                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                            : 'bg-red-50 text-red-500 border border-red-200'
+                                            }`}
                                         >
                                           {isChecked ? '✓' : '✕'}
                                         </div>
@@ -1393,8 +1591,8 @@ export default function EmployeeLearning() {
                       {!selectedShop
                         ? 'Select shop first…'
                         : filteredEmployees.length === 0
-                        ? 'No employees registered for this shop'
-                        : 'Select employee…'}
+                          ? 'No employees registered for this shop'
+                          : 'Select employee…'}
                     </option>
                     {filteredEmployees.map((emp, idx) => {
                       const empName = emp.name_as_per_aadhar || emp.name || emp.employee_name || emp.candidate_name || `Employee #${emp.employee_id || emp.id || idx + 1}`;
@@ -1483,11 +1681,10 @@ export default function EmployeeLearning() {
                                     <button
                                       type="button"
                                       onClick={() => toggleTask(task.id)}
-                                      className={`w-4 h-4 rounded border border-slate-300 flex items-center justify-center transition-all cursor-pointer ${
-                                        checked
-                                          ? 'bg-[#d4b457] border-[#d4b457] text-slate-950 font-bold text-[10px]'
-                                          : 'bg-white text-transparent hover:border-[#d4b457]'
-                                      }`}
+                                      className={`w-4 h-4 rounded border border-slate-300 flex items-center justify-center transition-all cursor-pointer ${checked
+                                        ? 'bg-[#d4b457] border-[#d4b457] text-slate-950 font-bold text-[10px]'
+                                        : 'bg-white text-transparent hover:border-[#d4b457]'
+                                        }`}
                                     >
                                       ✓
                                     </button>

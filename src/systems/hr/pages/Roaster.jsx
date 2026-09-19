@@ -22,7 +22,9 @@ import {
     Clock as ClockIcon,
     LayoutGrid,
     CalendarRange,
-    Trash2
+    Trash2,
+    Check,
+    ChevronDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -122,7 +124,7 @@ const Roster = () => {
         remark: ''
     });
     const [bulkAssignForm, setBulkAssignForm] = useState({
-        employee_id: '',
+        employee_ids: [],
         start_date: '',
         end_date: '',
         shift_type: 'General Shift',
@@ -139,6 +141,24 @@ const Roster = () => {
             sunday: true
         }
     });
+    const [isBulkEmpDropdownOpen, setIsBulkEmpDropdownOpen] = useState(false);
+    const [bulkEmpSearch, setBulkEmpSearch] = useState('');
+
+    // Employee Attendance Overview Preview Window Modal state
+    const [previewModal, setPreviewModal] = useState({
+        isOpen: false,
+        employee: null,
+        month: new Date(),
+        tab: 'timecard',
+        loading: false
+    });
+    const [overviewAttendanceLogs, setOverviewAttendanceLogs] = useState([]);
+    const [overviewPayrollRecords, setOverviewPayrollRecords] = useState([]);
+    const [overviewPayrollLoading, setOverviewPayrollLoading] = useState(false);
+    const [overviewLearningSubmission, setOverviewLearningSubmission] = useState(null);
+    const [overviewLearningLoading, setOverviewLearningLoading] = useState(false);
+    const [allRosterRecords, setAllRosterRecords] = useState([]);
+    const [leavesData, setLeavesData] = useState([]);
 
     const [customShifts, setCustomShifts] = useState([]);
     const [showManageShiftsModal, setShowManageShiftsModal] = useState(false);
@@ -504,15 +524,26 @@ const Roster = () => {
                 return;
             }
 
+            let sTime = assignForm.start_time || '09:30:00';
+            let eTime = assignForm.end_time || '19:30:00';
+            if (sTime && sTime.length === 5) sTime += ':00';
+            if (eTime && eTime.length === 5) eTime += ':00';
+
+            await supabase
+                .from('hr_management_shift_roster')
+                .delete()
+                .eq('employee_id', assignForm.employee_id)
+                .eq('date', assignForm.date);
+
             const { error } = await supabase
                 .from('hr_management_shift_roster')
-                .upsert({
+                .insert({
                     employee_id: assignForm.employee_id,
                     date: assignForm.date,
-                    shift_type: assignForm.shift_type,
-                    start_time: assignForm.start_time,
-                    end_time: assignForm.end_time,
-                    remark: assignForm.remark
+                    shift_type: assignForm.shift_type || 'General Shift',
+                    start_time: sTime,
+                    end_time: eTime,
+                    remark: assignForm.remark || ''
                 });
 
             if (error) throw error;
@@ -530,8 +561,9 @@ const Roster = () => {
 
     const handleBulkAssignShift = async () => {
         try {
-            if (!bulkAssignForm.employee_id || !bulkAssignForm.start_date || !bulkAssignForm.end_date) {
-                toast.error('Please fill all required fields');
+            const empIds = bulkAssignForm.employee_ids || [];
+            if (empIds.length === 0 || !bulkAssignForm.start_date || !bulkAssignForm.end_date) {
+                toast.error('Please select at least one employee and specify date range');
                 return;
             }
 
@@ -539,40 +571,48 @@ const Roster = () => {
             const endDate = new Date(bulkAssignForm.end_date);
             const shiftsToInsert = [];
 
-            let currentDate = new Date(startDate);
-            while (currentDate <= endDate) {
-                const dayOfWeek = currentDate.getDay();
-                const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek];
+            for (const empId of empIds) {
+                const empIdClean = String(empId).trim().toLowerCase();
+                let currentDate = new Date(startDate);
+                while (currentDate <= endDate) {
+                    const dayOfWeek = currentDate.getDay();
+                    const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek];
 
-                if (bulkAssignForm.days_of_week[dayName]) {
-                    const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
-                    const existingKey = `${bulkAssignForm.employee_id}-${dateStr}`;
-                    if (!rosterData.has(existingKey)) {
-                        shiftsToInsert.push({
-                            employee_id: bulkAssignForm.employee_id,
-                            date: dateStr,
-                            shift_type: bulkAssignForm.shift_type,
-                            start_time: bulkAssignForm.start_time,
-                            end_time: bulkAssignForm.end_time,
-                            remark: bulkAssignForm.remark
-                        });
+                    if (bulkAssignForm.days_of_week[dayName]) {
+                        const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
+                        const existingKey = `${empIdClean}-${dateStr}`;
+                        if (!rosterData.has(existingKey)) {
+                            shiftsToInsert.push({
+                                employee_id: empId,
+                                date: dateStr,
+                                shift_type: bulkAssignForm.shift_type,
+                                start_time: bulkAssignForm.start_time,
+                                end_time: bulkAssignForm.end_time,
+                                remark: bulkAssignForm.remark
+                            });
+                        }
                     }
+                    currentDate.setDate(currentDate.getDate() + 1);
                 }
-                currentDate.setDate(currentDate.getDate() + 1);
             }
 
             if (shiftsToInsert.length === 0) {
-                toast.info('No new shifts to assign. All selected dates already have shifts assigned.');
+                toast.info('No new shifts to assign. All selected dates for these employees already have shifts assigned.');
                 return;
             }
 
-            const { error } = await supabase
+            let { error } = await supabase
                 .from('hr_management_shift_roster')
-                .upsert(shiftsToInsert);
+                .insert(shiftsToInsert);
 
-            if (error) throw error;
+            if (error) {
+                const { error: upsertErr } = await supabase
+                    .from('hr_management_shift_roster')
+                    .upsert(shiftsToInsert);
+                if (upsertErr) throw upsertErr;
+            }
 
-            toast.success(`Successfully assigned ${shiftsToInsert.length} shifts`);
+            toast.success(`Successfully assigned ${shiftsToInsert.length} shifts across ${empIds.length} employee(s)`);
             setShowBulkAssignModal(false);
             resetBulkAssignForm();
             await fetchRosterData();
@@ -597,7 +637,7 @@ const Roster = () => {
 
     const resetBulkAssignForm = () => {
         setBulkAssignForm({
-            employee_id: '',
+            employee_ids: [],
             start_date: '',
             end_date: '',
             shift_type: 'General Shift',
@@ -614,6 +654,115 @@ const Roster = () => {
                 sunday: true
             }
         });
+        setIsBulkEmpDropdownOpen(false);
+        setBulkEmpSearch('');
+    };
+
+    // Helper functions for Employee Attendance Overview Modal
+    const fetchOverviewPayroll = async (emp) => {
+        if (!emp) return;
+        setOverviewPayrollLoading(true);
+        try {
+            const empIdStr = String(emp.employee_id || emp.id || '').trim().toLowerCase();
+            const { data, error } = await supabase
+                .from('hr_management_payroll')
+                .select('*');
+            if (error) throw error;
+            const filtered = (data || []).filter(r => {
+                const idCol = String(r.employee_id || r.employee_code || '').trim().toLowerCase();
+                return idCol === empIdStr || (idCol && empIdStr && (idCol.includes(empIdStr) || empIdStr.includes(idCol)));
+            });
+            setOverviewPayrollRecords(filtered);
+        } catch (e) {
+            console.error('Failed to fetch employee payroll records:', e);
+            setOverviewPayrollRecords([]);
+        } finally {
+            setOverviewPayrollLoading(false);
+        }
+    };
+
+    const fetchOverviewLearning = async (emp) => {
+        if (!emp) return;
+        setOverviewLearningLoading(true);
+        try {
+            const empIdStr = String(emp.employee_id || emp.id || '').trim().toLowerCase();
+            const empNameStr = String(emp.name_as_per_aadhar || emp.name || '').trim().toLowerCase();
+            const { data, error } = await supabase
+                .from('hr_learning_submissions')
+                .select('*')
+                .order('id', { ascending: false });
+            if (error) throw error;
+            const matched = (data || []).find(s => {
+                const subEmpId = String(s.employee_id || '').trim().toLowerCase();
+                const subEmpName = String(s.employee_name || '').trim().toLowerCase();
+                const matchId = empIdStr && subEmpId && (empIdStr === subEmpId || subEmpId.includes(empIdStr));
+                const matchName = empNameStr && subEmpName && (empNameStr === subEmpName || empNameStr.includes(subEmpName) || subEmpName.includes(empNameStr));
+                return matchId || matchName;
+            });
+            if (matched) {
+                let tasksArr = [];
+                if (typeof matched.tasks_data === 'string') {
+                    try { tasksArr = JSON.parse(matched.tasks_data); } catch (e) { tasksArr = []; }
+                } else if (Array.isArray(matched.tasks_data)) {
+                    tasksArr = matched.tasks_data;
+                }
+                setOverviewLearningSubmission({ ...matched, tasks: tasksArr });
+            } else {
+                setOverviewLearningSubmission(null);
+            }
+        } catch (e) {
+            console.error('Failed to fetch learning submission:', e);
+            setOverviewLearningSubmission(null);
+        } finally {
+            setOverviewLearningLoading(false);
+        }
+    };
+
+    const fetchOverviewMonthData = async (targetMonth, emp) => {
+        try {
+            const y = targetMonth.getFullYear();
+            const m = targetMonth.getMonth();
+            const startDateStr = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            const endDateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+            // Fetch attendance logs for the employee and month
+            const { data: attData } = await supabase
+                .from('hr_management_attendance_logs')
+                .select('*')
+                .gte('attendance_date', startDateStr)
+                .lte('attendance_date', endDateStr);
+            setOverviewAttendanceLogs(attData || []);
+
+            // Fetch roster records for the month
+            const { data: rosData } = await supabase
+                .from('hr_management_shift_roster')
+                .select('*')
+                .gte('date', startDateStr)
+                .lte('date', endDateStr);
+            setAllRosterRecords(rosData || []);
+
+            // Fetch leaves
+            const { data: lData } = await supabase
+                .from('hr_management_leaves')
+                .select('*');
+            setLeavesData(lData || []);
+        } catch (err) {
+            console.error('Error fetching overview month data:', err);
+        }
+    };
+
+    const openPreviewWindow = (emp) => {
+        const currentM = new Date();
+        setPreviewModal({
+            isOpen: true,
+            employee: emp,
+            month: currentM,
+            tab: 'timecard',
+            loading: false
+        });
+        fetchOverviewPayroll(emp);
+        fetchOverviewMonthData(currentM, emp);
     };
 
     const handleOpenAssignModal = (employeeId, date) => {
@@ -658,42 +807,49 @@ const Roster = () => {
     };
 
     const handleOpenEditSlidePanel = (employee) => {
-        let startDate, endDate;
+        let viewStart, viewEnd;
         if (viewMode === 'weekly') {
-            startDate = currentWeekStart;
-            endDate = addDays(currentWeekStart, 6);
+            viewStart = currentWeekStart;
+            viewEnd = addDays(currentWeekStart, 6);
         } else {
-            startDate = dateRange.fromDate;
-            endDate = dateRange.toDate;
+            viewStart = dateRange.fromDate;
+            viewEnd = dateRange.toDate;
         }
 
-        // Find existing assigned shifts for employee in the current view period
         const empIdClean = employee.employee_id ? String(employee.employee_id).trim().toLowerCase() : '';
-        let existingShiftType = '';
-        let existingStartTime = '';
-        let existingEndTime = '';
-        let existingRemark = '';
 
-        let currentDate = new Date(startDate);
-        while (currentDate <= endDate) {
+        let firstAssignedDate = null;
+        let lastAssignedDate = null;
+        let foundRoster = null;
+
+        let currentDate = new Date(viewStart);
+        while (currentDate <= viewEnd) {
             const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
             const roster = rosterData.get(`${empIdClean}-${dateStr}`);
             if (roster && roster.shift_type && roster.shift_type !== 'Not Assigned') {
-                existingShiftType = roster.shift_type;
-                existingStartTime = roster.start_time ? roster.start_time.slice(0, 5) : '';
-                existingEndTime = roster.end_time ? roster.end_time.slice(0, 5) : '';
-                existingRemark = roster.remark || '';
-                break; // Use first found shift in range
+                if (!firstAssignedDate) {
+                    firstAssignedDate = new Date(currentDate);
+                    foundRoster = roster;
+                }
+                lastAssignedDate = new Date(currentDate);
             }
             currentDate.setDate(currentDate.getDate() + 1);
         }
 
-        // If no shift in range, fallback to default or first custom shift
-        if (!existingShiftType) {
-            existingShiftType = customShifts[0]?.shift_name || 'General Shift';
-            const matchedShift = customShifts.find(s => s.shift_name === existingShiftType);
-            existingStartTime = matchedShift?.start_time ? matchedShift.start_time.slice(0, 5) : '09:30';
-            existingEndTime = matchedShift?.end_time ? matchedShift.end_time.slice(0, 5) : '19:30';
+        const startDate = firstAssignedDate || viewStart;
+        const endDate = lastAssignedDate || viewEnd;
+
+        let shiftType = foundRoster?.shift_type || customShifts[0]?.shift_name || 'General Shift';
+        let startTime = foundRoster?.start_time ? foundRoster.start_time.slice(0, 5) : '';
+        let endTime = foundRoster?.end_time ? foundRoster.end_time.slice(0, 5) : '';
+        let remark = foundRoster?.remark || '';
+
+        if (!startTime || !endTime) {
+            const matchedShift = customShifts.find(s => s.shift_name === shiftType);
+            if (matchedShift) {
+                if (!startTime && matchedShift.start_time) startTime = matchedShift.start_time.slice(0, 5);
+                if (!endTime && matchedShift.end_time) endTime = matchedShift.end_time.slice(0, 5);
+            }
         }
 
         setEditSlideForm({
@@ -701,10 +857,10 @@ const Roster = () => {
             employee_name: employee.name_as_per_aadhar || employee.name || '',
             start_date: formatDate(startDate, 'yyyy-MM-dd'),
             end_date: formatDate(endDate, 'yyyy-MM-dd'),
-            shift_type: existingShiftType,
-            start_time: existingStartTime,
-            end_time: existingEndTime,
-            remark: existingRemark
+            shift_type: shiftType,
+            start_time: startTime || '09:30',
+            end_time: endTime || '19:30',
+            remark: remark
         });
         setIsEditSlidePanelOpen(true);
     };
@@ -792,13 +948,18 @@ const Roster = () => {
             let currentDate = new Date(startDate);
             while (currentDate <= endDate) {
                 const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
+                let sTime = editSlideForm.start_time || '09:30:00';
+                let eTime = editSlideForm.end_time || '19:30:00';
+                if (sTime && sTime.length === 5) sTime += ':00';
+                if (eTime && eTime.length === 5) eTime += ':00';
+
                 shiftsToInsert.push({
                     employee_id: editSlideForm.employee_id,
                     date: dateStr,
-                    shift_type: editSlideForm.shift_type,
-                    start_time: editSlideForm.start_time,
-                    end_time: editSlideForm.end_time,
-                    remark: editSlideForm.remark
+                    shift_type: editSlideForm.shift_type || 'General Shift',
+                    start_time: sTime,
+                    end_time: eTime,
+                    remark: editSlideForm.remark || ''
                 });
                 currentDate.setDate(currentDate.getDate() + 1);
             }
@@ -816,7 +977,7 @@ const Roster = () => {
 
             const { error } = await supabase
                 .from('hr_management_shift_roster')
-                .upsert(shiftsToInsert);
+                .insert(shiftsToInsert);
 
             if (error) throw error;
 
@@ -1363,19 +1524,31 @@ const Roster = () => {
                                             <tr key={employee.id} className="hover:bg-gray-50 transition-colors">
                                                 <td className="sticky left-0 bg-white hover:bg-gray-50 z-10 px-3 py-2 border-r border-gray-200">
                                                     <div className="flex items-center gap-2">
-                                                        {employee.candidate_photo ? (
-                                                            <img
-                                                                src={employee.candidate_photo}
-                                                                alt={employee.name_as_per_aadhar}
-                                                                className="w-7 h-7 rounded-full object-cover border border-gray-200"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-semibold">
-                                                                {employee.name_as_per_aadhar?.charAt(0).toUpperCase() || '?'}
-                                                            </div>
-                                                        )}
+                                                        <div
+                                                            className="relative flex-shrink-0 cursor-pointer group"
+                                                            onClick={() => openPreviewWindow(employee)}
+                                                            title="Click to view employee overview, timecard, payslip & learning progress"
+                                                        >
+                                                            {employee.candidate_photo ? (
+                                                                <img
+                                                                    src={employee.candidate_photo}
+                                                                    alt={employee.name_as_per_aadhar}
+                                                                    className="w-7 h-7 rounded-full object-cover border border-gray-200 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-semibold group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm">
+                                                                    {employee.name_as_per_aadhar?.charAt(0).toUpperCase() || '?'}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                         <div>
-                                                            <p className="text-xs font-medium text-gray-800">{employee.name_as_per_aadhar}</p>
+                                                            <p
+                                                                className="text-xs font-medium text-gray-800 hover:text-indigo-600 cursor-pointer transition-colors"
+                                                                onClick={() => openPreviewWindow(employee)}
+                                                                title="Click to view employee overview"
+                                                            >
+                                                                {employee.name_as_per_aadhar}
+                                                            </p>
                                                             <p className="text-[9px] text-gray-500">{employee.employee_id}</p>
                                                             <p className="text-[8px] text-gray-400">{employee.designation}</p>
                                                         </div>
@@ -1498,19 +1671,31 @@ const Roster = () => {
                                         <tr key={employee.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="sticky left-0 bg-white hover:bg-gray-50 z-10 px-2 py-1.5 border-r border-gray-200">
                                                 <div className="flex items-center gap-1.5">
-                                                    {employee.candidate_photo ? (
-                                                        <img
-                                                            src={employee.candidate_photo}
-                                                            alt={employee.name_as_per_aadhar}
-                                                            className="w-7 h-7 rounded-full object-cover border border-gray-200"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-semibold">
-                                                            {employee.name_as_per_aadhar?.charAt(0).toUpperCase() || '?'}
-                                                        </div>
-                                                    )}
+                                                    <div
+                                                        className="relative flex-shrink-0 cursor-pointer group"
+                                                        onClick={() => openPreviewWindow(employee)}
+                                                        title="Click to view employee overview, timecard, payslip & learning progress"
+                                                    >
+                                                        {employee.candidate_photo ? (
+                                                            <img
+                                                                src={employee.candidate_photo}
+                                                                alt={employee.name_as_per_aadhar}
+                                                                className="w-7 h-7 rounded-full object-cover border border-gray-200 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-semibold group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm">
+                                                                {employee.name_as_per_aadhar?.charAt(0).toUpperCase() || '?'}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                     <div>
-                                                        <p className="text-xs font-medium text-gray-800">{employee.name_as_per_aadhar}</p>
+                                                        <p
+                                                            className="text-xs font-medium text-gray-800 hover:text-indigo-600 cursor-pointer transition-colors"
+                                                            onClick={() => openPreviewWindow(employee)}
+                                                            title="Click to view employee overview"
+                                                        >
+                                                            {employee.name_as_per_aadhar}
+                                                        </p>
                                                         <p className="text-[9px] text-gray-500">{employee.employee_id}</p>
                                                         <p className="text-[8px] text-gray-400">{employee.designation}</p>
                                                     </div>
@@ -1711,21 +1896,156 @@ const Roster = () => {
                         </div>
 
                         <form onSubmit={(e) => { e.preventDefault(); handleBulkAssignShift(); }} className="p-5 space-y-4">
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Select Employee *</label>
-                                <select
-                                    value={bulkAssignForm.employee_id}
-                                    onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, employee_id: e.target.value })}
-                                    className="w-full px-3 py-2 text-xs border border-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-900"
-                                    required
+                            {/* Multi-Select Employee Dropdown */}
+                            <div className="relative">
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        Select Employees * ({bulkAssignForm.employee_ids?.length || 0} selected)
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const allIds = employees.map(e => e.employee_id).filter(Boolean);
+                                                setBulkAssignForm(prev => ({ ...prev, employee_ids: allIds }));
+                                            }}
+                                            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold"
+                                        >
+                                            Select All
+                                        </button>
+                                        <span className="text-gray-300">|</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setBulkAssignForm(prev => ({ ...prev, employee_ids: [] }));
+                                            }}
+                                            className="text-[11px] text-gray-500 hover:text-gray-700 font-semibold"
+                                        >
+                                            Deselect All
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Dropdown Trigger Button */}
+                                <div
+                                    onClick={() => setIsBulkEmpDropdownOpen(!isBulkEmpDropdownOpen)}
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 bg-white rounded flex items-center justify-between cursor-pointer hover:border-indigo-500 min-h-[38px] transition-colors"
                                 >
-                                    <option value="">Select Employee</option>
-                                    {employees.map(emp => (
-                                        <option key={emp.id} value={emp.employee_id}>
-                                            {emp.name_as_per_aadhar} - {emp.designation} ({emp.employee_id})
-                                        </option>
-                                    ))}
-                                </select>
+                                    <div className="flex flex-wrap gap-1 items-center flex-1 max-h-20 overflow-y-auto pr-2">
+                                        {bulkAssignForm.employee_ids?.length === 0 ? (
+                                            <span className="text-gray-400">Click to select employees (multi-selection)...</span>
+                                        ) : (
+                                            bulkAssignForm.employee_ids?.map(empId => {
+                                                const emp = employees.find(e => String(e.employee_id) === String(empId));
+                                                return (
+                                                    <span
+                                                        key={empId}
+                                                        className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] px-1.5 py-0.5 rounded font-medium"
+                                                    >
+                                                        {emp?.name_as_per_aadhar || empId}
+                                                        <span
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setBulkAssignForm(prev => ({
+                                                                    ...prev,
+                                                                    employee_ids: prev.employee_ids.filter(id => id !== empId)
+                                                                }));
+                                                            }}
+                                                            className="hover:text-red-500 cursor-pointer font-bold ml-0.5 text-xs"
+                                                        >
+                                                            ×
+                                                        </span>
+                                                    </span>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                    <ChevronDown size={15} className={`text-gray-400 transition-transform ${isBulkEmpDropdownOpen ? 'rotate-180' : ''}`} />
+                                </div>
+
+                                {/* Dropdown Popover */}
+                                {isBulkEmpDropdownOpen && (
+                                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-md overflow-hidden max-h-60 flex flex-col animate-in fade-in zoom-in-95 duration-100">
+                                        <div className="p-2 border-b bg-gray-50 flex items-center gap-2">
+                                            <Search size={14} className="text-gray-400" />
+                                            <input
+                                                type="text"
+                                                value={bulkEmpSearch}
+                                                onChange={(e) => setBulkEmpSearch(e.target.value)}
+                                                placeholder="Search by employee name or ID..."
+                                                className="w-full bg-transparent text-xs outline-none text-gray-800"
+                                                autoFocus
+                                            />
+                                            {bulkEmpSearch && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setBulkEmpSearch('')}
+                                                    className="text-gray-400 hover:text-gray-600"
+                                                >
+                                                    <X size={13} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="overflow-y-auto divide-y divide-gray-50 flex-1">
+                                            {(() => {
+                                                const filteredList = employees.filter(emp => {
+                                                    const q = bulkEmpSearch.toLowerCase().trim();
+                                                    if (!q) return true;
+                                                    return (
+                                                        emp.name_as_per_aadhar?.toLowerCase().includes(q) ||
+                                                        emp.employee_id?.toString().toLowerCase().includes(q) ||
+                                                        emp.designation?.toLowerCase().includes(q)
+                                                    );
+                                                });
+
+                                                if (filteredList.length === 0) {
+                                                    return (
+                                                        <div className="py-4 text-center text-xs text-gray-400">
+                                                            No matching employees found
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return filteredList.map(emp => {
+                                                    const isChecked = bulkAssignForm.employee_ids?.includes(emp.employee_id);
+                                                    return (
+                                                        <div
+                                                            key={emp.id || emp.employee_id}
+                                                            onClick={() => {
+                                                                setBulkAssignForm(prev => {
+                                                                    const current = prev.employee_ids || [];
+                                                                    if (isChecked) {
+                                                                        return { ...prev, employee_ids: current.filter(id => id !== emp.employee_id) };
+                                                                    } else {
+                                                                        return { ...prev, employee_ids: [...current, emp.employee_id] };
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className={`flex items-center justify-between px-3 py-2 text-xs cursor-pointer transition-colors ${
+                                                                isChecked ? 'bg-indigo-50/70 font-semibold text-indigo-900' : 'hover:bg-gray-50 text-gray-700'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isChecked}
+                                                                    onChange={() => {}}
+                                                                    className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300 pointer-events-none"
+                                                                />
+                                                                <div>
+                                                                    <p className="text-xs">{emp.name_as_per_aadhar}</p>
+                                                                    <p className="text-[10px] text-gray-400 font-normal">ID: {emp.employee_id} • {emp.designation}</p>
+                                                                </div>
+                                                            </div>
+                                                            {isChecked && <Check size={14} className="text-indigo-600 font-bold" />}
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
@@ -1784,8 +2104,10 @@ const Roster = () => {
                                         onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, start_time: e.target.value })}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-gray-900"
                                         disabled={(() => {
+                                            const sType = bulkAssignForm.shift_type?.trim().toLowerCase();
+                                            const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'holiday';
                                             const shift = customShifts.find(s => s.shift_name === bulkAssignForm.shift_type);
-                                            return shift ? (!shift.start_time) : (bulkAssignForm.shift_type === 'Day Off' || bulkAssignForm.shift_type === 'Holiday');
+                                            return isOff || (shift ? !shift.start_time : false);
                                         })()}
                                     />
                                 </div>
@@ -1797,8 +2119,10 @@ const Roster = () => {
                                         onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, end_time: e.target.value })}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-gray-900"
                                         disabled={(() => {
+                                            const sType = bulkAssignForm.shift_type?.trim().toLowerCase();
+                                            const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'holiday';
                                             const shift = customShifts.find(s => s.shift_name === bulkAssignForm.shift_type);
-                                            return shift ? (!shift.start_time) : (bulkAssignForm.shift_type === 'Day Off' || bulkAssignForm.shift_type === 'Holiday');
+                                            return isOff || (shift ? !shift.start_time : false);
                                         })()}
                                     />
                                 </div>
@@ -1949,8 +2273,10 @@ const Roster = () => {
                                                 onChange={(e) => setAssignForm({ ...assignForm, start_time: e.target.value })}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                                                 disabled={(() => {
+                                                    const sType = assignForm.shift_type?.trim().toLowerCase();
+                                                    const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'holiday';
                                                     const shift = customShifts.find(s => s.shift_name === assignForm.shift_type);
-                                                    return shift ? (!shift.start_time) : (assignForm.shift_type === 'Day Off' || assignForm.shift_type === 'Holiday');
+                                                    return isOff || (shift ? !shift.start_time : false);
                                                 })()}
                                             />
                                         </div>
@@ -1963,8 +2289,10 @@ const Roster = () => {
                                                 onChange={(e) => setAssignForm({ ...assignForm, end_time: e.target.value })}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                                                 disabled={(() => {
+                                                    const sType = assignForm.shift_type?.trim().toLowerCase();
+                                                    const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'holiday';
                                                     const shift = customShifts.find(s => s.shift_name === assignForm.shift_type);
-                                                    return shift ? (!shift.start_time) : (assignForm.shift_type === 'Day Off' || assignForm.shift_type === 'Holiday');
+                                                    return isOff || (shift ? !shift.start_time : false);
                                                 })()}
                                             />
                                         </div>
@@ -2133,8 +2461,10 @@ const Roster = () => {
                                                 onChange={(e) => setEditSlideForm({ ...editSlideForm, start_time: e.target.value })}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                                                 disabled={(() => {
+                                                    const sType = editSlideForm.shift_type?.trim().toLowerCase();
+                                                    const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'holiday';
                                                     const shift = customShifts.find(s => s.shift_name === editSlideForm.shift_type);
-                                                    return shift ? (!shift.start_time) : (editSlideForm.shift_type === 'Day Off' || editSlideForm.shift_type === 'Holiday');
+                                                    return isOff || (shift ? !shift.start_time : false);
                                                 })()}
                                             />
                                         </div>
@@ -2147,8 +2477,10 @@ const Roster = () => {
                                                 onChange={(e) => setEditSlideForm({ ...editSlideForm, end_time: e.target.value })}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                                                 disabled={(() => {
+                                                    const sType = editSlideForm.shift_type?.trim().toLowerCase();
+                                                    const isOff = sType === 'weekly off' || sType === 'day off' || sType === 'wo' || sType === 'holiday';
                                                     const shift = customShifts.find(s => s.shift_name === editSlideForm.shift_type);
-                                                    return shift ? (!shift.start_time) : (editSlideForm.shift_type === 'Day Off' || editSlideForm.shift_type === 'Holiday');
+                                                    return isOff || (shift ? !shift.start_time : false);
                                                 })()}
                                             />
                                         </div>
@@ -2493,6 +2825,722 @@ const Roster = () => {
                     </div>
                 </div>
             )}
+            {/* Employee Attendance Overview Preview Window Modal */}
+            {previewModal.isOpen && previewModal.employee && (() => {
+                const emp = previewModal.employee;
+                const avatar = emp.candidate_photo;
+                const empName = emp.name_as_per_aadhar || emp.name || 'Employee';
+                const empId = emp.employee_id || emp.id || '—';
+                const empDesignation = emp.designation || '-';
+                const empStore = emp.joining_place || emp.store_name || '-';
+
+                // Selected month dates
+                const pMonth = previewModal.month;
+                const pYear = pMonth.getFullYear();
+                const pMonthIdx = pMonth.getMonth();
+                const daysInPMonth = new Date(pYear, pMonthIdx + 1, 0).getDate();
+
+                const todayObj = new Date();
+                const isCurrentMonth = pYear === todayObj.getFullYear() && pMonthIdx === todayObj.getMonth();
+                const maxDay = isCurrentMonth ? Math.min(todayObj.getDate(), daysInPMonth) : daysInPMonth;
+
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+                // Build list of days for selected month up to maxDay
+                const dayRows = [];
+                let totalPresent = 0;
+                let totalAbsent = 0;
+                let totalLate = 0;
+                let totalLateMins = 0;
+                let totalWorkMs = 0;
+
+                for (let d = 1; d <= maxDay; d++) {
+                    const dateStr = `${pYear}-${String(pMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const dateObj = new Date(pYear, pMonthIdx, d);
+                    const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
+
+                    // Date-specific roster lookup
+                    const rEntry = allRosterRecords.find(r => 
+                        String(r.employee_id).trim().toLowerCase() === String(empId).trim().toLowerCase() && r.date === dateStr
+                    );
+                    const hasRoster = !!(rEntry && rEntry.shift_type);
+                    const shiftName = hasRoster ? rEntry.shift_type : 'Roster Not Available';
+
+                    let scheduledStartStr = '10:00';
+                    let scheduledEndStr = '19:30';
+                    if (hasRoster && rEntry.start_time) {
+                        scheduledStartStr = rEntry.start_time.substring(0, 5);
+                    }
+                    if (hasRoster && rEntry.end_time) {
+                        scheduledEndStr = rEntry.end_time.substring(0, 5);
+                    }
+
+                    // Attendance record & Leave status check
+                    const att = overviewAttendanceLogs.find(a => 
+                        String(a.employee_id).trim().toLowerCase() === String(empId).trim().toLowerCase() && a.attendance_date === dateStr
+                    ) || { status: 'Absent', in_time: '-', out_time: '-' };
+
+                    const inTime = att.in_time;
+                    const outTime = att.out_time;
+
+                    const approvedLeave = leavesData.find(l => {
+                        const lEmpId = String(l.employee_id || l.employeeId || '').trim().toLowerCase();
+                        if (lEmpId !== String(empId).trim().toLowerCase()) return false;
+                        const from = l.from_date || l.fromDate;
+                        const to = l.to_date || l.toDate;
+                        if (!from || !to) return false;
+                        return from <= dateStr && to >= dateStr;
+                    });
+                    const isOnLeaveInTable = !!approvedLeave;
+
+                    // Compute late minutes against shift
+                    let lateMins = 0;
+                    if (inTime && inTime !== '-') {
+                        try {
+                            const inDate = new Date(inTime);
+                            if (!isNaN(inDate.getTime())) {
+                                const h = inDate.getHours();
+                                const m = inDate.getMinutes();
+                                const totalMins = h * 60 + m;
+                                let officialStart = 10 * 60;
+                                let grace = officialStart + 10;
+                                if (hasRoster && rEntry.start_time) {
+                                    const [sh, sm] = rEntry.start_time.split(':').map(Number);
+                                    officialStart = (sh || 0) * 60 + (sm || 0);
+                                    grace = officialStart + 10;
+                                }
+                                if (totalMins >= grace) {
+                                    lateMins = totalMins - officialStart;
+                                }
+                            }
+                        } catch (e) {
+                            lateMins = 0;
+                        }
+                    }
+
+                    let status = att.status;
+                    if (!status || status === 'Absent') {
+                        if (!inTime || inTime === '-') {
+                            if (isOnLeaveInTable) {
+                                status = 'On Leave';
+                            } else {
+                                status = 'Absent';
+                            }
+                        } else {
+                            status = lateMins > 0 ? 'Late' : 'Present';
+                        }
+                    }
+
+                    // Lunch duration
+                    const lunchStr = att.standard_lunch || '-';
+
+                    // Compute working hours
+                    let workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : '00:00:00';
+                    if ((!workHrsStr || workHrsStr === '00:00:00') && inTime && outTime && inTime !== '-' && outTime !== '-') {
+                        try {
+                            const iD = new Date(inTime);
+                            const oD = new Date(outTime);
+                            if (!isNaN(iD.getTime()) && !isNaN(oD.getTime()) && oD > iD) {
+                                const diffSec = Math.floor((oD - iD) / 1000);
+                                const hh = Math.floor(diffSec / 3600);
+                                const mm = Math.floor((diffSec % 3600) / 60);
+                                const ss = diffSec % 60;
+                                workHrsStr = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+                            }
+                        } catch (e) {}
+                    }
+
+                    const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
+                    const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;
+
+                    let inTimeFormatted = null;
+                    let outTimeFormatted = null;
+                    if (inTime && inTime !== '-') {
+                        try {
+                            inTimeFormatted = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(inTime));
+                        } catch (e) { inTimeFormatted = inTime; }
+                    }
+                    if (outTime && outTime !== '-') {
+                        try {
+                            outTimeFormatted = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(outTime));
+                        } catch (e) { outTimeFormatted = outTime; }
+                    }
+
+                    if (status === 'Present' || status === 'Late') {
+                        totalPresent++;
+                        if (lateMins > 0 || status === 'Late') {
+                            totalLate++;
+                            totalLateMins += lateMins;
+                        }
+                    } else if (status === 'Absent') {
+                        totalAbsent++;
+                    }
+
+                    totalWorkMs += dayWorkMs;
+
+                    dayRows.push({
+                        dayNum: d,
+                        dateStr,
+                        dayName,
+                        shiftName,
+                        hasRoster,
+                        scheduledStartStr,
+                        scheduledEndStr,
+                        inTimeFormatted,
+                        outTimeFormatted,
+                        inTime,
+                        outTime,
+                        lunchStr,
+                        workHrsStr,
+                        dayWorkMs,
+                        lateMins,
+                        status,
+                        attendance: att,
+                        rEntry
+                    });
+                }
+
+                const totalWorkHrsDec = totalWorkMs / (3600 * 1000);
+                const avgWorkHrsDec = totalPresent > 0 ? (totalWorkHrsDec / totalPresent).toFixed(1) : '0.0';
+                const totalWorkHrsInt = Math.floor(totalWorkHrsDec);
+                const totalWorkMinsInt = Math.round((totalWorkHrsDec - totalWorkHrsInt) * 60);
+                const totalWorkFormatted = `${totalWorkHrsInt}h ${totalWorkMinsInt}m`;
+
+                return (
+                    <div
+                        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}
+                    >
+                        <div
+                            className="bg-white max-w-5xl w-full rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Modal Header */}
+                            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 pr-14 relative">
+                                <button
+                                    onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}
+                                    className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all border border-white/10 shadow-sm active:scale-95"
+                                    title="Close preview"
+                                >
+                                    <X size={18} />
+                                </button>
+
+                                <div className="flex flex-wrap items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="relative">
+                                            {avatar ? (
+                                                <img
+                                                    src={avatar}
+                                                    alt={empName}
+                                                    className="w-14 h-14 rounded-2xl object-cover border-2 border-white/20 shadow-md"
+                                                />
+                                            ) : (
+                                                <div className="w-14 h-14 rounded-2xl bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-xl font-bold text-white shadow-md">
+                                                    {empName.charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h2 className="text-lg font-bold text-white tracking-tight">{empName}</h2>
+                                                <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-indigo-200 border border-white/10">
+                                                    ID: {empId}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-indigo-200 mt-0.5 font-medium">
+                                                {empDesignation} • {empStore}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Month Selection & View Tab Switcher */}
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <div className="flex items-center gap-1 bg-white/10 border border-white/10 rounded-xl px-1.5 py-1">
+                                            <button
+                                                onClick={async () => {
+                                                    const newM = new Date(pYear, pMonthIdx - 1, 1);
+                                                    setPreviewModal(prev => ({ ...prev, month: newM, loading: true }));
+                                                    await fetchOverviewMonthData(newM, emp);
+                                                    setPreviewModal(prev => ({ ...prev, loading: false }));
+                                                }}
+                                                className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
+                                                title="Previous Month"
+                                            >
+                                                <ChevronLeft size={14} />
+                                            </button>
+                                            <span className="text-xs font-semibold text-white px-2 min-w-[110px] text-center flex items-center justify-center gap-1">
+                                                {previewModal.loading && <Loader2 size={12} className="animate-spin text-indigo-300" />}
+                                                {monthNames[pMonthIdx]} {pYear}
+                                            </span>
+                                            <button
+                                                onClick={async () => {
+                                                    const newM = new Date(pYear, pMonthIdx + 1, 1);
+                                                    setPreviewModal(prev => ({ ...prev, month: newM, loading: true }));
+                                                    await fetchOverviewMonthData(newM, emp);
+                                                    setPreviewModal(prev => ({ ...prev, loading: false }));
+                                                }}
+                                                className="p-1 hover:bg-white/10 text-white rounded-lg transition-colors"
+                                                title="Next Month"
+                                            >
+                                                <ChevronRight size={14} />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex bg-white/10 p-1 rounded-xl border border-white/10">
+                                            <button
+                                                onClick={() => setPreviewModal({ ...previewModal, tab: 'timecard' })}
+                                                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                                    previewModal.tab === 'timecard'
+                                                        ? 'bg-white text-indigo-950 shadow-md font-bold'
+                                                        : 'text-indigo-200 hover:text-white'
+                                                }`}
+                                            >
+                                                📊 Timecard
+                                            </button>
+                                            <button
+                                                onClick={() => setPreviewModal({ ...previewModal, tab: 'timeline' })}
+                                                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                                    previewModal.tab === 'timeline'
+                                                        ? 'bg-white text-indigo-950 shadow-md font-bold'
+                                                        : 'text-indigo-200 hover:text-white'
+                                                }`}
+                                            >
+                                                📈 Timeline
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setPreviewModal(prev => ({ ...prev, tab: 'payslip' }));
+                                                    fetchOverviewPayroll(emp);
+                                                }}
+                                                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                                    previewModal.tab === 'payslip'
+                                                        ? 'bg-white text-indigo-950 shadow-md font-bold'
+                                                        : 'text-indigo-200 hover:text-white'
+                                                }`}
+                                            >
+                                                💳 Payslip
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setPreviewModal(prev => ({ ...prev, tab: 'learning' }));
+                                                    fetchOverviewLearning(emp);
+                                                }}
+                                                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                                    previewModal.tab === 'learning'
+                                                        ? 'bg-white text-indigo-950 shadow-md font-bold'
+                                                        : 'text-indigo-200 hover:text-white'
+                                                }`}
+                                            >
+                                                🎓 Learning
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Summary Stat Cards */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-4 pt-4 border-t border-white/10">
+                                    <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
+                                        <p className="text-base font-bold text-white mt-0.5">{dayRows.length}</p>
+                                    </div>
+                                    <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
+                                        <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
+                                        <p className="text-base font-bold text-emerald-400 mt-0.5">{totalPresent}</p>
+                                    </div>
+                                    <div className="bg-red-500/10 rounded-xl p-2 border border-red-500/20 text-center">
+                                        <p className="text-[10px] font-medium text-red-300 uppercase tracking-wider">Absent</p>
+                                        <p className="text-base font-bold text-red-400 mt-0.5">{totalAbsent}</p>
+                                    </div>
+                                    <div className="bg-amber-500/10 rounded-xl p-2 border border-amber-500/20 text-center">
+                                        <p className="text-[10px] font-medium text-amber-300 uppercase tracking-wider">Late Days</p>
+                                        <p className="text-base font-bold text-amber-400 mt-0.5">{totalLate}</p>
+                                    </div>
+                                    <div className="bg-indigo-500/10 rounded-xl p-2 border border-indigo-500/20 text-center">
+                                        <p className="text-[10px] font-medium text-indigo-300 uppercase tracking-wider">Total Work Hours</p>
+                                        <p className="text-base font-bold text-indigo-300 mt-0.5">{totalWorkFormatted}</p>
+                                    </div>
+                                    <div className="bg-purple-500/10 rounded-xl p-2 border border-purple-500/20 text-center">
+                                        <p className="text-[10px] font-medium text-purple-300 uppercase tracking-wider">Avg Daily Hours</p>
+                                        <p className="text-base font-bold text-purple-300 mt-0.5">{avgWorkHrsDec}h</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="flex-1 overflow-y-auto p-5 bg-slate-50 min-h-0">
+                                {previewModal.tab === 'timecard' ? (
+                                    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-xs">
+                                                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                                                    <tr>
+                                                        <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Date</th>
+                                                        <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Day</th>
+                                                        <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Roster / Shift</th>
+                                                        <th className="px-3 py-2.5 font-bold text-left uppercase text-[10px]">Punched Location</th>
+                                                        <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Scheduled</th>
+                                                        <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">In Time</th>
+                                                        <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Out Time</th>
+                                                        <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Lunch</th>
+                                                        <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Work Hours</th>
+                                                        <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Late</th>
+                                                        <th className="px-3 py-2.5 font-bold text-center uppercase text-[10px]">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 font-medium">
+                                                    {dayRows.map((row) => (
+                                                        <tr key={row.dayNum} className="hover:bg-slate-50/80 transition-colors">
+                                                            <td className="px-3 py-2 text-slate-900 font-bold font-mono">
+                                                                {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-slate-500 font-bold">{row.dayName}</td>
+                                                            <td className="px-3 py-2">
+                                                                {row.hasRoster ? (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                                                        📅 {row.shiftName}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                                                        Roster Not Available
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-slate-600 font-mono text-[11px]">
+                                                                {row.attendance?.store_name || '-'}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">
+                                                                {row.scheduledStartStr} – {row.scheduledEndStr}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center font-mono">
+                                                                {row.inTimeFormatted ? (
+                                                                    <span className="font-semibold text-emerald-700">{row.inTimeFormatted}</span>
+                                                                ) : (
+                                                                    <span className="text-slate-300">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center font-mono">
+                                                                {row.outTimeFormatted ? (
+                                                                    <span className="font-semibold text-slate-700">{row.outTimeFormatted}</span>
+                                                                ) : (
+                                                                    <span className="text-slate-300">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center font-mono text-slate-500 text-[11px]">
+                                                                {row.lunchStr}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center font-mono font-bold text-slate-900">
+                                                                {row.workHrsStr}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center">
+                                                                {row.lateMins > 0 ? (
+                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 font-mono">
+                                                                        {row.lateMins}m
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-slate-300">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center">
+                                                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold shadow-xs ${
+                                                                    row.status === 'Present'
+                                                                        ? 'bg-emerald-100 text-emerald-800'
+                                                                        : row.status === 'Late'
+                                                                        ? 'bg-orange-100 text-orange-800'
+                                                                        : row.status === 'On Leave'
+                                                                        ? 'bg-blue-100 text-blue-800'
+                                                                        : 'bg-red-100 text-red-800'
+                                                                }`}>
+                                                                    {row.status === 'Present' ? 'P' : row.status === 'Late' ? 'L' : row.status === 'On Leave' ? 'OL' : 'A'}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ) : previewModal.tab === 'timeline' ? (
+                                    <div className="space-y-3">
+                                        {dayRows.map((row) => (
+                                            <div key={row.dayNum} className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3">
+                                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-sm text-slate-900 font-mono">
+                                                            {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx]} ({row.dayName})
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                                            📅 {row.shiftName} ({row.scheduledStartStr} – {row.scheduledEndStr})
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-xs font-mono">
+                                                        {row.inTimeFormatted && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
+                                                        {row.outTimeFormatted && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
+                                                        <span className="font-bold text-slate-900">Total: {row.workHrsStr}</span>
+                                                        {row.lateMins > 0 && <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Late by {row.lateMins}m</span>}
+                                                    </div>
+                                                </div>
+
+                                                {row.inTimeFormatted || row.outTimeFormatted ? (
+                                                    <div className="pt-1">
+                                                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
+                                                            <span>Start ({row.scheduledStartStr})</span>
+                                                            <span>Lunch ({row.lunchStr})</span>
+                                                            <span>End ({row.scheduledEndStr})</span>
+                                                        </div>
+                                                        <div className="h-6 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200">
+                                                            <div className="bg-emerald-500 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider">
+                                                                MORNING SHIFT
+                                                            </div>
+                                                            <div className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold border-x border-amber-300">
+                                                                LUNCH
+                                                            </div>
+                                                            {row.outTimeFormatted ? (
+                                                                <div className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider">
+                                                                    EVENING SHIFT
+                                                                </div>
+                                                            ) : (
+                                                                <div className="bg-amber-500/30 border-l border-dashed border-amber-400 flex-1 flex items-center justify-center text-amber-900 text-[10px] font-semibold animate-pulse">
+                                                                    PUNCH OUT PENDING
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="py-2 text-center rounded-xl border border-dashed bg-slate-50 border-slate-200">
+                                                        <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : previewModal.tab === 'learning' ? (
+                                    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
+                                        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                            <div>
+                                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                                    🎓 Employee Learning & Task Checklist Report
+                                                </h3>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    Detailed task checklist matrix, checked level options, and completion summary for <span className="font-semibold text-indigo-900">{empName}</span> ({empId})
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {overviewLearningLoading ? (
+                                            <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
+                                                <Loader2 size={18} className="animate-spin text-indigo-600" />
+                                                <span className="text-xs font-semibold">Loading learning progress report...</span>
+                                            </div>
+                                        ) : overviewLearningSubmission ? (
+                                            (() => {
+                                                const tasksList = overviewLearningSubmission.tasks || [];
+                                                const checkedSet = new Set(tasksList.filter(t => t.checked).map(t => t.id));
+                                                const totalCompleted = checkedSet.size;
+                                                const deptList = ['EXCISE', 'RETAIL', 'SANCKS', 'STOCKS', 'WHOLESALE', 'TECHNICAL', 'IMP RETAIL/RETAIL /SANCKS'];
+
+                                                return (
+                                                    <div className="space-y-4">
+                                                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                                                            <div>
+                                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Submission Info & Summary</span>
+                                                                <span className="text-sm font-bold text-slate-900 mt-0.5 block">
+                                                                    {totalCompleted} Tasks Completed • {overviewLearningSubmission.shop_name} ({overviewLearningSubmission.submission_date})
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                {[1, 2, 3, 4].map(lvl => {
+                                                                    const lvlTotal = tasksList.filter(t => t.level === lvl).length;
+                                                                    const lvlDone = tasksList.filter(t => t.level === lvl && t.checked).length;
+                                                                    return (
+                                                                        <div key={lvl} className="bg-white border border-slate-200 px-2.5 py-1 rounded text-center text-xs">
+                                                                            <span className="text-slate-400 block text-[9px] uppercase font-bold">L{lvl}</span>
+                                                                            <span className="text-slate-800 font-bold">{lvlDone}/{lvlTotal}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                                                            <table className="w-full text-left border-collapse text-xs">
+                                                                <thead>
+                                                                    <tr className="bg-[#1C120C] text-[#d4b457] text-[10px] uppercase font-serif tracking-wider border-b border-[#1C120C]">
+                                                                        <th className="py-2.5 px-2 w-[110px]">DEPT</th>
+                                                                        <th className="py-2.5 px-2 font-bold">LEVEL 1</th>
+                                                                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                                                        <th className="py-2.5 px-2 font-bold">LEVEL 2</th>
+                                                                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                                                        <th className="py-2.5 px-2 font-bold">LEVEL 3</th>
+                                                                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                                                        <th className="py-2.5 px-2 font-bold">LEVEL 4</th>
+                                                                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-100 text-slate-800">
+                                                                    {deptList.map((dept) => {
+                                                                        const tasksByLevel = {
+                                                                            1: tasksList.filter((t) => t.dept === dept && t.level === 1),
+                                                                            2: tasksList.filter((t) => t.dept === dept && t.level === 2),
+                                                                            3: tasksList.filter((t) => t.dept === dept && t.level === 3),
+                                                                            4: tasksList.filter((t) => t.dept === dept && t.level === 4),
+                                                                        };
+                                                                        const maxRows = Math.max(
+                                                                            tasksByLevel[1].length,
+                                                                            tasksByLevel[2].length,
+                                                                            tasksByLevel[3].length,
+                                                                            tasksByLevel[4].length,
+                                                                            1
+                                                                        );
+
+                                                                        return Array.from({ length: maxRows }).map((_, rowIdx) => (
+                                                                            <tr
+                                                                                key={`${dept}-${rowIdx}`}
+                                                                                className={rowIdx === 0 ? 'border-t-2 border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}
+                                                                            >
+                                                                                <td className="py-2 px-2 text-emerald-700 font-bold text-[11px] whitespace-nowrap align-top">
+                                                                                    {rowIdx === 0 ? dept : ''}
+                                                                                </td>
+
+                                                                                {[1, 2, 3, 4].map((lvl) => {
+                                                                                    const task = tasksByLevel[lvl][rowIdx];
+                                                                                    if (!task) {
+                                                                                        return (
+                                                                                            <React.Fragment key={lvl}>
+                                                                                                <td className="py-2 px-2"></td>
+                                                                                                <td className="py-2 px-1 text-center"></td>
+                                                                                            </React.Fragment>
+                                                                                        );
+                                                                                    }
+
+                                                                                    const isChecked = !!task.checked;
+                                                                                    return (
+                                                                                        <React.Fragment key={lvl}>
+                                                                                            <td className={`py-2 px-2 align-top max-w-[180px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 rounded-sm' : ''}`}>
+                                                                                                <p className={`text-xs font-semibold leading-tight ${isChecked ? 'text-emerald-950 font-bold' : 'text-slate-800'}`}>
+                                                                                                    {task.en}
+                                                                                                </p>
+                                                                                                {task.hi && <p className={`text-[10px] mt-0.5 leading-tight ${isChecked ? 'text-emerald-800' : 'text-slate-500'}`}>{task.hi}</p>}
+                                                                                            </td>
+                                                                                            <td className="py-2 px-1 text-center align-top">
+                                                                                                <div
+                                                                                                    className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs mx-auto ${
+                                                                                                        isChecked
+                                                                                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                                                                                            : 'bg-red-50 text-red-500 border border-red-200'
+                                                                                                    }`}
+                                                                                                >
+                                                                                                    {isChecked ? '✓' : '✕'}
+                                                                                                </div>
+                                                                                            </td>
+                                                                                        </React.Fragment>
+                                                                                    );
+                                                                                })}
+                                                                            </tr>
+                                                                        ));
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()
+                                        ) : (
+                                            <div className="py-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-lg">
+                                                    🎓
+                                                </div>
+                                                <p className="text-xs font-bold text-slate-700">No Learning Checklist Submitted Yet</p>
+                                                <p className="text-[11px] text-slate-400 max-w-md">
+                                                    No staff task checklist record has been submitted for <span className="font-semibold text-slate-600">{empName}</span>.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    /* PAYSLIP VIEW */
+                                    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
+                                        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                                            <div>
+                                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                                    💳 Employee Payslip & Payroll History
+                                                </h3>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    Historical payout records, salary breakdown & deductions for <span className="font-semibold text-indigo-900">{empName}</span> ({empId})
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                                            <table className="w-full text-xs text-left">
+                                                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
+                                                    <tr>
+                                                        <th className="px-3.5 py-2.5">Month / Year</th>
+                                                        <th className="px-3.5 py-2.5">Base Salary</th>
+                                                        <th className="px-3.5 py-2.5">Present Days</th>
+                                                        <th className="px-3.5 py-2.5">Advances / Deductions</th>
+                                                        <th className="px-3.5 py-2.5">Net Payable</th>
+                                                        <th className="px-3.5 py-2.5 text-center">Status</th>
+                                                        <th className="px-3.5 py-2.5 text-right">Payment Info</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                                                    {overviewPayrollLoading ? (
+                                                        <tr>
+                                                            <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <Loader2 size={16} className="animate-spin text-indigo-600" />
+                                                                    <span className="text-xs font-semibold">Loading payslip history...</span>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ) : overviewPayrollRecords && overviewPayrollRecords.length > 0 ? (
+                                                        overviewPayrollRecords.map((payRecord) => (
+                                                            <tr key={payRecord.id || `${payRecord.year}-${payRecord.month}`} className="hover:bg-slate-50 transition-colors">
+                                                                <td className="px-3.5 py-2.5 font-bold text-slate-900">{payRecord.month} {payRecord.year}</td>
+                                                                <td className="px-3.5 py-2.5">₹{Number(payRecord.base_salary || payRecord.salary || 0).toLocaleString()}</td>
+                                                                <td className="px-3.5 py-2.5">{payRecord.present_days || payRecord.working_days || 0} Days</td>
+                                                                <td className="px-3.5 py-2.5 text-red-600">-₹{Number(payRecord.advance_deduction || payRecord.deduction || 0).toLocaleString()}</td>
+                                                                <td className="px-3.5 py-2.5 font-bold text-emerald-600">₹{Number(payRecord.net_salary || payRecord.net_payable || 0).toLocaleString()}</td>
+                                                                <td className="px-3.5 py-2.5 text-center">
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                                        (payRecord.payout_status || payRecord.status)?.toLowerCase() === 'paid'
+                                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                                            : (payRecord.payout_status || payRecord.status)?.toLowerCase() === 'hold'
+                                                                            ? 'bg-amber-100 text-amber-800'
+                                                                            : 'bg-slate-100 text-slate-700'
+                                                                    }`}>
+                                                                        {payRecord.payout_status || payRecord.status || 'Paid'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-3.5 py-2.5 text-right text-slate-500">{payRecord.payment_date || payRecord.created_at?.slice(0, 10) || '—'}</td>
+                                                            </tr>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                                                                <div className="flex flex-col items-center justify-center gap-2">
+                                                                    <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 text-lg">
+                                                                        💳
+                                                                    </div>
+                                                                    <p className="text-xs font-bold text-slate-700">No Payroll History Found</p>
+                                                                    <p className="text-[11px] text-slate-400 max-w-md">
+                                                                        No saved payout records found in <code className="text-indigo-600 font-mono font-semibold">hr_management_payroll</code> for <span className="font-semibold text-slate-600">{empName}</span>.
+                                                                    </p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };
