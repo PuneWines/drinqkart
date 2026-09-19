@@ -486,10 +486,28 @@ export default function EmployeeLearning() {
                 if (!subEmpId && subEmpName) subEmpId = nameToIdMap.get(subEmpName) || '';
                 if (!subEmpName && subEmpId) subEmpName = idToNameMap.get(subEmpId) || '';
 
-                const matchId = (resolvedUserEmpId && subEmpId && (resolvedUserEmpId === subEmpId || subEmpId.includes(resolvedUserEmpId) || resolvedUserEmpId.includes(subEmpId))) ||
-                                (currentEmpId && subEmpId && (currentEmpId === subEmpId || subEmpId.includes(currentEmpId) || currentEmpId.includes(subEmpId)));
+                const matchId = (resolvedUserEmpId && subEmpId && (
+                                  resolvedUserEmpId === subEmpId ||
+                                  subEmpId.includes(resolvedUserEmpId) ||
+                                  resolvedUserEmpId.includes(subEmpId) ||
+                                  resolvedUserEmpId.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
+                                  parseInt(resolvedUserEmpId, 10) === parseInt(subEmpId, 10)
+                                )) ||
+                                (currentEmpId && subEmpId && (
+                                  currentEmpId === subEmpId ||
+                                  subEmpId.includes(currentEmpId) ||
+                                  currentEmpId.includes(subEmpId) ||
+                                  currentEmpId.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
+                                  parseInt(currentEmpId, 10) === parseInt(subEmpId, 10)
+                                ));
 
-                const matchScopedId = subEmpId && scopedEmpIds.some(id => id === subEmpId || id.includes(subEmpId) || subEmpId.includes(id));
+                const matchScopedId = subEmpId && scopedEmpIds.some(id => 
+                  id === subEmpId ||
+                  id.includes(subEmpId) ||
+                  subEmpId.includes(id) ||
+                  id.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
+                  parseInt(id, 10) === parseInt(subEmpId, 10)
+                );
 
                 const matchName = (resolvedUserName && subEmpName && (resolvedUserName === subEmpName || resolvedUserName.includes(subEmpName) || subEmpName.includes(resolvedUserName))) ||
                                   (currentUserName && subEmpName && (currentUserName === subEmpName || currentUserName.includes(subEmpName) || subEmpName.includes(currentUserName)));
@@ -1280,8 +1298,14 @@ export default function EmployeeLearning() {
                           const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
                           const subEmpName = (s.employee || '').toString().trim().toLowerCase();
 
-                          const matchId = (empIdNorm && subEmpId && (empIdNorm === subEmpId || subEmpId.includes(empIdNorm) || empIdNorm.includes(subEmpId)));
-                          const matchName = (empNameNorm && subEmpName && (
+                          const matchId = Boolean(empIdNorm && subEmpId && (
+                            empIdNorm === subEmpId ||
+                            subEmpId.includes(empIdNorm) ||
+                            empIdNorm.includes(subEmpId) ||
+                            empIdNorm.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
+                            parseInt(empIdNorm, 10) === parseInt(subEmpId, 10)
+                          ));
+                          const matchName = Boolean(empNameNorm && subEmpName && (
                             empNameNorm === subEmpName ||
                             empNameNorm.includes(subEmpName) ||
                             subEmpName.includes(empNameNorm)
@@ -1373,15 +1397,14 @@ export default function EmployeeLearning() {
                   const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
                   const subEmpName = (s.employee || '').toString().trim().toLowerCase();
 
-                  if (modalEmpId && subEmpId) {
-                    return modalEmpId === subEmpId;
-                  }
-                  if (modalEmpNameNorm && subEmpName) {
-                    return modalEmpNameNorm === subEmpName ||
-                      modalEmpNameNorm.includes(subEmpName) ||
-                      subEmpName.includes(modalEmpNameNorm);
-                  }
-                  return false;
+                  const matchId = Boolean(modalEmpId && subEmpId && (modalEmpId === subEmpId || subEmpId.includes(modalEmpId) || modalEmpId.includes(subEmpId)));
+                  const matchName = Boolean(modalEmpNameNorm && subEmpName && (
+                    modalEmpNameNorm === subEmpName ||
+                    modalEmpNameNorm.includes(subEmpName) ||
+                    subEmpName.includes(modalEmpNameNorm)
+                  ));
+
+                  return matchId || matchName;
                 });
                 if (empSubs.length === 0) {
                   return (
@@ -1398,39 +1421,48 @@ export default function EmployeeLearning() {
                 return (
                   <div className="space-y-6">
                     {/* Summary Banner */}
-                    <div className="bg-slate-50 border border-slate-200 p-4 rounded flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Learning Progress Summary</div>
-                        <div className="text-lg font-serif font-bold text-slate-900 mt-0.5">
-                          {totalTicked} of {TASKS.length} Tasks Completed ({Math.round((totalTicked / TASKS.length) * 100)}%)
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-                        {/* Total Learning */}
-                        <div className="bg-[#1C120C] text-[#d4b457] border border-[#d4b457]/30 px-3 py-1.5 rounded text-center shadow-2xs">
-                          <span className="text-[#d4b457]/80 block text-[10px] uppercase font-bold tracking-wider">TOTAL LEARNING</span>
-                          <span className="font-bold text-sm font-mono">{TASKS.length}</span>
-                        </div>
+                    {(() => {
+                      const totalTasksCount = TASKS.length;
+                      const totalCheckedCount = totalTicked;
+                      const totalNotOkCount = TASKS.filter(t => !checkedSet.has(t.id) && t.status === 'Not OK').length;
+                      const totalMissingCount = TASKS.filter(t => !checkedSet.has(t.id) && (t.status === 'Missing' || !t.status)).length;
+                      const totalIssuesCount = totalNotOkCount;
 
-                        {/* Done Learning */}
-                        <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded text-center shadow-2xs">
-                          <span className="text-emerald-700 block text-[10px] uppercase font-bold tracking-wider">DONE LEARNING</span>
-                          <span className="text-emerald-950 font-bold text-sm font-mono">{totalTicked}</span>
-                        </div>
-
-                        {/* Level Breakdown */}
-                        {[1, 2, 3, 4].map(lvl => {
-                          const lvlTotal = TASKS.filter(t => t.level === lvl).length;
-                          const lvlDone = TASKS.filter(t => t.level === lvl && checkedSet.has(t.id)).length;
-                          return (
-                            <div key={lvl} className="bg-white border border-slate-200 px-3 py-1.5 rounded text-center shadow-2xs">
-                              <span className="text-slate-400 block text-[10px] uppercase font-bold">L{lvl}</span>
-                              <span className="text-slate-800 font-bold font-mono">{lvlDone}/{lvlTotal}</span>
+                      return (
+                        <div className="bg-slate-50 border border-slate-200 p-4 rounded flex flex-wrap items-center justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Learning Progress Summary</div>
+                            <div className="text-lg font-serif font-bold text-slate-900 mt-0.5">
+                              {totalCheckedCount} of {totalTasksCount} Tasks Completed ({Math.round((totalCheckedCount / totalTasksCount) * 100)}%)
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                          </div>
+
+                          {/* Quick Metrics Badges matching Shop Visit format */}
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-500/30 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                              ✅ {totalCheckedCount}/{totalTasksCount} Checked
+                            </span>
+                            {totalNotOkCount > 0 && (
+                              <span className="bg-red-50 text-red-600 border border-red-500/30 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                                ❌ {totalNotOkCount} Not OK
+                              </span>
+                            )}
+                            {totalMissingCount > 0 && (
+                              <span className="bg-amber-50 text-amber-700 border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                                ⚠️ {totalMissingCount} Missing
+                              </span>
+                            )}
+                            <span className={`text-xs font-extrabold px-3 py-1.5 rounded-lg border shadow-2xs ${
+                              totalIssuesCount === 0 
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                                : 'bg-red-100 text-red-800 border-red-300'
+                            }`}>
+                              {totalIssuesCount === 0 ? 'All Clear ✓' : `⚠️ ${totalIssuesCount} Issue(s)`}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Matrix Checklist Report */}
                     <div className="bg-white border border-slate-200 shadow-xs overflow-x-auto rounded">

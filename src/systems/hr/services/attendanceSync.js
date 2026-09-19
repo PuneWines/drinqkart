@@ -310,7 +310,10 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
     const empStoreMap = {};
     (dbEmployees || []).forEach(emp => {
         if (emp.employee_id) {
-            empStoreMap[emp.employee_id.toString().trim().toLowerCase()] = emp.joining_place || '';
+            const rawId = emp.employee_id.toString().trim().toLowerCase();
+            const normId = rawId.replace(/^0+/, '');
+            empStoreMap[rawId] = emp.joining_place || '';
+            if (normId) empStoreMap[normId] = emp.joining_place || '';
         }
     });
 
@@ -328,29 +331,34 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
     const totalDaysInMonth = getDaysInMonth(month, year);
 
     dbLogs.forEach(row => {
-        const id = row.employee_id;
-        if (!id) return;
+        const rawId = row.employee_id;
+        if (!rawId) return;
+
+        // Normalize employee ID key (e.g. '107' and '0107' map to same key '107')
+        const normIdKey = String(rawId).trim().toLowerCase().replace(/^0+/, '') || String(rawId).trim().toLowerCase();
 
         let serial = row.serial_number;
         if (!serial || serial === '' || serial === '-') {
-            const storeName = row.store_name || empStoreMap[id.toString().trim().toLowerCase()] || '';
+            const storeName = row.store_name || empStoreMap[normIdKey] || empStoreMap[rawId.toString().trim().toLowerCase()] || '';
             const matchedDevice = DEVICES.find(d => d.name.toUpperCase() === storeName.toUpperCase());
             if (matchedDevice) {
                 serial = matchedDevice.serial;
             }
         }
 
-        if (!serial || serial === '' || serial === '-') return;
-        if (serial !== device.serial) return;
+        if (device && device.serial && device.serial !== 'ALL') {
+            if (!serial || serial === '' || serial === '-') return;
+            if (serial !== device.serial) return;
+        }
 
-        if (!monthlyAgg[id]) {
-            monthlyAgg[id] = {
-                employee_code: id,
+        if (!monthlyAgg[normIdKey]) {
+            monthlyAgg[normIdKey] = {
+                employee_code: rawId,
                 employee_name: row.employee_name || 'Unknown',
                 designation: row.designation || '-',
                 store_name: row.store_name || '-',
                 device_id: row.device_id || '-',
-                serial_no: device.serial,
+                serial_no: device.serial || serial || 'ALL',
                 presentDays: 0,
                 absentDays: 0,
                 punchMissDays: 0,
@@ -360,7 +368,10 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
             };
         }
 
-        const agg = monthlyAgg[id];
+        const agg = monthlyAgg[normIdKey];
+        if (row.employee_name && row.employee_name !== 'Unknown' && agg.employee_name === 'Unknown') {
+            agg.employee_name = row.employee_name;
+        }
 
         // Accumulate statistics with 10 AM, 11 PM, and 5-punch rules
         const status = row.status;
@@ -459,12 +470,16 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
 
     // 5. Save batch to Supabase
     const monthName = monthNames[month - 1];
-    await supabase
+    let delQuery = supabase
         .from('hr_management_attendance_monthly')
         .delete()
         .eq('year', year)
-        .eq('month', monthName)
-        .eq('serial_no', device.serial);
+        .eq('month', monthName);
+
+    if (device && device.serial && device.serial !== 'ALL') {
+        delQuery = delQuery.eq('serial_no', device.serial);
+    }
+    await delQuery;
 
     if (finalData.length > 0) {
         const batchSize = 50;
@@ -500,12 +515,17 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
  */
 export const getMonthlyAttendanceFromSupabase = async (month, year, serialNo) => {
     const monthName = monthNames[month - 1];
-    const { data, error } = await supabase
+    let query = supabase
         .from('hr_management_attendance_monthly')
         .select('*')
         .eq('year', year)
-        .eq('month', monthName)
-        .eq('serial_no', serialNo);
+        .eq('month', monthName);
+
+    if (serialNo && serialNo !== 'ALL') {
+        query = query.eq('serial_no', serialNo);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
         console.error('Error reading from Supabase:', error);

@@ -154,7 +154,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'SYSTEM TRAINING PAGES ACCESS',
-        pages: ['Checklist Delegation', 'HR System', 'SNACKS INVENTRY', 'Petty Cash', 'Purchase System', 'Master Setting', 'WhatsApp Broadcast', 'Business overview']
+        pages: ['Checklist Delegation', 'HR System', 'SNACKS INVENTRY', 'Petty Cash', 'Purchase System', 'Master Setting', 'WhatsApp Broadcast', 'Business overview', 'Stock Balance']
       }
     ]
   }

@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   MessageSquare,
   BarChart3,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const systems = [
@@ -148,6 +149,15 @@ export const systems = [
           { label: 'Completed', to: '/systems/business-overview/help-center/completed' }
         ]
       }
+    ]
+  },
+  {
+    id: 'stock-balance',
+    label: 'Stock Balance',
+    base: '/systems/business-overview/stock-balance',
+    icon: FileSpreadsheet,
+    subtabs: [
+      { label: 'Stock Balance Sheet', to: '/systems/business-overview/stock-balance' }
     ]
   }
 ];
