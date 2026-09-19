@@ -134,7 +134,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'BUSINESS OVERVIEW MODULES',
-        pages: ['Feedback', 'Trader Invoices', 'Help Center']
+        pages: ['Feedback', 'Trader Invoices', 'Shop Visit', 'Help Center']
       }
     ]
   },
@@ -248,6 +248,7 @@ export default function MasterSetting() {
   const [userStatusInput, setUserStatusInput] = useState('active');
   const [usernameInput, setUsernameInput] = useState('');
   const [mobileInput, setMobileInput] = useState('');
+  const [roleInput, setRoleInput] = useState('Employee');
   const [passwordInput, setPasswordInput] = useState('');
   const [primaryShopInput, setPrimaryShopInput] = useState(''); // Primary assigned shop (single shop)
   const [shopNameInput, setShopNameInput] = useState(''); // Multi-shop permissions access list (comma-separated)
@@ -774,6 +775,16 @@ export default function MasterSetting() {
     setUserStatusInput((user.status || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active');
     setUsernameInput(user.user_name || user.username || '');
     setMobileInput(user.number || user.mobile || user.phone || '');
+
+    let normalizedRole = 'Employee';
+    const rLower = (user.role || '').toLowerCase().trim();
+    if (rLower === 'manager') normalizedRole = 'Manager';
+    else if (rLower === 'hod') normalizedRole = 'HOD';
+    else if (rLower === 'admin') normalizedRole = 'Admin';
+    else if (rLower === 'employee' || rLower === 'user') normalizedRole = 'Employee';
+    else if (user.role) normalizedRole = user.role;
+    setRoleInput(normalizedRole);
+
     setPasswordInput(user.password || '');
     setPrimaryShopInput(user.shop_name || '');
     setShopNameInput(user.user_access || user.shop_name || '');
@@ -960,6 +971,7 @@ export default function MasterSetting() {
         .from('users')
         .update({
           user_name: finalUserName,
+          role: roleInput,
           number: finalMobile,
           status: userStatusInput,
           password: passwordInput,
@@ -1025,16 +1037,10 @@ export default function MasterSetting() {
               .eq('id', editingUser.id);
           }
 
-          const userRoleLower = (editingUser.role || '').toLowerCase().trim();
-          let newDesignation = 'Employee';
-          if (userRoleLower === 'manager') newDesignation = 'Manager';
-          else if (userRoleLower === 'hod') newDesignation = 'HOD';
-          else if (userRoleLower === 'admin') newDesignation = 'Admin';
-
           const hrUpdatePayload = {
             status: hrStatusVal,
             joining_company_name: primaryShopVal,
-            designation: newDesignation
+            designation: roleInput
           };
           if (finalMobile) {
             hrUpdatePayload.mobile_no = finalMobile;
@@ -1650,14 +1656,18 @@ export default function MasterSetting() {
 
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/60 mb-1.5">
-                    Role
+                    Role <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={editingUser.role || 'user'}
-                    className="w-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold uppercase cursor-not-allowed"
-                  />
+                  <select
+                    value={roleInput}
+                    onChange={(e) => setRoleInput(e.target.value)}
+                    className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
+                  >
+                    <option value="Employee">Employee</option>
+                    <option value="Manager">Manager</option>
+                    <option value="HOD">HOD</option>
+                    <option value="Admin">Admin</option>
+                  </select>
                 </div>
 
                 <div>
@@ -2292,10 +2302,10 @@ export default function MasterSetting() {
                       onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                     >
-                      <option value="user">User / Operator</option>
-                      <option value="admin">Admin</option>
+                      <option value="Employee">Employee</option>
+                      <option value="Manager">Manager</option>
                       <option value="HOD">HOD</option>
-                      <option value="manager">Manager</option>
+                      <option value="Admin">Admin</option>
                     </select>
                   </div>
 

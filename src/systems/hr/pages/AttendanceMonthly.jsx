@@ -152,6 +152,9 @@ const AttendanceMonthly = () => {
         }
     };
 
+    const [inactiveEmpIds, setInactiveEmpIds] = useState(new Set());
+    const [inactiveEmpNames, setInactiveEmpNames] = useState(new Set());
+
     const fetchEmployeesTable = async () => {
         try {
             let allEmployeesData = [];
@@ -180,6 +183,27 @@ const AttendanceMonthly = () => {
             }
 
             setEmployeesData(allEmployeesData);
+
+            // Fetch users table to build inactive sets
+            const { data: usersData } = await supabase.from('users').select('*');
+            const inactIds = new Set();
+            const inactNames = new Set();
+            (usersData || []).forEach(u => {
+                const rawStatus = u.status ?? u.is_active ?? 'active';
+                const isInactive =
+                    rawStatus === false ||
+                    rawStatus === 0 ||
+                    ['inactive', 'resigned', 'terminated', 'left', 'disabled', 'false', '0'].includes(String(rawStatus).toLowerCase().trim());
+
+                if (isInactive) {
+                    const empId = (u.employee_id || '').toString().trim().toLowerCase();
+                    const uname = (u.user_name || u.username || u.emp_name || '').toString().trim().toLowerCase();
+                    if (empId) inactIds.add(empId);
+                    if (uname) inactNames.add(uname);
+                }
+            });
+            setInactiveEmpIds(inactIds);
+            setInactiveEmpNames(inactNames);
         } catch (error) {
             console.error('Error fetching employees table:', error);
         }
@@ -217,26 +241,47 @@ const AttendanceMonthly = () => {
     };
 
     const filteredData = (() => {
+        const isEmpInactive = (id, name) => {
+            const cleanId = (id || '').toString().trim().toLowerCase();
+            const cleanName = (name || '').toString().trim().toLowerCase();
+            if (cleanId && inactiveEmpIds.has(cleanId)) return true;
+            if (cleanName && inactiveEmpNames.has(cleanName)) return true;
+            return false;
+        };
+
         // 1. Get monthly records from attendanceData that match Search, Month, and Year filters
-        const baseList = attendanceData.filter(item => {
-            const matchesSearch =
-                (item.employeeName?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                (item.employeeCode?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase());
+        const baseList = attendanceData
+            .map(item => {
+                const empProfile = employeesData.find(e =>
+                    (e.employee_id && String(e.employee_id) === String(item.employeeCode)) ||
+                    (e.id && String(e.id) === String(item.employeeCode))
+                );
+                return {
+                    ...item,
+                    employeeName: empProfile ? (empProfile.user_name || empProfile.name_as_per_aadhar || item.employeeName) : item.employeeName
+                };
+            })
+            .filter(item => {
+                if (isEmpInactive(item.employeeCode, item.employeeName)) return false;
 
-            const matchesMonth = selectedMonth ? item.month === monthNames[selectedMonth - 1] : true;
-            const matchesYear = selectedYear ? item.year?.toString() === selectedYear.toString() : true;
+                const matchesSearch =
+                    (item.employeeName?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                    (item.employeeCode?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase());
 
-            const isMatched = isEmployeeInTable(item.employeeCode);
+                const matchesMonth = selectedMonth ? item.month === monthNames[selectedMonth - 1] : true;
+                const matchesYear = selectedYear ? item.year?.toString() === selectedYear.toString() : true;
 
-            let matchesFilterMode = true;
-            if (matchFilter === 'MATCHED') {
-                matchesFilterMode = isMatched;
-            } else if (matchFilter === 'UNMATCHED') {
-                matchesFilterMode = !isMatched;
-            }
+                const isMatched = isEmployeeInTable(item.employeeCode);
 
-            return matchesSearch && matchesMonth && matchesYear && matchesFilterMode;
-        });
+                let matchesFilterMode = true;
+                if (matchFilter === 'MATCHED') {
+                    matchesFilterMode = isMatched;
+                } else if (matchFilter === 'UNMATCHED') {
+                    matchesFilterMode = !isMatched;
+                }
+
+                return matchesSearch && matchesMonth && matchesYear && matchesFilterMode;
+            });
 
         // 2. If showing verified or all (matchFilter is not UNMATCHED), append remaining employees from employees table
         if (matchFilter !== 'UNMATCHED') {
@@ -246,25 +291,27 @@ const AttendanceMonthly = () => {
 
             const remaining = employeesData
                 .filter(emp => {
+                    const name = emp.user_name || emp.name_as_per_aadhar || '';
+                    const id = emp.employee_id || emp.id || '';
+
+                    if (isEmpInactive(id, name)) return false;
+
                     // Exclude if already in attendanceData (meaning they have monthly records)
-                    if (hasAttendance(emp.employee_id)) return false;
+                    if (hasAttendance(id)) return false;
 
                     // Apply search filter
-                    const name = emp.name_as_per_aadhar || '';
-                    const id = emp.employee_id || '';
-
                     const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        id.toLowerCase().includes(searchTerm.toLowerCase());
+                        id.toString().toLowerCase().includes(searchTerm.toLowerCase());
 
                     return matchesSearch;
                 })
                 .map(emp => ({
                     year: selectedYear,
                     month: monthNames[selectedMonth - 1],
-                    employeeCode: emp.employee_id,
-                    employeeName: emp.name_as_per_aadhar,
-                    designation: emp.designation,
-                    storeName: emp.joining_place,
+                    employeeCode: emp.employee_id || emp.id,
+                    employeeName: emp.user_name || emp.name_as_per_aadhar || 'Employee',
+                    designation: emp.designation || '-',
+                    storeName: emp.joining_place || '-',
                     deviceId: '-',
                     serialNo: '-',
                     presentDays: 0,
@@ -462,30 +509,20 @@ const AttendanceMonthly = () => {
                             ))}
                         </select>
                     </div>
-                    {/* Status Filter Pills */}
+                    {/* Status Filter Dropdown */}
                     <div>
                         <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Status</label>
-                        <div className="flex items-center gap-1 flex-wrap">
-                            {[
-                                { key: 'ALL', label: 'All', cls: 'bg-gray-100 text-gray-700 hover:bg-gray-200', active: 'bg-gray-700 text-white' },
-                                { key: 'HAS_PRESENT', label: '✓ Has Present', cls: 'bg-green-50 text-green-700 hover:bg-green-100', active: 'bg-green-600 text-white' },
-                                { key: 'HAS_ABSENT', label: '✗ Has Absent', cls: 'bg-red-50 text-red-700 hover:bg-red-100', active: 'bg-red-600 text-white' },
-                                { key: 'HAS_LATE', label: '⏱ Has Late', cls: 'bg-orange-50 text-orange-700 hover:bg-orange-100', active: 'bg-orange-500 text-white' },
-                                { key: 'ALL_ABSENT', label: '⛔ Fully Absent', cls: 'bg-rose-50 text-rose-700 hover:bg-rose-100', active: 'bg-rose-600 text-white' },
-                            ].map(({ key, label, cls, active }) => (
-                                <button
-                                    key={key}
-                                    onClick={() => setStatusFilter(key)}
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all border ${
-                                        statusFilter === key
-                                            ? `${active} border-transparent shadow-sm`
-                                            : `${cls} border-transparent`
-                                    }`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="w-full px-2 py-1.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs bg-white cursor-pointer font-medium"
+                        >
+                            <option value="ALL">All</option>
+                            <option value="HAS_PRESENT">✓ Has Present</option>
+                            <option value="HAS_ABSENT">✗ Has Absent</option>
+                            <option value="HAS_LATE">⏱ Has Late</option>
+                            <option value="ALL_ABSENT">⛔ Fully Absent</option>
+                        </select>
                     </div>
                 </div>
             </div>

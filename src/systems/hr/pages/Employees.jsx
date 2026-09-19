@@ -784,11 +784,12 @@ export default function EmployeeManagement() {
         }
 
         if (targetUser) {
-          const desigLower = (editFormData.designation || editingEmployee?.designation || '').toLowerCase().trim();
-          let targetRole = 'user';
-          if (desigLower === 'manager') targetRole = 'manager';
-          else if (desigLower === 'hod') targetRole = 'hod';
-          else if (desigLower === 'admin') targetRole = 'admin';
+          const desigVal = (editFormData.designation || editingEmployee?.designation || 'Employee').toString().trim();
+          let targetRole = 'Employee';
+          if (desigVal.toLowerCase() === 'manager') targetRole = 'Manager';
+          else if (desigVal.toLowerCase() === 'hod') targetRole = 'HOD';
+          else if (desigVal.toLowerCase() === 'admin') targetRole = 'Admin';
+          else if (desigVal) targetRole = desigVal;
 
           const userPayload = {
             shop_name: newShopName,
@@ -1834,6 +1835,7 @@ export default function EmployeeManagement() {
                       <option value="Employee">Employee</option>
                       <option value="Manager">Manager</option>
                       <option value="HOD">HOD</option>
+                      <option value="Admin">Admin</option>
                     </select>
                   </div>
 
@@ -2203,6 +2205,7 @@ export default function EmployeeManagement() {
                           <option value="Employee">Employee</option>
                           <option value="Manager">Manager</option>
                           <option value="HOD">HOD</option>
+                          <option value="Admin">Admin</option>
                         </select>
                       </div>
 
