@@ -411,7 +411,10 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Fetch employees from hr_management_employees table
+  const [inactiveEmpIds, setInactiveEmpIds] = useState(new Set());
+  const [inactiveEmpNames, setInactiveEmpNames] = useState(new Set());
+
+  // Fetch employees from hr_management_employees table & active status from users table
   const fetchEmployeesTable = async () => {
     try {
       let allEmployeesData = [];
@@ -440,6 +443,28 @@ const AttendanceDaily = () => {
       }
 
       setEmployeesData(allEmployeesData);
+
+      // Fetch users table to build inactive sets
+      const { data: usersData } = await supabase.from('users').select('*');
+      const inactIds = new Set();
+      const inactNames = new Set();
+      (usersData || []).forEach(u => {
+        const rawStatus = u.status ?? u.is_active ?? 'active';
+        const isInactive =
+          rawStatus === false ||
+          rawStatus === 0 ||
+          ['inactive', 'resigned', 'terminated', 'left', 'disabled', 'false', '0'].includes(String(rawStatus).toLowerCase().trim());
+
+        if (isInactive) {
+          const empId = (u.employee_id || '').toString().trim().toLowerCase();
+          const uname = (u.user_name || u.username || u.emp_name || '').toString().trim().toLowerCase();
+          if (empId) inactIds.add(empId);
+          if (uname) inactNames.add(uname);
+        }
+      });
+      setInactiveEmpIds(inactIds);
+      setInactiveEmpNames(inactNames);
+
       return allEmployeesData;
     } catch (error) {
       console.error('Error fetching hr_management_employees table:', error);
@@ -2313,6 +2338,15 @@ const AttendanceDaily = () => {
 
   // Filter employees
   const filteredEmployees = (() => {
+    // Helper to check if employee/user is inactive
+    const isEmpInactive = (id, name) => {
+      const cleanId = (id || '').toString().trim().toLowerCase();
+      const cleanName = (name || '').toString().trim().toLowerCase();
+      if (cleanId && inactiveEmpIds.has(cleanId)) return true;
+      if (cleanName && inactiveEmpNames.has(cleanName)) return true;
+      return false;
+    };
+
     // 1. Get employees with logs (matched or unmatched)
     const baseList = employees
       .map(emp => {
@@ -2326,6 +2360,9 @@ const AttendanceDaily = () => {
         };
       })
       .filter(emp => {
+        // Exclude inactive employees
+        if (isEmpInactive(emp.id, emp.name)) return false;
+
         const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           emp.id?.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -2371,6 +2408,11 @@ const AttendanceDaily = () => {
       const remaining = employeesData
         .filter(emp => {
           const empId = emp.employee_id || emp.id;
+          const name = emp.user_name || emp.name_as_per_aadhar || '';
+
+          // Exclude inactive employees
+          if (isEmpInactive(empId, name)) return false;
+
           // Exclude if already in employees list (meaning they have logs)
           if (hasAttendance(empId)) return false;
 
@@ -2378,7 +2420,6 @@ const AttendanceDaily = () => {
           if (statusFilter !== 'ALL' && statusFilter !== 'Absent') return false;
 
           // Apply search term and store filters
-          const name = emp.user_name || emp.name_as_per_aadhar || '';
           const id = empId ? String(empId) : '';
           const store = emp.shop_name || emp.joining_place || '';
 

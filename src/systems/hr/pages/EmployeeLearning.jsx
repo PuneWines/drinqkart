@@ -360,7 +360,7 @@ export default function EmployeeLearning() {
       await syncTasksWithSupabase();
 
       // 2. Load submissions from Supabase hr_learning_submissions
-      await loadSubmissionsFromSupabase();
+      await loadSubmissionsFromSupabase(combinedList, scopedList);
     } catch (err) {
       console.error('Error loading initial data:', err);
     } finally {
@@ -409,7 +409,7 @@ export default function EmployeeLearning() {
     }
   };
 
-  const loadSubmissionsFromSupabase = async () => {
+  const loadSubmissionsFromSupabase = async (combinedListParam = [], scopedListParam = []) => {
     try {
       const { data: dbSubs, error } = await supabase
         .from('hr_learning_submissions')
@@ -456,40 +456,54 @@ export default function EmployeeLearning() {
                 });
               }
             } else {
+              const activeEmpList = scopedListParam.length > 0 ? scopedListParam : (employees.length > 0 ? employees : combinedListParam);
+
+              // Build a map of employee_id <-> name for robust cross-matching
+              const idToNameMap = new Map();
+              const nameToIdMap = new Map();
+
+              activeEmpList.forEach(emp => {
+                const id = (emp.employee_id || emp.id || '').toString().trim().toLowerCase();
+                const name = (emp.name_as_per_aadhar || emp.name || '').toString().trim().toLowerCase();
+                if (id && name) {
+                  idToNameMap.set(id, name);
+                  nameToIdMap.set(name, id);
+                }
+              });
+
+              // Also resolve logged in user's derived ID & Name from employee list
+              let resolvedUserEmpId = currentEmpId || nameToIdMap.get(currentUserName) || '';
+              let resolvedUserName = currentUserName || idToNameMap.get(currentEmpId) || '';
+
+              const scopedEmpNames = scopedList.map(e => (e.name_as_per_aadhar || '').toString().trim().toLowerCase()).filter(Boolean);
+              const scopedEmpIds = scopedList.map(e => (e.employee_id || e.id || '').toString().trim().toLowerCase()).filter(Boolean);
+
               mappedSubs = mappedSubs.filter(s => {
-                const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
-                const subEmpName = (s.employee || '').toString().trim().toLowerCase();
+                let subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
+                let subEmpName = (s.employee || '').toString().trim().toLowerCase();
 
-                const matchId = currentEmpId && subEmpId && (currentEmpId === subEmpId || subEmpId.includes(currentEmpId));
-                const matchName = currentUserName && subEmpName && (
-                  currentUserName === subEmpName ||
-                  currentUserName.includes(subEmpName) ||
-                  subEmpName.includes(currentUserName)
-                );
+                // Cross resolve missing ID or missing Name for the submission
+                if (!subEmpId && subEmpName) subEmpId = nameToIdMap.get(subEmpName) || '';
+                if (!subEmpName && subEmpId) subEmpName = idToNameMap.get(subEmpId) || '';
 
-                return matchId || matchName;
+                const matchId = (resolvedUserEmpId && subEmpId && (resolvedUserEmpId === subEmpId || subEmpId.includes(resolvedUserEmpId) || resolvedUserEmpId.includes(subEmpId))) ||
+                                (currentEmpId && subEmpId && (currentEmpId === subEmpId || subEmpId.includes(currentEmpId) || currentEmpId.includes(subEmpId)));
+
+                const matchScopedId = subEmpId && scopedEmpIds.some(id => id === subEmpId || id.includes(subEmpId) || subEmpId.includes(id));
+
+                const matchName = (resolvedUserName && subEmpName && (resolvedUserName === subEmpName || resolvedUserName.includes(subEmpName) || subEmpName.includes(resolvedUserName))) ||
+                                  (currentUserName && subEmpName && (currentUserName === subEmpName || currentUserName.includes(subEmpName) || subEmpName.includes(currentUserName)));
+
+                const matchScopedName = subEmpName && scopedEmpNames.some(name => name === subEmpName || name.includes(subEmpName) || subEmpName.includes(name));
+
+                return matchId || matchScopedId || matchName || matchScopedName;
               });
             }
           }
         }
 
-        if (mappedSubs.length > 0) {
-          setSubmissions(mappedSubs);
-          localStorage.setItem('drinqkart_employee_learning_submissions', JSON.stringify(mappedSubs));
-        } else {
-          // If query returned 0 items (e.g. scoping issue or cold cache), check if local storage has existing records
-          const stored = localStorage.getItem('drinqkart_employee_learning_submissions');
-          if (stored) {
-            try {
-              const localSubs = JSON.parse(stored);
-              setSubmissions(localSubs.length > 0 ? localSubs : dbSubs);
-            } catch (e) {
-              setSubmissions(dbSubs);
-            }
-          } else {
-            setSubmissions(dbSubs);
-          }
-        }
+        setSubmissions(mappedSubs);
+        localStorage.setItem('drinqkart_employee_learning_submissions', JSON.stringify(mappedSubs));
       } else {
         loadSubmissionsFromLocalStorage();
       }
@@ -1261,17 +1275,17 @@ export default function EmployeeLearning() {
                         const empIdNorm = empId.toLowerCase();
                         const empNameNorm = (empName || '').toString().trim().toLowerCase();
 
-                        // Match submissions by employee_id or name
+                        // Match submissions by employee_id or name with bidirectional cross-resolution
                         const empSubs = submissions.filter((s) => {
                           const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
                           const subEmpName = (s.employee || '').toString().trim().toLowerCase();
 
-                          const matchId = empIdNorm && subEmpId && (empIdNorm === subEmpId || subEmpId.includes(empIdNorm));
-                          const matchName = empNameNorm && subEmpName && (
+                          const matchId = (empIdNorm && subEmpId && (empIdNorm === subEmpId || subEmpId.includes(empIdNorm) || empIdNorm.includes(subEmpId)));
+                          const matchName = (empNameNorm && subEmpName && (
                             empNameNorm === subEmpName ||
                             empNameNorm.includes(subEmpName) ||
                             subEmpName.includes(empNameNorm)
-                          );
+                          ));
 
                           return matchId || matchName;
                         });

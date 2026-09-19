@@ -28,7 +28,6 @@ export const systems = [
       { label: 'Working Day Calendar', to: '/dashboard/working-day-calendar' },
       { label: 'MIS Report', to: '/dashboard/mis-report' },
       { label: 'Admin Approval', to: '/dashboard/admin-approval' },
-
       { label: 'Settings', to: '/dashboard/setting' }
     ]
   },
@@ -209,6 +208,10 @@ export const getVisibleSystems = (user) => {
   console.log('[AccessControl Debug] masterAccessList:', masterAccessList);
 
   const isSubtabAllowed = (systemId, sub) => {
+    if (userRole === 'admin' || isMasterAdmin) {
+      if (systemId !== 'checklist') return true;
+    }
+
     if (systemId === 'whatsapp') {
       return masterAccessList.some(item => typeof item === 'string' && item.toLowerCase().trim() === 'whatsapp');
     }
@@ -224,8 +227,8 @@ export const getVisibleSystems = (user) => {
       }
     }
 
-    // For non-checklist systems, masteradmin maintains full access by default
-    if (systemId !== 'checklist' && isMasterAdmin) return true;
+    // For non-checklist systems, masteradmin/admin maintains full access by default
+    if (systemId !== 'checklist' && (isMasterAdmin || userRole === 'admin')) return true;
 
     if (masterAccessList.length > 0) {
       const labelsToCheck = [sub.label];

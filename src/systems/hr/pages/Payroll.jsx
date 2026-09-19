@@ -613,7 +613,6 @@ const Payroll = () => {
                 const empId = emp.employee_id?.toString().trim() || '-';
                 const name = emp.name_as_per_aadhar || '-';
                 const doj = emp.date_of_joining ? formatDate(emp.date_of_joining) : '-';
-                const salary = Number(emp.salary) || 0;
 
                 const empIdLower = empId.toLowerCase();
                 const empNameLower = name.toLowerCase();
@@ -621,10 +620,18 @@ const Payroll = () => {
 
                 const att = attendanceMap[matchedKey] || attendanceMap[empIdLower] || attendanceMap[empNameLower] || { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
                 const originalPresent = att.present;
-                const extraDays = (att.hasFriday && att.hasSaturday && att.hasSunday) ? 2 : 0;
 
-                // Load saved overrides
+                // Load saved overrides from hr_management_payroll if present
                 const savedPayroll = payrollMap[matchedKey] || payrollMap[empIdLower] || payrollMap[empNameLower];
+
+                const salary = (savedPayroll && savedPayroll.salary !== null && savedPayroll.salary !== undefined)
+                    ? Number(savedPayroll.salary)
+                    : (Number(emp.salary) || 0);
+
+                const extraDays = (savedPayroll && savedPayroll.extra_days !== null && savedPayroll.extra_days !== undefined)
+                    ? Number(savedPayroll.extra_days)
+                    : ((att.hasFriday && att.hasSaturday && att.hasSunday) ? 2 : 0);
+
                 const breakageDeduction = savedPayroll ? (Number(savedPayroll.breakage_deduction) || 0) : 0;
                 const medicalDeduction = savedPayroll ? (Number(savedPayroll.medical_deduction) || 0) : 0;
                 const rtoDeduction = savedPayroll ? (Number(savedPayroll.rto_deduction) || 0) : 0;
@@ -636,14 +643,18 @@ const Payroll = () => {
                 const present = originalPresent + leaveDays;
 
                 const adv = advanceMap[matchedKey] || advanceMap[empIdLower] || advanceMap[empNameLower] || { advanceDeduction: 0, fixedAdvanceAmount: 0, fixedAdvanceDeduction: 0 };
-                const advDeduction = adv.advanceDeduction;
-                const fixedAdvBalance = adv.fixedAdvanceAmount || (savedPayroll ? Number(savedPayroll.fixed_advance) || 0 : 0);
+                const advDeduction = (savedPayroll && savedPayroll.advance_deduction !== null && savedPayroll.advance_deduction !== undefined)
+                    ? Number(savedPayroll.advance_deduction)
+                    : adv.advanceDeduction;
+
+                const fixedAdvBalance = adv.fixedAdvanceAmount || (savedPayroll ? Number(savedPayroll.fixed_advance) || Number(savedPayroll.fixed_advance_amount) || 0 : 0);
 
                 const dailyRate = totalDays > 0 ? salary / totalDays : 0;
-                const calculatedProrated = dailyRate * (present + extraDays);
+                const calculatedProrated = Math.round(dailyRate * (present + extraDays));
                 const proratedSalary = (savedPayroll && savedPayroll.prorated_salary !== null && savedPayroll.prorated_salary !== undefined)
                     ? Number(savedPayroll.prorated_salary)
                     : calculatedProrated;
+
                 const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction + wayOff));
 
                 return [
@@ -688,16 +699,26 @@ const Payroll = () => {
                 const wayOff = savedPayroll ? (Number(savedPayroll.way_off) || Number(savedPayroll.way_off_deduction) || 0) : 0;
 
                 const present = emp.present + (payableLeavesMap[empIdLower] || 0);
-                const extraDays = (emp.hasFriday && emp.hasSaturday && emp.hasSunday) ? 2 : 0;
-                const salary = 0;
+                const extraDays = (savedPayroll && savedPayroll.extra_days !== null && savedPayroll.extra_days !== undefined)
+                    ? Number(savedPayroll.extra_days)
+                    : ((emp.hasFriday && emp.hasSaturday && emp.hasSunday) ? 2 : 0);
+
+                const salary = (savedPayroll && savedPayroll.salary !== null && savedPayroll.salary !== undefined)
+                    ? Number(savedPayroll.salary)
+                    : 0;
 
                 const adv = advanceMap[empIdLower] || { advanceDeduction: 0, fixedAdvanceAmount: 0, fixedAdvanceDeduction: 0 };
-                const advDeduction = adv.advanceDeduction;
-                const fixedAdvBalance = adv.fixedAdvanceAmount || (savedPayroll ? Number(savedPayroll.fixed_advance) || 0 : 0);
+                const advDeduction = (savedPayroll && savedPayroll.advance_deduction !== null && savedPayroll.advance_deduction !== undefined)
+                    ? Number(savedPayroll.advance_deduction)
+                    : adv.advanceDeduction;
 
+                const fixedAdvBalance = adv.fixedAdvanceAmount || (savedPayroll ? Number(savedPayroll.fixed_advance) || Number(savedPayroll.fixed_advance_amount) || 0 : 0);
+
+                const dailyRate = totalDays > 0 ? salary / totalDays : 0;
+                const calculatedProrated = Math.round(dailyRate * (present + extraDays));
                 const savedProrated = savedPayroll ? Number(savedPayroll.prorated_salary) : null;
-                const proratedSalary = (savedProrated !== null && savedProrated !== undefined && savedPayroll) ? savedProrated : 0;
-                const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction + wayOff));
+                const proratedSalary = (savedProrated !== null && savedProrated !== undefined && savedPayroll) ? savedProrated : calculatedProrated;
+                const unmatchedNetSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction + wayOff));
 
                 return [
                     emp.id,                    // 0: Emp ID
@@ -705,17 +726,17 @@ const Payroll = () => {
                     salary,                    // 2: Basic salary
                     totalDays,                 // 3: Total days
                     present,                   // 4: Attendance
-                    extraDays,                 // 5: Extra 2 days
-                    advDeduction,              // 6: Monthly Advance
-                    fixedAdvBalance,           // 7: Fixed Advance (NON-EDITABLE)
-                    breakageDeduction,         // 8: Brakeges
-                    medicalDeduction,          // 9: Medical
-                    rtoDeduction,              // 10: RTO
-                    proratedSalary,            // 11: Basic salary (Prorated)
+                    extraDays,                 // 5: Extra Days
+                    proratedSalary,            // 6: Basic salary (Prorated)
+                    advDeduction,              // 7: Monthly Advance
+                    fixedAdvBalance,           // 8: Fixed Advance (NON-EDITABLE)
+                    breakageDeduction,         // 9: Brakeges
+                    medicalDeduction,          // 10: Medical
+                    rtoDeduction,              // 11: RTO
                     seasonalBonus,             // 12: Seasonal Bonus
                     referralBonus,             // 13: Refferal Bonus
                     wayOff,                    // 14: Way Off
-                    netSalary,                 // 15: Final Salary
+                    unmatchedNetSalary,        // 15: Final Salary
                     savedPayroll ? !!savedPayroll.is_verified : false, // 16: isVerified
                     '-',                       // 17: Date of joining
                     emp.present,               // 18: originalPresent
@@ -762,6 +783,67 @@ const Payroll = () => {
             console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Handler for manual edits to inputs in salary or hold table
+    const handleManualInputChange = (empId, colIndex, val) => {
+        const numVal = val === '' ? '' : Math.max(0, Number(val) || 0);
+        const updateRows = (prevRows) => {
+            return prevRows.map(row => {
+                if (row[0]?.toString() !== empId?.toString()) return row;
+
+                const newRow = [...row];
+                newRow[colIndex] = numVal;
+
+                // Index mapping for calculations:
+                // 2: Salary (Base)
+                // 3: Total Days
+                // 4: Attendance (Present)
+                // 5: Extra Days
+                // 6: Prorated Salary
+                // 7: Monthly Advance
+                // 8: Fixed Advance
+                // 9: Brakeges
+                // 10: Medical
+                // 11: RTO
+                // 12: Seasonal Bonus
+                // 13: Referral Bonus
+                // 14: Way Off
+                // 15: Final Salary
+
+                const baseSalary = Number(newRow[2]) || 0;
+                const totalDays = Number(newRow[3]) || 30;
+                const attendance = Number(newRow[4]) || 0;
+                const extraDays = Number(newRow[5]) || 0;
+
+                // If Salary (colIndex 2), Extra Days (colIndex 5), Total Days (colIndex 3), or Attendance (colIndex 4) was edited, recompute Prorated Salary (colIndex 6)
+                if (colIndex === 2 || colIndex === 5 || colIndex === 3 || colIndex === 4) {
+                    const dailyRate = totalDays > 0 ? baseSalary / totalDays : 0;
+                    newRow[6] = Math.round(dailyRate * (attendance + extraDays));
+                }
+
+                const prorated = Number(newRow[6]) || 0;
+                const monthlyAdv = Number(newRow[7]) || 0;
+                const breakages = Number(newRow[9]) || 0;
+                const medical = Number(newRow[10]) || 0;
+                const rto = Number(newRow[11]) || 0;
+                const seasonal = Number(newRow[12]) || 0;
+                const referral = Number(newRow[13]) || 0;
+                const wayOff = Number(newRow[14]) || 0;
+
+                // Recalculate Final Salary (colIndex 15) using exact existing calculation formula
+                const finalSalary = Math.max(0, Math.round(prorated - breakages - medical - rto + seasonal + referral - monthlyAdv + wayOff));
+                newRow[15] = finalSalary;
+
+                return newRow;
+            });
+        };
+
+        if (activeTab === 'hold') {
+            setHoldData(prev => ({ ...prev, rows: updateRows(prev.rows) }));
+        } else {
+            setSalaryData(prev => ({ ...prev, rows: updateRows(prev.rows) }));
         }
     };
 
@@ -889,14 +971,19 @@ const Payroll = () => {
 
     // 1. Update Employee Records: Only updates values in hr_management_employees & draft payroll without sending to payment history or generating payroll
     const handleSavePayrollToDB = async (singleRow = null) => {
-        const rowsToProcess = singleRow
-            ? [singleRow]
-            : (salaryData.rows.filter(row => selectedEmpIds.has(row[0]?.toString())).length > 0
-                ? salaryData.rows.filter(row => selectedEmpIds.has(row[0]?.toString()))
-                : salaryData.rows);
+        const sourceData = activeTab === 'hold' ? holdData : salaryData;
+        let rowsToProcess = [];
+        if (singleRow) {
+            rowsToProcess = [singleRow];
+        } else if (selectedEmpIds.size > 0) {
+            rowsToProcess = sourceData.rows.filter(row => selectedEmpIds.has(row[0]?.toString()));
+        } else {
+            toast.error("Please select at least one employee row to update records.");
+            return;
+        }
 
         if (!rowsToProcess || rowsToProcess.length === 0) {
-            toast.error("No payroll records to save.");
+            toast.error("No payroll records selected to save.");
             return;
         }
 
@@ -925,12 +1012,12 @@ const Payroll = () => {
                     total_present: Number(row[4]) || 0,
                     extra_days: Number(row[5]) || 0,
                     salary: Number(row[2]) || 0,
-                    advance_deduction: Number(row[6]) || 0,
-                    fixed_advance_amount: Number(row[7]) || 0,
-                    breakage_deduction: Number(row[8]) || 0,
-                    medical_deduction: Number(row[9]) || 0,
-                    rto_deduction: Number(row[10]) || 0,
-                    prorated_salary: Number(row[11]) || 0,
+                    prorated_salary: Number(row[6]) || 0,
+                    advance_deduction: Number(row[7]) || 0,
+                    fixed_advance_amount: Number(row[8]) || 0,
+                    breakage_deduction: Number(row[9]) || 0,
+                    medical_deduction: Number(row[10]) || 0,
+                    rto_deduction: Number(row[11]) || 0,
                     seasonal_bonus: Number(row[12]) || 0,
                     referral_bonus: Number(row[13]) || 0,
                     way_off: Number(row[14]) || 0,
@@ -997,12 +1084,12 @@ const Payroll = () => {
                 total_present: Number(row[4]) || 0,
                 extra_days: Number(row[5]) || 0,
                 salary: Number(row[2]) || 0,
-                advance_deduction: Number(row[6]) || 0,
-                fixed_advance_amount: Number(row[7]) || 0,
-                breakage_deduction: Number(row[8]) || 0,
-                medical_deduction: Number(row[9]) || 0,
-                rto_deduction: Number(row[10]) || 0,
-                prorated_salary: Number(row[11]) || 0,
+                prorated_salary: Number(row[6]) || 0,
+                advance_deduction: Number(row[7]) || 0,
+                fixed_advance_amount: Number(row[8]) || 0,
+                breakage_deduction: Number(row[9]) || 0,
+                medical_deduction: Number(row[10]) || 0,
+                rto_deduction: Number(row[11]) || 0,
                 seasonal_bonus: Number(row[12]) || 0,
                 referral_bonus: Number(row[13]) || 0,
                 way_off: Number(row[14]) || 0,
@@ -1094,13 +1181,13 @@ const Payroll = () => {
                 total_present: Number(row[4]) || 0,
                 extra_days: Number(row[5]) || 0,
                 salary: Number(row[2]) || 0,
-                advance_deduction: Number(row[6]) || 0,
-                fixed_advance: Number(row[7]) || 0,
-                fixed_advance_amount: Number(row[7]) || 0,
-                breakage_deduction: Number(row[8]) || 0,
-                medical_deduction: Number(row[9]) || 0,
-                rto_deduction: Number(row[10]) || 0,
-                prorated_salary: Number(row[11]) || 0,
+                prorated_salary: Number(row[6]) || 0,
+                advance_deduction: Number(row[7]) || 0,
+                fixed_advance: Number(row[8]) || 0,
+                fixed_advance_amount: Number(row[8]) || 0,
+                breakage_deduction: Number(row[9]) || 0,
+                medical_deduction: Number(row[10]) || 0,
+                rto_deduction: Number(row[11]) || 0,
                 seasonal_bonus: Number(row[12]) || 0,
                 referral_bonus: Number(row[13]) || 0,
                 way_off: Number(row[14]) || 0,
@@ -1283,7 +1370,7 @@ const Payroll = () => {
     const totalEmployeesCount = filteredRowsForSummary.length;
     const totalBaseSalarySum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(row[2]) || 0), 0);
     const totalNetPayableSum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(row[15]) || 0), 0);
-    const totalDeductionsSum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(row[6]) || 0) + (Number(row[8]) || 0) + (Number(row[9]) || 0) + (Number(row[10]) || 0) + (Number(row[14]) || 0), 0);
+    const totalDeductionsSum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(row[7]) || 0), 0);
 
     // Pagination variables
     const pageSize = 15;
@@ -1341,52 +1428,6 @@ const Payroll = () => {
         );
     };
 
-    const handleManualInputChange = (empId, colIndex, val) => {
-        const numVal = val === '' ? 0 : Number(val);
-        const empIdLower = empId?.toString().toLowerCase();
-
-        const updateState = prev => {
-            const updatedRows = prev.rows.map(r => {
-                if (r[0]?.toString().toLowerCase() === empIdLower) {
-                    const newRow = [...r];
-                    newRow[colIndex] = numVal;
-
-                    if (colIndex === 2 || colIndex === 5) {
-                        // Recalculate Prorated Salary when Base Salary or Extra Days changes
-                        const salary = colIndex === 2 ? numVal : (Number(newRow[2]) || 0);
-                        const totalDays = Number(newRow[3]) || 30;
-                        const present = Number(newRow[4]) || 0;
-                        const extraDays = colIndex === 5 ? numVal : (Number(newRow[5]) || 0);
-                        const dailyRate = totalDays > 0 ? salary / totalDays : 0;
-                        newRow[11] = Math.round(dailyRate * (present + extraDays));
-                    }
-
-                    // Recalculate Final Salary
-                    // Index 11: prorated salary, Index 12: seasonal bonus, Index 13: referral bonus
-                    // Index 6: monthly advance, Index 8: breakage, Index 9: medical, Index 10: RTO, Index 14: way off
-                    const prorated = Number(newRow[11]) || 0;
-                    const seasonal = Number(newRow[12]) || 0;
-                    const referral = Number(newRow[13]) || 0;
-                    const advance = Number(newRow[6]) || 0;
-                    const breakage = Number(newRow[8]) || 0;
-                    const medical = Number(newRow[9]) || 0;
-                    const rto = Number(newRow[10]) || 0;
-                    const wayOff = Number(newRow[14]) || 0;
-
-                    newRow[15] = Math.round(Math.max(0, prorated - breakage - medical - rto + seasonal + referral - advance + wayOff));
-                    return newRow;
-                }
-                return r;
-            });
-            return { ...prev, rows: updatedRows };
-        };
-
-        if (activeTab === 'hold') {
-            setHoldData(updateState);
-        } else {
-            setSalaryData(updateState);
-        }
-    };
 
     return (
         <div className="p-8 pt-4 w-full max-w-full overflow-x-hidden">
@@ -1884,17 +1925,17 @@ const Payroll = () => {
                                                                         <Clock size={13} />
                                                                     </button>
                                                                 </div>
-                                                            );
-                                                        } else if (headerName === 'salary' || headerName === 'basic salary') {
+                                                            </div>
+                                                        );
+                                                    } else if (headerName === 'salary' || headerName === 'basic salary') {
                                                         cellClass = "px-4 py-2.5 text-center";
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 2, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'extra days' || headerName === 'extra 2 days') {
@@ -1902,11 +1943,21 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '0' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 5, e.target.value)}
-                                                                className="w-16 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-center font-bold text-xs bg-white text-indigo-600 disabled:opacity-50 disabled:bg-gray-50"
+                                                                className="w-16 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-center font-bold text-xs bg-white text-indigo-600"
+                                                            />
+                                                        );
+                                                    } else if (headerName === 'basic salary (prorated)') {
+                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        content = (
+                                                            <input
+                                                                type="number"
+                                                                value={cell === 0 ? '' : cell}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleManualInputChange(row[0], 6, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'monthly advance') {
@@ -1914,11 +1965,10 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 6, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                onChange={(e) => handleManualInputChange(row[0], 7, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'fixed advance') {
@@ -1929,11 +1979,10 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 8, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                onChange={(e) => handleManualInputChange(row[0], 9, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'medical') {
@@ -1941,11 +1990,10 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 9, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                onChange={(e) => handleManualInputChange(row[0], 10, e.target.value)}
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'rto') {
@@ -1953,23 +2001,10 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 10, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
-                                                            />
-                                                        );
-                                                    } else if (headerName === 'basic salary (prorated)') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 11, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'seasonal bonus') {
@@ -1977,11 +2012,10 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 12, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'refferal bonus') {
@@ -1989,11 +2023,10 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 13, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'way off') {
@@ -2001,11 +2034,10 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
-                                                                disabled={!selectedEmpIds.has(row[0]?.toString())}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 14, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold disabled:opacity-50 disabled:bg-gray-50"
+                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
                                                             />
                                                         );
                                                     } else if (headerName === 'action') {
@@ -2365,6 +2397,12 @@ UNIQUE (employee_id, year, month);`}
                                             <span className="text-slate-600 font-medium">Earned Basic ({selectedPayslip.present} present days)</span>
                                             <span className="font-bold text-slate-900">₹{(Number(selectedPayslip.prorated) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </div>
+                                        {Number(selectedPayslip.wayOff) > 0 && (
+                                            <div className="flex justify-between items-center py-1 text-xs">
+                                                <span className="text-slate-600 font-medium">Way Off</span>
+                                                <span className="font-bold text-slate-900">₹{(Number(selectedPayslip.wayOff) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                        )}
                                         {(Number(selectedPayslip.seasonal) > 0 || Number(selectedPayslip.referral) > 0) && (
                                             <div className="flex justify-between items-center py-1 text-xs">
                                                 <span className="text-slate-600 font-medium">Bonuses (Seasonal/Referral)</span>
@@ -2375,7 +2413,7 @@ UNIQUE (employee_id, year, month);`}
                                     <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-3 font-bold text-xs">
                                         <span className="text-slate-900 uppercase">Gross Salary</span>
                                         <span className="text-emerald-600 text-sm font-black">
-                                            ₹{((Number(selectedPayslip.prorated) || 0) + (Number(selectedPayslip.seasonal) || 0) + (Number(selectedPayslip.referral) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            ₹{((Number(selectedPayslip.prorated) || 0) + (Number(selectedPayslip.wayOff) || 0) + (Number(selectedPayslip.seasonal) || 0) + (Number(selectedPayslip.referral) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </span>
                                     </div>
                                 </div>
@@ -2412,17 +2450,11 @@ UNIQUE (employee_id, year, month);`}
                                                 <span className="font-mono text-rose-600">-₹{(Number(selectedPayslip.rto) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                             </div>
                                         )}
-                                        {Number(selectedPayslip.wayOff) > 0 && (
-                                            <div className="flex justify-between items-center py-1 text-xs">
-                                                <span className="text-slate-600 font-medium">Way Off</span>
-                                                <span className="font-mono text-rose-600">-₹{(Number(selectedPayslip.wayOff) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                            </div>
-                                        )}
                                     </div>
                                     <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-3 font-bold text-xs">
                                         <span className="text-slate-900 uppercase">Total Deductions</span>
                                         <span className="text-rose-600 text-sm font-black">
-                                            -₹{((Number(selectedPayslip.advance) || 0) + (Number(selectedPayslip.breakage) || 0) + (Number(selectedPayslip.medical) || 0) + (Number(selectedPayslip.rto) || 0) + (Number(selectedPayslip.wayOff) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            -₹{((Number(selectedPayslip.advance) || 0) + (Number(selectedPayslip.breakage) || 0) + (Number(selectedPayslip.medical) || 0) + (Number(selectedPayslip.rto) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </span>
                                     </div>
                                 </div>
@@ -2433,7 +2465,7 @@ UNIQUE (employee_id, year, month);`}
                                 <div>
                                     <span className="text-sm font-black block">Net Salary (Take Home)</span>
                                     <span className="text-[11px] text-blue-200 block mt-0.5">
-                                        Gross ₹{((Number(selectedPayslip.prorated) || 0) + (Number(selectedPayslip.seasonal) || 0) + (Number(selectedPayslip.referral) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })} &nbsp; Deductions ₹{((Number(selectedPayslip.advance) || 0) + (Number(selectedPayslip.breakage) || 0) + (Number(selectedPayslip.medical) || 0) + (Number(selectedPayslip.rto) || 0) + (Number(selectedPayslip.wayOff) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        Gross ₹{((Number(selectedPayslip.prorated) || 0) + (Number(selectedPayslip.wayOff) || 0) + (Number(selectedPayslip.seasonal) || 0) + (Number(selectedPayslip.referral) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })} &nbsp; Deductions ₹{((Number(selectedPayslip.advance) || 0) + (Number(selectedPayslip.breakage) || 0) + (Number(selectedPayslip.medical) || 0) + (Number(selectedPayslip.rto) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </span>
                                 </div>
                                 <span className="text-3xl font-black tracking-tight text-white">
