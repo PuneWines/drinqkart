@@ -207,25 +207,72 @@ export default function EmployeeOverviewModal({
     setLearningLoading(true);
     try {
       const empIdStr = String(employee.id || employee.employee_id || employee.code || '').trim();
-      const empNameStr = String(employee.name || employee.user_name || '').trim().toLowerCase();
+      const normEmpId = empIdStr.replace(/^0+/, '');
+      const empNameStr = String(employee.name || employee.user_name || employee.name_as_per_aadhar || '').trim().toLowerCase();
 
-      const { data } = await supabase
-        .from('hr_employee_learning_submissions')
-        .select('*')
-        .order('submission_date', { ascending: false });
+      // Query both potential Supabase table names for learning submissions
+      const [{ data: data1 }, { data: data2 }] = await Promise.all([
+        supabase.from('hr_learning_submissions').select('*').order('created_at', { ascending: false }),
+        supabase.from('hr_employee_learning_submissions').select('*').order('submission_date', { ascending: false })
+      ]);
 
-      if (data) {
-        const found = data.find(s => {
+      const allSubmissions = [
+        ...(data1 || []).map(s => {
+          let tasksArr = [];
+          if (typeof s.tasks_data === 'string') {
+            try { tasksArr = JSON.parse(s.tasks_data); } catch (e) { tasksArr = []; }
+          } else if (Array.isArray(s.tasks_data)) {
+            tasksArr = s.tasks_data;
+          } else if (Array.isArray(s.tasks)) {
+            tasksArr = s.tasks;
+          }
+          return {
+            ...s,
+            employee_name: s.employee_name || s.employee,
+            tasks: tasksArr
+          };
+        }),
+        ...(data2 || []).map(s => {
+          let tasksArr = [];
+          if (typeof s.tasks === 'string') {
+            try { tasksArr = JSON.parse(s.tasks); } catch (e) { tasksArr = []; }
+          } else if (Array.isArray(s.tasks)) {
+            tasksArr = s.tasks;
+          }
+          return {
+            ...s,
+            tasks: tasksArr
+          };
+        })
+      ];
+
+      if (allSubmissions.length > 0) {
+        const found = allSubmissions.find(s => {
           const sId = String(s.employee_id || s.employee_code || '').trim();
-          const sName = String(s.employee_name || '').trim().toLowerCase();
-          return (empIdStr && sId === empIdStr) || (empNameStr && sName.includes(empNameStr));
+          const normSId = sId.replace(/^0+/, '');
+          const sName = String(s.employee_name || s.employee || '').trim().toLowerCase();
+
+          const matchId = Boolean(empIdStr && sId && (
+            empIdStr === sId ||
+            (normEmpId && normSId && normEmpId === normSId) ||
+            parseInt(empIdStr, 10) === parseInt(sId, 10)
+          ));
+
+          const matchName = Boolean(empNameStr && sName && (
+            empNameStr === sName ||
+            empNameStr.includes(sName) ||
+            sName.includes(empNameStr)
+          ));
+
+          return matchId || matchName;
         });
+
         setLearningSubmission(found || null);
       } else {
         setLearningSubmission(null);
       }
     } catch (err) {
-      console.error('Error fetching learning report:', err);
+      console.error('Error fetching learning report in modal:', err);
     } finally {
       setLearningLoading(false);
     }
@@ -532,8 +579,16 @@ export default function EmployeeOverviewModal({
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {dayRows.map((row) => {
                       const punchedShopName = resolvePunchedStore(row.attendance);
+                      const isWeekendAbsent = row.status === 'Absent' && ['Fri', 'Sat', 'Sun'].includes(row.dayName);
                       return (
-                        <tr key={row.dayNum} className="hover:bg-slate-50/80 transition-colors">
+                        <tr 
+                          key={row.dayNum} 
+                          className={`transition-colors ${
+                            isWeekendAbsent 
+                              ? 'bg-red-100/70 hover:bg-red-100' 
+                              : 'hover:bg-slate-50/80'
+                          }`}
+                        >
                           <td className="px-3 py-2 text-slate-900 font-bold font-mono">
                             {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
                           </td>
@@ -600,8 +655,16 @@ export default function EmployeeOverviewModal({
             <div className="space-y-3">
               {dayRows.map((row) => {
                 const hasPunches = Boolean(row.inTimeFormatted || row.outTimeFormatted);
+                const isWeekendAbsent = row.status === 'Absent' && ['Fri', 'Sat', 'Sun'].includes(row.dayName);
                 return (
-                  <div key={row.dayNum} className="rounded-2xl p-3.5 border border-slate-200 bg-white shadow-sm flex flex-col gap-2">
+                  <div 
+                    key={row.dayNum} 
+                    className={`rounded-2xl p-3.5 border transition-colors flex flex-col gap-2 ${
+                      isWeekendAbsent 
+                        ? 'bg-red-50/90 border-red-200 shadow-sm' 
+                        : 'bg-white border-slate-200 shadow-sm'
+                    }`}
+                  >
                     <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold font-mono text-slate-900">
@@ -643,16 +706,45 @@ export default function EmployeeOverviewModal({
               ) : learningSubmission ? (
                 (() => {
                   const tasksList = learningSubmission.tasks || [];
-                  const totalCompleted = tasksList.filter(t => t.checked).length;
+                  const totalTasks = tasksList.length || 0;
+                  const totalChecked = tasksList.filter(t => t.checked).length;
+                  const totalNotOk = tasksList.filter(t => t.checked === false || t.status === 'Not OK' || t.status === 'bad').length;
+                  const totalMissing = tasksList.filter(t => t.status === 'Missing' || t.status === 'miss').length;
+                  const totalIssues = totalNotOk + totalMissing;
                   const deptList = ['EXCISE', 'RETAIL', 'SANCKS', 'STOCKS', 'WHOLESALE', 'TECHNICAL', 'IMP RETAIL/RETAIL /SANCKS'];
 
                   return (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between">
+                      {/* Summary Banner with Badges */}
+                      <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
                         <div>
-                          <span className="text-xs font-bold text-slate-500 uppercase">Submission Summary</span>
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Learning Task Checklist Submission</span>
                           <span className="text-sm font-bold text-slate-900 block mt-0.5">
-                            {totalCompleted} Tasks Completed • {learningSubmission.shop_name} ({learningSubmission.submission_date})
+                            {learningSubmission.shop_name || 'Shop Location'} • Submission Date: {learningSubmission.submission_date || '—'}
+                          </span>
+                        </div>
+
+                        {/* Badges Format */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-500/30 rounded-lg px-2.5 py-1 text-xs font-bold flex items-center gap-1">
+                            ✅ {totalChecked}/{totalTasks || 53} Checked
+                          </span>
+                          {totalNotOk > 0 && (
+                            <span className="bg-red-50 text-red-600 border border-red-500/30 rounded-lg px-2.5 py-1 text-xs font-bold flex items-center gap-1">
+                              ❌ {totalNotOk} Not OK
+                            </span>
+                          )}
+                          {totalMissing > 0 && (
+                            <span className="bg-amber-50 text-amber-700 border border-amber-500/30 rounded-lg px-2.5 py-1 text-xs font-bold flex items-center gap-1">
+                              ⚠️ {totalMissing} Missing
+                            </span>
+                          )}
+                          <span className={`text-xs font-extrabold px-2.5 py-1 rounded-lg border ${
+                            totalIssues === 0 
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                              : 'bg-red-100 text-red-800 border-red-300'
+                          }`}>
+                            {totalIssues === 0 ? 'All Clear ✓' : `⚠️ ${totalIssues} Issue(s)`}
                           </span>
                         </div>
                       </div>

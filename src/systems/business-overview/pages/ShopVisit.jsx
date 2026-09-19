@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, X, Store, Loader2, Download } from 'lucide-react';
+import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, X, Store, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2pdf from 'html2pdf.js';
+import SignaturePadModal from '../components/SignaturePadModal';
 
 const CHECKLIST_DATA = [
   {
@@ -289,12 +290,216 @@ function Fld({ label, children, full }) {
   );
 }
 
+function SignatureField({ label, value, onChange }) {
+  const canvasRef = useRef(null);
+  const isDrawingRef = useRef(false);
+  const [hasDrawn, setHasDrawn] = useState(!!value);
+  const [showModalPad, setShowModalPad] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (value) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setHasDrawn(true);
+      };
+      img.src = value;
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setHasDrawn(false);
+    }
+  }, [value]);
+
+  const getPos = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
+    };
+  };
+
+  const start = (e) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const pos = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    isDrawingRef.current = true;
+  };
+
+  const move = (e) => {
+    if (!isDrawingRef.current) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const pos = getPos(e);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    setHasDrawn(true);
+  };
+
+  const end = () => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const dataUrl = canvas.toDataURL('image/png');
+      onChange(dataUrl);
+    }
+  };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    setHasDrawn(false);
+    onChange('');
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{label}</label>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {hasDrawn && (
+            <button
+              type="button"
+              onClick={clear}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#ef4444',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                padding: '1px 4px'
+              }}
+              title="Clear signature"
+            >
+              <Trash2 size={11} /> Clear
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowModalPad(true)}
+            style={{
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              color: '#334155',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+              borderRadius: 6,
+              padding: '1px 6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3
+            }}
+            title="Open large signature pad"
+          >
+            <Maximize2 size={10} /> Full Pad
+          </button>
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: 120,
+          background: '#ffffff',
+          borderRadius: 10,
+          border: hasDrawn ? '1.5px solid #94a3b8' : '1.5px dashed #cbd5e1',
+          overflow: 'hidden',
+          boxSizing: 'border-box'
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          width={400}
+          height={160}
+          onMouseDown={start}
+          onMouseMove={move}
+          onMouseUp={end}
+          onMouseLeave={end}
+          onTouchStart={start}
+          onTouchMove={move}
+          onTouchEnd={end}
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'block',
+            cursor: 'crosshair',
+            touchAction: 'none'
+          }}
+        />
+        {!hasDrawn && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              color: '#94a3b8',
+              fontSize: 12,
+              fontWeight: 500,
+              gap: 4
+            }}
+          >
+            ✍️ Sign here
+          </div>
+        )}
+      </div>
+
+      {showModalPad && (
+        <SignaturePadModal
+          isOpen={showModalPad}
+          onClose={() => setShowModalPad(false)}
+          onSave={(dataUrl) => {
+            onChange(dataUrl);
+            setShowModalPad(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function ChecklistModal({ shops, onClose, onSaved }) {
   const [date, setDate] = useState(todayISO());
   const [visitor, setVisitor] = useState('');
   const [shop, setShop] = useState('');
   const [handover, setHandover] = useState('');
   const [takeover, setTakeover] = useState('');
+  const [remark, setRemark] = useState('');
+  const [manager1Name, setManager1Name] = useState('');
+  const [manager1Sig, setManager1Sig] = useState('');
+  const [manager2Name, setManager2Name] = useState('');
+  const [manager2Sig, setManager2Sig] = useState('');
   const [checks, setChecks] = useState({});
   const [coll, setColl] = useState({});
   const [saving, setSaving] = useState(false);
@@ -313,6 +518,14 @@ function ChecklistModal({ shops, onClose, onSaved }) {
 
   const report = () => {
     const L = [`🏪 *Shop Visit Report*`, `Shop: ${hero}`, `Date: ${fmtDate(date)}`, `Visitor: ${visitor || '?'}`, `Handover: ${handover || '-'}  |  Takeover: ${takeover || '-'}`, ''];
+    if (remark) {
+      L.push(`*Remark:* ${remark}`);
+      L.push('');
+    }
+    if (manager1Name || manager2Name) {
+      L.push(`*Managers:* M1: ${manager1Name || '-'} | M2: ${manager2Name || '-'}`);
+      L.push('');
+    }
     CHECKLIST_DATA.forEach(g => {
       L.push(`*${g.group}*`);
       g.items.forEach(it => { const s = checks[it.id]; L.push(`${s === 'ok' ? '✅' : s === 'bad' ? '❌' : s === 'miss' ? '⚠️' : '⬜'} ${it.icon} ${it.label} — ${s ? STATUS[s].label : 'Not checked'}`); });
@@ -345,8 +558,20 @@ function ChecklistModal({ shops, onClose, onSaved }) {
         missing_count: miss,
         total_items: TOTAL,
         all_ok: bad + miss === 0,
-        checks: checks,
-        report_summary: report()
+        checks: {
+          ...checks,
+          remark: remark || '',
+          manager1_name: manager1Name || '',
+          manager1_signature: manager1Sig || '',
+          manager2_name: manager2Name || '',
+          manager2_signature: manager2Sig || '',
+        },
+        report_summary: report(),
+        remark: remark || '',
+        manager1_name: manager1Name || '',
+        manager1_signature: manager1Sig || '',
+        manager2_name: manager2Name || '',
+        manager2_signature: manager2Sig || '',
       };
 
       // Map each checklist item to its corresponding database column
@@ -354,7 +579,19 @@ function ChecklistModal({ shops, onClose, onSaved }) {
         payload[colName] = checks[itemId] || null;
       });
 
-      const { error } = await supabase.from('shop_visit').insert([payload]);
+      let { error } = await supabase.from('shop_visit').insert([payload]);
+
+      // If top-level columns don't exist in Supabase schema cache, retry without top-level extras (they are preserved in checks JSON)
+      if (error && (error.message?.includes('schema cache') || error.message?.includes('column') || error.code === 'PGRST204')) {
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.remark;
+        delete fallbackPayload.manager1_name;
+        delete fallbackPayload.manager1_signature;
+        delete fallbackPayload.manager2_name;
+        delete fallbackPayload.manager2_signature;
+        const res = await supabase.from('shop_visit').insert([fallbackPayload]);
+        error = res.error;
+      }
 
       if (error) throw error;
       toast.success('Saved to Supabase ✓');
@@ -368,7 +605,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(10,20,40,0.65)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
     >
-      <div style={{ background: '#eef1f6', width: '100%', maxWidth: 580, maxHeight: '92vh', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
+      <div style={{ background: '#eef1f6', width: '100%', maxWidth: 720, maxHeight: '92vh', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
         <button
           onClick={onClose}
           style={{ position: 'absolute', top: 16, right: 16, zIndex: 20, background: 'rgba(255,255,255,0.22)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', transition: 'background .2s' }}
@@ -441,6 +678,72 @@ function ChecklistModal({ shops, onClose, onSaved }) {
               </div>
             );
           })}
+
+          {/* Remark Field Card (Below Checklist Items) */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, marginBottom: 14 }}>
+            <p style={{ margin: '0 0 12px', fontSize: 14.5, fontWeight: 700, color: '#0f172a' }}>💬 Remarks & Notes</p>
+            <Fld label="Remark" full>
+              <textarea
+                value={remark}
+                onChange={e => setRemark(e.target.value)}
+                placeholder="Enter remarks or visit observations…"
+                rows={3}
+                style={{ ...IS, resize: 'vertical' }}
+              />
+            </Fld>
+          </div>
+
+          {/* Manager Details Section Card (Below Remark) */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, marginBottom: 14 }}>
+            <p style={{ margin: '0 0 12px', fontSize: 14.5, fontWeight: 700, color: '#0f172a' }}>👥 Manager Details & Signatures</p>
+
+            <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+              {/* Left section — Manager 1 */}
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Manager 1
+                </div>
+                <Fld label="Manager 1 Name">
+                  <input
+                    type="text"
+                    value={manager1Name}
+                    onChange={e => setManager1Name(e.target.value)}
+                    placeholder="Enter Manager 1 name"
+                    style={IS}
+                  />
+                </Fld>
+                <SignatureField
+                  label="Manager 1 Signature"
+                  value={manager1Sig}
+                  onChange={setManager1Sig}
+                />
+              </div>
+
+              {/* Vertical Divider */}
+              <div style={{ width: 1, background: '#e2e8f0', alignSelf: 'stretch', margin: '0 2px' }} />
+
+              {/* Right section — Manager 2 */}
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Manager 2
+                </div>
+                <Fld label="Manager 2 Name">
+                  <input
+                    type="text"
+                    value={manager2Name}
+                    onChange={e => setManager2Name(e.target.value)}
+                    placeholder="Enter Manager 2 name"
+                    style={IS}
+                  />
+                </Fld>
+                <SignatureField
+                  label="Manager 2 Signature"
+                  value={manager2Sig}
+                  onChange={setManager2Sig}
+                />
+              </div>
+            </div>
+          </div>
           <div style={{ height: 4 }} />
         </div>
         <div style={{ background: '#fff', borderTop: '1px solid #e2e8f0', padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
@@ -565,8 +868,8 @@ function FormattedReportView({ reportText, checks, visit }) {
           </div>
         </div>
 
-        {/* Grouped Checklist Display (Scrollable Container) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxHeight: 440, overflowY: 'auto', paddingRight: 6 }}>
+        {/* Grouped Checklist Display */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {groupedData.every(g => g.items.filter(it => {
             if (filter === 'issues') return it.statusKey === 'bad' || it.statusKey === 'miss';
             if (filter === 'ok') return it.statusKey === 'ok';
@@ -682,6 +985,33 @@ function ViewModal({ visit, onClose }) {
   const shopName = visit.shop_name || 'Shop Visit';
   const visitDate = visit.visit_date ? fmtDate(visit.visit_date) : '—';
   const checks = parseVisitChecks(visit);
+  const remark = visit.remark || checks?.remark || '';
+  const manager1Name = visit.manager1_name || checks?.manager1_name || '';
+  const manager1Sig = visit.manager1_signature || checks?.manager1_signature || '';
+  const manager2Name = visit.manager2_name || checks?.manager2_name || '';
+  const manager2Sig = visit.manager2_signature || checks?.manager2_signature || '';
+
+  // Calculate metric counts from checks fallback if visit top-level fields are missing/zero
+  let notOkCount = visit.not_ok_count || 0;
+  let missingCount = visit.missing_count || 0;
+  let checkedCount = visit.checked_count || 0;
+
+  if (checks && typeof checks === 'object') {
+    const vals = Object.values(checks);
+    const calcNotOk = vals.filter(v => v === 'bad').length;
+    const calcMissing = vals.filter(v => v === 'miss').length;
+    const calcOk = vals.filter(v => v === 'ok').length;
+    const calcChecked = calcOk + calcNotOk + calcMissing;
+
+    if (calcChecked > 0) {
+      checkedCount = calcChecked;
+      notOkCount = calcNotOk;
+      missingCount = calcMissing;
+    }
+  }
+
+  const issueCount = notOkCount + missingCount;
+  const isAllClear = issueCount === 0 && checkedCount > 0;
 
   const downloadPDF = () => {
     const modalElem = document.getElementById('visit-report-modal-content');
@@ -713,7 +1043,7 @@ function ViewModal({ visit, onClose }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(10,20,40,0.65)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
     >
-      <div id="visit-report-modal-content" style={{ background: '#f8fafc', borderRadius: 18, maxWidth: 680, width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
+      <div id="visit-report-modal-content" style={{ background: '#f8fafc', borderRadius: 18, maxWidth: 860, width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px', borderBottom: '1px solid #e2e8f0', background: '#fff' }}>
           <div>
@@ -749,31 +1079,94 @@ function ViewModal({ visit, onClose }) {
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ background: '#e5f7ee', color: '#1a9e5c', border: '1px solid #1a9e5c', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                ✅ {visit.checked_count || 0}/{visit.total_items || TOTAL} Checked
+                ✅ {checkedCount}/{visit.total_items || TOTAL} Checked
               </span>
-              {(visit.not_ok_count || 0) > 0 && (
+              {notOkCount > 0 && (
                 <span style={{ background: '#fceaea', color: '#d64545', border: '1px solid #d64545', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                  ❌ {visit.not_ok_count} Not OK
+                  ❌ {notOkCount} Not OK
                 </span>
               )}
-              {(visit.missing_count || 0) > 0 && (
+              {missingCount > 0 && (
                 <span style={{ background: '#fbf1de', color: '#c98a1c', border: '1px solid #c98a1c', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                  ⚠️ {visit.missing_count} Missing
+                  ⚠️ {missingCount} Missing
                 </span>
               )}
             </div>
 
-            <span style={{ fontSize: 12.5, fontWeight: 800, color: visit.all_ok ? '#1a9e5c' : '#d64545' }}>
-              {visit.all_ok ? 'All Clear ✓' : `⚠️ ${(visit.not_ok_count || 0) + (visit.missing_count || 0)} Issue(s) Found`}
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: isAllClear ? '#1a9e5c' : '#d64545' }}>
+              {isAllClear ? 'All Clear ✓' : `⚠️ ${issueCount} Issue(s) Found`}
             </span>
           </div>
 
           {/* Formatted Report Card View */}
-          {rt ? (
+          {(rt || checks) ? (
             <FormattedReportView reportText={rt} checks={checks} visit={visit} />
           ) : (
-            <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', background: '#fff', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
-              No report summary generated for this visit.
+            <div style={{ padding: '24px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+              No report details available.
+            </div>
+          )}
+
+          {/* Remark Section (At end after scrolling all checklist items) */}
+          {remark && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                📝 Remark
+              </div>
+              <div style={{ fontSize: 14, color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.6, minHeight: 90, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                {remark}
+              </div>
+            </div>
+          )}
+
+          {/* Manager Details & Signatures Section (At the very bottom) */}
+          {(manager1Name || manager1Sig || manager2Name || manager2Sig) && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+                👥 Manager Verification & Signatures
+              </div>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+                {/* Manager 1 */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                    Manager 1
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+                    {manager1Name || '—'}
+                  </div>
+                  {manager1Sig ? (
+                    <div style={{ marginTop: 4, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 85 }}>
+                      <img src={manager1Sig} alt="Manager 1 Signature" style={{ maxHeight: 85, maxWidth: '100%', objectFit: 'contain' }} />
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 4, fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '16px 0', background: '#f8fafc', borderRadius: 10, textAlign: 'center' }}>
+                      No signature recorded
+                    </div>
+                  )}
+                </div>
+
+                {/* Vertical Divider */}
+                <div style={{ width: 1, background: '#e2e8f0', alignSelf: 'stretch', margin: '0 2px' }} />
+
+                {/* Manager 2 */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                    Manager 2
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+                    {manager2Name || '—'}
+                  </div>
+                  {manager2Sig ? (
+                    <div style={{ marginTop: 4, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 85 }}>
+                      <img src={manager2Sig} alt="Manager 2 Signature" style={{ maxHeight: 85, maxWidth: '100%', objectFit: 'contain' }} />
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 4, fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '16px 0', background: '#f8fafc', borderRadius: 10, textAlign: 'center' }}>
+                      No signature recorded
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

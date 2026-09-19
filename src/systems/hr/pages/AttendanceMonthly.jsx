@@ -94,7 +94,18 @@ const AttendanceMonthly = () => {
                 });
 
                 const allResults = await Promise.all(allDevicesPromises);
-                const combinedData = allResults.flat();
+                const flatData = allResults.flat();
+
+                // Deduplicate by employeeCode
+                const dedupedMap = new Map();
+                flatData.forEach(item => {
+                    const code = (item.employeeCode || '').toString().trim().toLowerCase().replace(/^0+/, '') || item.employeeCode;
+                    if (!dedupedMap.has(code) || (item.presentDays || 0) > (dedupedMap.get(code).presentDays || 0)) {
+                        dedupedMap.set(code, item);
+                    }
+                });
+
+                const combinedData = Array.from(dedupedMap.values()).map((row, idx) => ({ ...row, sNo: idx + 1 }));
 
                 setAttendanceData(combinedData);
                 setLastSynced(new Date().toISOString());
