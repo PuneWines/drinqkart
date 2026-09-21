@@ -317,27 +317,66 @@ const Payroll = () => {
                 return emp.status.toLowerCase() === 'active';
             });
 
-            // 2. Fetch daily logs for the month to find matched and unmatched employee stats
+            // 2. Fetch daily logs for the month to find matched and unmatched employee stats using pagination
             const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
             const totalDays = 30; // Every employee has fixed monthly Total days = 30
             const startDateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
             const endDateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-            const { data: dbLogs, error: logsError } = await supabase
-                .from('hr_management_attendance_logs')
-                .select('employee_id, employee_name, status, attendance_date')
-                .gte('attendance_date', startDateStr)
-                .lte('attendance_date', endDateStr)
-                .limit(10000);
+            let dbLogs = [];
+            let logPage = 0;
+            const logPageSize = 1000;
+            let hasMoreLogs = true;
 
-            if (logsError) throw logsError;
+            while (hasMoreLogs) {
+                const { data, error: logsError } = await supabase
+                    .from('hr_management_attendance_logs')
+                    .select('employee_id, employee_name, status, attendance_date')
+                    .gte('attendance_date', startDateStr)
+                    .lte('attendance_date', endDateStr)
+                    .range(logPage * logPageSize, (logPage + 1) * logPageSize - 1);
 
-            // Fetch roster entries for the month to count assigned Weekly Off (WO) & Day Off (DO)
-            const { data: dbRosters } = await supabase
-                .from('hr_management_shift_roster')
-                .select('employee_id, date, shift_type')
-                .gte('date', startDateStr)
-                .lte('date', endDateStr);
+                if (logsError) throw logsError;
+
+                if (data && data.length > 0) {
+                    dbLogs = [...dbLogs, ...data];
+                    if (data.length < logPageSize) {
+                        hasMoreLogs = false;
+                    } else {
+                        logPage++;
+                    }
+                } else {
+                    hasMoreLogs = false;
+                }
+            }
+
+            // Fetch roster entries for the month using pagination
+            let dbRosters = [];
+            let rosterPage = 0;
+            const rosterPageSize = 1000;
+            let hasMoreRosters = true;
+
+            while (hasMoreRosters) {
+                const { data, error: rosterErr } = await supabase
+                    .from('hr_management_shift_roster')
+                    .select('employee_id, date, shift_type')
+                    .gte('date', startDateStr)
+                    .lte('date', endDateStr)
+                    .range(rosterPage * rosterPageSize, (rosterPage + 1) * rosterPageSize - 1);
+
+                if (rosterErr) throw rosterErr;
+
+                if (data && data.length > 0) {
+                    dbRosters = [...dbRosters, ...data];
+                    if (data.length < rosterPageSize) {
+                        hasMoreRosters = false;
+                    } else {
+                        rosterPage++;
+                    }
+                } else {
+                    hasMoreRosters = false;
+                }
+            }
 
             const getLocalDayOfWeek = (dateStr) => {
                 if (!dateStr) return -1;
@@ -674,7 +713,7 @@ const Payroll = () => {
                     referralBonus,             // 13: Refferal Bonus
                     wayOff,                    // 14: Way Off
                     netSalary,                 // 15: Final Salary
-                    savedPayroll ? !!savedPayroll.is_verified : false, // 16: isVerified
+                    true,                      // 16: isVerified (Verified employee from master table)
                     doj,                       // 17: Date of joining
                     originalPresent,           // 18: originalPresent
                     extraDays,                 // 19: originalExtra
@@ -737,7 +776,7 @@ const Payroll = () => {
                     referralBonus,             // 13: Refferal Bonus
                     wayOff,                    // 14: Way Off
                     unmatchedNetSalary,        // 15: Final Salary
-                    savedPayroll ? !!savedPayroll.is_verified : false, // 16: isVerified
+                    false,                     // 16: isVerified (Unmatched/unverified)
                     '-',                       // 17: Date of joining
                     emp.present,               // 18: originalPresent
                     emp.extra,                 // 19: originalExtra
@@ -792,6 +831,7 @@ const Payroll = () => {
         const updateRows = (prevRows) => {
             return prevRows.map(row => {
                 if (row[0]?.toString() !== empId?.toString()) return row;
+                if (row[16] === false) return row; // Do not permit editing unverified employee rows
 
                 const newRow = [...row];
                 newRow[colIndex] = numVal;
@@ -1777,12 +1817,13 @@ const Payroll = () => {
                                         <th className="px-4 py-2.5 font-semibold text-gray-600 w-10 text-center">
                                             <input
                                                 type="checkbox"
-                                                checked={paginatedRows.length > 0 && paginatedRows.every(row => selectedEmpIds.has(row[0]?.toString()))}
+                                                checked={paginatedRows.filter(r => r[16] === true).length > 0 && paginatedRows.filter(r => r[16] === true).every(row => selectedEmpIds.has(row[0]?.toString()))}
                                                 onChange={(e) => {
                                                     const newSelected = new Set(selectedEmpIds);
                                                     paginatedRows.forEach(row => {
+                                                        const isVer = (activeTab === 'salary' || activeTab === 'hold') ? (row[16] === true) : true;
                                                         const id = row[0]?.toString();
-                                                        if (id) {
+                                                        if (id && isVer) {
                                                             if (e.target.checked) {
                                                                 newSelected.add(id);
                                                             } else {
@@ -1793,6 +1834,7 @@ const Payroll = () => {
                                                     setSelectedEmpIds(newSelected);
                                                 }}
                                                 className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                title="Select all verified employees"
                                             />
                                         </th>
                                     )}
@@ -1809,19 +1851,21 @@ const Payroll = () => {
                                 {paginatedRows.map((row, idx) => {
                                     const headersList = activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers;
                                     const cleanRow = row.slice(0, headersList.length);
-                                    const isVerified = (activeTab === 'salary' || activeTab === 'hold') ? row[15] !== false : true;
+                                    const isVerified = (activeTab === 'salary' || activeTab === 'hold') ? (row[16] === true) : true;
                                     const cellsToRender = (activeTab === 'salary' || activeTab === 'hold')
                                         ? headersList.map((header, j) => ({ header, cell: row[j + 1] }))
                                         : cleanRow.map((cell, j) => ({ header: headersList[j], cell }));
 
                                     return (
-                                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                        <tr key={idx} className={`transition-colors ${isVerified ? 'hover:bg-gray-50' : 'bg-slate-50/60 hover:bg-slate-50 opacity-90'}`}>
                                             {(activeTab === 'salary' || activeTab === 'hold') && (
                                                 <td className="px-4 py-2.5 text-center">
                                                     <input
                                                         type="checkbox"
-                                                        checked={selectedEmpIds.has(row[0]?.toString())}
+                                                        disabled={!isVerified}
+                                                        checked={isVerified && selectedEmpIds.has(row[0]?.toString())}
                                                         onChange={(e) => {
+                                                            if (!isVerified) return;
                                                             const newSelected = new Set(selectedEmpIds);
                                                             const id = row[0]?.toString();
                                                             if (id) {
@@ -1833,7 +1877,8 @@ const Payroll = () => {
                                                             }
                                                             setSelectedEmpIds(newSelected);
                                                         }}
-                                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                        className={`rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 ${!isVerified ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+                                                        title={!isVerified ? "Unverified employee cannot be selected" : "Select employee"}
                                                     />
                                                 </td>
                                             )}
@@ -1915,15 +1960,6 @@ const Payroll = () => {
                                                                             <span className="text-[9px] text-amber-600 font-semibold block mt-0.5">⚠️ Unverified</span>
                                                                         )}
                                                                     </div>
-                                                                    {/* Timeline Icon */}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => openPreviewWindow(row, 'timeline')}
-                                                                        className="p-1.5 rounded-md bg-slate-50 hover:bg-indigo-100 text-slate-400 hover:text-indigo-700 transition-all cursor-pointer shrink-0 border border-slate-200"
-                                                                        title="Click to view employee timeline & daily log"
-                                                                    >
-                                                                        <Clock size={13} />
-                                                                    </button>
                                                                 </div>
                                                             </div>
                                                         );
@@ -1932,10 +1968,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 2, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'extra days' || headerName === 'extra 2 days') {
@@ -1943,10 +1981,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '0' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 5, e.target.value)}
-                                                                className="w-16 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-center font-bold text-xs bg-white text-indigo-600"
+                                                                className={`w-16 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-center font-bold text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-indigo-600'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'basic salary (prorated)') {
@@ -1954,10 +1994,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 6, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'monthly advance') {
@@ -1965,10 +2007,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 7, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'fixed advance') {
@@ -1979,10 +2023,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 9, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'medical') {
@@ -1990,10 +2036,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 10, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'rto') {
@@ -2001,10 +2049,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 11, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'seasonal bonus') {
@@ -2012,10 +2062,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 12, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'refferal bonus') {
@@ -2023,10 +2075,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 13, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'way off') {
@@ -2034,10 +2088,12 @@ const Payroll = () => {
                                                         content = (
                                                             <input
                                                                 type="number"
+                                                                disabled={!isVerified}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 14, e.target.value)}
-                                                                className="w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs bg-white text-slate-700 font-semibold"
+                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isVerified ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
+                                                                title={!isVerified ? "Cannot edit unverified employee" : ""}
                                                             />
                                                         );
                                                     } else if (headerName === 'action') {

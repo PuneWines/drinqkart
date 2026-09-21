@@ -1882,7 +1882,7 @@ export default function MasterSetting() {
                                         type="text"
                                         value={shopNameInput}
                                         onChange={(e) => setShopNameInput(e.target.value)}
-                                        placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
+                                        placeholder="e.g. BALAJI, FRIENDS, KUNAL"
                                         className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
                                       />
                                     </div>
