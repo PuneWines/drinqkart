@@ -330,6 +330,22 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
     const totalSundays = getSundaysCount(month, year);
     const totalDaysInMonth = getDaysInMonth(month, year);
 
+    // Determine how many calendar days have elapsed this month up to today (or end of month for past months)
+    // Absent = total days elapsed - present - day off (matches daily attendance view definition)
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    const currentMonthPrefix = `${year}-${month.toString().padStart(2, '0')}`;
+    const isCurrentMonth = todayStr.startsWith(currentMonthPrefix);
+
+    // Count all calendar days elapsed (including Sundays - daily view treats all days as working unless Day Off)
+    const lastDayToCount = isCurrentMonth
+        ? Math.min(parseInt(dd, 10), totalDaysInMonth)
+        : totalDaysInMonth;
+    const totalDaysElapsed = lastDayToCount;
+
     dbLogs.forEach(row => {
         const rawId = row.employee_id;
         if (!rawId) return;
@@ -340,7 +356,10 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
         let serial = row.serial_number;
         if (!serial || serial === '' || serial === '-') {
             const storeName = row.store_name || empStoreMap[normIdKey] || empStoreMap[rawId.toString().trim().toLowerCase()] || '';
-            const matchedDevice = DEVICES.find(d => d.name.toUpperCase() === storeName.toUpperCase());
+            const matchedDevice = DEVICES.find(d => 
+                (d.name && d.name.toUpperCase() === storeName.toUpperCase()) ||
+                (d.apiName && d.apiName.toUpperCase() === storeName.toUpperCase())
+            );
             if (matchedDevice) {
                 serial = matchedDevice.serial;
             }
@@ -358,19 +377,25 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
                 designation: row.designation || '-',
                 store_name: row.store_name || '-',
                 device_id: row.device_id || '-',
-                serial_no: device.serial || serial || 'ALL',
+                serial_no: (serial && serial !== 'ALL') ? serial : (device && device.serial && device.serial !== 'ALL') ? device.serial : '-',
                 presentDays: 0,
-                absentDays: 0,
+                dayOffDays: 0,
                 punchMissDays: 0,
                 lateDays: 0,
                 totalWorkSecs: 0,
-                totalLunchSecs: 0
+                totalLunchSecs: 0,
+                loggedDates: new Set()
             };
         }
 
         const agg = monthlyAgg[normIdKey];
         if (row.employee_name && row.employee_name !== 'Unknown' && agg.employee_name === 'Unknown') {
             agg.employee_name = row.employee_name;
+        }
+
+        // Track every date that has a log row (to compute absent as missing working days)
+        if (row.attendance_date) {
+            agg.loggedDates.add(row.attendance_date);
         }
 
         // Accumulate statistics with 10 AM, 11 PM, and 5-punch rules
@@ -383,11 +408,6 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
 
         // Forgotten punch-out rule: Wait until 11:30 PM of that date.
         // If past 11:30 PM (or past date) and no punch-out occurred, assume out_time equal to in_time.
-        const now = new Date();
-        const yyyy = now.getFullYear();
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const dd = String(now.getDate()).padStart(2, '0');
-        const todayStr = `${yyyy}-${mm}-${dd}`;
         const isPast1130PM = (now.getHours() * 60 + now.getMinutes()) >= (23 * 60 + 30);
         const isPastDate = row.attendance_date && row.attendance_date < todayStr;
         const isTodayPastCutoff = row.attendance_date === todayStr && isPast1130PM;
@@ -430,9 +450,12 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
 
         if (status === 'Present' || status === 'Late' || status === 'Half Day') {
             agg.presentDays += 1;
-        } else if (status === 'Absent') {
-            agg.absentDays += 1;
+        } else if (status === 'Day Off' || status === 'DO') {
+            // Day off counts as neither present nor absent
+            agg.dayOffDays += 1;
         }
+        // Explicit Absent rows also mark that date as logged (no need to add to absent count here;
+        // we will compute absent = workingDaysElapsed - presentDays - dayOffDays below)
 
         if (status === 'Late' || (row.late_minute && row.late_minute > 0)) {
             agg.lateDays += 1;
@@ -443,10 +466,17 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
         }
 
         agg.totalWorkSecs += parseTimeToSeconds(workHoursStr);
-        agg.totalLunchSecs += parseTimeToSeconds(row.standard_lunch);
+        const lStr = row.standard_lunch || row.lunch_time || row.lunch_duration || row.lunch_hours || row.lunch || '00:00:00';
+        agg.totalLunchSecs += parseTimeToSeconds(lStr);
     });
 
     const finalData = Object.values(monthlyAgg).map((agg) => {
+        // Calculate absent days:
+        // All calendar days elapsed - present days - day off days
+        // This matches the daily attendance view where every day (incl. Sundays) is treated as
+        // a working day unless explicitly marked as Day Off.
+        const absentDays = Math.max(0, totalDaysElapsed - agg.presentDays - agg.dayOffDays);
+
         return {
             year: year,
             month: monthNames[month - 1],
@@ -457,7 +487,7 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
             device_id: agg.device_id,
             serial_no: agg.serial_no,
             present_days: agg.presentDays,
-            absent_days: agg.absentDays,
+            absent_days: absentDays,
             punch_miss: agg.punchMissDays,
             late_days: agg.lateDays,
             total_work_hours: formatSecsToHrsMins(agg.totalWorkSecs),

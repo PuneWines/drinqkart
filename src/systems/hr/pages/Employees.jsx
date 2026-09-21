@@ -631,10 +631,11 @@ export default function EmployeeManagement() {
         const empIdStr = (formData.employee_id || '').toString().trim();
         const empNameStr = (formData.name_as_per_aadhar || '').toString().trim();
         const desigLower = (formData.designation || '').toLowerCase().trim();
-        let targetRole = 'user';
-        if (desigLower === 'manager') targetRole = 'manager';
-        else if (desigLower === 'hod') targetRole = 'hod';
-        else if (desigLower === 'admin') targetRole = 'admin';
+        let targetRole = 'User';
+        if (desigLower === 'manager') targetRole = 'Manager';
+        else if (desigLower === 'hod') targetRole = 'HOD';
+        else if (desigLower === 'admin') targetRole = 'Admin';
+        else targetRole = 'User';
 
         let targetUser = null;
         if (empIdStr) {
@@ -784,11 +785,12 @@ export default function EmployeeManagement() {
         }
 
         if (targetUser) {
-          const desigVal = (editFormData.designation || editingEmployee?.designation || 'Employee').toString().trim();
-          let targetRole = 'Employee';
+          const desigVal = (editFormData.designation || editingEmployee?.designation || 'User').toString().trim();
+          let targetRole = 'User';
           if (desigVal.toLowerCase() === 'manager') targetRole = 'Manager';
           else if (desigVal.toLowerCase() === 'hod') targetRole = 'HOD';
           else if (desigVal.toLowerCase() === 'admin') targetRole = 'Admin';
+          else if (desigVal.toLowerCase() === 'employee' || desigVal.toLowerCase() === 'user' || desigVal.toLowerCase() === 'staff') targetRole = 'User';
           else if (desigVal) targetRole = desigVal;
 
           const userPayload = {

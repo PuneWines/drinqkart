@@ -15,6 +15,12 @@ export default function StockBalance() {
   const [selectedDate, setSelectedDate] = useState('');
   const [search, setSearch] = useState('');
   const [shopFilter, setShopFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Bulk Selection States
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   // Fetch shops for selection
   useEffect(() => {
@@ -39,7 +45,6 @@ export default function StockBalance() {
         .order('date', { ascending: false });
 
       if (error) {
-        // Table might not exist yet or error
         console.warn('Table stock_balance_records query notice:', error.message);
       }
       setStockRecords(data || []);
@@ -76,7 +81,6 @@ export default function StockBalance() {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         
-        // Parse array of arrays to find header row matching Date / Item Name
         const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
         
         if (!rawData || rawData.length === 0) {
@@ -85,7 +89,6 @@ export default function StockBalance() {
           return;
         }
 
-        // Search for header row containing 'Item Name' or 'Date'
         let headerRowIndex = -1;
         for (let i = 0; i < Math.min(rawData.length, 10); i++) {
           const rowStr = JSON.stringify(rawData[i] || []).toLowerCase();
@@ -108,7 +111,6 @@ export default function StockBalance() {
             return rowObj;
           }).filter(r => Object.values(r).some(v => v !== ''));
         } else {
-          // Default sheet_to_json
           parsedRows = XLSX.utils.sheet_to_json(ws);
         }
 
@@ -120,12 +122,10 @@ export default function StockBalance() {
 
         toast.loading(`Uploading ${parsedRows.length} stock items to database...`, { id: toastId });
 
-        // Map parsed rows to database schema
         const mappedRecords = parsedRows.map(row => {
           const rawDate = row['Date'] || row['date'] || selectedDate || new Date().toISOString().split('T')[0];
           let formattedDate = rawDate;
           if (typeof rawDate === 'number') {
-            // Excel serial date formula
             const dateObj = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
             formattedDate = dateObj.toISOString().split('T')[0];
           }
@@ -157,11 +157,9 @@ export default function StockBalance() {
           };
         }).filter(r => r.item_name !== '');
 
-        // Try inserting into Supabase
         const { error } = await supabase.from('stock_balance_records').insert(mappedRecords);
 
         if (error) {
-          // If table doesn't exist, store in local state as fallback & notify
           console.warn('Supabase insert notice:', error.message);
           setStockRecords(prev => [...mappedRecords, ...prev]);
           toast.success(`Parsed ${mappedRecords.length} records successfully! (Saved locally)`, { id: toastId });
@@ -207,8 +205,76 @@ export default function StockBalance() {
       (r.party_name || '').toLowerCase().includes(q);
 
     const matchesShop = !shopFilter || r.shop_id === shopFilter;
-    return matchesSearch && matchesShop;
+
+    // Date range filtering
+    let matchesDateRange = true;
+    if (r.date) {
+      if (startDate && r.date < startDate) matchesDateRange = false;
+      if (endDate && r.date > endDate) matchesDateRange = false;
+    }
+
+    return matchesSearch && matchesShop && matchesDateRange;
   });
+
+  // Toggle selection for a record with auto-selection of all records matching its date
+  const handleSelectRecord = (record, isChecked) => {
+    const newSelected = new Set(selectedIds);
+    if (isChecked) {
+      // Auto-select all records that match this record's date
+      const targetDate = record.date;
+      filteredRecords.forEach((r, idx) => {
+        const itemKey = r.id || idx;
+        if (targetDate && r.date === targetDate) {
+          newSelected.add(itemKey);
+        } else if (itemKey === (record.id || filteredRecords.indexOf(record))) {
+          newSelected.add(itemKey);
+        }
+      });
+    } else {
+      // Deselect all records with that date or just this record
+      const targetDate = record.date;
+      filteredRecords.forEach((r, idx) => {
+        const itemKey = r.id || idx;
+        if (targetDate && r.date === targetDate) {
+          newSelected.delete(itemKey);
+        } else {
+          newSelected.delete(record.id || filteredRecords.indexOf(record));
+        }
+      });
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = (isChecked) => {
+    if (isChecked) {
+      const allKeys = new Set(filteredRecords.map((r, idx) => r.id || idx));
+      setSelectedIds(allKeys);
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) {
+      toast.error('No records selected for deletion!');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} selected stock records?`)) return;
+
+    try {
+      const dbIdsToDelete = Array.from(selectedIds).filter(id => typeof id === 'number' || (typeof id === 'string' && id.length > 10));
+      if (dbIdsToDelete.length > 0) {
+        await supabase.from('stock_balance_records').delete().in('id', dbIdsToDelete);
+      }
+      setStockRecords(prev => prev.filter((r, idx) => !selectedIds.has(r.id || idx)));
+      setSelectedIds(new Set());
+      setIsSelectMode(false);
+      toast.success('Selected records deleted successfully!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Error deleting selected records');
+    }
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -301,20 +367,82 @@ export default function StockBalance() {
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search item, brand, subhead, party..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-          />
+      {/* Filter & Search Bar with Date Range & Select Mode */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+          <div className="relative w-full sm:w-72">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search item, brand, subhead, party..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+
+          {/* Start Date & End Date Filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
+              <Calendar size={13} className="text-slate-400" />
+              <span className="text-[11px] font-semibold text-slate-500">From:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent text-xs text-slate-700 outline-none font-medium"
+              />
+            </div>
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
+              <Calendar size={13} className="text-slate-400" />
+              <span className="text-[11px] font-semibold text-slate-500">To:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent text-xs text-slate-700 outline-none font-medium"
+              />
+            </div>
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="text-[11px] text-indigo-600 font-semibold hover:underline"
+              >
+                Clear Dates
+              </button>
+            )}
+
+            {/* Select Mode & Bulk Delete Buttons directly beside Date Filters */}
+            <button
+              onClick={() => {
+                if (isSelectMode) {
+                  setIsSelectMode(false);
+                  setSelectedIds(new Set());
+                } else {
+                  setIsSelectMode(true);
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                isSelectMode ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+              }`}
+            >
+              <CheckCircle size={14} />
+              {isSelectMode ? 'Cancel Select' : 'Select Mode'}
+            </button>
+
+            {isSelectMode && selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                <Trash2 size={14} />
+                Delete Selected ({selectedIds.size})
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
           <select
             value={shopFilter}
             onChange={(e) => setShopFilter(e.target.value)}
@@ -344,6 +472,19 @@ export default function StockBalance() {
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-800 text-slate-200 uppercase font-bold text-[10px]">
               <tr>
+                {/* 1st Column: Select Checkbox (when in Select Mode) OR Action Column (when NOT in Select Mode) */}
+                {isSelectMode ? (
+                  <th className="px-3 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredRecords.length > 0 && selectedIds.size === filteredRecords.length}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                    />
+                  </th>
+                ) : (
+                  <th className="px-3 py-3 text-center">Action</th>
+                )}
                 <th className="px-3 py-3">Shop</th>
                 <th className="px-3 py-3">Date</th>
                 <th className="px-3 py-3">Item Name</th>
@@ -360,7 +501,6 @@ export default function StockBalance() {
                 <th className="px-3 py-3">Mls</th>
                 <th className="px-3 py-3">Company Name</th>
                 <th className="px-3 py-3">Party Name</th>
-                <th className="px-3 py-3 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -371,39 +511,55 @@ export default function StockBalance() {
               ) : filteredRecords.length === 0 ? (
                 <tr>
                   <td colSpan={17} className="text-center py-12 text-slate-400 font-medium">
-                    No stock balance records uploaded yet. Select a Shop and upload an Excel file above!
+                    No stock balance records uploaded yet matching your filters.
                   </td>
                 </tr>
               ) : (
-                filteredRecords.map((r, idx) => (
-                  <tr key={r.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-3 py-2 font-bold text-indigo-900">{r.shop_id || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600 font-mono">{r.date || '—'}</td>
-                    <td className="px-3 py-2 font-bold text-slate-900">{r.item_name}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-600">{r.opening_qty}</td>
-                    <td className="px-3 py-2 text-right font-mono text-emerald-600 font-semibold">+{r.quantity_in}</td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-600 font-semibold">-{r.quantity_out}</td>
-                    <td className="px-3 py-2 text-right font-mono font-bold text-indigo-600 bg-indigo-50/50">{r.closing_qty}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-700">₹{r.purchase_rate}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-700">₹{r.mrp_rate}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.subhead || '—'}</td>
-                    <td className="px-3 py-2 text-slate-800 font-semibold">{r.brand_name || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.liquor_type || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.b_cs || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.mls || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.company_name || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.party_name || '—'}</td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => handleDelete(r.id)}
-                        className="p-1 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                        title="Delete Record"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                filteredRecords.map((r, idx) => {
+                  const itemKey = r.id || idx;
+                  const isChecked = selectedIds.has(itemKey);
+                  return (
+                    <tr key={itemKey} className={`hover:bg-slate-50/80 transition-colors ${isChecked ? 'bg-indigo-50/60' : ''}`}>
+                      {/* 1st Column: Checkbox or Single Delete Action */}
+                      {isSelectMode ? (
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => handleSelectRecord(r, e.target.checked)}
+                            className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                          />
+                        </td>
+                      ) : (
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => handleDelete(r.id)}
+                            className="p-1 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+                            title="Delete Record"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      )}
+                      <td className="px-3 py-2 font-bold text-indigo-900">{r.shop_id || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 font-mono">{r.date || '—'}</td>
+                      <td className="px-3 py-2 font-bold text-slate-900">{r.item_name}</td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-600">{r.opening_qty}</td>
+                      <td className="px-3 py-2 text-right font-mono text-emerald-600 font-semibold">+{r.quantity_in}</td>
+                      <td className="px-3 py-2 text-right font-mono text-amber-600 font-semibold">-{r.quantity_out}</td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-indigo-600 bg-indigo-50/50">{r.closing_qty}</td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-700">₹{r.purchase_rate}</td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-700">₹{r.mrp_rate}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.subhead || '—'}</td>
+                      <td className="px-3 py-2 text-slate-800 font-semibold">{r.brand_name || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.liquor_type || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.b_cs || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.mls || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.company_name || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.party_name || '—'}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

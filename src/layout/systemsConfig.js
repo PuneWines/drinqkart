@@ -148,7 +148,8 @@ export const systems = [
           { label: 'Follow-Up', to: '/systems/business-overview/help-center/follow-up' },
           { label: 'Completed', to: '/systems/business-overview/help-center/completed' }
         ]
-      }
+      },
+      { label: 'Stock Balance', to: '/systems/business-overview/stock-balance' }
     ]
   },
   {
@@ -390,5 +391,10 @@ export const getVisibleSystems = (user) => {
 
 export const getActiveSystem = (visibleSystems, pathname) => {
   if (!visibleSystems || visibleSystems.length === 0) return null;
-  return visibleSystems.find((s) => pathname.startsWith(s.base)) || visibleSystems[0];
+  // Match the longest matching base URL first so specific sub-routes (e.g. stock-balance) match before general ones
+  const matches = visibleSystems.filter((s) => pathname.startsWith(s.base));
+  if (matches.length > 0) {
+    return matches.sort((a, b) => b.base.length - a.base.length)[0];
+  }
+  return visibleSystems[0];
 };
