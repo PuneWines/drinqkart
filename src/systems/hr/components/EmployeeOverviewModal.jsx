@@ -2,28 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+const parseDateTimeHelper = (str, dateStr = '') => {
+  if (!str || str === '-') return null;
+  if (str.includes('T')) return new Date(str);
+  const match = str.match(/(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const s = match[3] ? parseInt(match[3], 10) : 0;
+  const ampm = match[4];
+  if (ampm) {
+    if (ampm.toUpperCase() === 'PM' && h < 12) h += 12;
+    if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+  }
+  const dateParts = dateStr ? dateStr.split('-').map(Number) : [];
+  const year = dateParts[0] || new Date().getFullYear();
+  const month = dateParts[1] ? dateParts[1] - 1 : new Date().getMonth();
+  const day = dateParts[2] || new Date().getDate();
+  return new Date(year, month, day, h, m, s);
+};
+
 // Helper to calculate work hours between two 12h/24h strings
 const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00') => {
   if (!inTimeStr || !outTimeStr || inTimeStr === '-' || outTimeStr === '-') return '00:00:00';
   try {
-    const parseDateTime = (str) => {
-      if (str.includes('T')) return new Date(str);
-      const match = str.match(/(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i);
-      if (!match) return null;
-      let h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      const s = match[3] ? parseInt(match[3], 10) : 0;
-      const ampm = match[4];
-      if (ampm) {
-        if (ampm.toUpperCase() === 'PM' && h < 12) h += 12;
-        if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
-      }
-      const [year, month, day] = dateStr.split('-').map(Number);
-      return new Date(year, month - 1, day, h, m, s);
-    };
-
-    const inDate = parseDateTime(inTimeStr);
-    let outDate = parseDateTime(outTimeStr);
+    const inDate = parseDateTimeHelper(inTimeStr, dateStr);
+    let outDate = parseDateTimeHelper(outTimeStr, dateStr);
     if (!inDate || !outDate) return '00:00:00';
     if (outDate < inDate) outDate = new Date(outDate.getTime() + 24 * 3600 * 1000);
 
@@ -347,8 +351,34 @@ export default function EmployeeOverviewModal({
       const dKey = dVal.includes('T') ? dVal.split('T')[0] : dVal.substring(0, 10);
       return dKey === dateStr;
     }) || {};
-    const inTime = att.in_time || att.check_in || att.clock_in || att.in_time_ist;
-    const outTime = att.out_time || att.check_out || att.clock_out || att.out_time_ist;
+
+    let inTime = att.in_time || att.check_in || att.clock_in || att.in_time_ist;
+    let outTime = att.out_time || att.check_out || att.clock_out || att.out_time_ist;
+
+    // If punch_log has actual logs, use exact first and last punch from punch_log
+    if (att.punch_log && att.punch_log !== '-') {
+      const rawList = att.punch_log
+        .split(/\s*\|\s*/)
+        .filter(Boolean)
+        .map(p => p.trim());
+      if (rawList.length > 0) {
+        inTime = rawList[0];
+        if (rawList.length > 1) {
+          outTime = rawList[rawList.length - 1];
+        }
+      }
+    } else if (att.manual_punches && (att.manual_punches.is_manual || att.manual_punches.manual_override)) {
+      const mPunches = att.manual_punches.manual || att.manual_punches;
+      const mList = Object.entries(mPunches)
+        .filter(([k, v]) => v && typeof v === 'string' && k !== 'is_manual' && k !== 'manual_override' && k !== 'absent')
+        .map(([k, v]) => v.trim());
+      if (mList.length > 0) {
+        inTime = mList[0];
+        if (mList.length > 1) {
+          outTime = mList[mList.length - 1];
+        }
+      }
+    }
 
     const isRosterWeeklyOff = hasRoster && (
       String(rEntry.shift_type).toLowerCase().includes('weekly off') || 
@@ -371,8 +401,63 @@ export default function EmployeeOverviewModal({
     }
 
     const lateMins = att.late_minutes || 0;
-    const lunchStr = att.standard_lunch || att.lunch_time || att.lunch_duration || att.lunch_hours || att.lunch || '-';
-    const workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : (inTime && outTime ? calculateWorkHours(inTime, outTime, dateStr, lunchStr) : '00:00:00');
+    
+    // Compute lunch break duration dynamically from raw punch_log or manual_punches if not stored
+    let computedLunchStr = att.standard_lunch || att.lunch_time || att.lunch_duration || att.lunch_hours || att.lunch || '-';
+    if (!computedLunchStr || computedLunchStr === '-' || computedLunchStr === '00:00:00') {
+      if (att.punch_log && att.punch_log !== '-') {
+        const rawPunches = att.punch_log
+          .split(/\s*\|\s*/)
+          .filter(Boolean)
+          .map(p => p.trim());
+        if (rawPunches.length >= 3) {
+          let actualLunchMs = 0;
+          for (let i = 1; i < rawPunches.length - 1; i += 2) {
+            const pOut = parseDateTimeHelper(rawPunches[i], dateStr);
+            const pIn = parseDateTimeHelper(rawPunches[i + 1], dateStr);
+            if (pOut && pIn && pIn > pOut) {
+              actualLunchMs += (pIn.getTime() - pOut.getTime());
+            }
+          }
+          if (actualLunchMs > 0) {
+            const totalSecs = Math.floor(actualLunchMs / 1000);
+            const hrs = Math.floor(totalSecs / 3600);
+            const mins = Math.floor((totalSecs % 3600) / 60);
+            const secs = totalSecs % 60;
+            computedLunchStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+          }
+        }
+      } else if (att.manual_punches && (att.manual_punches.is_manual || att.manual_punches.manual_override)) {
+        const mPunches = att.manual_punches.manual || att.manual_punches;
+        const mList = Object.entries(mPunches)
+          .filter(([k, v]) => v && typeof v === 'string' && k !== 'is_manual' && k !== 'manual_override' && k !== 'absent')
+          .map(([k, v]) => v.trim());
+        if (mList.length >= 3) {
+          let actualLunchMs = 0;
+          for (let i = 1; i < mList.length - 1; i += 2) {
+            const pOut = parseDateTimeHelper(mList[i], dateStr);
+            const pIn = parseDateTimeHelper(mList[i + 1], dateStr);
+            if (pOut && pIn && pIn > pOut) {
+              actualLunchMs += (pIn.getTime() - pOut.getTime());
+            }
+          }
+          if (actualLunchMs > 0) {
+            const totalSecs = Math.floor(actualLunchMs / 1000);
+            const hrs = Math.floor(totalSecs / 3600);
+            const mins = Math.floor((totalSecs % 3600) / 60);
+            const secs = totalSecs % 60;
+            computedLunchStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+          }
+        }
+      }
+    }
+
+    const lunchStr = (computedLunchStr && computedLunchStr !== '00:00:00') ? computedLunchStr : '-';
+
+    let workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : '00:00:00';
+    if (inTime && outTime && inTime !== '-' && outTime !== '-') {
+      workHrsStr = calculateWorkHours(inTime, outTime, dateStr, lunchStr);
+    }
 
     const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
     const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;

@@ -807,6 +807,27 @@ const AttendanceDaily = () => {
       }
     }
 
+    // Compute lunch and waste time from validDayPunches if 3 or more punches exist
+    let actualLunchMs = 0;
+    if (validDayPunches.length >= 3) {
+      for (let i = 1; i < validDayPunches.length - 1; i += 2) {
+        const pOut = parseISTToDate(validDayPunches[i]);
+        const pIn = parseISTToDate(validDayPunches[i + 1]);
+        if (pOut && pIn && pIn > pOut) {
+          actualLunchMs += (pIn - pOut);
+        }
+      }
+    }
+
+    const standardLunchMs = 2.5 * 3600 * 1000;
+    const wasteTimeMs = Math.max(0, actualLunchMs - standardLunchMs);
+    const displayLunchMs = Math.min(actualLunchMs, standardLunchMs);
+
+    if (actualLunchMs > 0) {
+      modified.standard_lunch = calculateHoursMins(displayLunchMs);
+      modified.waste_time = wasteTimeMs > 0 ? calculateHoursMins(wasteTimeMs) : '-';
+    }
+
     // Recompute working hours with exact punch times (deducting lunch duration if present)
     if (modified.in_time && modified.out_time && modified.in_time !== '-' && modified.out_time !== '-') {
       modified.working_hour = calculateWorkHours(modified.in_time, modified.out_time, modified.attendance_date, modified.standard_lunch);
@@ -1507,9 +1528,6 @@ const AttendanceDaily = () => {
         const displayDeviceId = dMap ? dMap.deviceId : '-';
         const displayAssignedSerial = serial || (dMap ? dMap.serialNo : '-');
 
-        const lateMins = calculateLateMinutes(inTime);
-        const workHrs = punchMiss === 'Yes' ? '00:00:00' : calculateWorkHours(inTime, outTime);
-
         let actualLunchMs = 0;
         if (logs.length > 2) {
           for (let i = 1; i < logs.length - 1; i += 2) {
@@ -1524,6 +1542,9 @@ const AttendanceDaily = () => {
         const standardLunchMs = 2.5 * 3600 * 1000;
         const wasteTimeMs = Math.max(0, actualLunchMs - standardLunchMs);
         const displayLunchMs = Math.min(actualLunchMs, standardLunchMs);
+        const standardLunchStr = calculateHoursMins(displayLunchMs);
+
+        const workHrs = punchMiss === 'Yes' ? '00:00:00' : calculateWorkHours(inTime, outTime, group.Date, standardLunchStr);
 
         const dateObj = parseISTToDate(group.Date);
         const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(dateObj);
@@ -1727,7 +1748,44 @@ const AttendanceDaily = () => {
       late_minute = 0;
     }
 
-    const working_hour = out_time ? calculateWorkHours(in_time, out_time, dateStr) : "00:00:00";
+    // ── Lunch & Waste Time Calculation ──────────────────────────────────
+    // When employee has 3 or more punches:
+    // Punches: [In, Lunch Out, Lunch In, Out] or additional mid-day breaks
+    let actualLunchMs = 0;
+    if (activeTimes.length >= 3) {
+      for (let i = 1; i < activeTimes.length - 1; i += 2) {
+        const [hOut, mOut] = activeTimes[i].split(':').map(Number);
+        const [hIn, mIn] = activeTimes[i + 1].split(':').map(Number);
+        const outMinutes = (hOut || 0) * 60 + (mOut || 0);
+        const inMinutes = (hIn || 0) * 60 + (mIn || 0);
+        if (inMinutes > outMinutes) {
+          actualLunchMs += (inMinutes - outMinutes) * 60 * 1000;
+        }
+      }
+    }
+
+    const standardLunchMs = 2.5 * 3600 * 1000;
+    const wasteTimeMs = Math.max(0, actualLunchMs - standardLunchMs);
+    const displayLunchMs = Math.min(actualLunchMs, standardLunchMs);
+
+    const standard_lunch = actualLunchMs > 0 ? calculateHoursMins(displayLunchMs) : "-";
+    const waste_time = wasteTimeMs > 0 ? calculateHoursMins(wasteTimeMs) : "-";
+
+    // Working hours = (Total Duration between 1st & Last Punch) - (Total Lunch Duration)
+    let working_hour = "00:00:00";
+    if (out_time && in_time) {
+      try {
+        const inDate = parseISTToDate(in_time);
+        const outDate = parseISTToDate(out_time);
+        if (inDate && outDate && outDate > inDate) {
+          const totalSpanMs = outDate - inDate;
+          const netWorkMs = Math.max(0, totalSpanMs - actualLunchMs);
+          working_hour = calculateHoursMins(netWorkMs);
+        }
+      } catch (e) {
+        working_hour = "00:00:00";
+      }
+    }
 
     const punch_miss = activeTimes.length === 1 ? "Yes" : "No";
     let punch_miss_msg = "";
@@ -1750,6 +1808,8 @@ const AttendanceDaily = () => {
       punch_miss_msg,
       working_hour,
       late_minute,
+      standard_lunch,
+      waste_time,
       status
     };
   };
@@ -1840,6 +1900,8 @@ const AttendanceDaily = () => {
           updateData.punch_miss_msg = metrics.punch_miss_msg;
           updateData.working_hour = metrics.working_hour;
           updateData.late_minute = metrics.late_minute;
+          updateData.standard_lunch = metrics.standard_lunch;
+          updateData.waste_time = metrics.waste_time;
           updateData.is_late = metrics.late_minute > 0;
           if (metrics.status) {
             updateData.status = metrics.status; // 'Present' or 'Late'
@@ -2005,15 +2067,31 @@ const AttendanceDaily = () => {
 
     const isOffOrLeaveStatus = status === 'Absent' || status === 'On Leave' || status === 'Weekly Off' || status === 'Day Off';
 
-    // Populate manual punches state (if user-saved manual punches exist, use them; otherwise derive from valid In/Out times)
+    // Populate manual punches state:
+    // 1. If user-saved manual punches exist, use them
+    // 2. Else if punch_log has entries, parse all punches into the editable list
+    // 3. Otherwise derive from valid In/Out times
     let punchesObj = {};
     if (!isOffOrLeaveStatus) {
-      if (fullRecord?.manual_punches && fullRecord.manual_punches.is_manual) {
+      if (fullRecord?.manual_punches && (fullRecord.manual_punches.is_manual || fullRecord.manual_punches.manual_override)) {
         if (fullRecord.manual_punches.manual && typeof fullRecord.manual_punches.manual === 'object') {
           punchesObj = { ...fullRecord.manual_punches.manual };
         } else {
           punchesObj = { ...fullRecord.manual_punches };
         }
+      } else if (fullRecord?.punch_log && fullRecord.punch_log !== '-') {
+        const rawPunches = fullRecord.punch_log
+          .split(/\s*\|\s*/)
+          .filter(Boolean)
+          .map(p => convert12hTo24h(p))
+          .filter(Boolean)
+          .sort();
+
+        rawPunches.forEach((pTime, idx) => {
+          if (idx < 6) {
+            punchesObj[(idx + 1).toString()] = pTime;
+          }
+        });
       } else {
         const inTimePart = formattedIn ? formattedIn.split('T')[1]?.substring(0, 5) : '';
         const outTimePart = formattedOut ? formattedOut.split('T')[1]?.substring(0, 5) : '';
@@ -3929,36 +4007,63 @@ const AttendanceDaily = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
                     <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
                       <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Calculated Metrics</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
-                          <span className="text-gray-500">Working Hours</span>
-                          <span className="font-semibold text-gray-800">{selectedEmployee.attendance?.working_hour || '-'}</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
-                          <span className="text-gray-500">Late Minutes</span>
-                          <span className="font-semibold text-orange-600">{selectedEmployee.attendance?.late_minute || 0}m</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
-                          <span className="text-gray-500">Standard Lunch</span>
-                          <span className="font-semibold text-gray-800">{selectedEmployee.attendance?.standard_lunch || '-'}</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
-                          <span className="text-gray-500">Waste Time</span>
-                          <span className="font-semibold text-gray-800">{selectedEmployee.attendance?.waste_time || '-'}</span>
-                        </div>
-                        <div className="flex justify-between py-1">
-                          <span className="text-gray-500">Device Serial</span>
-                          <span className="font-mono text-xs text-gray-800 font-semibold">
-                            {(() => {
-                              const att = selectedEmployee.attendance;
-                              const sn = att?.serial_number || att?.serialNo || att?.device_id || att?.device_serial || null;
-                              if (!sn || sn === '-') return '-';
-                              const matchedDev = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === sn.toString().trim().toLowerCase());
-                              return matchedDev ? `${sn} (${matchedDev.name})` : sn;
-                            })()}
-                          </span>
-                        </div>
-                      </div>
+                      {(() => {
+                        const activeManualList = Object.values(tempManualPunches).filter(Boolean);
+                        let liveMetrics = null;
+
+                        if (activeManualList.length > 0) {
+                          const shift = getEmployeeRoster(selectedEmployee.id, selectedEmployee.date);
+                          liveMetrics = calculateMetricsFromManualPunches(tempManualPunches, selectedEmployee.date, shift);
+                        } else if (tempInTime && tempOutTime) {
+                          const shift = getEmployeeRoster(selectedEmployee.id, selectedEmployee.date);
+                          const workHrs = calculateWorkHours(tempInTime, tempOutTime, selectedEmployee.date);
+                          const lateMins = calculateLateMinutes(tempInTime, selectedEmployee.date, shift);
+                          liveMetrics = {
+                            working_hour: workHrs,
+                            late_minute: lateMins,
+                            standard_lunch: selectedEmployee.attendance?.standard_lunch || '-',
+                            waste_time: selectedEmployee.attendance?.waste_time || '-'
+                          };
+                        }
+
+                        const workingHourDisplay = liveMetrics?.working_hour || selectedEmployee.attendance?.working_hour || '-';
+                        const lateMinuteDisplay = liveMetrics?.late_minute !== undefined ? liveMetrics.late_minute : (selectedEmployee.attendance?.late_minute || 0);
+                        const standardLunchDisplay = liveMetrics?.standard_lunch || selectedEmployee.attendance?.standard_lunch || '-';
+                        const wasteTimeDisplay = liveMetrics?.waste_time || selectedEmployee.attendance?.waste_time || '-';
+
+                        return (
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
+                              <span className="text-gray-500">Working Hours</span>
+                              <span className="font-semibold text-gray-800 font-mono">{workingHourDisplay}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
+                              <span className="text-gray-500">Late Minutes</span>
+                              <span className="font-semibold text-orange-600 font-mono">{lateMinuteDisplay}m</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
+                              <span className="text-gray-500">Standard Lunch</span>
+                              <span className="font-semibold text-gray-800 font-mono">{standardLunchDisplay}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
+                              <span className="text-gray-500">Waste Time</span>
+                              <span className="font-semibold text-gray-800 font-mono">{wasteTimeDisplay}</span>
+                            </div>
+                            <div className="flex justify-between py-1">
+                              <span className="text-gray-500">Device Serial</span>
+                              <span className="font-mono text-xs text-gray-800 font-semibold">
+                                {(() => {
+                                  const att = selectedEmployee.attendance;
+                                  const sn = att?.serial_number || att?.serialNo || att?.device_id || att?.device_serial || null;
+                                  if (!sn || sn === '-') return '-';
+                                  const matchedDev = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === sn.toString().trim().toLowerCase());
+                                  return matchedDev ? `${sn} (${matchedDev.name})` : sn;
+                                })()}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 space-y-4">
@@ -3983,10 +4088,13 @@ const AttendanceDaily = () => {
                         <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Manual Punches (Database)</h4>
                         {(() => {
                           const punchesObj = selectedEmployee.attendance?.manual_punches;
-                          if (!punchesObj) {
+                          // Only display if there are explicitly saved manual punches
+                          const isManualRecord = punchesObj?.is_manual === true || punchesObj?.manual_override === true || (punchesObj?.manual && punchesObj.manual.is_manual === true);
+
+                          if (!punchesObj || !isManualRecord) {
                             return (
                               <div className="bg-white rounded p-3 border border-gray-200 flex items-center justify-center text-gray-400 text-xs h-[80px]">
-                                No manual punches recorded
+                                No manual punches saved yet
                               </div>
                             );
                           }
@@ -3996,23 +4104,42 @@ const AttendanceDaily = () => {
                             ? punchesObj.manual
                             : punchesObj;
 
+                          const parseTimeToMinutes = (tStr) => {
+                            if (!tStr) return 0;
+                            try {
+                              const clean = tStr.trim().toUpperCase();
+                              const isPM = clean.endsWith('PM');
+                              const isAM = clean.endsWith('AM');
+                              let timePart = clean;
+                              if (isPM || isAM) timePart = clean.slice(0, -2).trim();
+                              const [hStr, mStr] = timePart.split(':');
+                              let h = parseInt(hStr, 10) || 0;
+                              const m = parseInt(mStr, 10) || 0;
+                              if (isPM && h < 12) h += 12;
+                              if (isAM && h === 12) h = 0;
+                              return h * 60 + m;
+                            } catch (e) {
+                              return 0;
+                            }
+                          };
+
                           const activePunches = Object.entries(punches)
-                            .filter(([key, val]) => val && val !== '' && typeof val === 'string' && key !== 'is_manual')
-                            .sort((a, b) => a[1].localeCompare(b[1]));
+                            .filter(([key, val]) => val && val !== '' && typeof val === 'string' && key !== 'is_manual' && key !== 'manual_override' && key !== 'absent')
+                            .sort((a, b) => parseTimeToMinutes(a[1]) - parseTimeToMinutes(b[1]));
 
                           if (activePunches.length === 0) {
                             return (
                               <div className="bg-white rounded p-3 border border-gray-200 flex items-center justify-center text-gray-400 text-xs h-[80px]">
-                                No manual punches recorded
+                                No manual punches saved yet
                               </div>
                             );
                           }
 
                           return (
                             <div className="bg-white rounded p-3 border border-gray-200 overflow-y-auto max-h-[120px] flex flex-wrap gap-2">
-                              {activePunches.map(([key, time]) => (
+                              {activePunches.map(([key, time], pIdx) => (
                                 <span key={key} className="inline-flex items-center px-2 py-1 bg-purple-50 border border-purple-200 text-purple-700 rounded-md text-xs font-mono font-medium">
-                                  Punch {key}: {time}
+                                  Punch {pIdx + 1}: {time}
                                 </span>
                               ))}
                             </div>
