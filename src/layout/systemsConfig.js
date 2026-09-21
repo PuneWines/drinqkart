@@ -148,8 +148,7 @@ export const systems = [
           { label: 'Follow-Up', to: '/systems/business-overview/help-center/follow-up' },
           { label: 'Completed', to: '/systems/business-overview/help-center/completed' }
         ]
-      },
-      { label: 'Stock Balance', to: '/systems/business-overview/stock-balance' }
+      }
     ]
   },
   {

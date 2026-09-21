@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { 
-  FileSpreadsheet, Upload, RefreshCw, Search, Trash2, Calendar, Store, CheckCircle, AlertCircle, Database
+  FileSpreadsheet, Upload, RefreshCw, Search, Trash2, Calendar, Store, CheckCircle, AlertCircle, Database, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
+
+const PAGE_SIZE = 1000;
 
 export default function StockBalance() {
   const [stockRecords, setStockRecords] = useState([]);
@@ -17,6 +19,8 @@ export default function StockBalance() {
   const [shopFilter, setShopFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Bulk Selection States
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -35,14 +39,39 @@ export default function StockBalance() {
     loadShops();
   }, []);
 
-  // Fetch Stock Records
+  // Fetch Stock Records: strictly limited to top 1,000 records only (no full table scanning)
   const fetchStockRecords = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('stock_balance_records')
-        .select('*')
-        .order('date', { ascending: false });
+        .select('*');
+
+      // Apply Shop Filter on Server
+      if (shopFilter) {
+        query = query.eq('shop_id', shopFilter);
+      }
+
+      // Apply Date Filters on Server
+      if (startDate) {
+        query = query.gte('date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('date', endDate);
+      }
+
+      // Apply Search Filter on Server across multiple columns
+      if (search.trim()) {
+        const term = search.trim();
+        query = query.or(`item_name.ilike.%${term}%,brand_name.ilike.%${term}%,subhead.ilike.%${term}%,party_name.ilike.%${term}%`);
+      }
+
+      // Always limit strictly to 1,000 rows
+      query = query
+        .order('date', { ascending: false })
+        .limit(PAGE_SIZE);
+
+      const { data, error } = await query;
 
       if (error) {
         console.warn('Table stock_balance_records query notice:', error.message);
@@ -53,10 +82,11 @@ export default function StockBalance() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shopFilter, startDate, endDate, search]);
 
   useEffect(() => {
     fetchStockRecords();
+    setSelectedIds(new Set());
   }, [fetchStockRecords]);
 
   // Handle Excel Upload
@@ -184,37 +214,18 @@ export default function StockBalance() {
     try {
       const { error } = await supabase.from('stock_balance_records').delete().eq('id', id);
       if (!error) {
-        setStockRecords(prev => prev.filter(r => r.id !== id));
         toast.success('Record deleted');
       } else {
-        setStockRecords(prev => prev.filter(r => r.id !== id));
         toast.success('Record removed');
       }
+      // Re-fetch next available records to maintain full 1000 limit
+      fetchStockRecords();
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Filtering
-  const filteredRecords = stockRecords.filter(r => {
-    const q = search.toLowerCase();
-    const matchesSearch = !search || 
-      (r.item_name || '').toLowerCase().includes(q) ||
-      (r.brand_name || '').toLowerCase().includes(q) ||
-      (r.subhead || '').toLowerCase().includes(q) ||
-      (r.party_name || '').toLowerCase().includes(q);
-
-    const matchesShop = !shopFilter || r.shop_id === shopFilter;
-
-    // Date range filtering
-    let matchesDateRange = true;
-    if (r.date) {
-      if (startDate && r.date < startDate) matchesDateRange = false;
-      if (endDate && r.date > endDate) matchesDateRange = false;
-    }
-
-    return matchesSearch && matchesShop && matchesDateRange;
-  });
+  const filteredRecords = stockRecords;
 
   // Toggle selection for a record with auto-selection of all records matching its date
   const handleSelectRecord = (record, isChecked) => {
@@ -266,10 +277,11 @@ export default function StockBalance() {
       if (dbIdsToDelete.length > 0) {
         await supabase.from('stock_balance_records').delete().in('id', dbIdsToDelete);
       }
-      setStockRecords(prev => prev.filter((r, idx) => !selectedIds.has(r.id || idx)));
       setSelectedIds(new Set());
       setIsSelectMode(false);
       toast.success('Selected records deleted successfully!');
+      // Re-fetch to pull the remaining items into the page
+      fetchStockRecords();
     } catch (err) {
       console.error(err);
       toast.error('Error deleting selected records');
@@ -461,13 +473,13 @@ export default function StockBalance() {
             <option value="TLS">TLS</option>
           </select>
           <span className="text-xs font-semibold text-slate-500">
-            Total Items: <b className="text-indigo-900">{filteredRecords.length}</b>
+            Loaded Records: <b className="text-indigo-900">{filteredRecords.length.toLocaleString()}</b>
           </span>
         </div>
       </div>
 
       {/* Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-800 text-slate-200 uppercase font-bold text-[10px]">
@@ -506,12 +518,17 @@ export default function StockBalance() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={17} className="text-center py-10 text-slate-400">Loading stock records...</td>
+                  <td colSpan={17} className="text-center py-10 text-slate-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw size={16} className="animate-spin text-indigo-600" />
+                      <span>Fetching 1,000 records from database...</span>
+                    </div>
+                  </td>
                 </tr>
               ) : filteredRecords.length === 0 ? (
                 <tr>
                   <td colSpan={17} className="text-center py-12 text-slate-400 font-medium">
-                    No stock balance records uploaded yet matching your filters.
+                    No stock balance records found matching your filters.
                   </td>
                 </tr>
               ) : (
@@ -563,6 +580,19 @@ export default function StockBalance() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Informative Footer */}
+        <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between text-xs text-slate-500 font-medium">
+          <div>
+            Showing <span className="font-bold text-slate-800">{filteredRecords.length.toLocaleString()}</span> records
+            {filteredRecords.length >= PAGE_SIZE && (
+              <span className="ml-2 text-indigo-600 font-semibold">(Limited to 1,000 to keep the system lightning fast & prevent hanging)</span>
+            )}
+          </div>
+          <div className="text-[11px] text-slate-400">
+            Apply Date Range or Shop filters to view specific records.
+          </div>
         </div>
       </div>
     </div>

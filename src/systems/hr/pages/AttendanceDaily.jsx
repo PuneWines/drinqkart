@@ -4,14 +4,23 @@ import { Search, Download, Calendar, Loader2, CheckCircle, X, Clock, Pencil, Fil
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
+const SHOP_NAME_TO_LOCATION = {
+  'MADHURA': 'BAVDHAN',
+  'TLS': 'HINJEWADI',
+  'FRIENDS': 'WAGHOLI',
+  'BALAJI': 'AKOLE',
+  'KUNAL ULWE': 'MUMBAI',
+  'KUNAL KHARGHAR': 'KHARGHAR'
+};
+
 const DEVICES = [
   { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' },
-  { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-  { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-  { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-  { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-  { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-  { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
+  { name: 'MADHURA', apiName: SHOP_NAME_TO_LOCATION['MADHURA'], serial: 'C26238441B1E342D' },
+  { name: 'TLS', apiName: SHOP_NAME_TO_LOCATION['TLS'], serial: 'AMDB25061400335' },
+  { name: 'FRIENDS', apiName: SHOP_NAME_TO_LOCATION['FRIENDS'], serial: 'AMDB25061400343' },
+  { name: 'BALAJI', apiName: SHOP_NAME_TO_LOCATION['BALAJI'], serial: 'C262CC13CF202038' },
+  { name: 'KUNAL ULWE', apiName: SHOP_NAME_TO_LOCATION['KUNAL ULWE'], serial: 'C2630450C32A2327' },
+  { name: 'KUNAL KHARGHAR', apiName: SHOP_NAME_TO_LOCATION['KUNAL KHARGHAR'], serial: 'AMDB25120600859' }
 ];
 
 const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
@@ -28,13 +37,13 @@ const resolvePunchedStore = (attendance, deviceMapping = []) => {
     }
     if (deviceMapping && deviceMapping.length > 0) {
       const matchedMapping = deviceMapping.find(m => m.serialNo && m.serialNo.toString().trim().toLowerCase() === serial.toLowerCase());
-      if (matchedMapping && matchedMapping.storeName) {
+      if (matchedMapping && matchedMapping.storeName && matchedMapping.storeName.toUpperCase() !== 'MUMBAI') {
         return matchedMapping.storeName;
       }
     }
   }
 
-  if (attendance.store_name && attendance.store_name !== '-') {
+  if (attendance.store_name && attendance.store_name !== '-' && attendance.store_name.toUpperCase() !== 'MUMBAI') {
     return attendance.store_name.toString().trim();
   }
 
@@ -220,7 +229,6 @@ const STATUS_CONFIG = {
   'Half Day': { color: 'bg-yellow-100 text-yellow-700', label: 'H', fullLabel: 'Half Day', bgColor: 'bg-yellow-200/60' },
   'Weekly Off': { color: 'bg-indigo-100 text-indigo-700', label: 'WO', fullLabel: 'Weekly Off', bgColor: 'bg-indigo-100/60' },
   'Day Off': { color: 'bg-gray-100 text-gray-700', label: 'DO', fullLabel: 'Day Off', bgColor: 'bg-gray-200' },
-  'Future': { color: 'text-gray-300 font-normal', label: '-', fullLabel: 'Future Date', bgColor: 'transparent' },
 };
 
 const AttendanceDaily = () => {
@@ -1420,7 +1428,10 @@ const AttendanceDaily = () => {
               const logs = JSON.parse(text);
               return Array.isArray(logs) ? logs.map(l => ({ ...l, _DeviceName: device.name })) : [];
             } catch (e) {
-              console.error(`Error fetching for ${device.name}:`, e);
+              // Silently handle expected timeout/unreachable hardware devices
+              if (e.name !== 'AbortError') {
+                console.warn(`Device ${device.name} (${device.apiName}) is offline/unreachable:`, e.message || e);
+              }
               return [];
             }
           })
@@ -2392,15 +2403,6 @@ const AttendanceDaily = () => {
     'AKOLE': 'BALAJI',
     'MUMBAI': 'KUNAL ULWE',
     'KHARGHAR': 'KUNAL KHARGHAR'
-  };
-
-  const SHOP_NAME_TO_LOCATION = {
-    'MADHURA': 'BAVDHAN',
-    'TLS': 'HINJEWADI',
-    'FRIENDS': 'WAGHOLI',
-    'BALAJI': 'AKOLE',
-    'KUNAL ULWE': 'ULWE',
-    'KUNAL KHARGHAR': 'KHARGHAR'
   };
 
   const shops = Object.keys(SHOP_NAME_TO_LOCATION);

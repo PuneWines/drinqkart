@@ -72,11 +72,38 @@ const formatTimeIST = (timeStr) => {
   }
 };
 
+const HARDWARE_DEVICES = [
+  { name: 'MADHURA', serial: 'C26238441B1E342D' },
+  { name: 'TLS', serial: 'AMDB25061400335' },
+  { name: 'FRIENDS', serial: 'AMDB25061400343' },
+  { name: 'BALAJI', serial: 'C262CC13CF202038' },
+  { name: 'KUNAL ULWE', serial: 'C2630450C32A2327' },
+  { name: 'KUNAL KHARGHAR', serial: 'AMDB25120600859' }
+];
+
 const resolvePunchedStore = (att) => {
   if (!att) return null;
-  if (att.shop_name && att.shop_name !== '-') return att.shop_name;
-  if (att.joining_place && att.joining_place !== '-') return att.joining_place;
-  if (att.store_name && att.store_name !== '-') return att.store_name;
+
+  // 1. Check explicit punch_location or punched_location
+  if (att.punch_location && att.punch_location !== '-' && att.punch_location.toUpperCase() !== 'MUMBAI') {
+    return att.punch_location;
+  }
+  if (att.punched_location && att.punched_location !== '-' && att.punched_location.toUpperCase() !== 'MUMBAI') {
+    return att.punched_location;
+  }
+
+  // 2. Check biometric device serial number
+  const serial = (att.serial_number || att.serialNo || '').toString().trim();
+  if (serial && serial !== '-' && serial !== 'ALL') {
+    const matchedDevice = HARDWARE_DEVICES.find(d => d.serial.toLowerCase() === serial.toLowerCase());
+    if (matchedDevice) return matchedDevice.name;
+  }
+
+  // 3. Check explicit store_name on punch attendance log only if not empty / not placeholder / not fallback
+  if (att.store_name && att.store_name !== '-' && att.store_name.trim() !== '' && att.store_name.toUpperCase() !== 'MUMBAI' && att.store_name.toUpperCase() !== 'ALL') {
+    return att.store_name.trim();
+  }
+
   return null;
 };
 
@@ -332,6 +359,8 @@ export default function EmployeeOverviewModal({
   let totalPresent = 0;
   let totalAbsent = 0;
   let totalLate = 0;
+  let totalWeeklyOff = 0;
+  let totalDayOff = 0;
   let totalLateMins = 0;
   let totalWorkMs = 0;
 
@@ -468,6 +497,10 @@ export default function EmployeeOverviewModal({
         totalLate++;
         totalLateMins += lateMins;
       }
+    } else if (status === 'Weekly Off' || status === 'WO') {
+      totalWeeklyOff++;
+    } else if (status === 'Day Off' || status === 'DO') {
+      totalDayOff++;
     } else if (status === 'Absent') {
       totalAbsent++;
     }
@@ -607,10 +640,14 @@ export default function EmployeeOverviewModal({
           </div>
 
           {/* Stat Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-4 pt-4 border-t border-white/10">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-4 pt-4 border-t border-white/10">
             <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
               <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
               <p className="text-base font-bold text-white mt-0.5">{dayRows.length}</p>
+            </div>
+            <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
+              <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
+              <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPresent + totalWeeklyOff + totalDayOff}</p>
             </div>
             <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
               <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
