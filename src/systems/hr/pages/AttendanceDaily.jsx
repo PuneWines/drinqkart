@@ -1820,7 +1820,7 @@ const AttendanceDaily = () => {
         }
 
         let metrics = calculateMetricsFromManualPunches(finalManualPunches.manual, date, shiftEntry);
-        
+
         if (newStatus === 'Absent' || newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off' || manualPunches.absent) {
           updateData.status = (newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off') ? newStatus : 'Absent';
           updateData.in_time = null;
@@ -1851,7 +1851,7 @@ const AttendanceDaily = () => {
           updateData.punch_log_status = "Bahar";
         }
       } else {
-        const clampedIn = inTime ? clampInTimeTo10AM(inTime, date) : null;
+        const clampedIn = inTime && inTime !== '-' ? (isBefore9AM(inTime) ? null : inTime) : null;
         const clampedOut = outTime ? clampOutTimeTo11PM(outTime, date) : null;
         if (inTime !== undefined) {
           updateData.in_time = clampedIn ? formatToISTISOString(clampedIn) : null;
@@ -2245,7 +2245,7 @@ const AttendanceDaily = () => {
   const getAttendanceForDate = (employeeId, date) => {
     if (!employeeId || !date) return { status: 'Absent', in_time: '-', out_time: '-' };
     const empIdClean = String(employeeId).trim().toLowerCase();
-    
+
     // 1. Check if an explicit attendance record exists
     const record = attendanceData.find(
       a => a.employee_id && String(a.employee_id).trim().toLowerCase() === empIdClean && a.attendance_date === date
@@ -2813,13 +2813,12 @@ const AttendanceDaily = () => {
                     return (
                       <th
                         key={idx}
-                        className={`sticky top-0 px-0.5 py-1.5 font-medium text-center text-[10px] min-w-[32px] z-10 transition-colors ${
-                          isHovered
+                        className={`sticky top-0 px-0.5 py-1.5 font-medium text-center text-[10px] min-w-[32px] z-10 transition-colors ${isHovered
                             ? 'bg-indigo-100 text-indigo-950 font-bold ring-1 ring-indigo-400 z-30'
                             : day.isWeekend
-                            ? 'bg-red-50 text-gray-700'
-                            : 'bg-gray-50 text-gray-700'
-                        }`}
+                              ? 'bg-red-50 text-gray-700'
+                              : 'bg-gray-50 text-gray-700'
+                          }`}
                       >
                         <div className="font-semibold">{day.date}</div>
                         <div className={`text-[8px] mt-0.5 ${isHovered ? 'text-indigo-700 font-semibold' : 'text-gray-400'}`}>
@@ -2938,8 +2937,8 @@ const AttendanceDaily = () => {
                           while (i < days.length) {
                             const d = days[i];
                             const att = getAttendanceForDate(employee.id, d.fullDate);
-                            let dayRoster = rosterData.find(r => 
-                              String(r.employee_id).trim() === String(employee.id).trim() && 
+                            let dayRoster = rosterData.find(r =>
+                              String(r.employee_id).trim() === String(employee.id).trim() &&
                               r.date === d.fullDate
                             );
                             let rawStatus = att.status;
@@ -2986,8 +2985,8 @@ const AttendanceDaily = () => {
                               const streak = [];
                               while (j < days.length) {
                                 const nextAtt = getAttendanceForDate(employee.id, days[j].fullDate);
-                                let nextDayRoster = rosterData.find(r => 
-                                  String(r.employee_id).trim() === String(employee.id).trim() && 
+                                let nextDayRoster = rosterData.find(r =>
+                                  String(r.employee_id).trim() === String(employee.id).trim() &&
                                   r.date === days[j].fullDate
                                 );
                                 let nextRawStatus = nextAtt.status;
@@ -3132,9 +3131,8 @@ const AttendanceDaily = () => {
                                               left: `${bubbleLeftPct}%`,
                                               transition: 'left 280ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 180ms ease'
                                             }}
-                                            className={`absolute -top-7 -translate-x-1/2 px-2.5 py-0.5 bg-gradient-to-r ${themeBubbleGradient} text-white text-[9px] font-black rounded-full shadow-xl border border-white whitespace-nowrap z-40 flex items-center gap-1 pointer-events-none ${
-                                              activeItem ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-75 translate-y-1'
-                                            }`}
+                                            className={`absolute -top-7 -translate-x-1/2 px-2.5 py-0.5 bg-gradient-to-r ${themeBubbleGradient} text-white text-[9px] font-black rounded-full shadow-xl border border-white whitespace-nowrap z-40 flex items-center gap-1 pointer-events-none ${activeItem ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-75 translate-y-1'
+                                              }`}
                                           >
                                             {activeItem && (
                                               <>
@@ -3169,9 +3167,8 @@ const AttendanceDaily = () => {
                                               >
                                                 {/* Inner Day Content / Animated Bubble Node */}
                                                 <div
-                                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all duration-200 relative ${
-                                                    isHovered ? themeNodeHovered : themeNodeDefault
-                                                  }`}
+                                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all duration-200 relative ${isHovered ? themeNodeHovered : themeNodeDefault
+                                                    }`}
                                                 >
                                                   {isHovered ? item.day.date : (
                                                     itemIdx === 0 ? (
@@ -3185,8 +3182,8 @@ const AttendanceDaily = () => {
                                                     )
                                                   )}
                                                   {(() => {
-                                                    const dayRoster = rosterData.find(r => 
-                                                      String(r.employee_id).trim() === String(employee.id).trim() && 
+                                                    const dayRoster = rosterData.find(r =>
+                                                      String(r.employee_id).trim() === String(employee.id).trim() &&
                                                       r.date === item.day.fullDate
                                                     ) || getEmployeeRoster(employee.id, item.day.fullDate);
                                                     return dayRoster ? (
@@ -3268,9 +3265,8 @@ const AttendanceDaily = () => {
                                 key={idx}
                                 onMouseEnter={() => setHoveredCell({ empId: employee.id, idx })}
                                 onMouseLeave={() => setHoveredCell(null)}
-                                className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 relative ${
-                                  isCellHovered ? 'bg-indigo-50/80 ring-1 ring-indigo-300/80 z-10' : day.isWeekend ? 'bg-gray-50' : ''
-                                }`}
+                                className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 relative ${isCellHovered ? 'bg-indigo-50/80 ring-1 ring-indigo-300/80 z-10' : day.isWeekend ? 'bg-gray-50' : ''
+                                  }`}
                                 onClick={() => handleEmployeeSelect(employee, day.fullDate, status, attendance.in_time, attendance.out_time)}
                               >
                                 <div className="relative inline-block">
@@ -3288,8 +3284,8 @@ const AttendanceDaily = () => {
                                     ) : null;
                                   })()}
                                   {(() => {
-                                    const dayRoster = rosterData.find(r => 
-                                      String(r.employee_id).trim() === String(employee.id).trim() && 
+                                    const dayRoster = rosterData.find(r =>
+                                      String(r.employee_id).trim() === String(employee.id).trim() &&
                                       r.date === day.fullDate
                                     ) || getEmployeeRoster(employee.id, day.fullDate);
                                     return dayRoster ? (
@@ -3603,12 +3599,12 @@ const AttendanceDaily = () => {
                               const cleanAssigned = rawAssigned.toString().trim().toUpperCase();
                               const assignedStore = LOCATION_TO_SHOP_MAP[cleanAssigned] ||
                                 (cleanAssigned.includes('HINJ') || cleanAssigned.includes('VISHAL') ? 'TLS' :
-                                 cleanAssigned.includes('ULWE') || cleanAssigned.includes('MUMBAI') ? 'KUNAL ULWE' :
-                                 cleanAssigned.includes('BAVD') || cleanAssigned.includes('BAWD') ? 'MADHURA' :
-                                 cleanAssigned.includes('WAGH') ? 'FRIENDS' :
-                                 cleanAssigned.includes('AKOL') ? 'BALAJI' :
-                                 cleanAssigned.includes('KHARG') ? 'KUNAL KHARGHAR' :
-                                 (cleanAssigned !== '-' ? rawAssigned.toString().trim() : '-'));
+                                  cleanAssigned.includes('ULWE') || cleanAssigned.includes('MUMBAI') ? 'KUNAL ULWE' :
+                                    cleanAssigned.includes('BAVD') || cleanAssigned.includes('BAWD') ? 'MADHURA' :
+                                      cleanAssigned.includes('WAGH') ? 'FRIENDS' :
+                                        cleanAssigned.includes('AKOL') ? 'BALAJI' :
+                                          cleanAssigned.includes('KHARG') ? 'KUNAL KHARGHAR' :
+                                            (cleanAssigned !== '-' ? rawAssigned.toString().trim() : '-'));
                               return (
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-semibold text-gray-900">
@@ -3937,10 +3933,6 @@ const AttendanceDaily = () => {
                         <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
                           <span className="text-gray-500">Working Hours</span>
                           <span className="font-semibold text-gray-800">{selectedEmployee.attendance?.working_hour || '-'}</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
-                          <span className="text-gray-500">Overtime</span>
-                          <span className="font-semibold text-gray-800">{selectedEmployee.attendance?.overtime || '-'}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
                           <span className="text-gray-500">Late Minutes</span>

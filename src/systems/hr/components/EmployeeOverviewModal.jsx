@@ -371,7 +371,7 @@ export default function EmployeeOverviewModal({
     }
 
     const lateMins = att.late_minutes || 0;
-    const lunchStr = att.standard_lunch || '-';
+    const lunchStr = att.standard_lunch || att.lunch_time || att.lunch_duration || att.lunch_hours || att.lunch || '-';
     const workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : (inTime && outTime ? calculateWorkHours(inTime, outTime, dateStr, lunchStr) : '00:00:00');
 
     const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);

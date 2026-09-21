@@ -125,6 +125,28 @@ const AllTasks = () => {
 
   const [username, setUsername] = useState("");
   const [userRole, setUserRole] = useState("");
+
+  // ---- RBAC: Can the current user submit a given task? ----
+  // User role: can only submit tasks where task.name === username
+  // Manager role: can only submit tasks where BOTH given_by === username AND name === username
+  // Admin/HOD: can submit any task
+  const canSubmitTask = useCallback((task) => {
+    if (!task || !username) return false;
+    const role = (userRole || "").toLowerCase();
+    const taskName = (task.name || task.assigned_person || task.doer_name || "").toLowerCase().trim();
+    const taskGivenBy = (task.given_by || task.filled_by || "").toLowerCase().trim();
+    const currentUser = username.toLowerCase().trim();
+
+    if (role === "manager") {
+      // Manager can only submit tasks that are assigned TO themselves AND given BY themselves
+      return taskName === currentUser && taskGivenBy === currentUser;
+    } else if (role === "user" || role === "employee") {
+      // User/Employee can only submit tasks assigned to themselves
+      return taskName === currentUser;
+    }
+    // Admin, HOD, masteradmin — can submit all
+    return true;
+  }, [username, userRole]);
   const [startDate, setStartDate] = useState(getFirstDayOfMonth());
   const [endDate, setEndDate] = useState(getCurrentDayOfMonth());
 
@@ -158,7 +180,7 @@ const AllTasks = () => {
       }).map(u => u.user_name);
 
       return [...new Set([currentUsername, ...matched])].filter(Boolean);
-    } else if (role === "user") {
+    } else if (role === "user" || role === "employee") {
       return [currentUsername].filter(Boolean);
     }
 
@@ -201,7 +223,8 @@ const AllTasks = () => {
 
     setUserRole(role || "");
     setUsername(user || "");
-    if ((role || "").toLowerCase() === "user") {
+    const lowerRole = (role || "").toLowerCase();
+    if (lowerRole === "user" || lowerRole === "employee") {
       setShowHistory(false);
       setWorkEmployeeFilter(user || "");
     }
@@ -792,6 +815,20 @@ const AllTasks = () => {
 
   // Handle Selections
   const handleSelectItem = useCallback((id, isChecked) => {
+    if (isChecked) {
+      // RBAC: Block selection of tasks that the current user cannot submit
+      const task = tasks.find(t => t.id === id || t.task_id === id);
+      if (task && !canSubmitTask(task)) {
+        const role = (userRole || "").toLowerCase();
+        if (role === "manager") {
+          alert(`⚠️ You can only submit tasks where you are both the Manager and the Employee assigned.\n\nManager Name and Employee must both match your username to submit.`);
+        } else {
+          alert(`⚠️ You can only submit tasks assigned to you.`);
+        }
+        return; // Block the selection
+      }
+    }
+
     setSelectedItems((prev) => {
       const next = new Set(prev);
       if (isChecked) {
@@ -819,14 +856,15 @@ const AllTasks = () => {
         return n;
       });
     }
-  }, []);
+  }, [tasks, canSubmitTask, userRole]);
 
   const handleSelectAll = useCallback(
     (e) => {
       if (e.target.checked) {
         const submittableTasks = filteredPendingTasks.filter(t => {
           const timeStatus = getTimeStatus(t[statusDateColumn], t.status);
-          return timeStatus !== "Upcoming";
+          // RBAC: Only select tasks the user can actually submit
+          return timeStatus !== "Upcoming" && canSubmitTask(t);
         });
         setSelectedItems(new Set(submittableTasks.map((t) => t.id)));
       } else {
@@ -835,7 +873,7 @@ const AllTasks = () => {
         setUploadedImages({});
         setStatusData({});
       }
-    }, [filteredPendingTasks, getTimeStatus, statusDateColumn]);
+    }, [filteredPendingTasks, getTimeStatus, statusDateColumn, canSubmitTask]);
 
   const paginatedTasks = useMemo(() => {
     return (showHistory ? filteredHistoryTasks : filteredPendingTasks).slice(0, visibleCount);
@@ -997,6 +1035,16 @@ const AllTasks = () => {
   const handleSubmit = async () => {
     if (selectedItems.size === 0) {
       showToast("Please select at least one task to submit", "error");
+      return;
+    }
+
+    // RBAC: Double-check server-side that no unauthorized tasks are being submitted
+    const unauthorizedTasks = Array.from(selectedItems).filter(id => {
+      const task = tasks.find(t => t.id === id || t.task_id === id);
+      return task && !canSubmitTask(task);
+    });
+    if (unauthorizedTasks.length > 0) {
+      showToast("You are not authorized to submit one or more selected tasks. Please deselect them and try again.", "error");
       return;
     }
 
@@ -1547,18 +1595,44 @@ const AllTasks = () => {
                                       </td>
                                     </tr>
                                   )}
-                                  <tr className="hover:bg-gray-50">
-                                    {!showHistory && (
-                                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
-                                        <input
-                                          type="checkbox"
-                                          checked={selectedItems.has(task.id)}
-                                          onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                          disabled={getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"}
-                                          className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
-                                        />
-                                      </td>
-                                    )}
+                                  <tr className={`hover:bg-gray-50 ${!showHistory && !canSubmitTask(task) ? 'bg-gray-50/50' : ''}`}>
+                                    {!showHistory && (() => {
+                                      const isUpcoming = getTimeStatus(task[statusDateColumn], task.status) === "Upcoming";
+                                      const canSubmit = canSubmitTask(task);
+                                      return (
+                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                                          {canSubmit ? (
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedItems.has(task.id)}
+                                              onChange={(e) => handleSelectItem(task.id, e.target.checked)}
+                                              disabled={isUpcoming}
+                                              className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                                            />
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              title={(() => {
+                                                const role = (userRole || "").toLowerCase();
+                                                if (role === "manager") return "You can only submit tasks where you are both the Manager and the Employee";
+                                                return "You can only submit tasks assigned to you";
+                                              })()}
+                                              onClick={() => {
+                                                const role = (userRole || "").toLowerCase();
+                                                if (role === "manager") {
+                                                  alert(`⚠️ Submit Restricted\n\nYou can only submit tasks where BOTH:\n• Manager Name = your name\n• Employee = your name\n\nThis task is assigned to a different employee.`);
+                                                } else {
+                                                  alert(`⚠️ Submit Restricted\n\nYou can only submit tasks assigned to you.`);
+                                                }
+                                              }}
+                                              className="h-4 w-4 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors cursor-not-allowed"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                            </button>
+                                          )}
+                                        </td>
+                                      );
+                                    })()}
                                     {activeTab === "repair" ? (
                                       <>
                                         {!showHistory ? (
@@ -1921,15 +1995,35 @@ const AllTasks = () => {
                                 {/* Card Header */}
                                 <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
                                   <div className="flex items-center gap-2">
-                                    {!showHistory && (
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedItems.has(task.id)}
-                                        onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                        disabled={getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"}
-                                        className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                                      />
-                                    )}
+                                    {!showHistory && (() => {
+                                      const isUpcoming = getTimeStatus(task[statusDateColumn], task.status) === "Upcoming";
+                                      const canSubmit = canSubmitTask(task);
+                                      return canSubmit ? (
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedItems.has(task.id)}
+                                          onChange={(e) => handleSelectItem(task.id, e.target.checked)}
+                                          disabled={isUpcoming}
+                                          className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                        />
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          title="You cannot submit this task"
+                                          onClick={() => {
+                                            const role = (userRole || "").toLowerCase();
+                                            if (role === "manager") {
+                                              alert(`⚠️ Submit Restricted\n\nYou can only submit tasks where BOTH:\n• Manager Name = your name\n• Employee = your name\n\nThis task is assigned to a different employee.`);
+                                            } else {
+                                              alert(`⚠️ Submit Restricted\n\nYou can only submit tasks assigned to you.`);
+                                            }
+                                          }}
+                                          className="h-4 w-4 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                        </button>
+                                      );
+                                    })()}
                                     <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
                                     {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
                                       <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-tighter border border-amber-200 animate-pulse">Extended</span>

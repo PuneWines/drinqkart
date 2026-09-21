@@ -59,46 +59,41 @@ const AttendanceMonthly = () => {
             }
 
             if (selectedDevice.serial === 'ALL') {
-                const allDevicesPromises = DEVICES.map(async (device) => {
-                    let dbRecords = await getMonthlyAttendanceFromSupabase(selectedMonth, selectedYear, device.serial);
+                let dbRecords = await getMonthlyAttendanceFromSupabase(selectedMonth, selectedYear, 'ALL');
 
-                    const isCurrentMonth = selectedYear === new Date().getFullYear() && selectedMonth === (new Date().getMonth() + 1);
-                    let needsSync = false;
+                const isCurrentMonth = selectedYear === new Date().getFullYear() && selectedMonth === (new Date().getMonth() + 1);
+                let needsSync = false;
 
-                    if (dbRecords.length === 0) {
-                        needsSync = true;
-                    } else if (isCurrentMonth) {
-                        const lastSyncedAt = dbRecords[0]?.lastSyncedAt;
-                        if (lastSyncedAt) {
-                            const diffMs = new Date() - new Date(lastSyncedAt);
-                            const diffHrs = diffMs / (1000 * 60 * 60);
-                            if (diffHrs > 6) {
-                                needsSync = true;
-                            }
-                        } else {
+                if (dbRecords.length === 0) {
+                    needsSync = true;
+                } else if (isCurrentMonth) {
+                    const lastSyncedAt = dbRecords[0]?.lastSyncedAt;
+                    if (lastSyncedAt) {
+                        const diffMs = new Date() - new Date(lastSyncedAt);
+                        const diffHrs = diffMs / (1000 * 60 * 60);
+                        if (diffHrs > 6) {
                             needsSync = true;
                         }
+                    } else {
+                        needsSync = true;
                     }
+                }
 
-                    if (forceSync || needsSync) {
-                        setSyncing(true);
-                        try {
-                            await syncMonthlyAttendanceFromApi(selectedMonth, selectedYear, device);
-                            dbRecords = await getMonthlyAttendanceFromSupabase(selectedMonth, selectedYear, device.serial);
-                        } catch (syncErr) {
-                            console.error(`Sync error for ${device.name}:`, syncErr);
-                        }
+                if (forceSync || needsSync) {
+                    setSyncing(true);
+                    try {
+                        await syncMonthlyAttendanceFromApi(selectedMonth, selectedYear, ALL_DEVICES_OPTION);
+                        dbRecords = await getMonthlyAttendanceFromSupabase(selectedMonth, selectedYear, 'ALL');
+                    } catch (syncErr) {
+                        console.error("Sync error for all devices:", syncErr);
+                    } finally {
+                        setSyncing(false);
                     }
-
-                    return dbRecords;
-                });
-
-                const allResults = await Promise.all(allDevicesPromises);
-                const flatData = allResults.flat();
+                }
 
                 // Deduplicate by employeeCode
                 const dedupedMap = new Map();
-                flatData.forEach(item => {
+                dbRecords.forEach(item => {
                     const code = (item.employeeCode || '').toString().trim().toLowerCase().replace(/^0+/, '') || item.employeeCode;
                     if (!dedupedMap.has(code) || (item.presentDays || 0) > (dedupedMap.get(code).presentDays || 0)) {
                         dedupedMap.set(code, item);
@@ -108,7 +103,11 @@ const AttendanceMonthly = () => {
                 const combinedData = Array.from(dedupedMap.values()).map((row, idx) => ({ ...row, sNo: idx + 1 }));
 
                 setAttendanceData(combinedData);
-                setLastSynced(new Date().toISOString());
+                if (dbRecords.length > 0 && dbRecords[0]?.lastSyncedAt) {
+                    setLastSynced(dbRecords[0].lastSyncedAt);
+                } else {
+                    setLastSynced(new Date().toISOString());
+                }
             } else {
                 let dbRecords = await getMonthlyAttendanceFromSupabase(selectedMonth, selectedYear, selectedDevice.serial);
 
