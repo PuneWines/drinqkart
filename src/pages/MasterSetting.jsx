@@ -39,7 +39,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: 'CHECKLIST DELEGATION MODULES',
-        pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'Admin Approval', 'Users Management', 'Settings']
+        pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'MIS Report', 'Admin Approval', 'Users Management', 'Settings']
       }
     ]
   },
