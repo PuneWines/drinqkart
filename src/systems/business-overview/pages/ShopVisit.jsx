@@ -183,6 +183,52 @@ const parseVisitChecks = (visit) => {
 
   return res;
 };
+
+const generateReportSummaryText = (visit, checks = {}) => {
+  const shop = visit?.shop_name || 'Shop Visit';
+  const vDate = visit?.visit_date ? fmtDate(visit.visit_date) : '-';
+  const visitor = visit?.visitor_name || '-';
+  const handover = visit?.handover_by || '-';
+  const takeover = visit?.takeover_by || '-';
+  const remark = visit?.remark || checks?.remark || '';
+  const m1 = visit?.manager1_name || checks?.manager1_name || '';
+  const m2 = visit?.manager2_name || checks?.manager2_name || '';
+
+  const L = [
+    `🏪 *Shop Visit Report*`,
+    `Shop: ${shop}`,
+    `Date: ${vDate}`,
+    `Visitor: ${visitor}`,
+    `Handover: ${handover}  |  Takeover: ${takeover}`,
+    ''
+  ];
+
+  if (remark) {
+    L.push(`*Remark:* ${remark}`);
+    L.push('');
+  }
+  if (m1 || m2) {
+    L.push(`*Managers:* M1: ${m1 || '-'} | M2: ${m2 || '-'}`);
+    L.push('');
+  }
+
+  let done = 0, bad = 0, miss = 0;
+  CHECKLIST_DATA.forEach(g => {
+    L.push(`*${g.group}*`);
+    g.items.forEach(it => {
+      const s = checks[it.id];
+      if (s) done++;
+      if (s === 'bad') bad++;
+      if (s === 'miss') miss++;
+      L.push(`${s === 'ok' ? '✅' : s === 'bad' ? '❌' : s === 'miss' ? '⚠️' : '⬜'} ${it.icon} ${it.label} — ${s ? STATUS[s].label : 'Not checked'}`);
+    });
+    L.push('');
+  });
+
+  L.push(`Summary: ${done}/${TOTAL} checked, ${bad} not ok, ${miss} missing.`);
+  return L.join('\n');
+};
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (iso) => { if (!iso) return '-'; const [y, m, d] = iso.split('T')[0].split('-'); return `${d}/${m}/${y}`; };
 const IS = { border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '9px 11px', fontSize: 13.5, background: '#fff', color: '#1e293b', width: '100%', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' };
@@ -506,6 +552,11 @@ function ChecklistModal({ shops, onClose, onSaved }) {
 
   useEffect(() => {
     try { const u = JSON.parse(localStorage.getItem('user') || localStorage.getItem('currentUser') || '{}'); if (u.name || u.user_name || u.username) setVisitor(u.name || u.user_name || u.username); } catch (_) { }
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = orig;
+    };
   }, []);
 
   const done = Object.values(checks).filter(Boolean).length;
@@ -603,7 +654,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(10,20,40,0.65)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(10,20,40,0.65)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overscrollBehavior: 'contain' }}
     >
       <div style={{ background: '#eef1f6', width: '100%', maxWidth: 720, maxHeight: '92vh', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
         <button
@@ -626,7 +677,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
             <span style={{ background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 999, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}>👤 {visitor || 'Visitor name'}</span>
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 0' }}>
+        <div className="modal-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 0' }}>
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, marginBottom: 14 }}>
             <p style={{ margin: '0 0 12px', fontSize: 14.5, fontWeight: 700, color: '#0f172a' }}>📝 Visit details</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -761,13 +812,33 @@ function ChecklistModal({ shops, onClose, onSaved }) {
   );
 }
 
-function FormattedReportView({ reportText, checks, visit }) {
+function ViewModal({ visit, onClose }) {
+  const scrollRef = useRef(null);
   const [filter, setFilter] = useState('all'); // 'all' | 'issues' | 'ok'
   const [copied, setCopied] = useState(false);
 
+  const rt = visit.report_summary;
+  const shopName = visit.shop_name || 'Shop Visit';
+  const visitDate = visit.visit_date ? fmtDate(visit.visit_date) : '—';
+  const checks = parseVisitChecks(visit);
+  const remark = visit.remark || checks?.remark || '';
+  const manager1Name = visit.manager1_name || checks?.manager1_name || '';
+  const manager1Sig = visit.manager1_signature || checks?.manager1_signature || '';
+  const manager2Name = visit.manager2_name || checks?.manager2_name || '';
+  const manager2Sig = visit.manager2_signature || checks?.manager2_signature || '';
+
+  useEffect(() => {
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = orig;
+    };
+  }, []);
+
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(reportText);
+      const textToCopy = rt || generateReportSummaryText(visit, checks);
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       toast.success('Report copied to clipboard!');
       setTimeout(() => setCopied(false), 2000);
@@ -790,11 +861,9 @@ function FormattedReportView({ reportText, checks, visit }) {
         statusBorder: statusObj?.border || '#cbd5e1'
       };
     });
-
     const okCount = items.filter(i => i.statusKey === 'ok').length;
     const badCount = items.filter(i => i.statusKey === 'bad').length;
     const missCount = items.filter(i => i.statusKey === 'miss').length;
-
     return {
       group: group.group,
       items,
@@ -809,226 +878,135 @@ function FormattedReportView({ reportText, checks, visit }) {
   const totalMiss = groupedData.reduce((acc, g) => acc + g.missCount, 0);
   const totalOk = groupedData.reduce((acc, g) => acc + g.okCount, 0);
   const totalChecked = totalOk + totalBad + totalMiss;
+  const issueCount = totalBad + totalMiss;
+  const isAllClear = issueCount === 0 && totalChecked > 0;
 
-  return (
-    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
-      <div style={{ padding: 18, background: '#f8fafc' }}>
-        {/* Quick Filters */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              onClick={() => setFilter('all')}
-              style={{
-                border: '1px solid #cbd5e1',
-                background: filter === 'all' ? '#0f4c81' : '#fff',
-                color: filter === 'all' ? '#fff' : '#475569',
-                padding: '4px 12px',
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              All Items ({TOTAL})
-            </button>
-            <button
-              onClick={() => setFilter('issues')}
-              style={{
-                border: '1px solid #fca5a5',
-                background: filter === 'issues' ? '#d64545' : '#fff',
-                color: filter === 'issues' ? '#fff' : '#d64545',
-                padding: '4px 12px',
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              ⚠️ Issues Only ({totalBad + totalMiss})
-            </button>
-            <button
-              onClick={() => setFilter('ok')}
-              style={{
-                border: '1px solid #86efac',
-                background: filter === 'ok' ? '#1a9e5c' : '#fff',
-                color: filter === 'ok' ? '#fff' : '#1a9e5c',
-                padding: '4px 12px',
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              ✅ Clear Only ({totalOk})
-            </button>
-          </div>
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
-            Checked: <span style={{ color: '#0f172a' }}>{totalChecked}/{TOTAL}</span>
-          </div>
-        </div>
-
-        {/* Grouped Checklist Display */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {groupedData.every(g => g.items.filter(it => {
-            if (filter === 'issues') return it.statusKey === 'bad' || it.statusKey === 'miss';
-            if (filter === 'ok') return it.statusKey === 'ok';
-            return true;
-          }).length === 0) ? (
-            <div style={{ textAlign: 'center', padding: '36px 16px', background: '#fff', borderRadius: 12, border: '1px dashed #cbd5e1', color: '#64748b' }}>
-              <div style={{ fontSize: 24, marginBottom: 6 }}>✨</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
-                {filter === 'issues' ? 'No issues found in this visit!' : filter === 'ok' ? 'No clear items found.' : 'No checklist items.'}
-              </div>
-            </div>
-          ) : (
-            groupedData.map(g => {
-              const filteredItems = g.items.filter(it => {
-                if (filter === 'issues') return it.statusKey === 'bad' || it.statusKey === 'miss';
-                if (filter === 'ok') return it.statusKey === 'ok';
-                return true;
-              });
-
-              if (filteredItems.length === 0) return null;
-
-              return (
-                <div key={g.group} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', letterSpacing: 0.2 }}>
-                      {g.group}
-                    </span>
-                    <div style={{ display: 'flex', gap: 6, fontSize: 11, fontWeight: 700 }}>
-                      {g.okCount > 0 && <span style={{ background: '#e5f7ee', color: '#1a9e5c', padding: '2px 8px', borderRadius: 12 }}>{g.okCount} OK</span>}
-                      {g.badCount > 0 && <span style={{ background: '#fceaea', color: '#d64545', padding: '2px 8px', borderRadius: 12 }}>{g.badCount} Not OK</span>}
-                      {g.missCount > 0 && <span style={{ background: '#fbf1de', color: '#c98a1c', padding: '2px 8px', borderRadius: 12 }}>{g.missCount} Missing</span>}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 8 }}>
-                    {filteredItems.map(it => {
-                      const iconStatus = it.statusKey === 'ok' ? '✅' : it.statusKey === 'bad' ? '❌' : it.statusKey === 'miss' ? '⚠️' : '⬜';
-                      return (
-                        <div
-                          key={it.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justify: 'space-between',
-                            padding: '8px 10px',
-                            background: it.statusBg,
-                            border: `1px solid ${it.statusBorder}`,
-                            borderRadius: 9,
-                            fontSize: 12.5
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', paddingRight: 6 }}>
-                            <span style={{ fontSize: 13 }}>{iconStatus}</span>
-                            <span style={{ fontSize: 13 }}>{it.icon}</span>
-                            <span style={{ fontWeight: 600, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {it.label}
-                            </span>
-                          </div>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: it.statusKey ? '#fff' : '#64748b',
-                              background: it.statusColor,
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {it.statusLabel}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Footer Summary Banner */}
-        <div style={{ marginTop: 14, background: '#0f172a', color: '#fff', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600 }}>
-            Summary: <b style={{ color: '#38bdf8' }}>{totalChecked}/{TOTAL}</b> checked | <b style={{ color: '#f87171' }}>{totalBad} Not OK</b> | <b style={{ color: '#fbbf24' }}>{totalMiss} Missing</b>
-          </div>
-          <button
-            onClick={handleCopy}
-            style={{
-              background: '#2563eb',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              padding: '6px 14px',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <Share2 size={13} /> Copy Report
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ViewModal({ visit, onClose }) {
-  const rt = visit.report_summary;
-  const shopName = visit.shop_name || 'Shop Visit';
-  const visitDate = visit.visit_date ? fmtDate(visit.visit_date) : '—';
-  const checks = parseVisitChecks(visit);
-  const remark = visit.remark || checks?.remark || '';
-  const manager1Name = visit.manager1_name || checks?.manager1_name || '';
-  const manager1Sig = visit.manager1_signature || checks?.manager1_signature || '';
-  const manager2Name = visit.manager2_name || checks?.manager2_name || '';
-  const manager2Sig = visit.manager2_signature || checks?.manager2_signature || '';
-
-  // Calculate metric counts from checks fallback if visit top-level fields are missing/zero
-  let notOkCount = visit.not_ok_count || 0;
-  let missingCount = visit.missing_count || 0;
-  let checkedCount = visit.checked_count || 0;
-
-  if (checks && typeof checks === 'object') {
-    const vals = Object.values(checks);
-    const calcNotOk = vals.filter(v => v === 'bad').length;
-    const calcMissing = vals.filter(v => v === 'miss').length;
-    const calcOk = vals.filter(v => v === 'ok').length;
-    const calcChecked = calcOk + calcNotOk + calcMissing;
-
-    if (calcChecked > 0) {
-      checkedCount = calcChecked;
-      notOkCount = calcNotOk;
-      missingCount = calcMissing;
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
-  }
+  };
 
-  const issueCount = notOkCount + missingCount;
-  const isAllClear = issueCount === 0 && checkedCount > 0;
+  const scrollToTop = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const downloadPDF = () => {
-    const modalElem = document.getElementById('visit-report-modal-content');
-    if (!modalElem) {
-      toast.error('Report content not found');
-      return;
-    }
-    const opt = {
-      margin: [8, 8, 8, 8],
-      filename: `Shop_Visit_${shopName}_${visitDate}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
     try {
       toast.loading('Generating PDF…', { id: 'pdf-toast' });
-      html2pdf().set(opt).from(modalElem).save().then(() => {
+      const printableDiv = document.createElement('div');
+      printableDiv.style.padding = '20px';
+      printableDiv.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      printableDiv.style.color = '#1e293b';
+      printableDiv.style.background = '#ffffff';
+      printableDiv.style.width = '750px';
+
+      let html = `
+        <div style="border-bottom: 2px solid #0f4c81; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end;">
+          <div>
+            <div style="font-size: 20px; font-weight: 800; color: #0f4c81; letter-spacing: -0.5px;">DRINQKART ENTERPRISE</div>
+            <div style="font-size: 15px; font-weight: 700; color: #1e293b; margin-top: 2px;">Shop Visit Inspection Report — <u>${shopName}</u></div>
+          </div>
+          <div style="text-align: right; font-size: 12px; color: #475569;">
+            Visit Date: <b style="color: #0f172a;">${visitDate}</b>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+          <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc;">
+            <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Visitor</div>
+            <div style="font-size: 13px; font-weight: 700; color: #1e293b; margin-top: 2px;">${visit.visitor_name || '—'}</div>
+          </div>
+          <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc;">
+            <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Handover By</div>
+            <div style="font-size: 13px; font-weight: 700; color: #1e293b; margin-top: 2px;">${visit.handover_by || '—'}</div>
+          </div>
+          <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc;">
+            <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Takeover By</div>
+            <div style="font-size: 13px; font-weight: 700; color: #1e293b; margin-top: 2px;">${visit.takeover_by || '—'}</div>
+          </div>
+        </div>
+
+        <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 14px; margin-bottom: 16px; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between;">
+          <div>Inspection Summary: <b>${totalChecked}/${TOTAL}</b> Checked</div>
+          <div>
+            <span style="color: #1a9e5c;">${totalOk} OK</span> &nbsp;|&nbsp; 
+            <span style="color: #d64545;">${totalBad} Not OK</span> &nbsp;|&nbsp; 
+            <span style="color: #c98a1c;">${totalMiss} Missing</span>
+          </div>
+        </div>
+      `;
+
+      groupedData.forEach(g => {
+        html += `
+          <div style="margin-bottom: 12px; page-break-inside: avoid;">
+            <div style="background: #e2e8f0; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 800; color: #0f172a; margin-bottom: 4px; display: flex; justify-content: space-between;">
+              <span>${g.group}</span>
+              <span style="font-size: 10.5px; font-weight: 700;">
+                ${g.okCount > 0 ? `<span style="color:#166534;">${g.okCount} OK</span> ` : ''}
+                ${g.badCount > 0 ? `<span style="color:#991b1b;">${g.badCount} Bad</span> ` : ''}
+                ${g.missCount > 0 ? `<span style="color:#92400e;">${g.missCount} Miss</span>` : ''}
+              </span>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 10.5px;">
+        `;
+        for (let i = 0; i < g.items.length; i += 2) {
+          const it1 = g.items[i];
+          const it2 = g.items[i + 1];
+          const st1 = it1.statusKey === 'ok' ? '<span style="color:#166534;font-weight:700;">✅ OK</span>' : it1.statusKey === 'bad' ? '<span style="color:#b91c1c;font-weight:700;">❌ Not OK</span>' : it1.statusKey === 'miss' ? '<span style="color:#b45309;font-weight:700;">⚠️ Missing</span>' : '⬜ Not checked';
+          const st2 = it2 ? (it2.statusKey === 'ok' ? '<span style="color:#166534;font-weight:700;">✅ OK</span>' : it2.statusKey === 'bad' ? '<span style="color:#b91c1c;font-weight:700;">❌ Not OK</span>' : it2.statusKey === 'miss' ? '<span style="color:#b45309;font-weight:700;">⚠️ Missing</span>' : '⬜ Not checked') : '';
+
+          html += `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 3px 6px; width: 36%; font-weight: 600; color: #334155;">${it1.icon} ${it1.label}</td>
+              <td style="padding: 3px 6px; width: 14%;">${st1}</td>
+              <td style="padding: 3px 6px; width: 36%; font-weight: 600; color: #334155;">${it2 ? `${it2.icon} ${it2.label}` : ''}</td>
+              <td style="padding: 3px 6px; width: 14%;">${st2}</td>
+            </tr>
+          `;
+        }
+        html += `</table></div>`;
+      });
+
+      if (remark) {
+        html += `
+          <div style="margin-top: 14px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; page-break-inside: avoid;">
+            <div style="font-size: 11px; font-weight: 800; color: #0f4c81; text-transform: uppercase;">Remark</div>
+            <div style="font-size: 12px; margin-top: 4px; color: #1e293b; white-space: pre-wrap;">${remark}</div>
+          </div>
+        `;
+      }
+
+      if (manager1Name || manager1Sig || manager2Name || manager2Sig) {
+        html += `
+          <div style="margin-top: 16px; border-top: 1.5px solid #cbd5e1; padding-top: 10px; display: flex; gap: 20px; page-break-inside: avoid;">
+            <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; background: #fff;">
+              <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">Manager 1</div>
+              <div style="font-size: 12px; font-weight: 700; color: #0f172a; margin-top: 2px;">${manager1Name || '—'}</div>
+              ${manager1Sig ? `<img src="${manager1Sig}" style="max-height: 45px; max-width: 100%; margin-top: 6px; object-fit: contain; border: 1px solid #f1f5f9;" />` : '<div style="font-size: 11px; color: #94a3b8; font-style: italic; margin-top: 6px;">No signature recorded</div>'}
+            </div>
+            <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; background: #fff;">
+              <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">Manager 2</div>
+              <div style="font-size: 12px; font-weight: 700; color: #0f172a; margin-top: 2px;">${manager2Name || '—'}</div>
+              ${manager2Sig ? `<img src="${manager2Sig}" style="max-height: 45px; max-width: 100%; margin-top: 6px; object-fit: contain; border: 1px solid #f1f5f9;" />` : '<div style="font-size: 11px; color: #94a3b8; font-style: italic; margin-top: 6px;">No signature recorded</div>'}
+            </div>
+          </div>
+        `;
+      }
+
+      printableDiv.innerHTML = html;
+
+      const opt = {
+        margin: [8, 8, 8, 8],
+        filename: `Shop_Visit_${shopName}_${visitDate}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(printableDiv).save().then(() => {
         toast.success('PDF Downloaded!', { id: 'pdf-toast' });
       }).catch(err => {
         toast.error('PDF export failed: ' + (err?.message || 'Error generating PDF'), { id: 'pdf-toast' });
@@ -1041,138 +1019,334 @@ function ViewModal({ visit, onClose }) {
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(10,20,40,0.65)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(10,20,40,0.65)',
+        backdropFilter: 'blur(4px)',
+        zIndex: 200,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        overscrollBehavior: 'contain'
+      }}
     >
-      <div id="visit-report-modal-content" style={{ background: '#f8fafc', borderRadius: 18, maxWidth: 860, width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px', borderBottom: '1px solid #e2e8f0', background: '#fff' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Store size={18} color="#0f4c81" />
-              <span style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{shopName}</span>
+      <div
+        style={{
+          background: '#fff',
+          borderRadius: 18,
+          maxWidth: 880,
+          width: '100%',
+          height: '92vh',
+          maxHeight: '92vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          overscrollBehavior: 'contain',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)'
+        }}
+      >
+        {/* Header Modal Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 22px', borderBottom: '1.5px solid #e2e8f0', background: '#fff', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Store size={20} color="#0f4c81" />
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>
-              📅 Visit Date: <b>{visitDate}</b>
+            <div>
+              <span style={{ fontWeight: 800, fontSize: 17, color: '#0f172a' }}>{shopName}</span>
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                📅 Inspection Report &bull; {visitDate}
+              </div>
             </div>
           </div>
           <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
         </div>
 
-        <div style={{ overflowY: 'auto', padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Metadata Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Visitor</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginTop: 2 }}>{visit.visitor_name || '—'}</div>
+        {/* SINGLE UNIFIED SCROLLABLE CONTAINER */}
+        <div
+          className="modal-scrollbar"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            overscrollBehavior: 'contain',
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            background: '#f8fafc'
+          }}
+        >
+          {/* SINGLE UNIFIED REPORT CARD */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+            {/* 1. Visitor, Handover By, Takeover By Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Visitor</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', marginTop: 3 }}>{visit.visitor_name || '—'}</div>
+              </div>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Handover By</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', marginTop: 3 }}>{visit.handover_by || '—'}</div>
+              </div>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Takeover By</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', marginTop: 3 }}>{visit.takeover_by || '—'}</div>
+              </div>
             </div>
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Handover By</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginTop: 2 }}>{visit.handover_by || '—'}</div>
-            </div>
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Takeover By</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginTop: 2 }}>{visit.takeover_by || '—'}</div>
-            </div>
-          </div>
 
-          {/* Quick Metrics Badges */}
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ background: '#e5f7ee', color: '#1a9e5c', border: '1px solid #1a9e5c', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                ✅ {checkedCount}/{visit.total_items || TOTAL} Checked
+            {/* 2. Top Metrics Summary Badges */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ background: '#e5f7ee', color: '#1a9e5c', border: '1px solid #1a9e5c', borderRadius: 8, padding: '4px 10px', fontSize: 12.5, fontWeight: 700 }}>
+                  ✅ {totalChecked}/{TOTAL} Checked
+                </span>
+                {totalBad > 0 && (
+                  <span style={{ background: '#fceaea', color: '#d64545', border: '1px solid #d64545', borderRadius: 8, padding: '4px 10px', fontSize: 12.5, fontWeight: 700 }}>
+                    ❌ {totalBad} Not OK
+                  </span>
+                )}
+                {totalMiss > 0 && (
+                  <span style={{ background: '#fbf1de', color: '#c98a1c', border: '1px solid #c98a1c', borderRadius: 8, padding: '4px 10px', fontSize: 12.5, fontWeight: 700 }}>
+                    ⚠️ {totalMiss} Missing
+                  </span>
+                )}
+              </div>
+
+              <span style={{ fontSize: 13, fontWeight: 800, color: isAllClear ? '#1a9e5c' : '#d64545' }}>
+                {isAllClear ? '✅ All Clear' : `⚠️ ${issueCount} Issue(s) Found`}
               </span>
-              {notOkCount > 0 && (
-                <span style={{ background: '#fceaea', color: '#d64545', border: '1px solid #d64545', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                  ❌ {notOkCount} Not OK
-                </span>
-              )}
-              {missingCount > 0 && (
-                <span style={{ background: '#fbf1de', color: '#c98a1c', border: '1px solid #c98a1c', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                  ⚠️ {missingCount} Missing
-                </span>
+            </div>
+
+            {/* 3. Quick Filter Tabs & Checked Indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setFilter('all')}
+                  style={{
+                    border: filter === 'all' ? '1px solid #0f4c81' : '1px solid #cbd5e1',
+                    background: filter === 'all' ? '#0f4c81' : '#fff',
+                    color: filter === 'all' ? '#fff' : '#475569',
+                    padding: '5px 14px',
+                    borderRadius: 20,
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  All Items ({TOTAL})
+                </button>
+                <button
+                  onClick={() => setFilter('issues')}
+                  style={{
+                    border: '1px solid #fca5a5',
+                    background: filter === 'issues' ? '#d64545' : '#fff',
+                    color: filter === 'issues' ? '#fff' : '#d64545',
+                    padding: '5px 14px',
+                    borderRadius: 20,
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⚠️ Issues Only ({issueCount})
+                </button>
+                <button
+                  onClick={() => setFilter('ok')}
+                  style={{
+                    border: '1px solid #86efac',
+                    background: filter === 'ok' ? '#1a9e5c' : '#fff',
+                    color: filter === 'ok' ? '#fff' : '#1a9e5c',
+                    padding: '5px 14px',
+                    borderRadius: 20,
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✅ Clear Only ({totalOk})
+                </button>
+              </div>
+
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#64748b' }}>
+                Checked: <span style={{ color: '#0f172a' }}>{totalChecked}/{TOTAL}</span>
+              </div>
+            </div>
+
+            {/* 4. Grouped Checklist Display */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {groupedData.every(g => g.items.filter(it => {
+                if (filter === 'issues') return it.statusKey === 'bad' || it.statusKey === 'miss';
+                if (filter === 'ok') return it.statusKey === 'ok';
+                return true;
+              }).length === 0) ? (
+                <div style={{ textAlign: 'center', padding: '36px 16px', background: '#f8fafc', borderRadius: 12, border: '1px dashed #cbd5e1', color: '#64748b' }}>
+                  <div style={{ fontSize: 24, marginBottom: 6 }}>✨</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
+                    {filter === 'issues' ? 'No issues found in this visit!' : filter === 'ok' ? 'No clear items found.' : 'No checklist items.'}
+                  </div>
+                </div>
+              ) : (
+                groupedData.map(g => {
+                  const filteredItems = g.items.filter(it => {
+                    if (filter === 'issues') return it.statusKey === 'bad' || it.statusKey === 'miss';
+                    if (filter === 'ok') return it.statusKey === 'ok';
+                    return true;
+                  });
+
+                  if (filteredItems.length === 0) return null;
+
+                  return (
+                    <div key={g.group} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #e2e8f0' }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b' }}>
+                          {g.group}
+                        </span>
+                        <div style={{ display: 'flex', gap: 6, fontSize: 11, fontWeight: 700 }}>
+                          {g.okCount > 0 && <span style={{ background: '#e5f7ee', color: '#1a9e5c', padding: '2px 8px', borderRadius: 12 }}>{g.okCount} OK</span>}
+                          {g.badCount > 0 && <span style={{ background: '#fceaea', color: '#d64545', padding: '2px 8px', borderRadius: 12 }}>{g.badCount} Not OK</span>}
+                          {g.missCount > 0 && <span style={{ background: '#fbf1de', color: '#c98a1c', padding: '2px 8px', borderRadius: 12 }}>{g.missCount} Missing</span>}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 8 }}>
+                        {filteredItems.map(it => {
+                          const iconStatus = it.statusKey === 'ok' ? '✅' : it.statusKey === 'bad' ? '❌' : it.statusKey === 'miss' ? '⚠️' : '⬜';
+                          return (
+                            <div
+                              key={it.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '8px 10px',
+                                background: it.statusBg,
+                                border: `1px solid ${it.statusBorder}`,
+                                borderRadius: 9,
+                                fontSize: 12.5
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', paddingRight: 6 }}>
+                                <span style={{ fontSize: 13 }}>{iconStatus}</span>
+                                <span style={{ fontSize: 13 }}>{it.icon}</span>
+                                <span style={{ fontWeight: 600, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {it.label}
+                                </span>
+                              </div>
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: it.statusKey ? '#fff' : '#64748b',
+                                  background: it.statusColor,
+                                  padding: '2px 8px',
+                                  borderRadius: 6,
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {it.statusLabel}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
 
-            <span style={{ fontSize: 12.5, fontWeight: 800, color: isAllClear ? '#1a9e5c' : '#d64545' }}>
-              {isAllClear ? 'All Clear ✓' : `⚠️ ${issueCount} Issue(s) Found`}
-            </span>
+            {/* 5. Summary & Copy Report Footer */}
+            <div style={{ background: '#0f172a', color: '#fff', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                Summary: <b style={{ color: '#38bdf8' }}>{totalChecked}/{TOTAL}</b> checked | <b style={{ color: '#f87171' }}>{totalBad} Not OK</b> | <b style={{ color: '#fbbf24' }}>{totalMiss} Missing</b>
+              </div>
+              <button
+                onClick={handleCopy}
+                style={{
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Share2 size={13} /> {copied ? 'Copied!' : 'Copy Report'}
+              </button>
+            </div>
+
+            {/* 6. Remark Section */}
+            {remark && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                  📝 Remark
+                </div>
+                <div style={{ fontSize: 13.5, color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.6, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+                  {remark}
+                </div>
+              </div>
+            )}
+
+            {/* 7. Manager Verification & Signatures */}
+            {(manager1Name || manager1Sig || manager2Name || manager2Sig) && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+                  👥 Manager Verification & Signatures
+                </div>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                      Manager 1
+                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
+                      {manager1Name || '—'}
+                    </div>
+                    {manager1Sig ? (
+                      <div style={{ marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 80 }}>
+                        <img src={manager1Sig} alt="Manager 1 Signature" style={{ maxHeight: 80, maxWidth: '100%', objectFit: 'contain' }} />
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 4, fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '14px 0', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center' }}>
+                        No signature recorded
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ width: 1, background: '#e2e8f0', alignSelf: 'stretch', margin: '0 2px' }} />
+
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                      Manager 2
+                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
+                      {manager2Name || '—'}
+                    </div>
+                    {manager2Sig ? (
+                      <div style={{ marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 80 }}>
+                        <img src={manager2Sig} alt="Manager 2 Signature" style={{ maxHeight: 80, maxWidth: '100%', objectFit: 'contain' }} />
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 4, fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '14px 0', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center' }}>
+                        No signature recorded
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Formatted Report Card View */}
-          {(rt || checks) ? (
-            <FormattedReportView reportText={rt} checks={checks} visit={visit} />
-          ) : (
-            <div style={{ padding: '24px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-              No report details available.
-            </div>
-          )}
-
-          {/* Remark Section (At end after scrolling all checklist items) */}
-          {remark && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', marginTop: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
-                📝 Remark
-              </div>
-              <div style={{ fontSize: 14, color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.6, minHeight: 90, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
-                {remark}
-              </div>
-            </div>
-          )}
-
-          {/* Manager Details & Signatures Section (At the very bottom) */}
-          {(manager1Name || manager1Sig || manager2Name || manager2Sig) && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', marginTop: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#0f4c81', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
-                👥 Manager Verification & Signatures
-              </div>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
-                {/* Manager 1 */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                    Manager 1
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
-                    {manager1Name || '—'}
-                  </div>
-                  {manager1Sig ? (
-                    <div style={{ marginTop: 4, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 85 }}>
-                      <img src={manager1Sig} alt="Manager 1 Signature" style={{ maxHeight: 85, maxWidth: '100%', objectFit: 'contain' }} />
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 4, fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '16px 0', background: '#f8fafc', borderRadius: 10, textAlign: 'center' }}>
-                      No signature recorded
-                    </div>
-                  )}
-                </div>
-
-                {/* Vertical Divider */}
-                <div style={{ width: 1, background: '#e2e8f0', alignSelf: 'stretch', margin: '0 2px' }} />
-
-                {/* Manager 2 */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                    Manager 2
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
-                    {manager2Name || '—'}
-                  </div>
-                  {manager2Sig ? (
-                    <div style={{ marginTop: 4, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 85 }}>
-                      <img src={manager2Sig} alt="Manager 2 Signature" style={{ maxHeight: 85, maxWidth: '100%', objectFit: 'contain' }} />
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 4, fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '16px 0', background: '#f8fafc', borderRadius: 10, textAlign: 'center' }}>
-                      No signature recorded
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Modal Footer */}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', background: '#fff', display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+        <div style={{ padding: '12px 22px', borderTop: '1.5px solid #e2e8f0', background: '#fff', display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center', flexShrink: 0 }}>
           <button
             onClick={downloadPDF}
             style={{
@@ -1334,7 +1508,32 @@ export default function ShopVisit() {
       )}
       {showModal && <ChecklistModal shops={shops} onClose={() => setShowModal(false)} onSaved={fetch_} />}
       {viewRow && <ViewModal visit={viewRow} onClose={() => setViewRow(null)} />}
-      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .modal-scrollbar {
+          overflow-y: auto !important;
+          scrollbar-width: thin !important;
+          scrollbar-color: #0f4c81 #e2e8f0 !important;
+          scroll-behavior: smooth;
+        }
+        .modal-scrollbar::-webkit-scrollbar {
+          width: 10px !important;
+          height: 10px !important;
+          display: block !important;
+        }
+        .modal-scrollbar::-webkit-scrollbar-track {
+          background: #e2e8f0 !important;
+          border-radius: 8px !important;
+        }
+        .modal-scrollbar::-webkit-scrollbar-thumb {
+          background: #0f4c81 !important;
+          border-radius: 8px !important;
+          border: 2px solid #e2e8f0 !important;
+        }
+        .modal-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #093155 !important;
+        }
+      `}</style>
     </div>
   );
 }

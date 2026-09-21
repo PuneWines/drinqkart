@@ -324,27 +324,26 @@ export default function EmployeeLearning() {
               });
             }
           } else {
-            // Regular Employee / User: Access to himself/herself matching by employee_id or name
+            // Regular Employee / User: Strictly filter by employee_id
             scopedList = combinedList.filter(emp => {
-              const empIdNorm = (emp.employee_id || '').toString().trim().toLowerCase();
-              const empNameNorm = (emp.name_as_per_aadhar || '').toString().trim().toLowerCase();
+              const empIdNorm = (emp.employee_id || emp.id || '').toString().trim().toLowerCase();
+              if (!currentEmpId || !empIdNorm) return false;
 
-              const matchId = currentEmpId && empIdNorm && (currentEmpId === empIdNorm || empIdNorm.includes(currentEmpId));
-              const matchName = currentUserName && empNameNorm && (
-                currentUserName === empNameNorm ||
-                currentUserName.includes(empNameNorm) ||
-                empNameNorm.includes(currentUserName)
+              return (
+                currentEmpId === empIdNorm ||
+                empIdNorm.includes(currentEmpId) ||
+                currentEmpId.includes(empIdNorm) ||
+                currentEmpId.replace(/^0+/, '') === empIdNorm.replace(/^0+/, '') ||
+                parseInt(currentEmpId, 10) === parseInt(empIdNorm, 10)
               );
-
-              return matchId || matchName;
             });
 
-            // Fallback if no exact match
-            if (scopedList.length === 0 && currentUserName) {
+            // Fallback if no exact match by employee_id
+            if (scopedList.length === 0 && (currentEmpId || currentUserName)) {
               scopedList = [{
-                id: currentEmpId || currentUserName,
-                employee_id: currentEmpId,
-                name_as_per_aadhar: currentUserObj.emp_name || currentUserObj.user_name || currentUserObj.username,
+                id: currentUserObj.employee_id || currentUserObj.id || currentEmpId || currentUserName,
+                employee_id: currentUserObj.employee_id || currentEmpId,
+                name_as_per_aadhar: currentUserObj.emp_name || currentUserObj.user_name || currentUserObj.username || 'My Profile',
                 joining_company_name: currentUserObj.shop_name || '',
                 status: 'Active'
               }];
@@ -456,65 +455,18 @@ export default function EmployeeLearning() {
                 });
               }
             } else {
-              const activeEmpList = scopedListParam.length > 0 ? scopedListParam : (employees.length > 0 ? employees : combinedListParam);
-
-              // Build a map of employee_id <-> name for robust cross-matching
-              const idToNameMap = new Map();
-              const nameToIdMap = new Map();
-
-              activeEmpList.forEach(emp => {
-                const id = (emp.employee_id || emp.id || '').toString().trim().toLowerCase();
-                const name = (emp.name_as_per_aadhar || emp.name || '').toString().trim().toLowerCase();
-                if (id && name) {
-                  idToNameMap.set(id, name);
-                  nameToIdMap.set(name, id);
-                }
-              });
-
-              // Also resolve logged in user's derived ID & Name from employee list
-              let resolvedUserEmpId = currentEmpId || nameToIdMap.get(currentUserName) || '';
-              let resolvedUserName = currentUserName || idToNameMap.get(currentEmpId) || '';
-
-              const scopedEmpNames = scopedList.map(e => (e.name_as_per_aadhar || '').toString().trim().toLowerCase()).filter(Boolean);
-              const scopedEmpIds = scopedList.map(e => (e.employee_id || e.id || '').toString().trim().toLowerCase()).filter(Boolean);
-
+              // Regular Employee / User: Strictly filter submissions by employee_id
               mappedSubs = mappedSubs.filter(s => {
-                let subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
-                let subEmpName = (s.employee || '').toString().trim().toLowerCase();
+                const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
+                if (!currentEmpId || !subEmpId) return false;
 
-                // Cross resolve missing ID or missing Name for the submission
-                if (!subEmpId && subEmpName) subEmpId = nameToIdMap.get(subEmpName) || '';
-                if (!subEmpName && subEmpId) subEmpName = idToNameMap.get(subEmpId) || '';
-
-                const matchId = (resolvedUserEmpId && subEmpId && (
-                                  resolvedUserEmpId === subEmpId ||
-                                  subEmpId.includes(resolvedUserEmpId) ||
-                                  resolvedUserEmpId.includes(subEmpId) ||
-                                  resolvedUserEmpId.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
-                                  parseInt(resolvedUserEmpId, 10) === parseInt(subEmpId, 10)
-                                )) ||
-                                (currentEmpId && subEmpId && (
-                                  currentEmpId === subEmpId ||
-                                  subEmpId.includes(currentEmpId) ||
-                                  currentEmpId.includes(subEmpId) ||
-                                  currentEmpId.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
-                                  parseInt(currentEmpId, 10) === parseInt(subEmpId, 10)
-                                ));
-
-                const matchScopedId = subEmpId && scopedEmpIds.some(id => 
-                  id === subEmpId ||
-                  id.includes(subEmpId) ||
-                  subEmpId.includes(id) ||
-                  id.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
-                  parseInt(id, 10) === parseInt(subEmpId, 10)
+                return (
+                  currentEmpId === subEmpId ||
+                  subEmpId.includes(currentEmpId) ||
+                  currentEmpId.includes(subEmpId) ||
+                  currentEmpId.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
+                  parseInt(currentEmpId, 10) === parseInt(subEmpId, 10)
                 );
-
-                const matchName = (resolvedUserName && subEmpName && (resolvedUserName === subEmpName || resolvedUserName.includes(subEmpName) || subEmpName.includes(resolvedUserName))) ||
-                                  (currentUserName && subEmpName && (currentUserName === subEmpName || currentUserName.includes(subEmpName) || subEmpName.includes(currentUserName)));
-
-                const matchScopedName = subEmpName && scopedEmpNames.some(name => name === subEmpName || name.includes(subEmpName) || subEmpName.includes(name));
-
-                return matchId || matchScopedId || matchName || matchScopedName;
               });
             }
           }
@@ -1389,7 +1341,12 @@ export default function EmployeeLearning() {
             {/* Modal Body */}
             <div className="p-5 max-h-[85vh] overflow-y-auto space-y-6 text-slate-800">
               {(() => {
-                const modalEmpObj = employees.find(e => e.name_as_per_aadhar === selectedModalEmp);
+                const modalEmpObj = employees.find(e => 
+                  (e.name_as_per_aadhar && e.name_as_per_aadhar === selectedModalEmp) ||
+                  (e.name && e.name === selectedModalEmp) ||
+                  (e.employee_name && e.employee_name === selectedModalEmp) ||
+                  (e.candidate_name && e.candidate_name === selectedModalEmp)
+                );
                 const modalEmpId = (modalEmpObj?.employee_id || '').toString().trim().toLowerCase();
                 const modalEmpNameNorm = (selectedModalEmp || '').toString().trim().toLowerCase();
 
