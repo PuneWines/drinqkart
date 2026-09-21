@@ -229,6 +229,7 @@ const STATUS_CONFIG = {
   'Half Day': { color: 'bg-yellow-100 text-yellow-700', label: 'H', fullLabel: 'Half Day', bgColor: 'bg-yellow-200/60' },
   'Weekly Off': { color: 'bg-indigo-100 text-indigo-700', label: 'WO', fullLabel: 'Weekly Off', bgColor: 'bg-indigo-100/60' },
   'Day Off': { color: 'bg-gray-100 text-gray-700', label: 'DO', fullLabel: 'Day Off', bgColor: 'bg-gray-200' },
+  'Future': { color: 'bg-transparent text-gray-300 font-normal', label: '-', fullLabel: 'Future', bgColor: 'bg-transparent' },
 };
 
 const AttendanceDaily = () => {
@@ -2370,7 +2371,8 @@ const AttendanceDaily = () => {
       }
     }
 
-    if (date > todayDate) {
+    const todayStr = getLocalDateString(new Date());
+    if (date > todayStr) {
       return { status: 'Future', in_time: '-', out_time: '-' };
     }
     return { status: 'Absent', in_time: '-', out_time: '-' };
@@ -3336,23 +3338,25 @@ const AttendanceDaily = () => {
                             else if (status === 'Absent' || status === 'On Leave') absentCount++;
                             else if (status === 'Half Day') halfDayCount++;
 
+                            const isFuture = status === 'Future';
                             const isCellHovered = hoveredCell && hoveredCell.empId === employee.id && hoveredCell.idx === idx;
 
                             return (
                               <td
                                 key={idx}
-                                onMouseEnter={() => setHoveredCell({ empId: employee.id, idx })}
+                                onMouseEnter={() => !isFuture && setHoveredCell({ empId: employee.id, idx })}
                                 onMouseLeave={() => setHoveredCell(null)}
-                                className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 relative ${isCellHovered ? 'bg-indigo-50/80 ring-1 ring-indigo-300/80 z-10' : day.isWeekend ? 'bg-gray-50' : ''
+                                className={`px-0.5 py-1 text-center transition-all relative ${isFuture ? 'cursor-default opacity-40' : 'cursor-pointer hover:opacity-80'
+                                  } ${isCellHovered ? 'bg-indigo-50/80 ring-1 ring-indigo-300/80 z-10' : day.isWeekend ? 'bg-gray-50/60' : ''
                                   }`}
-                                onClick={() => handleEmployeeSelect(employee, day.fullDate, status, attendance.in_time, attendance.out_time)}
+                                onClick={() => !isFuture && handleEmployeeSelect(employee, day.fullDate, status, attendance.in_time, attendance.out_time)}
                               >
                                 <div className="relative inline-block">
-                                  <div className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${config.color} font-medium text-[10px] transition-transform hover:scale-105`}>
+                                  <div className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${config.color} font-medium text-[10px] transition-transform ${!isFuture ? 'hover:scale-105' : ''}`}>
                                     {config.label}
                                   </div>
                                   {(() => {
-                                    if (!attendance?.manual_punches) return null;
+                                    if (isFuture || !attendance?.manual_punches) return null;
                                     const punches = attendance.manual_punches.manual && typeof attendance.manual_punches.manual === 'object'
                                       ? attendance.manual_punches.manual
                                       : attendance.manual_punches;
@@ -3362,6 +3366,7 @@ const AttendanceDaily = () => {
                                     ) : null;
                                   })()}
                                   {(() => {
+                                    if (isFuture) return null;
                                     const dayRoster = rosterData.find(r =>
                                       String(r.employee_id).trim() === String(employee.id).trim() &&
                                       r.date === day.fullDate
@@ -3378,7 +3383,7 @@ const AttendanceDaily = () => {
                                     ) : null;
                                   })()}
                                 </div>
-                                {attendance.late_minute > 0 && (
+                                {!isFuture && attendance.late_minute > 0 && (
                                   <div className="text-[8px] text-gray-400 mt-0.5">
                                     {attendance.late_minute}m
                                   </div>
@@ -3877,7 +3882,7 @@ const AttendanceDaily = () => {
                           }}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-gray-800 font-medium"
                         >
-                          {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+                          {Object.entries(STATUS_CONFIG).filter(([key]) => key !== 'Future').map(([key, config]) => (
                             <option key={key} value={key}>{config.fullLabel}</option>
                           ))}
                         </select>
