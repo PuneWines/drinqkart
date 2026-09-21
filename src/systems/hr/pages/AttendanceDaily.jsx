@@ -1549,6 +1549,8 @@ const AttendanceDaily = () => {
         const dateObj = parseISTToDate(group.Date);
         const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(dateObj);
 
+        const lateMins = calculateLateMinutes(inTime, group.Date);
+
         let status = 'Present';
         if (lateMins > 0) status = 'Late';
 
@@ -2389,10 +2391,6 @@ const AttendanceDaily = () => {
     'WAGHOLI': 'FRIENDS',
     'AKOLE': 'BALAJI',
     'MUMBAI': 'KUNAL ULWE',
-    'ULWE': 'KUNAL ULWE',
-    'ULWE NAVI MUMBAI': 'KUNAL ULWE',
-    'NAVI MUMBAI': 'KUNAL ULWE',
-    'MUMBAI ULWE': 'KUNAL ULWE',
     'KHARGHAR': 'KUNAL KHARGHAR'
   };
 
