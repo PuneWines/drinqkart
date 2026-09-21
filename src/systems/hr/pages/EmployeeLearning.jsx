@@ -189,10 +189,9 @@ export default function EmployeeLearning() {
       setShops(allShops);
 
       // Fetch active users from 'users' table (Master Settings user management) and HR tables
-      const [{ data: masterUsersData }, { data: hrMgmtData }, { data: empData }] = await Promise.all([
-        supabase.from('users').select('*'),
-        supabase.from('hr_management_employees').select('*'),
-        supabase.from('employees').select('*')
+      const [{ data: masterUsersData }, { data: hrMgmtData }] = await Promise.all([
+        supabase.from('users').select('*').then(res => res, () => ({ data: [] })),
+        supabase.from('hr_management_employees').select('*').then(res => res, () => ({ data: [] }))
       ]);
 
       // Build active status map from Master Setting users table
@@ -263,9 +262,8 @@ export default function EmployeeLearning() {
         }
       };
 
-      // 1. Process HR tables first so full Aadhar name and exact employee_id take primary precedence
+      // 1. Process HR table first so full Aadhar name and exact employee_id take primary precedence
       (hrMgmtData || []).forEach(addEmp);
-      (empData || []).forEach(addEmp);
 
       // 2. Add users table entries only if employee_id or name doesn't already exist
       (masterUsersData || []).forEach(u => {
@@ -324,21 +322,29 @@ export default function EmployeeLearning() {
               });
             }
           } else {
-            // Regular Employee / User: Strictly filter by employee_id
+            // Regular Employee / User: Filter by employee_id or name fallback
             scopedList = combinedList.filter(emp => {
               const empIdNorm = (emp.employee_id || emp.id || '').toString().trim().toLowerCase();
-              if (!currentEmpId || !empIdNorm) return false;
+              const empNameNorm = (emp.name_as_per_aadhar || emp.name || emp.candidate_name || '').toString().trim().toLowerCase();
 
-              return (
+              const matchId = currentEmpId && empIdNorm && (
                 currentEmpId === empIdNorm ||
                 empIdNorm.includes(currentEmpId) ||
                 currentEmpId.includes(empIdNorm) ||
                 currentEmpId.replace(/^0+/, '') === empIdNorm.replace(/^0+/, '') ||
                 parseInt(currentEmpId, 10) === parseInt(empIdNorm, 10)
               );
+
+              const matchName = currentUserName && empNameNorm && (
+                currentUserName === empNameNorm ||
+                currentUserName.includes(empNameNorm) ||
+                empNameNorm.includes(currentUserName)
+              );
+
+              return matchId || matchName;
             });
 
-            // Fallback if no exact match by employee_id
+            // Fallback if no match found in database tables
             if (scopedList.length === 0 && (currentEmpId || currentUserName)) {
               scopedList = [{
                 id: currentUserObj.employee_id || currentUserObj.id || currentEmpId || currentUserName,
@@ -373,20 +379,9 @@ export default function EmployeeLearning() {
         .from('hr_learning_tasks')
         .select('*');
 
-      if (!fetchErr && existingDbTasks && existingDbTasks.length > 0) {
-        // Map database records to state catalog
-        const mapped = existingDbTasks.map(t => ({
-          id: t.id,
-          level: t.level,
-          dept: t.dept,
-          en: t.task_en,
-          hi: t.task_hi || '',
-          tag: t.tag || ''
-        }));
-        setDbTasks(mapped);
-      } else {
+      if (!fetchErr && (!existingDbTasks || existingDbTasks.length === 0)) {
         // Table is empty or freshly created — auto populate seed records
-        const seedPayload = INITIAL_TASKS.map(t => ({
+        const seedPayload = TASKS.map(t => ({
           id: t.id,
           level: t.level,
           dept: t.dept,
@@ -395,16 +390,12 @@ export default function EmployeeLearning() {
           tag: t.tag || null
         }));
 
-        const { error: seedErr } = await supabase
+        await supabase
           .from('hr_learning_tasks')
           .upsert(seedPayload, { onConflict: 'id' });
-
-        if (seedErr) console.warn('Supabase task seed warning:', seedErr.message);
-        setDbTasks(INITIAL_TASKS);
       }
     } catch (e) {
-      console.error('Failed syncing tasks with Supabase:', e);
-      setDbTasks(INITIAL_TASKS);
+      // Ignore task seed errors gracefully
     }
   };
 
@@ -455,18 +446,26 @@ export default function EmployeeLearning() {
                 });
               }
             } else {
-              // Regular Employee / User: Strictly filter submissions by employee_id
+              // Regular Employee / User: Filter submissions by employee_id or employee_name fallback
               mappedSubs = mappedSubs.filter(s => {
                 const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
-                if (!currentEmpId || !subEmpId) return false;
+                const subEmpName = (s.employee || '').toString().trim().toLowerCase();
 
-                return (
+                const matchId = currentEmpId && subEmpId && (
                   currentEmpId === subEmpId ||
                   subEmpId.includes(currentEmpId) ||
                   currentEmpId.includes(subEmpId) ||
                   currentEmpId.replace(/^0+/, '') === subEmpId.replace(/^0+/, '') ||
                   parseInt(currentEmpId, 10) === parseInt(subEmpId, 10)
                 );
+
+                const matchName = currentUserName && subEmpName && (
+                  currentUserName === subEmpName ||
+                  currentUserName.includes(subEmpName) ||
+                  subEmpName.includes(currentUserName)
+                );
+
+                return matchId || matchName;
               });
             }
           }
