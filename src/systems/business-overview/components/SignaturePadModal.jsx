@@ -94,7 +94,6 @@ export default function SignaturePadModal({ isOpen, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
-        
         {/* Header */}
         <div className="bg-[#2a5298] text-white px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
