@@ -260,7 +260,7 @@ function MultiSegmentPie({ ok, bad, miss, total }) {
     { count: miss, color: '#c98a1c', label: 'Missing' },
     { count: unchecked, color: '#e2e8f0', label: 'Pending' },
   ];
- 
+
   let cumulativeOffset = 0;
 
   return (
@@ -693,13 +693,13 @@ function ChecklistModal({ shops, onClose, onSaved }) {
               <Fld label="Takeover by"><input type="text" value={takeover} onChange={e => setTakeover(e.target.value)} placeholder="Name" style={IS} /></Fld>
             </div>
           </div>
-          <p style={{ fontSize: 12, color: '#64748b', margin: '0 4px 12px' }}>Tap status — items turn <b style={{ color: '#1a9e5c' }}>green</b>, <b style={{ color: '#d64545' }}>red</b>, or <b style={{ color: '#c98a1c' }}>amber</b>.</p>
+          <p style={{ fontSize: 12, color: '#64748b', margin: '0 4px 14px' }}>Tap status — items turn <b style={{ color: '#1a9e5c' }}>green</b>, <b style={{ color: '#d64545' }}>red</b>, or <b style={{ color: '#c98a1c' }}>amber</b>.</p>
           {CHECKLIST_DATA.map(grp => {
             const dg = grp.items.filter(it => checks[it.id]).length;
             const co = coll[grp.group];
             return (
               <div key={grp.group} style={{ marginBottom: 14 }}>
-                <div onClick={() => setColl(p => ({ ...p, [grp.group]: !p[grp.group] }))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 10px', cursor: 'pointer', userSelect: 'none' }}>
+                <div onClick={() => setColl(p => ({ ...p, [grp.group]: !p[grp.group] }))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 12px', cursor: 'pointer', userSelect: 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.3 }}>{grp.group}</span>
                     <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{dg}/{grp.items.length}</span>
@@ -906,7 +906,7 @@ function ViewModal({ visit, onClose }) {
       let html = `
         <div style="border-bottom: 2px solid #0f4c81; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end;">
           <div>
-            <div style="font-size: 20px; font-weight: 800; color: #0f4c81; letter-spacing: -0.5px;">DRINQKART ENTERPRISE</div>
+            <div style="font-size: 20px; font-weight: 800; color: #0f4c81; letter-spacing: -0.5px;">DRINQKART</div>
             <div style="font-size: 15px; font-weight: 700; color: #1e293b; margin-top: 2px;">Shop Visit Inspection Report — <u>${shopName}</u></div>
           </div>
           <div style="text-align: right; font-size: 12px; color: #475569;">
@@ -929,41 +929,36 @@ function ViewModal({ visit, onClose }) {
           </div>
         </div>
 
-        <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 14px; margin-bottom: 16px; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between;">
-          <div>Inspection Summary: <b>${totalChecked}/${TOTAL}</b> Checked</div>
-          <div>
-            <span style="color: #1a9e5c;">${totalOk} OK</span> &nbsp;|&nbsp; 
-            <span style="color: #d64545;">${totalBad} Not OK</span> &nbsp;|&nbsp; 
-            <span style="color: #c98a1c;">${totalMiss} Missing</span>
+        <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center;">Inspection Summary: <b style="margin-left: 4px;">${totalChecked}/${TOTAL}</b>&nbsp;Checked</div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; background: #e5f7ee; color: #166534; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 11px; line-height: 1; text-align: center;">${totalOk} OK</span>
+            <span style="display: inline-flex; align-items: center; justify-content: center; background: #fceaea; color: #b91c1c; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 11px; line-height: 1; text-align: center;">${totalBad} Not OK</span>
+            <span style="display: inline-flex; align-items: center; justify-content: center; background: #fbf1de; color: #b45309; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 11px; line-height: 1; text-align: center;">${totalMiss} Missing</span>
           </div>
         </div>
       `;
 
       groupedData.forEach(g => {
         html += `
-          <div style="margin-bottom: 12px; page-break-inside: avoid;">
-            <div style="background: #e2e8f0; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 800; color: #0f172a; margin-bottom: 4px; display: flex; justify-content: space-between;">
-              <span>${g.group}</span>
-              <span style="font-size: 10.5px; font-weight: 700;">
-                ${g.okCount > 0 ? `<span style="color:#166534;">${g.okCount} OK</span> ` : ''}
-                ${g.badCount > 0 ? `<span style="color:#991b1b;">${g.badCount} Bad</span> ` : ''}
-                ${g.missCount > 0 ? `<span style="color:#92400e;">${g.missCount} Miss</span>` : ''}
-              </span>
+          <div style="margin-bottom: 18px; page-break-inside: avoid;">
+            <div style="background: #e2e8f0; padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 800; color: #0f4c81; line-height: 1.4; margin-bottom: 10px;">
+              ${g.group}
             </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 10.5px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 4px;">
         `;
         for (let i = 0; i < g.items.length; i += 2) {
           const it1 = g.items[i];
           const it2 = g.items[i + 1];
-          const st1 = it1.statusKey === 'ok' ? '<span style="color:#166534;font-weight:700;">✅ OK</span>' : it1.statusKey === 'bad' ? '<span style="color:#b91c1c;font-weight:700;">❌ Not OK</span>' : it1.statusKey === 'miss' ? '<span style="color:#b45309;font-weight:700;">⚠️ Missing</span>' : '⬜ Not checked';
-          const st2 = it2 ? (it2.statusKey === 'ok' ? '<span style="color:#166534;font-weight:700;">✅ OK</span>' : it2.statusKey === 'bad' ? '<span style="color:#b91c1c;font-weight:700;">❌ Not OK</span>' : it2.statusKey === 'miss' ? '<span style="color:#b45309;font-weight:700;">⚠️ Missing</span>' : '⬜ Not checked') : '';
+          const st1 = it1.statusKey === 'ok' ? '<span style="display:inline-block;vertical-align:middle;color:#166534;font-weight:700;line-height:1.2;">✅ OK</span>' : it1.statusKey === 'bad' ? '<span style="display:inline-block;vertical-align:middle;color:#b91c1c;font-weight:700;line-height:1.2;">❌ Not OK</span>' : it1.statusKey === 'miss' ? '<span style="display:inline-block;vertical-align:middle;color:#b45309;font-weight:700;line-height:1.2;">⚠️ Missing</span>' : '<span style="display:inline-block;vertical-align:middle;color:#94a3b8;line-height:1.2;">⬜ Not checked</span>';
+          const st2 = it2 ? (it2.statusKey === 'ok' ? '<span style="display:inline-block;vertical-align:middle;color:#166534;font-weight:700;line-height:1.2;">✅ OK</span>' : it2.statusKey === 'bad' ? '<span style="display:inline-block;vertical-align:middle;color:#b91c1c;font-weight:700;line-height:1.2;">❌ Not OK</span>' : it2.statusKey === 'miss' ? '<span style="display:inline-block;vertical-align:middle;color:#b45309;font-weight:700;line-height:1.2;">⚠️ Missing</span>' : '<span style="display:inline-block;vertical-align:middle;color:#94a3b8;line-height:1.2;">⬜ Not checked</span>') : '';
 
           html += `
             <tr style="border-bottom: 1px solid #f1f5f9;">
-              <td style="padding: 3px 6px; width: 36%; font-weight: 600; color: #334155;">${it1.icon} ${it1.label}</td>
-              <td style="padding: 3px 6px; width: 14%;">${st1}</td>
-              <td style="padding: 3px 6px; width: 36%; font-weight: 600; color: #334155;">${it2 ? `${it2.icon} ${it2.label}` : ''}</td>
-              <td style="padding: 3px 6px; width: 14%;">${st2}</td>
+              <td style="padding: 6px 8px; width: 34%; font-weight: 600; color: #334155; vertical-align: middle; line-height: 1.3;">${it1.icon} ${it1.label}</td>
+              <td style="padding: 6px 8px; width: 16%; text-align: center; vertical-align: middle;">${st1}</td>
+              <td style="padding: 6px 8px; width: 34%; font-weight: 600; color: #334155; vertical-align: middle; line-height: 1.3;">${it2 ? `${it2.icon} ${it2.label}` : ''}</td>
+              <td style="padding: 6px 8px; width: 16%; text-align: center; vertical-align: middle;">${st2}</td>
             </tr>
           `;
         }
@@ -976,7 +971,7 @@ function ViewModal({ visit, onClose }) {
             <div style="font-size: 11px; font-weight: 800; color: #0f4c81; text-transform: uppercase;">Remark</div>
             <div style="font-size: 12px; margin-top: 4px; color: #1e293b; white-space: pre-wrap;">${remark}</div>
           </div>
-        `;
+        `
       }
 
       if (manager1Name || manager1Sig || manager2Name || manager2Sig) {
@@ -1200,15 +1195,10 @@ function ViewModal({ visit, onClose }) {
 
                   return (
                     <div key={g.group} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #e2e8f0' }}>
+                      <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #e2e8f0' }}>
                         <span style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b' }}>
                           {g.group}
                         </span>
-                        <div style={{ display: 'flex', gap: 6, fontSize: 11, fontWeight: 700 }}>
-                          {g.okCount > 0 && <span style={{ background: '#e5f7ee', color: '#1a9e5c', padding: '2px 8px', borderRadius: 12 }}>{g.okCount} OK</span>}
-                          {g.badCount > 0 && <span style={{ background: '#fceaea', color: '#d64545', padding: '2px 8px', borderRadius: 12 }}>{g.badCount} Not OK</span>}
-                          {g.missCount > 0 && <span style={{ background: '#fbf1de', color: '#c98a1c', padding: '2px 8px', borderRadius: 12 }}>{g.missCount} Missing</span>}
-                        </div>
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 8 }}>
@@ -1261,7 +1251,7 @@ function ViewModal({ visit, onClose }) {
             {/* 5. Summary & Copy Report Footer */}
             <div style={{ background: '#0f172a', color: '#fff', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600 }}>
-                Summary: <b style={{ color: '#38bdf8' }}>{totalChecked}/{TOTAL}</b> checked | <b style={{ color: '#f87171' }}>{totalBad} Not OK</b> | <b style={{ color: '#fbbf24' }}>{totalMiss} Missing</b>
+                Summary: <b style={{ color: '#38bdf8' }}>{totalChecked}/{TOTAL}</b> checked | <b style={{ color: '#f87171' }}>{totalBad} Not OK</b> | <b style={{ paddingBottom: '10px', color: '#fbbf24' }}>{totalMiss} Missing</b>
               </div>
               <button
                 onClick={handleCopy}

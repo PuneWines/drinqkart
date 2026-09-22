@@ -148,11 +148,11 @@ export const fetchDelegationDataSortByDate = async () => {
       .or('submission_date.is.null,status.neq.done') // Fetch pending tasks (never submitted) OR tasks that are not 'done' (extended)
       .order('planned_date', { ascending: true });
 
-    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin';
+    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin' || roleUpper === 'ADMIN';
 
     if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (!isMasterAdmin && (roleUpper === 'ADMIN' || roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
+    } else if (!isMasterAdmin && (roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
       const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
       const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
       if (allowedShops.length > 0) {

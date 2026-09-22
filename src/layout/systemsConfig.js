@@ -218,8 +218,9 @@ export const getVisibleSystems = (user) => {
   console.log('[AccessControl Debug] masterAccessList:', masterAccessList);
 
   const isSubtabAllowed = (systemId, sub) => {
+    // Admin and MasterAdmin have full permission across all systems and pages
     if (userRole === 'admin' || isMasterAdmin) {
-      if (systemId !== 'checklist') return true;
+      return true;
     }
 
     if (systemId === 'whatsapp') {

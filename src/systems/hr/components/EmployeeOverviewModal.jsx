@@ -971,15 +971,19 @@ export default function EmployeeOverviewModal({
                     ) : payrollRecords && payrollRecords.length > 0 ? (
                       payrollRecords.map((payRecord) => {
                         const wayOffAmt = Number(payRecord.way_off || payRecord.way_off_deduction || 0);
-                        const totalDeductions = (Number(payRecord.advance_deduction || payRecord.deduction || 0) + Number(payRecord.breakage_deduction || 0) + Number(payRecord.medical_deduction || 0) + Number(payRecord.rto_deduction || 0) + wayOffAmt);
+                        const totalDeductions = (Number(payRecord.advance_deduction || payRecord.deduction || 0) + Number(payRecord.breakage_deduction || 0) + Number(payRecord.medical_deduction || 0) + Number(payRecord.rto_deduction || 0));
+                        const proratedVal = Number(payRecord.prorated_salary || payRecord.base_salary || payRecord.salary || 0);
+                        const seasonalVal = Number(payRecord.seasonal_bonus || 0);
+                        const referralVal = Number(payRecord.referral_bonus || 0);
+                        const netPayable = Math.max(0, Math.round(proratedVal - totalDeductions + seasonalVal + referralVal + wayOffAmt));
                         return (
                           <tr key={payRecord.id || `${payRecord.year}-${payRecord.month}`} className="hover:bg-slate-50">
                             <td className="px-3.5 py-2.5 font-bold text-slate-900">{payRecord.month} {payRecord.year}</td>
                             <td className="px-3.5 py-2.5">₹{Number(payRecord.base_salary || payRecord.salary || 0).toLocaleString()}</td>
                             <td className="px-3.5 py-2.5">{payRecord.total_present || payRecord.present_days || payRecord.working_days || 0} Days</td>
                             <td className="px-3.5 py-2.5 text-rose-600">-₹{totalDeductions.toLocaleString()}</td>
-                            <td className="px-3.5 py-2.5 text-rose-600 font-semibold">{wayOffAmt > 0 ? `-₹${wayOffAmt.toLocaleString()}` : '-'}</td>
-                            <td className="px-3.5 py-2.5 font-bold text-emerald-600">₹{Number(payRecord.net_salary || payRecord.net_payable || 0).toLocaleString()}</td>
+                            <td className="px-3.5 py-2.5 text-emerald-600 font-semibold">{wayOffAmt > 0 ? `+₹${wayOffAmt.toLocaleString()}` : '-'}</td>
+                            <td className="px-3.5 py-2.5 font-bold text-emerald-600">₹{netPayable.toLocaleString()}</td>
                             <td className="px-3.5 py-2.5 text-center">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${(payRecord.payout_status || payRecord.status)?.toLowerCase() === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                                 {payRecord.payout_status || payRecord.status || 'Pending'}
