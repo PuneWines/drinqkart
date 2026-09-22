@@ -36,7 +36,7 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
     // Apply role & shop filter
     if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (!isMasterAdmin && (roleUpper === 'ADMIN' || roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
+    } else if (!isMasterAdmin && roleUpper !== 'ADMIN' && (roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
       const rawShops = userAccess
         .split(',')
         .map(s => s.trim())
@@ -99,7 +99,7 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
 
     if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (!isMasterAdmin && (roleUpper === 'ADMIN' || roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
+    } else if (!isMasterAdmin && roleUpper !== 'ADMIN' && (roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
       const rawShops = userAccess
         .split(',')
         .map(s => s.trim())

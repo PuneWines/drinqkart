@@ -1126,8 +1126,11 @@ export default function AdminDashboard() {
           }
         }
 
+        const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
+        const isAdminUser = currentUserRole === 'admin' || (currentUsername || '').toLowerCase() === 'admin' || (currentUsername || '').toLowerCase() === 'masteradmin';
+
         let userShopsList = [];
-        if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+        if (!isAdminUser && rawShopStr && rawShopStr.toLowerCase() !== "all") {
           userShopsList = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
         }
 

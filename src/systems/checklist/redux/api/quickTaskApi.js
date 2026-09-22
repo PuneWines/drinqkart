@@ -116,11 +116,11 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
 
     const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
     const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
-    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin';
+    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin' || roleUpper === 'ADMIN';
 
     if (roleUpper === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (!isMasterAdmin && (roleUpper === 'ADMIN' || roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
+    } else if (!isMasterAdmin && (roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
       const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
       const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
       if (allowedShops.length > 0) {
