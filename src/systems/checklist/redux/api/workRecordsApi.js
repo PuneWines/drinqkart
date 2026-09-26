@@ -596,11 +596,43 @@ export const checkAndPromoteAssignmentsApi = async () => {
       .not('end_datetime', 'is', null);
 
     if (!expiredError && expiredNoNext && expiredNoNext.length > 0) {
-      for (const asgn of expiredNoNext) {
-        const end = new Date(asgn.end_datetime);
-        const durationMins = Number(asgn.estimated_minutes || 0);
-        const endWithDuration = new Date(end.getTime() + durationMins * 60 * 1000);
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+      for (const asgn of expiredNoNext) {
+        if (!asgn.end_datetime) continue;
+        const str = String(asgn.end_datetime).trim();
+        const datePart = str.split(/[T ]/)[0] || "";
+        // If dummy date, skip
+        if (datePart === "2000-01-01" || datePart.startsWith("0000") || datePart.startsWith("1970")) {
+          continue;
+        }
+
+        // If today's date has not passed the end date string (e.g. today is 2026-09-26, end is 2026-09-27), NEVER expire it
+        if (datePart > todayStr) {
+          continue;
+        }
+
+        // Parse date components safely using local time
+        let timePart = "";
+        if (str.includes("T")) timePart = str.split("T")[1]?.substring(0, 8) || "";
+        else if (str.includes(" ")) timePart = str.split(" ")[1]?.substring(0, 8) || "";
+
+        // Default end time to 23:59:59 if not specified or 00:00
+        if (!timePart || timePart.startsWith("00:00")) {
+          timePart = "23:59:59";
+        }
+
+        const [y, m, d] = datePart.split("-").map(Number);
+        const [hh, mm, ss] = timePart.split(":").map(Number);
+        if (!y || !m || !d) continue;
+
+        const endWithDuration = new Date(y, m - 1, d, hh || 23, mm || 59, ss || 59);
+        const durationMins = Number(asgn.estimated_minutes || 0);
+        if (durationMins > 0) {
+          endWithDuration.setMinutes(endWithDuration.getMinutes() + durationMins);
+        }
+
+        // Safety: only expire if current timestamp strictly passed the end time
         if (now > endWithDuration) {
           await supabase
             .from('task_assignments')
