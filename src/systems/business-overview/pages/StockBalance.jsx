@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { 
   FileSpreadsheet, Upload, RefreshCw, Search, Trash2, Calendar, Store, CheckCircle, 
@@ -151,12 +151,35 @@ function parseNum(val) {
   return isNaN(num) ? 0 : num;
 }
 
-function normalizeShopName(shopStr, shopList) {
-  if (!shopStr) return '';
-  const trimmed = String(shopStr).trim();
-  const match = shopList.find(s => s.name.toLowerCase() === trimmed.toLowerCase());
-  if (match) return match.name;
-  return trimmed.toUpperCase();
+function matchShopName(shopStr, shopList) {
+  if (!shopStr) return null;
+  const raw = String(shopStr).trim();
+  if (!raw) return null;
+  const clean = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!clean) return null;
+
+  // 1. Exact case-insensitive match (trimmed)
+  for (const s of shopList) {
+    const sName = String(s.name || s.shop_name || s).trim();
+    if (sName.toLowerCase() === raw.toLowerCase()) {
+      return sName;
+    }
+  }
+
+  // 2. Alphanumeric exact match (ignoring spaces, dashes, dots, etc.)
+  // e.g. "KUNAL KHARGHAR" === "kunalkharghar", "KUNAL ULWE" === "kunalulwe"
+  for (const s of shopList) {
+    const sName = String(s.name || s.shop_name || s).trim();
+    const sClean = sName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (sClean === clean) {
+      return sName;
+    }
+  }
+
+  // STRICT RULE: No substring or partial matches allowed.
+  // If Excel specifies "Kunal", it will NOT assume "KUNAL ULWE" or "KUNAL KHARGHAR".
+  // The user must specify the exact registered shop name.
+  return null;
 }
 
 const DEFAULT_SHOPS = [
@@ -181,16 +204,12 @@ export default function StockBalance() {
 
   // Import Modal States
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importShop, setImportShop] = useState('');
-  const [importDate, setImportDate] = useState(() => new Date().toISOString().split('T')[0]);
   
   // Parsed Data & Column Detection
   const [parsedRows, setParsedRows] = useState([]);
   const [detectedColumns, setDetectedColumns] = useState([]);
   const [shopColumnName, setShopColumnName] = useState('');
   const [dateColumnName, setDateColumnName] = useState('');
-  const [sampleExtractedShop, setSampleExtractedShop] = useState('');
-  const [sampleExtractedDate, setSampleExtractedDate] = useState('');
   
   const [selectedFileName, setSelectedFileName] = useState('');
   const [selectedFileSize, setSelectedFileSize] = useState('');
@@ -200,13 +219,21 @@ export default function StockBalance() {
 
   const fileInputRef = useRef(null);
 
-  // Fetch shops for selection
+  // Fetch shops for selection and auto-matching
   useEffect(() => {
     async function loadShops() {
       try {
-        const { data } = await supabase.from('shops').select('id, name');
+        let { data } = await supabase.from('shop').select('id, shop_name');
+        if (!data || data.length === 0) {
+          const res = await supabase.from('shops').select('id, name');
+          data = res.data;
+        }
         if (data && data.length > 0) {
-          setShops(data);
+          const formatted = data.map(s => ({
+            id: s.id || s.shop_name || s.name,
+            name: (s.shop_name || s.name || '').trim()
+          })).filter(s => s.name);
+          setShops(formatted);
         } else {
           setShops(DEFAULT_SHOPS.map(name => ({ id: name, name })));
         }
@@ -274,13 +301,7 @@ export default function StockBalance() {
     }
   };
 
-  // When opening import modal, initialize fallback target shop with active shopFilter if set
   const handleOpenImportModal = () => {
-    if (shopFilter) {
-      setImportShop(shopFilter);
-    } else if (!importShop && shops.length > 0) {
-      setImportShop(shops[0].name);
-    }
     setIsImportModalOpen(true);
   };
 
@@ -291,8 +312,6 @@ export default function StockBalance() {
     setDetectedColumns([]);
     setShopColumnName('');
     setDateColumnName('');
-    setSampleExtractedShop('');
-    setSampleExtractedDate('');
     setSelectedFileName('');
     setSelectedFileSize('');
     setShowPreviewTable(true);
@@ -387,8 +406,7 @@ export default function StockBalance() {
         // Map and extract based on matching column names
         const mappedList = [];
         const foundColumnsSet = new Set();
-        let firstSampleShop = '';
-        let firstSampleDate = '';
+        const availableShops = shops.length > 0 ? shops : DEFAULT_SHOPS.map(name => ({ id: name, name }));
 
         for (const row of rawRows) {
           const normRow = {};
@@ -404,27 +422,29 @@ export default function StockBalance() {
             }
           });
 
-          // 1. DATE: Extract from Excel column if present; otherwise note fallback
-          const rawDate = getFieldValue(normRow, COLUMN_KEYS.date);
-          const parsedDate = parseExcelDate(rawDate);
-          if (parsedDate && !firstSampleDate) firstSampleDate = parsedDate;
-
-          // 2. ITEM NAME: Must not be empty
+          // 1. ITEM NAME: Must not be empty
           const rawItemName = getFieldValue(normRow, COLUMN_KEYS.item_name);
           const itemName = String(rawItemName || '').trim();
           if (!itemName) continue;
 
-          // 3. SHOP: Extract from Excel column if present; otherwise note fallback
+          // 2. SHOP: Auto-extracted from Excel column and matched against actual registered shops
           const rawShop = getFieldValue(normRow, COLUMN_KEYS.shop_id);
-          const normalizedShop = normalizeShopName(rawShop, shops);
-          if (normalizedShop && !firstSampleShop) firstSampleShop = normalizedShop;
+          const rawShopStr = String(rawShop !== undefined && rawShop !== null ? rawShop : '').trim();
+          const matchedShop = matchShopName(rawShopStr, availableShops);
+
+          // 3. DATE: Auto-extracted from Excel column
+          const rawDate = getFieldValue(normRow, COLUMN_KEYS.date);
+          const rawDateStr = String(rawDate !== undefined && rawDate !== null ? rawDate : '').trim();
+          const parsedDate = parseExcelDate(rawDate);
 
           mappedList.push({
-            // Preserve raw extracted values so user can adjust fallbacks without re-parsing
-            hasExcelShop: Boolean(normalizedShop),
-            excelShop: normalizedShop,
-            hasExcelDate: Boolean(parsedDate),
+            rawShop: rawShopStr,
+            matchedShop: matchedShop, // matched official shop name or null
+            isShopMatched: Boolean(matchedShop),
+
+            rawDate: rawDateStr,
             excelDate: parsedDate,
+            isDateValid: Boolean(parsedDate),
 
             item_name: itemName,
             opening_qty: parseNum(getFieldValue(normRow, COLUMN_KEYS.opening_qty)),
@@ -457,8 +477,6 @@ export default function StockBalance() {
 
         setParsedRows(mappedList);
         setDetectedColumns(Array.from(foundColumnsSet));
-        setSampleExtractedShop(firstSampleShop);
-        setSampleExtractedDate(firstSampleDate);
 
         toast.success(`Successfully parsed ${mappedList.length} items from ${file.name}`);
       } catch (err) {
@@ -469,6 +487,62 @@ export default function StockBalance() {
     reader.readAsBinaryString(file);
   };
 
+  // Comprehensive validation across all parsed rows
+  const importValidation = useMemo(() => {
+    if (parsedRows.length === 0) {
+      return {
+        hasRows: false,
+        totalRows: 0,
+        allShopsMatched: false,
+        allDatesValid: false,
+        canImport: false,
+        matchedShops: [],
+        unmatchedShopNames: [],
+        unmatchedRowsCount: 0,
+        invalidDateRowsCount: 0,
+        sampleDate: ''
+      };
+    }
+
+    const matchedShopsSet = new Set();
+    const unmatchedShopSet = new Set();
+    let unmatchedRowsCount = 0;
+    let invalidDateRowsCount = 0;
+    let sampleDate = '';
+
+    parsedRows.forEach(r => {
+      if (r.matchedShop) {
+        matchedShopsSet.add(r.matchedShop);
+      } else {
+        unmatchedRowsCount++;
+        unmatchedShopSet.add(r.rawShop ? `"${r.rawShop}"` : '(Blank / Missing)');
+      }
+
+      if (r.isDateValid) {
+        if (!sampleDate) sampleDate = r.excelDate;
+      } else {
+        invalidDateRowsCount++;
+      }
+    });
+
+    const allShopsMatched = unmatchedRowsCount === 0 && matchedShopsSet.size > 0;
+    const allDatesValid = invalidDateRowsCount === 0;
+    const canImport = allShopsMatched && allDatesValid;
+
+    return {
+      hasRows: true,
+      totalRows: parsedRows.length,
+      allShopsMatched,
+      allDatesValid,
+      canImport,
+      matchedShops: Array.from(matchedShopsSet),
+      unmatchedShopNames: Array.from(unmatchedShopSet),
+      unmatchedRowsCount,
+      invalidDateRowsCount,
+      sampleDate
+    };
+  }, [parsedRows]);
+
   // Submit and upload parsed rows to Supabase in batches
   const handleConfirmImport = async () => {
     if (parsedRows.length === 0) {
@@ -476,45 +550,40 @@ export default function StockBalance() {
       return;
     }
 
-    // Determine final Shop and Date for each record:
-    // If given in Excel -> USE EXCEL VALUE
-    // If not given in Excel -> USE SELECTED FALLBACK
-    const finalRecords = parsedRows.map(r => {
-      const finalShop = r.hasExcelShop ? r.excelShop : (importShop || shopFilter || 'BALAJI');
-      const finalDate = r.hasExcelDate ? r.excelDate : (importDate || new Date().toISOString().split('T')[0]);
-
-      return {
-        shop_id: finalShop,
-        date: finalDate,
-        item_name: r.item_name,
-        opening_qty: r.opening_qty,
-        quantity_in: r.quantity_in,
-        quantity_out: r.quantity_out,
-        closing_qty: r.closing_qty,
-        purchase_rate: r.purchase_rate,
-        mrp_rate: r.mrp_rate,
-        subhead: r.subhead,
-        brand_name: r.brand_name,
-        liquor_type: r.liquor_type,
-        b_cs: r.b_cs,
-        mls: r.mls,
-        type1: r.type1,
-        type2: r.type2,
-        type3: r.type3,
-        type4: r.type4,
-        type5: r.type5,
-        type6: r.type6,
-        company_name: r.company_name,
-        party_name: r.party_name,
-        created_at: r.created_at
-      };
-    });
-
-    const missingShopCount = finalRecords.filter(r => !r.shop_id).length;
-    if (missingShopCount > 0) {
-      toast.error(`Excel does not have a Shop column for ${missingShopCount} items. Please choose a Fallback Shop above.`);
+    if (!importValidation.canImport) {
+      if (!importValidation.allShopsMatched) {
+        toast.error(`Import stopped: ${importValidation.unmatchedRowsCount} row(s) have unverified shop names (${importValidation.unmatchedShopNames.join(', ')}). All shops must match registered shops.`);
+      } else if (!importValidation.allDatesValid) {
+        toast.error(`Import stopped: ${importValidation.invalidDateRowsCount} row(s) have missing or invalid dates.`);
+      }
       return;
     }
+
+    const finalRecords = parsedRows.map(r => ({
+      shop_id: r.matchedShop,
+      date: r.excelDate,
+      item_name: r.item_name,
+      opening_qty: r.opening_qty,
+      quantity_in: r.quantity_in,
+      quantity_out: r.quantity_out,
+      closing_qty: r.closing_qty,
+      purchase_rate: r.purchase_rate,
+      mrp_rate: r.mrp_rate,
+      subhead: r.subhead,
+      brand_name: r.brand_name,
+      liquor_type: r.liquor_type,
+      b_cs: r.b_cs,
+      mls: r.mls,
+      type1: r.type1,
+      type2: r.type2,
+      type3: r.type3,
+      type4: r.type4,
+      type5: r.type5,
+      type6: r.type6,
+      company_name: r.company_name,
+      party_name: r.party_name,
+      created_at: r.created_at
+    }));
 
     setUploading(true);
     const toastId = toast.loading(`Uploading ${finalRecords.length} records in batches...`);
@@ -537,7 +606,7 @@ export default function StockBalance() {
         }
       }
 
-      toast.success(`Successfully imported ${finalRecords.length} stock records!`, { id: toastId });
+      toast.success(`Successfully imported ${finalRecords.length} stock records across ${importValidation.matchedShops.length} shop(s)!`, { id: toastId });
       handleCloseImportModal();
       fetchStockRecords();
     } catch (err) {
@@ -1016,63 +1085,26 @@ export default function StockBalance() {
             {/* Modal Content */}
             <div className="p-6 overflow-y-auto space-y-5">
 
-              {/* Extraction Rules Note */}
-              <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-3.5 flex items-start gap-2.5 text-xs text-indigo-950">
-                <Info size={16} className="text-indigo-600 mt-0.5 shrink-0" />
-                <div className="space-y-1">
-                  <p className="font-bold text-indigo-900">Automatic Column Extraction Rules:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-indigo-800 font-medium">
-                    <li><b>Date:</b> If the Excel sheet contains a Date column, each row's date is extracted directly. If not, the Fallback Date below is used.</li>
-                    <li><b>Shop Location:</b> If the Excel sheet contains a Shop column, each row's shop is extracted directly. If not, the Fallback Shop below is used.</li>
-                    <li><b>Stock Columns:</b> Item Name, Opening Qty, Qty In, Qty Out, Closing Qty, Rates, Subhead, Brand, Type, etc. are extracted automatically.</li>
+              {/* Extraction & Verification Rules Note */}
+              <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 flex items-start gap-3 text-xs text-indigo-950">
+                <Info size={18} className="text-indigo-600 mt-0.5 shrink-0" />
+                <div className="space-y-1.5">
+                  <p className="font-bold text-indigo-900 text-sm">Automatic Shop & Date Extraction & Strict Verification:</p>
+                  <ul className="list-disc list-inside space-y-1 text-xs text-indigo-800 font-medium">
+                    <li>
+                      <b>Shop Name:</b> Auto-extracted per row from Excel column (<span className="font-mono text-indigo-900 font-bold">Shop, Location, Branch, Store, Godown</span>). Every row's shop is verified against actual registered shops (<span className="font-mono font-semibold">{(shops.length > 0 ? shops.map(s => s.name) : DEFAULT_SHOPS).join(', ')}</span>). <b>If ANY row does not match a valid shop, import is stopped.</b>
+                    </li>
+                    <li>
+                      <b>Date:</b> Auto-extracted per row from Excel column (<span className="font-mono text-indigo-900 font-bold">Date, Stock Date, Entry Date, Bill Date, As On</span>). All rows must contain valid dates.
+                    </li>
+                    <li>
+                      <b>Stock Fields:</b> Item Name, Opening Qty, Qty In, Qty Out, Closing Qty, Rates, Subhead, Brand, Type, etc. are extracted automatically.
+                    </li>
                   </ul>
                 </div>
               </div>
 
-              {/* Step 1: Destination Fallbacks Config */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/70">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Fallback Shop Location</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Used if missing in Excel</span>
-                  </label>
-                  <select
-                    value={importShop}
-                    onChange={(e) => setImportShop(e.target.value)}
-                    disabled={uploading}
-                    className="w-full bg-white border border-slate-300 text-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
-                    id="modal-shop-select"
-                  >
-                    <option value="">Auto-Detect from Excel (or select fallback)...</option>
-                    {shops.map(s => (
-                      <option key={s.id || s.name} value={s.name}>{s.name}</option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Matches Excel columns: <span className="font-mono text-slate-600">Shop, Shop Name, Location, Branch, Store, Godown</span>
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Fallback Stock Date</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Used if missing in Excel</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={importDate}
-                    onChange={(e) => setImportDate(e.target.value)}
-                    disabled={uploading}
-                    className="w-full bg-white border border-slate-300 text-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
-                    id="modal-date-input"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Matches Excel columns: <span className="font-mono text-slate-600">Date, Stock Date, Entry Date, Bill Date, As On</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Step 2: File Upload Dropzone */}
+              {/* File Upload Dropzone */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Choose Excel Sheet (.xlsx, .xls, .csv)
@@ -1091,7 +1123,7 @@ export default function StockBalance() {
                 {!selectedFileName ? (
                   <div
                     onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                    className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50/80 rounded-2xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2.5"
+                    className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50/80 rounded-2xl p-7 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2.5"
                   >
                     <div className="p-3 bg-indigo-100 text-indigo-700 rounded-2xl">
                       <Upload size={24} />
@@ -1111,7 +1143,7 @@ export default function StockBalance() {
                         <div>
                           <p className="text-xs font-bold text-emerald-950">{selectedFileName}</p>
                           <p className="text-[11px] text-emerald-700 font-medium">
-                            {selectedFileSize} • <b className="text-emerald-900">{parsedRows.length.toLocaleString()}</b> valid stock items extracted
+                            {selectedFileSize} • <b className="text-emerald-900">{parsedRows.length.toLocaleString()}</b> total stock items extracted
                           </p>
                         </div>
                       </div>
@@ -1123,8 +1155,6 @@ export default function StockBalance() {
                           setDetectedColumns([]);
                           setShopColumnName('');
                           setDateColumnName('');
-                          setSampleExtractedShop('');
-                          setSampleExtractedDate('');
                           if (fileInputRef.current) fileInputRef.current.value = '';
                         }}
                         disabled={uploading}
@@ -1134,9 +1164,9 @@ export default function StockBalance() {
                       </button>
                     </div>
 
-                    {/* Column Detection Live Status Card */}
+                    {/* Column Detection Status */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
-                      {/* Shop Status */}
+                      {/* Shop Column Status */}
                       <div className="flex items-start gap-2">
                         {shopColumnName ? (
                           <>
@@ -1144,24 +1174,24 @@ export default function StockBalance() {
                             <div>
                               <span className="font-bold text-slate-800">Shop Column Detected:</span>
                               <p className="text-emerald-700 font-semibold text-[11px]">
-                                "{shopColumnName}" (extracted per row: e.g. <span className="underline font-bold">{sampleExtractedShop || 'auto'}</span>)
+                                "{shopColumnName}" (extracted per row)
                               </p>
                             </div>
                           </>
                         ) : (
                           <>
-                            <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+                            <AlertTriangle size={16} className="text-rose-600 mt-0.5 shrink-0" />
                             <div>
-                              <span className="font-bold text-slate-800">No Shop Column in Excel:</span>
-                              <p className="text-slate-600 text-[11px]">
-                                Using fallback: <b className="text-indigo-900">{importShop || 'Please select a shop above'}</b>
+                              <span className="font-bold text-rose-800">Shop Column Missing:</span>
+                              <p className="text-rose-600 text-[11px]">
+                                No Shop column found. Sheet must contain a Shop/Location column.
                               </p>
                             </div>
                           </>
                         )}
                       </div>
 
-                      {/* Date Status */}
+                      {/* Date Column Status */}
                       <div className="flex items-start gap-2">
                         {dateColumnName ? (
                           <>
@@ -1169,23 +1199,84 @@ export default function StockBalance() {
                             <div>
                               <span className="font-bold text-slate-800">Date Column Detected:</span>
                               <p className="text-emerald-700 font-semibold text-[11px]">
-                                "{dateColumnName}" (extracted per row: e.g. <span className="underline font-bold font-mono">{sampleExtractedDate || 'auto'}</span>)
+                                "{dateColumnName}" (extracted per row)
                               </p>
                             </div>
                           </>
                         ) : (
                           <>
-                            <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+                            <AlertTriangle size={16} className="text-rose-600 mt-0.5 shrink-0" />
                             <div>
-                              <span className="font-bold text-slate-800">No Date Column in Excel:</span>
-                              <p className="text-slate-600 text-[11px]">
-                                Using fallback date: <b className="text-indigo-900 font-mono">{importDate}</b>
+                              <span className="font-bold text-rose-800">Date Column Missing:</span>
+                              <p className="text-rose-600 text-[11px]">
+                                No Date column found. Sheet must contain a Date column.
                               </p>
                             </div>
                           </>
                         )}
                       </div>
                     </div>
+
+                    {/* Strict Shop Matching & Date Validation Alerts */}
+                    {!importValidation.allShopsMatched && (
+                      <div className="bg-rose-50 border border-rose-300 rounded-2xl p-4 text-xs text-rose-900 space-y-2">
+                        <div className="flex items-center gap-2 font-bold text-rose-700 text-sm">
+                          <AlertTriangle size={18} className="shrink-0" />
+                          <span>Import Stopped: Unmatched Shop Names Detected ({importValidation.unmatchedRowsCount} row{importValidation.unmatchedRowsCount > 1 ? 's' : ''})</span>
+                        </div>
+                        <p className="text-[12px] text-rose-800 font-medium">
+                          All rows in the Excel file must match actual registered shop names. Import cannot proceed until all shops match.
+                        </p>
+                        <div className="bg-white/80 p-2.5 rounded-xl border border-rose-200 text-[11px] space-y-1">
+                          <p>
+                            <span className="font-bold text-rose-900">Unrecognized Shop Names in Excel: </span>
+                            <span className="font-mono font-bold text-rose-700">
+                              {importValidation.unmatchedShopNames.join(', ') || '(Blank or Empty)'}
+                            </span>
+                          </p>
+                          <p>
+                            <span className="font-bold text-slate-700">Actual Registered Shops: </span>
+                            <span className="font-semibold text-emerald-800">
+                              {(shops.length > 0 ? shops.map(s => s.name) : DEFAULT_SHOPS).join(', ')}
+                            </span>
+                          </p>
+                        </div>
+                        <p className="text-[11px] text-rose-600 font-medium">
+                          💡 Please rename the shops in your Excel sheet to match one of the registered shops above, then re-upload.
+                        </p>
+                      </div>
+                    )}
+
+                    {importValidation.allShopsMatched && !importValidation.allDatesValid && (
+                      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-xs text-amber-900 space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-amber-800 text-sm">
+                          <AlertTriangle size={18} className="shrink-0" />
+                          <span>Import Stopped: Missing or Invalid Dates ({importValidation.invalidDateRowsCount} row{importValidation.invalidDateRowsCount > 1 ? 's' : ''})</span>
+                        </div>
+                        <p className="text-[12px] text-amber-800 font-medium">
+                          Some rows have empty or unparseable dates. Every row must have a valid date (YYYY-MM-DD or DD/MM/YYYY).
+                        </p>
+                      </div>
+                    )}
+
+                    {importValidation.canImport && (
+                      <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3.5 text-xs text-emerald-950 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-1.5 bg-emerald-600 text-white rounded-lg">
+                            <Check size={16} />
+                          </div>
+                          <div>
+                            <span className="font-bold text-emerald-900">All Shops & Dates Matched & Verified!</span>
+                            <p className="text-[11px] text-emerald-700">
+                              Verified {parsedRows.length.toLocaleString()} rows across {importValidation.matchedShops.length} shop(s): <span className="font-bold">{importValidation.matchedShops.join(', ')}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 bg-emerald-200/70 text-emerald-900 font-bold rounded-lg text-[11px]">
+                          Ready to Import
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1202,7 +1293,7 @@ export default function StockBalance() {
                       className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
                     >
                       {showPreviewTable ? <EyeOff size={13} /> : <Eye size={13} />}
-                      {showPreviewTable ? 'Hide Data Preview' : 'Show Data Preview (3 rows)'}
+                      {showPreviewTable ? 'Hide Data Preview' : 'Show Data Preview'}
                     </button>
                   </div>
 
@@ -1246,37 +1337,40 @@ export default function StockBalance() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {parsedRows.slice(0, 3).map((r, i) => {
-                            const effectiveShop = r.hasExcelShop ? r.excelShop : (importShop || 'BALAJI');
-                            const effectiveDate = r.hasExcelDate ? r.excelDate : (importDate || 'Today');
-
-                            return (
-                              <tr key={i} className="hover:bg-slate-50 font-medium">
-                                <td className="px-2.5 py-1.5 font-bold text-indigo-900">
-                                  <div className="flex items-center gap-1">
-                                    <span>{effectiveShop}</span>
-                                    <span className={`text-[9px] px-1 py-0.2 rounded font-normal ${r.hasExcelShop ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                                      {r.hasExcelShop ? 'from Excel' : 'fallback'}
+                          {parsedRows.slice(0, 5).map((r, i) => (
+                            <tr key={i} className="hover:bg-slate-50 font-medium">
+                              <td className="px-2.5 py-1.5 font-bold">
+                                {r.isShopMatched ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-emerald-900">{r.matchedShop}</span>
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-emerald-100 text-emerald-800">
+                                      ✓ Matched
                                     </span>
                                   </div>
-                                </td>
-                                <td className="px-2.5 py-1.5 text-slate-600 font-mono">
-                                  <div className="flex items-center gap-1">
-                                    <span>{effectiveDate}</span>
-                                    <span className={`text-[9px] px-1 py-0.2 rounded font-normal ${r.hasExcelDate ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                                      {r.hasExcelDate ? 'from Excel' : 'fallback'}
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-rose-700 line-through">{r.rawShop || '(Blank)'}</span>
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-rose-100 text-rose-800">
+                                      ✕ Unmatched
                                     </span>
                                   </div>
-                                </td>
-                                <td className="px-2.5 py-1.5 font-bold text-slate-900">{r.item_name}</td>
-                                <td className="px-2.5 py-1.5 text-right font-mono font-bold text-indigo-600">{r.closing_qty}</td>
-                                <td className="px-2.5 py-1.5 text-right font-mono">₹{r.purchase_rate}</td>
-                                <td className="px-2.5 py-1.5 text-right font-mono font-semibold">₹{r.mrp_rate}</td>
-                                <td className="px-2.5 py-1.5 text-slate-700">{r.brand_name || '—'}</td>
-                                <td className="px-2.5 py-1.5 text-slate-600">{r.subhead || '—'}</td>
-                              </tr>
-                            );
-                          })}
+                                )}
+                              </td>
+                              <td className="px-2.5 py-1.5 font-mono">
+                                {r.isDateValid ? (
+                                  <span className="text-slate-700">{r.excelDate}</span>
+                                ) : (
+                                  <span className="text-rose-600 font-bold">{r.rawDate || 'Missing'} (Invalid)</span>
+                                )}
+                              </td>
+                              <td className="px-2.5 py-1.5 font-bold text-slate-900">{r.item_name}</td>
+                              <td className="px-2.5 py-1.5 text-right font-mono font-bold text-indigo-600">{r.closing_qty}</td>
+                              <td className="px-2.5 py-1.5 text-right font-mono">₹{r.purchase_rate}</td>
+                              <td className="px-2.5 py-1.5 text-right font-mono font-semibold">₹{r.mrp_rate}</td>
+                              <td className="px-2.5 py-1.5 text-slate-700">{r.brand_name || '—'}</td>
+                              <td className="px-2.5 py-1.5 text-slate-600">{r.subhead || '—'}</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
@@ -1314,29 +1408,55 @@ export default function StockBalance() {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 p-4 px-6 flex items-center justify-end gap-3">
-              <button
-                onClick={handleCloseImportModal}
-                disabled={uploading}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition cursor-pointer"
-              >
-                Cancel
-              </button>
+            <div className="bg-slate-50 border-t border-slate-200 p-4 px-6 flex items-center justify-between gap-3">
+              <div className="text-xs">
+                {parsedRows.length > 0 && (
+                  !importValidation.canImport ? (
+                    <span className="text-rose-600 font-bold flex items-center gap-1.5">
+                      <AlertTriangle size={15} />
+                      Import blocked: {!importValidation.allShopsMatched ? `${importValidation.unmatchedRowsCount} unmatched shop row(s)` : `${importValidation.invalidDateRowsCount} invalid date row(s)`}
+                    </span>
+                  ) : (
+                    <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                      <CheckCircle size={15} />
+                      All {parsedRows.length.toLocaleString()} rows verified
+                    </span>
+                  )
+                )}
+              </div>
 
-              <button
-                onClick={handleConfirmImport}
-                disabled={uploading || parsedRows.length === 0}
-                className="flex items-center gap-2 px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl shadow-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                id="submit-excel-import-btn"
-              >
-                <Upload size={14} className={uploading ? 'animate-bounce' : ''} />
-                {uploading 
-                  ? 'Importing Records...' 
-                  : parsedRows.length > 0 
-                    ? `Import ${parsedRows.length.toLocaleString()} Records` 
-                    : 'Choose File to Import'
-                }
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCloseImportModal}
+                  disabled={uploading}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleConfirmImport}
+                  disabled={uploading || parsedRows.length === 0 || !importValidation.canImport}
+                  className={`flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-sm transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                    !importValidation.canImport && parsedRows.length > 0
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800'
+                  }`}
+                  id="submit-excel-import-btn"
+                >
+                  <Upload size={14} className={uploading ? 'animate-bounce' : ''} />
+                  {uploading 
+                    ? 'Importing Records...' 
+                    : parsedRows.length === 0 
+                      ? 'Choose File to Import'
+                      : !importValidation.allShopsMatched
+                        ? 'Import Blocked (Unmatched Shops)'
+                        : !importValidation.allDatesValid
+                          ? 'Import Blocked (Invalid Dates)'
+                          : `Import ${parsedRows.length.toLocaleString()} Verified Records`
+                  }
+                </button>
+              </div>
             </div>
 
           </div>
