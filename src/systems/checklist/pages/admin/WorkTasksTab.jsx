@@ -11,7 +11,8 @@ import {
   Filter,
   Camera,
   Loader2,
-  Download
+  Download,
+  Clock
 } from "lucide-react";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
@@ -81,6 +82,31 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   } else {
     return "NOT_DONE";
   }
+};
+
+const formatCountdown = (diffMs) => {
+  if (diffMs <= 0) return "0h 00m";
+  const totalMinutes = Math.ceil(diffMs / (60 * 1000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const mins = totalMinutes % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${String(mins).padStart(2, '0')}m`;
+  }
+  return `${hours}h ${String(mins).padStart(2, '0')}m`;
+};
+
+const getWorkTaskRemainingExpiry = (task, currentTime = new Date()) => {
+  const { taskEnd } = getWorkTaskTimeBounds(task);
+  const diffMs = taskEnd.getTime() - currentTime.getTime();
+  return formatCountdown(diffMs);
+};
+
+const getWorkTaskTimeUntilStart = (task, currentTime = new Date()) => {
+  const { taskStart } = getWorkTaskTimeBounds(task);
+  const diffMs = taskStart.getTime() - currentTime.getTime();
+  return formatCountdown(diffMs);
 };
 
 const renderUserStatus = (task, formatDateWithTime) => {
@@ -364,7 +390,7 @@ const WorkTasksTab = ({
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000);
+    }, 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -1390,7 +1416,23 @@ const WorkTasksTab = ({
                                       const ds = getWorkTaskDynamicStatus(task, currentTime);
                                       const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
                                       const label = ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
-                                      return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>;
+                                      return (
+                                        <div className="flex flex-col gap-1 items-start">
+                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>
+                                          {ds === 'ACTIVE' && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-200">
+                                              <Clock size={10} className="shrink-0 animate-pulse text-red-500" />
+                                              <span>{getWorkTaskRemainingExpiry(task, currentTime)}</span>
+                                            </span>
+                                          )}
+                                          {ds === 'UPCOMING' && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                              <Clock size={10} className="shrink-0 text-emerald-600" />
+                                              <span>{getWorkTaskTimeUntilStart(task, currentTime)}</span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
                                     })()
                                   ) : header.id === "current_date" ? (
                                     <div className="flex flex-col">
@@ -1417,9 +1459,27 @@ const WorkTasksTab = ({
                                       if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
                                       if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
                                       if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
-                                      if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
                                       if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
-                                      return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
+                                      if (ds === "UPCOMING") {
+                                        return (
+                                          <div className="flex flex-col gap-1 items-start">
+                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                              <Clock size={11} className="shrink-0 text-emerald-600" />
+                                              <span>Starts in {getWorkTaskTimeUntilStart(task, currentTime)}</span>
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <div className="flex flex-col gap-1 items-start">
+                                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">
+                                            <Clock size={11} className="shrink-0 animate-pulse text-red-500" />
+                                            <span>Expires in {getWorkTaskRemainingExpiry(task, currentTime)}</span>
+                                          </span>
+                                        </div>
+                                      );
                                     })()
                                   ) : (header.id === 'name' || header.id === 'manager_name') ? (
                                     <span className="font-bold text-gray-900">{task[header.id] || "—"}</span>
@@ -1670,9 +1730,27 @@ const WorkTasksTab = ({
                                       if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
                                       if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
                                       if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
-                                      if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
                                       if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
-                                      return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
+                                      if (ds === "UPCOMING") {
+                                        return (
+                                          <div className="flex flex-col gap-1 items-start">
+                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                              <Clock size={11} className="shrink-0 text-emerald-600" />
+                                              <span>Starts in {getWorkTaskTimeUntilStart(task, currentTime)}</span>
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <div className="flex flex-col gap-1 items-start">
+                                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">
+                                            <Clock size={11} className="shrink-0 animate-pulse text-red-500" />
+                                            <span>Expires in {getWorkTaskRemainingExpiry(task, currentTime)}</span>
+                                          </span>
+                                        </div>
+                                      );
                                     })()}
                                   </div>
                                 </div>
