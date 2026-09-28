@@ -14,22 +14,18 @@ const getWorkTaskTimeBounds = (task) => {
   let endHour = 23;
   let endMin = 59;
   if (startStr) {
-    const parts = startStr.split('T');
-    if (parts[1]) {
-      const timeParts = parts[1].split(':');
-      startHour = parseInt(timeParts[0]) || 0;
-      startMin = parseInt(timeParts[1]) || 0;
-    }
+    const timePart = startStr.includes('T') ? startStr.split('T')[1] : startStr;
+    const timeParts = timePart.split(':');
+    startHour = parseInt(timeParts[0], 10) || 0;
+    startMin = parseInt(timeParts[1], 10) || 0;
   }
   if (endStr) {
-    const parts = endStr.split('T');
-    if (parts[1]) {
-      const timeParts = parts[1].split(':');
-      endHour = parseInt(timeParts[0]) || 0;
-      endMin = parseInt(timeParts[1]) || 0;
-    }
+    const timePart = endStr.includes('T') ? endStr.split('T')[1] : endStr;
+    const timeParts = timePart.split(':');
+    endHour = parseInt(timeParts[0], 10) || 0;
+    endMin = parseInt(timeParts[1], 10) || 0;
   }
-  const [year, month, day] = task.current_date.split('-').map(Number);
+  const [year, month, day] = (task.current_date ? task.current_date.split('T')[0] : '').split('-').map(Number);
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
   const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
   const duration = (task.duration || task.estimated_minutes || 0) + (task.extra_time || task.extraTime || 0); // minutes
@@ -68,6 +64,31 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   } else {
     return "NOT_DONE";
   }
+};
+
+const formatCountdown = (diffMs) => {
+  if (diffMs <= 0) return "0h 00m";
+  const totalMinutes = Math.ceil(diffMs / (60 * 1000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const mins = totalMinutes % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${String(mins).padStart(2, '0')}m`;
+  }
+  return `${hours}h ${String(mins).padStart(2, '0')}m`;
+};
+
+const getWorkTaskRemainingExpiry = (task, currentTime = new Date()) => {
+  const { taskEnd } = getWorkTaskTimeBounds(task);
+  const diffMs = taskEnd.getTime() - currentTime.getTime();
+  return formatCountdown(diffMs);
+};
+
+const getWorkTaskTimeUntilStart = (task, currentTime = new Date()) => {
+  const { taskStart } = getWorkTaskTimeBounds(task);
+  const diffMs = taskStart.getTime() - currentTime.getTime();
+  return formatCountdown(diffMs);
 };
 
 const getExtraTimeRemaining = (task, currentTime) => {
@@ -109,7 +130,7 @@ const UserTasks = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
-    }, 60000)
+    }, 10000)
     return () => clearInterval(timer)
   }, [])
 
@@ -279,7 +300,15 @@ const UserTasks = () => {
       return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Rejected</span>;
     }
     if (ds === "UPCOMING") {
-      return <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full uppercase tracking-wider">Upcoming</span>;
+      return (
+        <div className="flex flex-col items-end gap-1">
+          <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full uppercase tracking-wider">Upcoming</span>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <Clock size={10} className="shrink-0 text-emerald-600" />
+            <span>Starts in {getWorkTaskTimeUntilStart(task, currentTime)}</span>
+          </span>
+        </div>
+      );
     }
     // Extra-time (45m) window removed; treat overdue as NOT_DONE
     if (ds === "NOT_DONE") {
@@ -288,7 +317,15 @@ const UserTasks = () => {
     if (task.status === "REJECTED") {
       return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Rejected (Resubmit Today)</span>;
     }
-    return <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Active</span>;
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Active</span>
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-200">
+          <Clock size={10} className="shrink-0 animate-pulse text-red-500" />
+          <span>Expires in {getWorkTaskRemainingExpiry(task, currentTime)}</span>
+        </span>
+      </div>
+    );
   }
 
   return (
