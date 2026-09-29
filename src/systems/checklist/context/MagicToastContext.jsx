@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import MagicToast from '../components/MagicToast';
 
 const MagicToastContext = createContext();
@@ -24,8 +24,10 @@ export const MagicToastProvider = ({ children }) => {
         setToasts(prev => prev.filter(toast => toast.id !== id));
     }, []);
 
+    const contextValue = useMemo(() => ({ showToast }), [showToast]);
+
     return (
-        <MagicToastContext.Provider value={{ showToast }}>
+        <MagicToastContext.Provider value={contextValue}>
             {children}
             <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-4 pointer-events-none">
                 {toasts.map(toast => (

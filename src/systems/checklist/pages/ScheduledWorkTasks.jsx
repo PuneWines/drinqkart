@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect, useCallback, Fragment } from "react";
+import { useState, useMemo, useEffect, useCallback, Fragment, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -109,25 +109,32 @@ export default function ScheduledWorkTasks() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Background Promotion Trigger
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
+
+  // Background Promotion Trigger: Runs every 5 minutes
   const runPromotionCheck = useCallback(async () => {
     try {
       const { promotedCount } = await checkAndPromoteAssignmentsApi();
       if (promotedCount > 0) {
-        showToast(`Auto-promoted ${promotedCount} expired work assignment(s)!`, "info");
+        if (showToastRef.current) {
+          showToastRef.current(`Auto-promoted ${promotedCount} expired work assignment(s)!`, "info");
+        }
         dispatch(fetchWorkRecords());
       }
     } catch (err) {
       console.error("Auto promotion check failed:", err);
     }
-  }, [dispatch, showToast]);
+  }, [dispatch]);
 
   useEffect(() => {
     runPromotionCheck();
     const timer = setInterval(() => {
       setCurrentTime(new Date());
       runPromotionCheck();
-    }, 60000); // 1 minute
+    }, 5 * 60 * 1000); // 5 minutes
     return () => clearInterval(timer);
   }, [runPromotionCheck]);
 
