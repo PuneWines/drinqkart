@@ -634,10 +634,17 @@ export const checkAndPromoteAssignmentsApi = async () => {
 
         // Safety: only expire if current timestamp strictly passed the end time
         if (now > endWithDuration) {
+          const sTime = extractTimeFromDatetime(asgn.start_datetime) || "09:00:00";
+          const eTime = extractTimeFromDatetime(asgn.end_datetime) || "23:00:00";
+
           await supabase
             .from('task_assignments')
             .update({
               status: 'AVAILABLE',
+              start_datetime: `2000-01-01T${sTime}`,
+              end_datetime: `2000-01-01T${eTime}`,
+              manager_name: null,
+              employee_name: null,
               updated_at: new Date().toISOString()
             })
             .eq('id', asgn.id);

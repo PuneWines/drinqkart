@@ -127,17 +127,10 @@ const UserTasks = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date())
-    }, 10000)
-    return () => clearInterval(timer)
-  }, [])
-
   const currentUsername = localStorage.getItem("user-name") || ""
 
-  const loadTasks = useCallback(async () => {
-    setLoading(true)
+  const loadTasks = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true)
     try {
       const data = await fetchWorkTasksForUserApi(currentUsername)
       setUserTasks(data || [])
@@ -145,7 +138,7 @@ const UserTasks = () => {
       console.error("Error loading tasks:", error)
       showToast("Failed to load tasks", "error")
     } finally {
-      setLoading(false)
+      if (!isBackground) setLoading(false)
     }
   }, [currentUsername, showToast])
 
@@ -154,6 +147,16 @@ const UserTasks = () => {
       loadTasks()
     }
   }, [loadTasks, currentUsername])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+      if (currentUsername) {
+        loadTasks(true)
+      }
+    }, 5 * 60 * 1000) // 5 minutes
+    return () => clearInterval(timer)
+  }, [currentUsername, loadTasks])
 
   const filteredTasks = userTasks.filter((task) => {
     const dynamicStatus = getWorkTaskDynamicStatus(task, currentTime);

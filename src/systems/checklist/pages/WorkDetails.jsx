@@ -217,34 +217,41 @@ export default function WorkDetails() {
   // Local state for modified fields (spreadsheet-style editing)
   const [modifiedRows, setModifiedRows] = useState({});
 
-  // Real-time Timer: Update every minute to trigger auto-reset
+  // Real-time Timer: Update every 5 minutes to trigger auto-reset
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // 1 minute
+    }, 5 * 60 * 1000); // 5 minutes
     return () => clearInterval(timer);
   }, []);
 
-  // Background Promotion Trigger
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
+
+  // Background Promotion Trigger: Runs every 5 minutes
   const runPromotionCheck = useCallback(async () => {
     try {
       const { promotedCount } = await checkAndPromoteAssignmentsApi();
       if (promotedCount > 0) {
-        showToast(`Auto-promoted ${promotedCount} expired work assignment(s)!`, "info");
+        if (showToastRef.current) {
+          showToastRef.current(`Auto-promoted ${promotedCount} expired work assignment(s)!`, "info");
+        }
         dispatch(fetchWorkRecords());
       }
     } catch (err) {
       console.error("Auto promotion check failed:", err);
     }
-  }, [dispatch, showToast]);
+  }, [dispatch]);
 
   useEffect(() => {
     runPromotionCheck();
     const timer = setInterval(() => {
       runPromotionCheck();
-    }, 60000); // 1 minute
+    }, 5 * 60 * 1000); // 5 minutes
     return () => clearInterval(timer);
   }, [runPromotionCheck]);
 
@@ -363,19 +370,27 @@ export default function WorkDetails() {
       const joinedAsgn = Array.isArray(task.task_assignments) ? task.task_assignments[0] : task.task_assignments;
       let assignment = joinedAsgn || assignments.find(a => a.task_id === task.id);
 
-      const isAvailable = !assignment?.id || (isAssignmentExpired(assignment) && !assignment?.next_start_datetime);
+      const isAvailable = !assignment?.id || (!assignment?.next_start_datetime && (assignment?.status === 'AVAILABLE' || isAssignmentExpired(assignment)));
 
       const startTime = getTimePart(assignment?.start_datetime);
       const endTime = getTimePart(assignment?.end_datetime);
 
-      const baseAssignmentData = {
+      const baseAssignmentData = isAvailable ? {
+        ...(assignment || {}),
+        start_datetime: startTime ? `T${startTime}` : "",
+        end_datetime: endTime ? `T${endTime}` : "",
+        estimated_minutes: task.estimated_minutes !== undefined && task.estimated_minutes !== null ? task.estimated_minutes : (assignment?.estimated_minutes || 0),
+        manager_name: "",
+        employee_name: "",
+        status: "AVAILABLE"
+      } : {
         ...(assignment || {}),
         start_datetime: assignment?.start_datetime || (startTime ? `T${startTime}` : ""),
         end_datetime: assignment?.end_datetime || (endTime ? `T${endTime}` : ""),
         estimated_minutes: task.estimated_minutes !== undefined && task.estimated_minutes !== null ? task.estimated_minutes : (assignment?.estimated_minutes || 0),
         manager_name: assignment?.manager_name || "",
         employee_name: assignment?.employee_name || "",
-        status: assignment?.status || (isAvailable ? "AVAILABLE" : "")
+        status: assignment?.status || ""
       };
 
       const modified = modifiedRows[task.id] || {};

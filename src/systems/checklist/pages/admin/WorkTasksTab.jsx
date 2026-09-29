@@ -387,13 +387,6 @@ const WorkTasksTab = ({
   const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false, workEmployee: false });
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
-
   const loadingRef = useRef(null);
 
   const getTimeStatus = useCallback((dateString, taskStatus) => {
@@ -464,20 +457,18 @@ const WorkTasksTab = ({
     }
   }, [showHistory, userRole]);
 
-  const fetchData = useCallback(async (pageNumber = 0, append = false) => {
+  const fetchData = useCallback(async (pageNumber = 0, append = false, isBackground = false) => {
     if (!username) return;
 
     try {
       if (pageNumber === 0) {
-        setIsLoading(true);
+        if (!isBackground) {
+          setIsLoading(true);
+        }
       } else {
         setIsLoadingMore(true);
       }
       setError(null);
-      if (!append) {
-        setTasks([]);
-        setHistoryData([]);
-      }
 
       let currentUsername = (username || localStorage.getItem("user-name") || "").trim();
       let currentUserRole = (userRole || localStorage.getItem("role") || "").toLowerCase().trim();
@@ -614,7 +605,7 @@ const WorkTasksTab = ({
           manager_name: item.manager_name || item.task_assignments?.manager_name || item.given_by || "—"
         };
 
-        if (mapped.status === "REJECTED") {
+        if ((mapped.work_status || mapped.status || "").toUpperCase() === "REJECTED") {
           const todayStr = getLocalStyleDate(new Date());
           mapped.current_date = todayStr;
           mapped.submission_date = null;
@@ -661,18 +652,15 @@ const WorkTasksTab = ({
       const hasMoreData = (data && data.length === limit);
       setHasMore(hasMoreData);
 
+      const now = new Date();
       if (showHistory) {
         const historyTasks = filteredWorkTasks.filter(item => {
-          const ds = getWorkTaskDynamicStatus(item, currentTime);
-          return ds === "NOT_DONE" || item.submission_date;
+          const isPastDate = item.current_date && item.current_date < todayStr;
+          return item.submission_date || isPastDate;
         });
         setHistoryData(prev => append ? [...prev, ...historyTasks] : historyTasks);
       } else {
-        const liveTasks = filteredWorkTasks.filter(item => {
-          const { taskEnd } = getWorkTaskTimeBounds(item);
-          return currentTime <= taskEnd;
-        });
-        setTasks(prev => append ? [...prev, ...liveTasks] : liveTasks);
+        setTasks(prev => append ? [...prev, ...filteredWorkTasks] : filteredWorkTasks);
       }
     } catch (err) {
       console.error("Fetch error:", err);
@@ -681,13 +669,21 @@ const WorkTasksTab = ({
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [username, userRole, showHistory, holidaysList, debouncedSearchTerm, workEmployeeFilter, currentTime, dateFilter, startDate, endDate, historyShopFilter, historyManagerFilter]);
+  }, [username, userRole, showHistory, holidaysList, debouncedSearchTerm, workEmployeeFilter, dateFilter, startDate, endDate, historyShopFilter, historyManagerFilter]);
 
   useEffect(() => {
     setPage(0);
     setHasMore(true);
     fetchData(0, false);
   }, [showHistory, debouncedSearchTerm, dateFilter, workEmployeeFilter, startDate, endDate, username, userRole, historyShopFilter, historyManagerFilter, fetchData]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+      fetchData(0, false, true);
+    }, 5 * 60 * 1000); // 5 minutes interval
+    return () => clearInterval(timer);
+  }, [fetchData]);
 
   const filteredPendingTasks = useMemo(() => {
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -710,16 +706,17 @@ const WorkTasksTab = ({
     return sortedTasks.filter((task) => {
       const taskDateValue = task.current_date;
       const status = taskDateValue ? getTimeStatus(taskDateValue, task.status) : null;
+      const ds = getWorkTaskDynamicStatus(task, currentTime);
 
       if (taskDateValue && status) {
         if (dateFilter === "all") {
           // Keep all
         } else if (dateFilter === "today") {
-          if (status !== "Today") return false;
-        } else if (dateFilter === "not_done") {
-          if (status !== "Not Done") return false;
+          if (status !== "Today" && ds !== "ACTIVE") return false;
+        } else if (dateFilter === "not_done" || dateFilter === "overdue") {
+          if (status !== "Not Done" && ds !== "NOT_DONE") return false;
         } else if (dateFilter === "upcoming") {
-          if (status !== "Upcoming") return false;
+          if (status !== "Upcoming" && ds !== "UPCOMING") return false;
         }
       }
 
@@ -739,7 +736,7 @@ const WorkTasksTab = ({
 
       return true;
     });
-  }, [tasks, dateFilter, getTimeStatus]);
+  }, [tasks, dateFilter, getTimeStatus, currentTime]);
 
   const filteredHistoryTasks = useMemo(() => {
     const completionField = "submission_date";
@@ -847,8 +844,10 @@ const WorkTasksTab = ({
       if (e.target.checked) {
         const submittableTasks = filteredPendingTasks.filter(t => {
           const ds = getWorkTaskDynamicStatus(t, currentTime);
-          const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
-          return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
+          const role = (userRole || "").toLowerCase();
+          const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+          const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
+          return ds !== "UPCOMING" && !isAssignedByMe;
         });
         setSelectedItems(new Set(submittableTasks.map((t) => t.id)));
       } else {
@@ -1343,8 +1342,10 @@ const WorkTasksTab = ({
                             checked={(() => {
                               const submittableTasks = filteredPendingTasks.filter(t => {
                                 const ds = getWorkTaskDynamicStatus(t, currentTime);
-                                const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
-                                return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
+                                const role = (userRole || "").toLowerCase();
+                                const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                                const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
+                                return ds !== "UPCOMING" && !isAssignedByMe;
                               });
                               return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                             })()}
@@ -1402,8 +1403,10 @@ const WorkTasksTab = ({
                                     onChange={(e) => handleSelectItem(task.id, e.target.checked)}
                                     disabled={(() => {
                                       const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                      const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username && task.name !== username;
-                                      return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
+                                      const role = (userRole || "").toLowerCase();
+                                      const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                                      const isAssignedByMe = !isAdmin && role === "manager" && task.manager_name === username && task.name !== username;
+                                      return ds === "UPCOMING" || isAssignedByMe;
                                     })()}
                                     className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                                   />
@@ -1596,8 +1599,10 @@ const WorkTasksTab = ({
                           checked={(() => {
                             const submittableTasks = filteredPendingTasks.filter(t => {
                               const ds = getWorkTaskDynamicStatus(t, currentTime);
-                              const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
-                              return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
+                              const role = (userRole || "").toLowerCase();
+                              const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                              const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
+                              return ds !== "UPCOMING" && !isAssignedByMe;
                             });
                             return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                           })()}
@@ -1649,8 +1654,10 @@ const WorkTasksTab = ({
                                   onChange={(e) => handleSelectItem(task.id, e.target.checked)}
                                   disabled={(() => {
                                     const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                    const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username && task.name !== username;
-                                    return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
+                                    const role = (userRole || "").toLowerCase();
+                                    const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                                    const isAssignedByMe = !isAdmin && role === "manager" && task.manager_name === username && task.name !== username;
+                                    return ds === "UPCOMING" || isAssignedByMe;
                                   })()}
                                   className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                                 />
