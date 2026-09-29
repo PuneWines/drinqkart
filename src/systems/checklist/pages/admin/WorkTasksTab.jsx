@@ -540,14 +540,14 @@ const WorkTasksTab = ({
       const currentTimeStr = getLocalStyleTimeStr(new Date());
 
       if (showHistory) {
-        query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr},current_date.eq.${todayStr}`);
+        query = query.or(`submission_date.not.is.null,current_date.lte.${todayStr}`);
         if (startDate) {
           query = query.gte("current_date", startDate);
         }
         if (endDate) {
           query = query.lte("current_date", endDate);
         }
-        query = query.order('current_date', { ascending: false });
+        query = query.order('current_date', { ascending: false }).order('start_time', { ascending: true });
       } else {
         query = query
           .eq('current_date', todayStr)
@@ -584,11 +584,15 @@ const WorkTasksTab = ({
         query = query.eq('task_assignments.manager_name', historyManagerFilter);
       }
 
-      // Apply pagination limit/range in database (100 per page) AFTER filters are set
-      const limit = 100;
-      const from = pageNumber * limit;
-      const to = from + limit - 1;
-      query = query.range(from, to);
+      // Apply pagination limit/range in database (100 per page for history, 1000 for live tasks today)
+      if (showHistory) {
+        const limit = 100;
+        const from = pageNumber * limit;
+        const to = from + limit - 1;
+        query = query.range(from, to);
+      } else {
+        query = query.limit(1000);
+      }
 
       const { data, error: fetchError } = await query;
       if (fetchError) {
@@ -649,18 +653,23 @@ const WorkTasksTab = ({
         return !isHoliday;
       });
 
-      const hasMoreData = (data && data.length === limit);
+      const hasMoreData = showHistory ? (data && data.length === 100) : false;
       setHasMore(hasMoreData);
 
       const now = new Date();
       if (showHistory) {
         const historyTasks = filteredWorkTasks.filter(item => {
+          const ds = getWorkTaskDynamicStatus(item, now);
           const isPastDate = item.current_date && item.current_date < todayStr;
-          return item.submission_date || isPastDate;
+          return item.submission_date || isPastDate || ds === "NOT_DONE";
         });
         setHistoryData(prev => append ? [...prev, ...historyTasks] : historyTasks);
       } else {
-        setTasks(prev => append ? [...prev, ...filteredWorkTasks] : filteredWorkTasks);
+        const liveTasks = filteredWorkTasks.filter(item => {
+          const ds = getWorkTaskDynamicStatus(item, now);
+          return ds !== "NOT_DONE";
+        });
+        setTasks(prev => append ? [...prev, ...liveTasks] : liveTasks);
       }
     } catch (err) {
       console.error("Fetch error:", err);
@@ -687,48 +696,43 @@ const WorkTasksTab = ({
 
   const filteredPendingTasks = useMemo(() => {
     const sortedTasks = [...tasks].sort((a, b) => {
-      const statusA = getTimeStatus(a.current_date, a.status);
-      const statusB = getTimeStatus(b.current_date, b.status);
+      const dsA = getWorkTaskDynamicStatus(a, currentTime);
+      const dsB = getWorkTaskDynamicStatus(b, currentTime);
+      const rank = { "ACTIVE": 0, "UPCOMING": 1 };
+      const rA = rank[dsA] !== undefined ? rank[dsA] : 2;
+      const rB = rank[dsB] !== undefined ? rank[dsB] : 2;
+      if (rA !== rB) return rA - rB;
 
-      const rank = { "Not Done": 0, "Today": 1, "Upcoming": 2 };
-      const groupA = rank[statusA] !== undefined ? rank[statusA] : 3;
-      const groupB = rank[statusB] !== undefined ? rank[statusB] : 3;
-
-      if (groupA !== groupB) return groupA - groupB;
-
-      const dateA = a.current_date ? new Date(a.current_date) : new Date(0);
-      const dateB = b.current_date ? new Date(b.current_date) : new Date(0);
-      return dateA - dateB;
+      const timeA = a.start_time || "";
+      const timeB = b.start_time || "";
+      return timeA.localeCompare(timeB);
     });
 
     const seen = new Set();
 
     return sortedTasks.filter((task) => {
-      const taskDateValue = task.current_date;
-      const status = taskDateValue ? getTimeStatus(taskDateValue, task.status) : null;
       const ds = getWorkTaskDynamicStatus(task, currentTime);
+      const status = task.current_date ? getTimeStatus(task.current_date, task.status) : null;
 
-      if (taskDateValue && status) {
-        if (dateFilter === "all") {
-          // Keep all
-        } else if (dateFilter === "today") {
-          if (status !== "Today" && ds !== "ACTIVE") return false;
-        } else if (dateFilter === "not_done" || dateFilter === "overdue") {
-          if (status !== "Not Done" && ds !== "NOT_DONE") return false;
-        } else if (dateFilter === "upcoming") {
-          if (status !== "Upcoming" && ds !== "UPCOMING") return false;
-        }
+      if (ds === "NOT_DONE") return false;
+
+      if (dateFilter === "all") {
+        // Keep all live tasks (Active + Upcoming)
+      } else if (dateFilter === "today") {
+        if (ds !== "ACTIVE") return false;
+      } else if (dateFilter === "upcoming") {
+        if (ds !== "UPCOMING") return false;
       }
 
       const nameKey = task.name || "";
       let seriesBase = `${task.assignment_id || ""}_${nameKey}_${task.id || ""}`;
 
-      if (status === "Upcoming") {
+      if (ds === "UPCOMING" || status === "Upcoming") {
         const key = `upcoming::${seriesBase}`;
         if (seen.has(key)) return false;
         seen.add(key);
       } else {
-        const taskDate = taskDateValue ? new Date(taskDateValue).toDateString() : "";
+        const taskDate = task.current_date ? new Date(task.current_date).toDateString() : "";
         const key = `${seriesBase}::${taskDate}`;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -1042,7 +1046,7 @@ const WorkTasksTab = ({
           pageQuery = pageQuery.in("name", reportingUsers);
         }
 
-        pageQuery = pageQuery.or(`submission_date.not.is.null,current_date.lt.${todayStr}`);
+        pageQuery = pageQuery.or(`submission_date.not.is.null,current_date.lte.${todayStr}`);
 
         if (startDate) {
           pageQuery = pageQuery.gte("current_date", startDate);
@@ -1113,7 +1117,12 @@ const WorkTasksTab = ({
         );
       }
 
-      const historyTasks = filteredWorkTasks;
+      const now = new Date();
+      const historyTasks = filteredWorkTasks.filter(item => {
+        const ds = getWorkTaskDynamicStatus(item, now);
+        const isPastDate = item.current_date && item.current_date < todayStr;
+        return item.submission_date || isPastDate || ds === "NOT_DONE";
+      });
 
       const finalTasks = historyTasks.filter((task) => {
         let matchesShop = true;
@@ -1376,8 +1385,12 @@ const WorkTasksTab = ({
                   <tbody className="bg-white divide-y divide-gray-200">
                     {paginatedTasks.length > 0 ? (
                       paginatedTasks.map((task, index) => {
-                        const currentStatus = getTimeStatus(task.current_date, task.status);
-                        const prevStatus = index > 0 ? getTimeStatus(paginatedTasks[index - 1].current_date, paginatedTasks[index - 1].status) : null;
+                        const ds = getWorkTaskDynamicStatus(task, currentTime);
+                        const currentStatus = ds === 'ACTIVE' ? 'Active' : ds === 'UPCOMING' ? 'Upcoming' : getTimeStatus(task.current_date, task.status);
+                        const prevStatus = index > 0 ? (() => {
+                          const pDs = getWorkTaskDynamicStatus(paginatedTasks[index - 1], currentTime);
+                          return pDs === 'ACTIVE' ? 'Active' : pDs === 'UPCOMING' ? 'Upcoming' : getTimeStatus(paginatedTasks[index - 1].current_date, paginatedTasks[index - 1].status);
+                        })() : null;
                         const showGroupHeader = currentStatus !== prevStatus;
 
                         return (
@@ -1386,9 +1399,9 @@ const WorkTasksTab = ({
                               <tr className="bg-gray-100/30">
                                 <td colSpan={tableHeaders.length + 6} className="px-4 sm:px-6 py-2">
                                   <div className="flex items-center gap-2">
-                                    <div className={`w-1.5 h-1.5 rounded-full ${currentStatus === 'Not Done' ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${currentStatus === 'Active' ? 'bg-green-500' : currentStatus === 'Upcoming' ? 'bg-blue-500' : 'bg-red-500'}`}></div>
                                     <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
-                                      {currentStatus}
+                                      {currentStatus} Tasks
                                     </span>
                                   </div>
                                 </td>
@@ -1629,8 +1642,12 @@ const WorkTasksTab = ({
               <div className="md:hidden space-y-4 p-4 bg-gray-50/50 pb-24">
                 {paginatedTasks.length > 0 ? (
                   paginatedTasks.map((task, index) => {
-                    const currentStatus = getTimeStatus(task.current_date, task.status);
-                    const prevStatus = index > 0 ? getTimeStatus(paginatedTasks[index - 1].current_date, paginatedTasks[index - 1].status) : null;
+                    const ds = getWorkTaskDynamicStatus(task, currentTime);
+                    const currentStatus = ds === 'ACTIVE' ? 'Active' : ds === 'UPCOMING' ? 'Upcoming' : getTimeStatus(task.current_date, task.status);
+                    const prevStatus = index > 0 ? (() => {
+                      const pDs = getWorkTaskDynamicStatus(paginatedTasks[index - 1], currentTime);
+                      return pDs === 'ACTIVE' ? 'Active' : pDs === 'UPCOMING' ? 'Upcoming' : getTimeStatus(paginatedTasks[index - 1].current_date, paginatedTasks[index - 1].status);
+                    })() : null;
                     const showGroupHeader = currentStatus !== prevStatus;
 
                     return (
@@ -1638,8 +1655,8 @@ const WorkTasksTab = ({
                         {showGroupHeader && !showHistory && (
                           <div className="pt-2 pb-1 px-1">
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
-                              <div className={`w-1 h-1 rounded-full ${currentStatus === 'Not Done' ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                              {currentStatus}
+                              <div className={`w-1 h-1 rounded-full ${currentStatus === 'Active' ? 'bg-green-500' : currentStatus === 'Upcoming' ? 'bg-blue-500' : 'bg-red-500'}`}></div>
+                              {currentStatus} Tasks
                             </span>
                           </div>
                         )}
@@ -1664,9 +1681,8 @@ const WorkTasksTab = ({
                               )}
                               <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
                             </div>
-                            <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-semibold rounded-full ${currentStatus === 'Not Done' ? 'bg-red-100 text-red-800' :
-                              currentStatus === 'Today' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                              {currentStatus}
+                            <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-semibold rounded-full ${ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : ds === 'UPCOMING' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
+                              {ds === 'ACTIVE' ? 'Active' : ds === 'UPCOMING' ? 'Upcoming' : 'Not Done'}
                             </span>
                           </div>
 
