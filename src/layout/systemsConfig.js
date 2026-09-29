@@ -157,7 +157,8 @@ export const systems = [
     base: '/systems/business-overview/stock-balance',
     icon: FileSpreadsheet,
     subtabs: [
-      { label: 'Stock Balance Sheet', to: '/systems/business-overview/stock-balance' }
+      { label: 'Dashboard', to: '/systems/business-overview/stock-balance' },
+      { label: 'Stock Balance Sheet', to: '/systems/business-overview/stock-balance/sheet' }
     ]
   }
 ];

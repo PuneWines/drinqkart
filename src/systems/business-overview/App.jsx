@@ -6,6 +6,7 @@ import TraderInvoices from './pages/TraderInvoices';
 import HelpCenterRecords from './pages/HelpCenterRecords';
 import ShopVisit from './pages/ShopVisit';
 import StockBalance from './pages/StockBalance';
+import StockBalanceDashboard from './pages/StockBalanceDashboard';
 import { Toaster } from 'react-hot-toast';
 
 function BusinessOverviewApp() {
@@ -21,7 +22,9 @@ function BusinessOverviewApp() {
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
             <Route path="shop-visit" element={<ShopVisit />} />
-            <Route path="stock-balance" element={<StockBalance />} />
+            <Route path="stock-balance" element={<StockBalanceDashboard />} />
+            <Route path="stock-balance/dashboard" element={<StockBalanceDashboard />} />
+            <Route path="stock-balance/sheet" element={<StockBalance />} />
             <Route path="help-center" element={<Navigate to="help-center/all" replace />} />
             <Route path="help-center/all" element={<HelpCenterRecords activeTab="all" />} />
             <Route path="help-center/follow-up" element={<HelpCenterRecords activeTab="follow-up" />} />

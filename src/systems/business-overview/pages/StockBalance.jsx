@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
 import { 
   FileSpreadsheet, Upload, RefreshCw, Search, Trash2, Calendar, Store, CheckCircle, 
   AlertCircle, Database, ChevronLeft, ChevronRight, X, Check, FileCheck, Layers, 
-  Eye, EyeOff, AlertTriangle, ArrowRight, Info, CheckSquare, Square
+  Eye, EyeOff, AlertTriangle, ArrowRight, Info, CheckSquare, Square, BarChart3
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
@@ -187,6 +188,7 @@ const DEFAULT_SHOPS = [
 ];
 
 export default function StockBalance() {
+  const navigate = useNavigate();
   const [stockRecords, setStockRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [shops, setShops] = useState([]);
@@ -750,6 +752,16 @@ export default function StockBalance() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+
+          {/* Executive Dashboard Button */}
+          <button
+            onClick={() => navigate('/systems/business-overview/stock-balance')}
+            className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl shadow-sm hover:shadow transition-all cursor-pointer"
+            id="view-executive-dashboard-btn"
+          >
+            <BarChart3 size={15} />
+            <span>Executive Dashboard</span>
+          </button>
 
           {/* Main Import Button */}
           <button
