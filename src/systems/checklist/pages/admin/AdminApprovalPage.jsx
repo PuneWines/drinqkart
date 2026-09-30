@@ -494,7 +494,7 @@ export default function AdminApprovalPage() {
     if (
       (currentUserRole === "manager" || currentUserRole === "admin") &&
       activeTab === "work" &&
-      isPastDeadline(task)
+      isPastSubmission(task.current_date || task.submission_date)
     ) {
       showToast("You cannot approve a past task.", "error");
       return;
@@ -547,7 +547,7 @@ export default function AdminApprovalPage() {
     if (
       (currentUserRole === "manager" || currentUserRole === "admin") &&
       activeTab === "work" &&
-      isPastDeadline(task)
+      isPastSubmission(task.current_date || task.submission_date)
     ) {
       showToast("You cannot reject a past task.", "error");
       return;
