@@ -323,6 +323,7 @@ export default function AdminApprovalPage() {
           if (activeTab === "work") {
             return {
               ...task,
+              status: task.work_status || task.status || "PENDING",
               manager_name:
                 task.task_assignments?.manager_name || task.manager_name || "—",
             };
@@ -376,26 +377,31 @@ export default function AdminApprovalPage() {
           const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
           if (!isShopAllowed) return false;
 
+          const isPastDate = isPastSubmission(task.current_date || task.submission_date);
+
           if (viewMode === "pending") {
-            // Pending: not past deadline, and has been submitted but not approved by manager
+            // Pending: not past calendar day, and has been submitted but not approved by manager
             const isSubmitted = ["submitted", "done", "completed"].includes(taskStatus);
-            return !isPast && isSubmitted && !task.manager_approved_by;
+            return !isPastDate && isSubmitted && !task.manager_approved_by;
           } else {
-            // History: approved/rejected by me, or past deadline unapproved
+            // History: approved/rejected by me, or past calendar day unapproved
             const isApprovedByMe = (task.manager_approved_by || "").toLowerCase() === currentUsername;
             const isRejectedByMe = taskStatus === "rejected" && (task.manager_approved_by || "").toLowerCase() === currentUsername;
-            const isPastUnapproved = isPast && !task.manager_approved_by;
+            const isPastUnapproved = isPastDate && !task.manager_approved_by;
             return isApprovedByMe || isRejectedByMe || isPastUnapproved;
           }
         } else if (isSystemAdmin) {
-          // Admin / Super Admin filtering
+          // Admin / Super Admin filtering:
+          // Admin can review and approve all MANAGER_APPROVED tasks throughout the operating day.
+          const isPastDate = isPastSubmission(task.current_date || task.submission_date);
+
           if (viewMode === "pending") {
-            // Pending: task status is MANAGER_APPROVED and NOT past deadline
-            return taskStatus === "manager_approved" && !isPast;
+            // Pending: task status is MANAGER_APPROVED, not a past calendar day, and not yet processed by admin
+            return taskStatus === "manager_approved" && !isPastDate && !task.admin_approved_by;
           } else {
-            // History: approved/rejected by any admin (or current admin), or past deadline (unable to approve)
+            // History: approved/rejected by any admin (or current admin), or past calendar date unapproved
             const isAdminProcessed = !!task.admin_approved_by || taskStatus === "approved" || taskStatus === "rejected";
-            const isPastUnapproved = isPast && taskStatus === "manager_approved";
+            const isPastUnapproved = isPastDate && taskStatus === "manager_approved";
             return isAdminProcessed || isPastUnapproved;
           }
         } else {
@@ -1242,7 +1248,7 @@ export default function AdminApprovalPage() {
                               )}
                           </div>
                         ) : activeTab === "work" &&
-                          isPastDeadline(task) &&
+                          (isPastSubmission(task.current_date || task.submission_date) || isPastDeadline(task)) &&
                           !["approved", "rejected"].includes(
                             (task.status || "").toLowerCase(),
                           ) ? (
@@ -1418,7 +1424,7 @@ export default function AdminApprovalPage() {
                                 disabled={
                                   processingId === task.id ||
                                   (isManager &&
-                                    isPastDeadline(task) &&
+                                    isPastSubmission(task.current_date || task.submission_date) &&
                                     (task.shop || task.shop_name || "")
                                       .toLowerCase()
                                       .trim() !== "office")
@@ -1437,7 +1443,7 @@ export default function AdminApprovalPage() {
                                 disabled={
                                   processingId === task.id ||
                                   (isManager &&
-                                    isPastDeadline(task) &&
+                                    isPastSubmission(task.current_date || task.submission_date) &&
                                     (task.shop || task.shop_name || "")
                                       .toLowerCase()
                                       .trim() !== "office")
@@ -1450,10 +1456,11 @@ export default function AdminApprovalPage() {
                             </div>
                           )
                         ) : activeTab === "work" &&
-                          isPastDeadline(task) &&
-                          !["approved", "rejected"].includes(
-                            (task.status || "").toLowerCase(),
-                          ) ? (
+                          (isPastSubmission(task.current_date || task.submission_date) || isPastDeadline(task)) &&
+                          !["approved", "rejected", "manager_approved"].includes(
+                            (task.status || task.work_status || "").toLowerCase(),
+                          ) &&
+                          !task.manager_approved_by ? (
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800">
                             Unable to Approve
                           </span>
@@ -1861,7 +1868,7 @@ export default function AdminApprovalPage() {
                             disabled={
                               processingId === task.id ||
                               (isManager &&
-                                isPastDeadline(task) &&
+                                isPastSubmission(task.current_date || task.submission_date) &&
                                 (task.shop || task.shop_name || "")
                                   .toLowerCase()
                                   .trim() !== "office")
@@ -1880,7 +1887,7 @@ export default function AdminApprovalPage() {
                             disabled={
                               processingId === task.id ||
                               (isManager &&
-                                isPastDeadline(task) &&
+                                isPastSubmission(task.current_date || task.submission_date) &&
                                 (task.shop || task.shop_name || "")
                                   .toLowerCase()
                                   .trim() !== "office")
