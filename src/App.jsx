@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -41,8 +41,16 @@ import PublicTraderInvoiceForm from './systems/business-overview/pages/PublicTra
 const ConsoleRoute = ({ children }) => {
   const { user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   if (!user) return <Navigate to="/login" replace />;
+
+  // Clone children and inject the sidebar collapse controller
+  const childrenWithProps = React.Children.map(children, (child) =>
+    React.isValidElement(child)
+      ? React.cloneElement(child, { onCollapseSidebar: setIsSidebarCollapsed })
+      : child
+  );
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-100 font-sans">
@@ -54,10 +62,12 @@ const ConsoleRoute = ({ children }) => {
         <AppSidebar
           isMobileMenuOpen={isMobileMenuOpen}
           onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
+          externalCollapsed={isSidebarCollapsed}
+          onExternalCollapse={setIsSidebarCollapsed}
         />
         <main className="flex-1 bg-gray-100 overflow-auto h-full flex flex-col min-w-0">
           <div className="flex-1 overflow-auto min-h-0 flex flex-col p-1.5 sm:p-3 md:p-4">
-            {children}
+            {childrenWithProps}
           </div>
         </main>
       </div>

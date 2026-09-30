@@ -9,7 +9,7 @@ import StockBalance from './pages/StockBalance';
 import StockBalanceDashboard from './pages/StockBalanceDashboard';
 import { Toaster } from 'react-hot-toast';
 
-function BusinessOverviewApp() {
+function BusinessOverviewApp({ onCollapseSidebar }) {
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
@@ -22,8 +22,8 @@ function BusinessOverviewApp() {
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
             <Route path="shop-visit" element={<ShopVisit />} />
-            <Route path="stock-balance" element={<StockBalanceDashboard />} />
-            <Route path="stock-balance/dashboard" element={<StockBalanceDashboard />} />
+            <Route path="stock-balance" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
+            <Route path="stock-balance/dashboard" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
             <Route path="stock-balance/sheet" element={<StockBalance />} />
             <Route path="help-center" element={<Navigate to="help-center/all" replace />} />
             <Route path="help-center/all" element={<HelpCenterRecords activeTab="all" />} />
