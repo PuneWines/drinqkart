@@ -66,11 +66,18 @@ const getSubtabIcon = (label) => {
   return FileText;
 };
 
-const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu }) => {
+const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, onExternalCollapse }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [localCollapsed, setLocalCollapsed] = useState(false);
   const [expandedTabs, setExpandedTabs] = useState({});
+
+  // If external control is provided, use it; otherwise use local state
+  const isCollapsed = externalCollapsed !== undefined ? externalCollapsed : localCollapsed;
+  const setIsCollapsed = (val) => {
+    if (onExternalCollapse) onExternalCollapse(typeof val === 'function' ? val(isCollapsed) : val);
+    else setLocalCollapsed(val);
+  };
 
   const visibleSystems = getVisibleSystems(user);
   const activeSystem = getActiveSystem(visibleSystems, location.pathname);
