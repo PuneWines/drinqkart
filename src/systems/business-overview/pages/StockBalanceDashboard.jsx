@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../../../lib/supabase";
 import DashboardFilterSidebar from "../components/DashboardFilterSidebar";
+import GroupWiseStoreWiseSale from "../components/GroupWiseStoreWiseSale";
 import {
   TrendingUp,
   Eraser,
@@ -1226,9 +1227,7 @@ const Top10BrandsBarChart = ({
               />
 
               {/* Angled Brand Name below X-axis baseline */}
-              <g
-                transform={`translate(${x + barW / 2}, ${padT + chartH + 8})`}
-              >
+              <g transform={`translate(${x + barW / 2}, ${padT + chartH + 8})`}>
                 <text
                   x={0}
                   y={0}
@@ -1801,7 +1800,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         let q = supabase
           .from("stock_balance_records")
           .select(
-            "date, shop_id, liquor_type, subhead, item_name, quantity_out, mrp_rate, purchase_rate, b_cs",
+            "date, shop_id, liquor_type, subhead, item_name, quantity_out, mrp_rate, purchase_rate, b_cs, type1, type2, type5, brand_name",
           )
           .gt("quantity_out", 0);
 
@@ -2381,6 +2380,16 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                 }`}
               >
                 Sales
+              </button>
+              <button
+                onClick={() => setActiveTab("GroupWise")}
+                className={`min-w-28 py-2.5 sm:py-3 px-5 sm:px-8 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-sm cursor-pointer ${
+                  activeTab === "GroupWise"
+                    ? "bg-[#180e5b] text-white shadow-indigo-950/20"
+                    : "bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700"
+                }`}
+              >
+                Group Wise Sale
               </button>
             </div>
 
@@ -3823,6 +3832,13 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                 </div>
               </section>
             </>
+          )}
+
+          {/* ========================================================= */}
+          {/* GROUP WISE SALE TAB — Multi-Dimensional Pivot Tables */}
+          {/* ========================================================= */}
+          {activeTab === "GroupWise" && (
+            <GroupWiseStoreWiseSale liveRecords={records} />
           )}
         </main>
       </div>
