@@ -71,7 +71,16 @@ const getWorkTaskTimeBounds = (task) => {
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   const wStatus = (task.work_status || task.status || "").toUpperCase();
-  if (wStatus === "REJECTED") return "REJECTED";
+  if (wStatus === "REJECTED") {
+    // If the task date has passed (day ended), it is NOT_DONE (expired)
+    const taskDateStr = task.current_date ? (task.current_date.includes('T') ? task.current_date.split('T')[0] : task.current_date) : "";
+    const today = new Date(currentTime);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (taskDateStr && taskDateStr < todayStr) {
+      return "NOT_DONE";
+    }
+    return "ACTIVE";
+  }
 
   const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
 
@@ -1471,10 +1480,11 @@ const WorkTasksTab = ({
                                     renderAdminStatus(task)
                                   ) : header.id === "status" ? (
                                     (() => {
+                                      const wStatus = (task.work_status || task.status || "").toUpperCase();
+                                      if (wStatus === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
                                       const ds = getWorkTaskDynamicStatus(task, currentTime);
                                       if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
                                       if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
-                                      if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
                                       if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
                                       if (ds === "UPCOMING") {
                                         return (
@@ -1749,10 +1759,11 @@ const WorkTasksTab = ({
                                   <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
                                   <div className="text-sm">
                                     {(() => {
+                                      const wStatus = (task.work_status || task.status || "").toUpperCase();
+                                      if (wStatus === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
                                       const ds = getWorkTaskDynamicStatus(task, currentTime);
                                       if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
                                       if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
-                                      if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
                                       if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
                                       if (ds === "UPCOMING") {
                                         return (
