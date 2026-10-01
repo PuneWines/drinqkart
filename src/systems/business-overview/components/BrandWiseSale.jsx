@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { Download, Search, ChevronDown, Layers } from "lucide-react";
 
 const SEGS = ["Sale", "Purchase", "Closing qty", "Closing case"];
-const SEARCH_BY_OPTIONS = ["Brand Name", "Item Name", "Company", "Trader Wise"];
+const SEARCH_BY_OPTIONS = ["Brand Name"];
 const KPI_OPTIONS = ["Amount", "Qty", "Case"];
 const AGG_OPTIONS = ["Total", "Avg"];
 

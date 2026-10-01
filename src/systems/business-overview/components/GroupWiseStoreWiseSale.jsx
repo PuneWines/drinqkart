@@ -2,10 +2,8 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
   Layers,
-  Upload,
   RotateCcw,
   Download,
-  Calendar,
   Search,
   Check,
   ChevronDown,
@@ -14,7 +12,6 @@ import {
   TrendingUp,
   Store,
   Layers3,
-  Database,
   Info,
 } from "lucide-react";
 
@@ -278,14 +275,8 @@ function MultiSelectDropdown({
 // MAIN GROUP WISE STORE WISE SALE COMPONENT
 // ==========================================
 export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
-  // Only actual records from database or actual uploaded file
-  const [data, setData] = useState(() => mapLiveRecordsToGroupSchema(liveRecords));
-
-  const [uploadedFileName, setUploadedFileName] = useState(null);
-
-  // Date filters
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // Always map directly from live database records
+  const data = useMemo(() => mapLiveRecordsToGroupSchema(liveRecords), [liveRecords]);
 
   // Search in table
   const [tableSearch, setTableSearch] = useState("");
@@ -300,13 +291,6 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
     t5: new Set(),
     kpi: new Set(["Amount"]),
   });
-
-  // Keep synced with live database records unless user uploaded a specific file
-  useEffect(() => {
-    if (!uploadedFileName) {
-      setData(mapLiveRecordsToGroupSchema(liveRecords));
-    }
-  }, [liveRecords, uploadedFileName]);
 
   // Derive distinct options per dimension from current dataset
   const opts = useMemo(() => {
@@ -347,134 +331,15 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
       t5: new Set(),
       kpi: new Set(["Amount"]),
     });
-    setStartDate("");
-    setEndDate("");
     setTableSearch("");
-  };
-
-  // Handle File Upload (.xlsx, .xls, .csv)
-  const fileInputRef = useRef(null);
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array", cellDates: true });
-      const sheetName = wb.SheetNames[0];
-      const rawRows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
-        defval: "",
-      });
-
-      if (!rawRows || !rawRows.length) {
-        alert("The uploaded sheet is empty.");
-        return;
-      }
-
-      const aliasMap = {
-        date: ["date", "bill_date", "transaction_date", "day"],
-        store: [
-          "store",
-          "select store",
-          "shop",
-          "shop_id",
-          "store_name",
-          "store name",
-        ],
-        lt: ["liquor type", "liquortype", "lt", "liquor_type", "category"],
-        sub: ["subhead", "sub head", "sub_head", "sub", "sub category"],
-        t1: ["type 1", "type1", "type_1", "t1", "segment"],
-        t2: ["type 2", "type2", "type_2", "t2", "variety"],
-        t5: ["type 5", "type5", "type_5", "t5", "origin"],
-        Amount: [
-          "amount",
-          "sales_amount",
-          "sale_amount",
-          "total_amount",
-          "amt",
-          "sales amount",
-        ],
-        Quantity: [
-          "quantity",
-          "qty",
-          "sales_quantity",
-          "quantity_out",
-          "bottles",
-          "units",
-        ],
-        Case: ["case", "cases", "sales_cases", "b_cs", "case_qty"],
-      };
-
-      const parsed = rawRows.map((r) => {
-        const lowerKeys = {};
-        Object.keys(r).forEach((k) => {
-          lowerKeys[k.trim().toLowerCase()] = r[k];
-        });
-
-        const rowOut = {};
-        Object.entries(aliasMap).forEach(([targetKey, aliases]) => {
-          const match = aliases.find((a) => a in lowerKeys);
-          let val = match ? lowerKeys[match] : "";
-
-          if (targetKey === "date" && val instanceof Date) {
-            val = new Date(val.getTime() - val.getTimezoneOffset() * 60000)
-              .toISOString()
-              .slice(0, 10);
-          } else if (
-            targetKey === "Amount" ||
-            targetKey === "Quantity" ||
-            targetKey === "Case"
-          ) {
-            val = Number(val) || 0;
-          } else {
-            val = typeof val === "string" ? val.trim() : String(val || "");
-          }
-
-          rowOut[targetKey] = val;
-        });
-
-        // Compute missing Case if Quantity exists
-        if (!rowOut.Case && rowOut.Quantity) {
-          rowOut.Case = Math.round((rowOut.Quantity / 12) * 10) / 10;
-        }
-
-        return rowOut;
-      });
-
-      setData(parsed);
-      setUploadedFileName(file.name);
-      setSel({
-        store: new Set(),
-        lt: new Set(),
-        sub: new Set(),
-        t1: new Set(),
-        t2: new Set(),
-        t5: new Set(),
-        kpi: new Set(["Amount"]),
-      });
-    } catch (err) {
-      console.error("File upload error:", err);
-      alert(`Could not parse file: ${err.message}`);
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  // Switch back to Live Database Records
-  const handleResetToLive = () => {
-    setUploadedFileName(null);
-    setData(mapLiveRecordsToGroupSchema(liveRecords));
   };
 
   // ==========================================
   // PIVOT CALCULATION ENGINE
   // ==========================================
   const pivotResults = useMemo(() => {
-    // 1. Filter rows by date and dimension selections
+    // 1. Filter rows by dimension selections
     const filteredRows = data.filter((row) => {
-      if (startDate && row.date && row.date < startDate) return false;
-      if (endDate && row.date && row.date > endDate) return false;
-
       // Check store filter
       if (sel.store.size > 0 && !sel.store.has(row.store)) return false;
 
@@ -524,55 +389,63 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
       totalCs += Number(r.Case) || 0;
     });
 
-    // Build Pivot Tables for each KPI
-    const kpiTables = activeKpis.map((kpi) => {
-      const grid = {}; // { rowLabel: { storeName: val } }
+    // Unified Pivot Structure:
+    // grid[label][store][kpi] = sum
+    const grid = {};
 
-      filteredRows.forEach((r) => {
-        const label = getRowLabel(r);
-        if (!grid[label]) grid[label] = {};
-        grid[label][r.store] =
-          (grid[label][r.store] || 0) + (Number(r[kpi]) || 0);
-      });
-
-      let rowKeys = Object.keys(grid).sort((a, b) => a.localeCompare(b));
-
-      // Filter by table search
-      if (tableSearch) {
-        const searchLower = tableSearch.toLowerCase();
-        rowKeys = rowKeys.filter((k) => k.toLowerCase().includes(searchLower));
+    filteredRows.forEach((r) => {
+      const label = getRowLabel(r);
+      if (!grid[label]) grid[label] = {};
+      const storeName = r.store || "UNASSIGNED";
+      if (!grid[label][storeName]) {
+        grid[label][storeName] = { Amount: 0, Quantity: 0, Case: 0 };
       }
+      grid[label][storeName].Amount += Number(r.Amount) || 0;
+      grid[label][storeName].Quantity += Number(r.Quantity) || 0;
+      grid[label][storeName].Case += Number(r.Case) || 0;
+    });
 
-      // Column Totals
-      const colTotals = activeStores.map((store) => {
-        return rowKeys.reduce((sum, rKey) => sum + (grid[rKey]?.[store] || 0), 0);
+    let rowKeys = Object.keys(grid).sort((a, b) => a.localeCompare(b));
+
+    // Filter by table search
+    if (tableSearch) {
+      const searchLower = tableSearch.toLowerCase();
+      rowKeys = rowKeys.filter((k) => k.toLowerCase().includes(searchLower));
+    }
+
+    // Column Totals: colTotals[store][kpi]
+    const colTotals = {};
+    activeStores.forEach((st) => {
+      colTotals[st] = { Amount: 0, Quantity: 0, Case: 0 };
+      activeKpis.forEach((kpi) => {
+        colTotals[st][kpi] = rowKeys.reduce((sum, rKey) => sum + (grid[rKey]?.[st]?.[kpi] || 0), 0);
       });
+    });
 
-      // Row Data
-      const rows = rowKeys.map((label) => {
-        let rowSum = 0;
-        const cellValues = activeStores.map((store) => {
-          const val = grid[label]?.[store] || 0;
-          rowSum += val;
-          return val;
+    // Grand Totals across all stores: grandTotals[kpi]
+    const grandTotals = {};
+    activeKpis.forEach((kpi) => {
+      grandTotals[kpi] = activeStores.reduce((sum, st) => sum + (colTotals[st]?.[kpi] || 0), 0);
+    });
+
+    // Rows array
+    const rows = rowKeys.map((label) => {
+      const storeValues = {};
+      const rowTotals = { Amount: 0, Quantity: 0, Case: 0 };
+
+      activeStores.forEach((st) => {
+        storeValues[st] = {};
+        activeKpis.forEach((kpi) => {
+          const val = grid[label]?.[st]?.[kpi] || 0;
+          storeValues[st][kpi] = val;
+          rowTotals[kpi] += val;
         });
-
-        return {
-          label,
-          values: cellValues,
-          total: rowSum,
-        };
       });
-
-      const grandTotal = colTotals.reduce((a, b) => a + b, 0);
 
       return {
-        kpi,
-        groupHeader: groupHeaderText,
-        stores: activeStores,
-        rows,
-        colTotals,
-        grandTotal,
+        label,
+        storeValues,
+        rowTotals,
       };
     });
 
@@ -582,28 +455,75 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
       totalQty,
       totalCs,
       activeStoresCount: activeStores.length,
-      kpiTables,
+      groupHeader: groupHeaderText,
+      stores: activeStores,
+      kpis: activeKpis,
+      rows,
+      colTotals,
+      grandTotals,
     };
-  }, [data, startDate, endDate, sel, opts.store, tableSearch]);
+  }, [data, sel, opts.store, tableSearch]);
 
   // Export to Excel Functionality
   const handleExportExcel = () => {
     try {
       const wb = XLSX.utils.book_new();
+      const { groupHeader, stores, kpis, rows, colTotals, grandTotals } = pivotResults;
 
-      pivotResults.kpiTables.forEach((tbl) => {
-        const headers = [tbl.groupHeader, ...tbl.stores, "Total"];
-        const sheetData = [headers];
+      const sheetData = [];
 
-        tbl.rows.forEach((r) => {
-          sheetData.push([r.label, ...r.values, r.total]);
+      if (kpis.length > 1) {
+        // Top header (Store names)
+        const topHeader = [""];
+        stores.forEach((st) => {
+          topHeader.push(st);
+          for (let i = 1; i < kpis.length; i++) topHeader.push("");
         });
+        topHeader.push("Total");
+        for (let i = 1; i < kpis.length; i++) topHeader.push("");
+        sheetData.push(topHeader);
 
-        sheetData.push(["Total", ...tbl.colTotals, tbl.grandTotal]);
+        // Sub header (KPI names)
+        const subHeader = [groupHeader];
+        stores.forEach(() => {
+          kpis.forEach((kpi) => subHeader.push(kpi));
+        });
+        kpis.forEach((kpi) => subHeader.push(kpi));
+        sheetData.push(subHeader);
+      } else {
+        // Single KPI header
+        const header = [groupHeader, ...stores, `Total (${kpis[0]})`];
+        sheetData.push(header);
+      }
 
-        const ws = XLSX.utils.aoa_to_sheet(sheetData);
-        XLSX.utils.book_append_sheet(wb, ws, `${tbl.kpi} Pivot`.slice(0, 31));
+      // Row data
+      rows.forEach((r) => {
+        const rowData = [r.label];
+        stores.forEach((st) => {
+          kpis.forEach((kpi) => {
+            rowData.push(r.storeValues[st]?.[kpi] || 0);
+          });
+        });
+        kpis.forEach((kpi) => {
+          rowData.push(r.rowTotals[kpi] || 0);
+        });
+        sheetData.push(rowData);
       });
+
+      // Total row
+      const totalRow = ["Total"];
+      stores.forEach((st) => {
+        kpis.forEach((kpi) => {
+          totalRow.push(colTotals[st]?.[kpi] || 0);
+        });
+      });
+      kpis.forEach((kpi) => {
+        totalRow.push(grandTotals[kpi] || 0);
+      });
+      sheetData.push(totalRow);
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(wb, ws, "Group Wise Sale");
 
       XLSX.writeFile(
         wb,
@@ -616,48 +536,6 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-      {/* ========================================================= */}
-      {/* TOP SUMMARY STATS & TITLE BANNER */}
-      {/* ========================================================= */}
-      <div className="bg-[#180e5b] rounded-2xl p-4 sm:p-5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-white/10 backdrop-blur-md">
-              <Layers3 className="w-5 h-5 text-sky-300" />
-            </span>
-            <h1 className="text-lg sm:text-xl font-extrabold tracking-tight">
-              Group Wise Store Wise Sale
-            </h1>
-          </div>
-          <p className="text-xs text-indigo-100 flex items-center gap-1.5 font-medium mt-0.5">
-            <Info className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-            All selections can be multiple apart from KPI dates. Group rows are
-            built dynamically from ticked categories; stores ticked become
-            columns.
-          </p>
-        </div>
-
-        {/* Dynamic Source Badge & Quick Actions */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-md text-sky-200 text-xs font-bold border border-white/15 flex items-center gap-1.5">
-            <Database className="w-3.5 h-3.5 text-sky-300" />
-            {uploadedFileName
-              ? `File: ${uploadedFileName} (${data.length} records)`
-              : `Live Database (${liveRecords.length} records)`}
-          </span>
-
-          {uploadedFileName && (
-            <button
-              onClick={handleResetToLive}
-              className="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset to Database
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* ========================================================= */}
       {/* KPI METRIC CARDS ROW */}
       {/* ========================================================= */}
@@ -714,34 +592,8 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
       {/* MULTI-DIMENSIONAL FILTER CONTROLS CARD */}
       {/* ========================================================= */}
       <div className="bg-white rounded-2xl border-2 border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col gap-4">
-        {/* Top filter row: Dates and Multi-Selects */}
+        {/* Top filter row: Multi-Selects */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-          {/* Start Date */}
-          <div className="flex flex-col gap-1 min-w-[130px]">
-            <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-indigo-600" /> Start Date
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:outline-hidden focus:border-indigo-500 shadow-2xs"
-            />
-          </div>
-
-          {/* End Date */}
-          <div className="flex flex-col gap-1 min-w-[130px]">
-            <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-indigo-600" /> End Date
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:outline-hidden focus:border-indigo-500 shadow-2xs"
-            />
-          </div>
-
           {/* Multi-Select Dimension Filters */}
           {DIMS.map((dim) => (
             <MultiSelectDropdown
@@ -767,30 +619,11 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
               Clear All Filters
             </button>
 
-            {/* Hidden File Input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileUpload}
-              className="hidden"
-              id="excel-file-upload-input"
-            />
-
-            {/* Upload Button */}
-            <label
-              htmlFor="excel-file-upload-input"
-              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Upload Excel / CSV
-            </label>
-
             {/* Export to Excel Button */}
             <button
               onClick={handleExportExcel}
               className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-              title="Export Pivot Tables to Excel"
+              title="Export Pivot Table to Excel"
             >
               <Download className="w-3.5 h-3.5" />
               Export Pivot to Excel
@@ -809,28 +642,19 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
             />
           </div>
         </div>
-
-        {/* Upload Guide Callout */}
-        <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-          <span className="font-bold text-slate-700">Supported columns for file upload:</span>{" "}
-          <span className="font-mono text-indigo-700">
-            Date, Store, Liquor Type, Subhead, Type 1, Type 2, Type 5, Amount, Quantity, Case
-          </span>
-          .
-        </div>
       </div>
 
       {/* ========================================================= */}
-      {/* PIVOT TABLES SECTION */}
+      {/* SINGLE UNIFIED PIVOT TABLE WITH SCROLL */}
       {/* ========================================================= */}
-      {pivotResults.kpiTables.length === 0 || pivotResults.filteredCount === 0 ? (
+      {pivotResults.rows.length === 0 || pivotResults.filteredCount === 0 ? (
         <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-2">
           <Info className="w-8 h-8 text-amber-600" />
           <p className="font-bold text-amber-900 text-sm">
             No records found for the current combination of filters.
           </p>
           <p className="text-xs text-amber-700">
-            Try clicking "Clear All Filters" or expanding your date range.
+            Try clicking "Clear All Filters" or expanding your filter selections above.
           </p>
           <button
             onClick={handleClearAll}
@@ -840,118 +664,175 @@ export default function GroupWiseStoreWiseSale({ liveRecords = [] }) {
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {pivotResults.kpiTables.map((tbl) => (
-            <div
-              key={tbl.kpi}
-              className="bg-white rounded-2xl border-2 border-[#b8ddf8] shadow-xs overflow-hidden flex flex-col"
-            >
-              {/* Card Header */}
-              <div className="bg-[#f0f7ff] border-b-2 border-[#b8ddf8] px-4 py-3 sm:px-5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
-                    {tbl.kpi} — Group Wise Store Wise Sale
-                  </h2>
-                </div>
-                <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                  {tbl.rows.length} {tbl.rows.length === 1 ? "Row" : "Rows"}
-                </span>
-              </div>
+        <div className="bg-white rounded-2xl border-2 border-[#b8ddf8] shadow-xs overflow-hidden flex flex-col">
+          {/* Card Header */}
+          <div className="bg-[#f0f7ff] border-b-2 border-[#b8ddf8] px-4 py-3 sm:px-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
+                {pivotResults.kpis.join(" / ")} — Group Wise Store Wise Sale
+              </h2>
+            </div>
+            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+              {pivotResults.rows.length} {pivotResults.rows.length === 1 ? "Row" : "Rows"}
+            </span>
+          </div>
 
-              {/* Table Wrapper */}
-              <div className="overflow-x-auto custom-scrollbar">
-                <table className="w-full text-xs text-left border-collapse min-w-[640px]">
-                  {/* Table Header */}
-                  <thead>
-                    <tr className="bg-[#180e5b] text-white font-bold sticky top-0 z-10 select-none">
-                      <th className="py-3 px-4 text-left font-black tracking-wide border-r border-indigo-900/60 min-w-[220px]">
-                        {tbl.groupHeader}
+          {/* Table Scroll Wrapper */}
+          <div className="overflow-x-auto overflow-y-auto max-h-[72vh] custom-scrollbar border border-slate-100">
+            <table className="w-full text-xs text-left border-collapse min-w-[700px]">
+              {/* Table Header */}
+              <thead>
+                {pivotResults.kpis.length > 1 ? (
+                  <>
+                    {/* Top Header: Group and Stores */}
+                    <tr className="bg-[#180e5b] text-white font-bold sticky top-0 z-30 select-none">
+                      <th
+                        rowSpan={2}
+                        className="py-3 px-4 text-left font-black tracking-wide border-r border-indigo-900/60 min-w-[220px] bg-[#180e5b] text-white align-middle sticky left-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.25)]"
+                      >
+                        {pivotResults.groupHeader}
                       </th>
-                      {tbl.stores.map((store) => (
+                      {pivotResults.stores.map((store) => (
                         <th
                           key={store}
-                          className="py-3 px-3.5 text-right font-black border-r border-indigo-900/60 min-w-[110px]"
+                          colSpan={pivotResults.kpis.length}
+                          className="py-2.5 px-3 text-center font-black border-r border-indigo-900/60 bg-[#1e1273] text-white tracking-wide"
                         >
                           {store}
                         </th>
                       ))}
-                      <th className="py-3 px-4 text-right font-black bg-[#120a44] min-w-[130px]">
-                        Total ({tbl.kpi})
+                      <th
+                        colSpan={pivotResults.kpis.length}
+                        className="py-2.5 px-3 text-center font-black bg-[#120a44] text-white tracking-wide"
+                      >
+                        Total
                       </th>
                     </tr>
-                  </thead>
 
-                  {/* Table Body */}
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {tbl.rows.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={tbl.stores.length + 2}
-                          className="py-8 text-center text-slate-400 font-bold"
+                    {/* Sub Header: KPIs */}
+                    <tr className="sticky top-[37px] z-30 select-none">
+                      {pivotResults.stores.map((store) =>
+                        pivotResults.kpis.map((kpi) => (
+                          <th
+                            key={`${store}-${kpi}`}
+                            className="py-2 px-2.5 text-right font-extrabold border-r border-indigo-900/40 bg-[#25178d] text-indigo-100 min-w-[95px] text-[11px]"
+                          >
+                            {kpi}
+                          </th>
+                        ))
+                      )}
+                      {pivotResults.kpis.map((kpi) => (
+                        <th
+                          key={`total-${kpi}`}
+                          className="py-2 px-2.5 text-right font-extrabold border-r border-indigo-950/60 bg-[#160d52] text-amber-300 min-w-[105px] text-[11px]"
                         >
-                          No group rows matching the search criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      tbl.rows.map((row, rIdx) => (
-                        <tr
-                          key={row.label || rIdx}
-                          className="hover:bg-indigo-50/50 transition-colors group"
-                        >
-                          {/* Group Label */}
-                          <td className="py-2.5 px-4 font-bold text-slate-900 border-r border-slate-100 group-hover:text-indigo-900 truncate max-w-[280px]" title={row.label}>
-                            {row.label}
-                          </td>
-
-                          {/* Store Columns */}
-                          {row.values.map((val, cIdx) => (
-                            <td
-                              key={tbl.stores[cIdx]}
-                              className="py-2.5 px-3.5 text-right tabular-nums border-r border-slate-100"
-                            >
-                              {val > 0 ? (
-                                <span className="font-semibold text-slate-800">
-                                  {formatKpiValue(val, tbl.kpi)}
-                                </span>
-                              ) : (
-                                <span className="text-slate-300 font-light">-</span>
-                              )}
-                            </td>
-                          ))}
-
-                          {/* Row Total */}
-                          <td className="py-2.5 px-4 text-right font-black tabular-nums bg-indigo-50/40 text-indigo-950 group-hover:bg-indigo-100/50">
-                            {formatKpiTotal(row.total, tbl.kpi)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-
-                  {/* Grand Total Footer */}
-                  <tfoot>
-                    <tr className="bg-[#eef4ff] border-t-2 border-indigo-200 font-black text-slate-900">
-                      <td className="py-3 px-4 font-black text-indigo-950 border-r border-indigo-200">
-                        Total
-                      </td>
-                      {tbl.colTotals.map((tot, cIdx) => (
-                        <td
-                          key={tbl.stores[cIdx]}
-                          className="py-3 px-3.5 text-right tabular-nums border-r border-indigo-200 text-indigo-950"
-                        >
-                          {formatKpiTotal(tot, tbl.kpi)}
-                        </td>
+                          {kpi}
+                        </th>
                       ))}
-                      <td className="py-3 px-4 text-right tabular-nums bg-[#dbeafe] text-indigo-950 font-black">
-                        {formatKpiTotal(tbl.grandTotal, tbl.kpi)}
-                      </td>
                     </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          ))}
+                  </>
+                ) : (
+                  /* Single KPI header */
+                  <tr className="bg-[#180e5b] text-white font-bold sticky top-0 z-30 select-none">
+                    <th className="py-3 px-4 text-left font-black tracking-wide border-r border-indigo-900/60 min-w-[220px] sticky left-0 z-40 bg-[#180e5b] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.25)]">
+                      {pivotResults.groupHeader}
+                    </th>
+                    {pivotResults.stores.map((store) => (
+                      <th
+                        key={store}
+                        className="py-3 px-3.5 text-right font-black border-r border-indigo-900/60 min-w-[110px]"
+                      >
+                        {store}
+                      </th>
+                    ))}
+                    <th className="py-3 px-4 text-right font-black bg-[#120a44] min-w-[130px]">
+                      Total ({pivotResults.kpis[0]})
+                    </th>
+                  </tr>
+                )}
+              </thead>
+
+              {/* Table Body */}
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {pivotResults.rows.map((row, rIdx) => (
+                  <tr
+                    key={row.label || rIdx}
+                    className="hover:bg-indigo-50/50 transition-colors group"
+                  >
+                    {/* Group Label (Sticky on horizontal scroll) */}
+                    <td
+                      className="py-2.5 px-4 font-bold text-slate-900 border-r border-slate-200 group-hover:text-indigo-900 truncate max-w-[280px] sticky left-0 z-10 bg-white group-hover:bg-indigo-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]"
+                      title={row.label}
+                    >
+                      {row.label}
+                    </td>
+
+                    {/* Store Columns */}
+                    {pivotResults.stores.map((store) =>
+                      pivotResults.kpis.map((kpi) => {
+                        const val = row.storeValues[store]?.[kpi] || 0;
+                        return (
+                          <td
+                            key={`${store}-${kpi}`}
+                            className="py-2.5 px-2.5 text-right tabular-nums border-r border-slate-100"
+                          >
+                            {val > 0 ? (
+                              <span className="font-semibold text-slate-800">
+                                {formatKpiValue(val, kpi)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-light">-</span>
+                            )}
+                          </td>
+                        );
+                      })
+                    )}
+
+                    {/* Row Totals */}
+                    {pivotResults.kpis.map((kpi) => (
+                      <td
+                        key={`total-${kpi}`}
+                        className="py-2.5 px-3 text-right font-black tabular-nums bg-indigo-50/40 text-indigo-950 group-hover:bg-indigo-100/50 border-r border-indigo-100/50"
+                      >
+                        {formatKpiTotal(row.rowTotals[kpi], kpi)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+
+              {/* Grand Total Footer */}
+              <tfoot>
+                <tr className="bg-[#eef4ff] border-t-2 border-indigo-300 font-black text-slate-900 sticky bottom-0 z-20 shadow-[0_-2px_5px_-2px_rgba(0,0,0,0.1)]">
+                  <td className="py-3 px-4 font-black text-indigo-950 border-r border-indigo-300 sticky left-0 bottom-0 z-30 bg-[#eef4ff] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)]">
+                    Total
+                  </td>
+                  {pivotResults.stores.map((store) =>
+                    pivotResults.kpis.map((kpi) => (
+                      <td
+                        key={`${store}-${kpi}`}
+                        className="py-3 px-2.5 text-right tabular-nums border-r border-indigo-200 text-indigo-950 font-black bg-[#eef4ff]"
+                      >
+                        {formatKpiTotal(
+                          pivotResults.colTotals[store]?.[kpi] || 0,
+                          kpi
+                        )}
+                      </td>
+                    ))
+                  )}
+                  {pivotResults.kpis.map((kpi) => (
+                    <td
+                      key={`total-${kpi}`}
+                      className="py-3 px-3 text-right tabular-nums bg-[#dbeafe] text-indigo-950 font-black border-r border-indigo-300/60"
+                    >
+                      {formatKpiTotal(pivotResults.grandTotals[kpi] || 0, kpi)}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
     </div>
