@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../../../lib/supabase";
 import DashboardFilterSidebar from "../components/DashboardFilterSidebar";
 import GroupWiseStoreWiseSale from "../components/GroupWiseStoreWiseSale";
+import BrandWiseSale from "../components/BrandWiseSale";
 import {
   TrendingUp,
   Eraser,
@@ -1800,9 +1801,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         let q = supabase
           .from("stock_balance_records")
           .select(
-            "date, shop_id, liquor_type, subhead, item_name, quantity_out, mrp_rate, purchase_rate, b_cs, type1, type2, type5, brand_name",
-          )
-          .gt("quantity_out", 0);
+            "date, shop_id, liquor_type, subhead, item_name, quantity_out, quantity_in, closing_qty, mrp_rate, purchase_rate, b_cs, type1, type2, type5, brand_name, company_name, party_name",
+          );
 
         if (selectedStore !== "All") {
           q = q.eq("shop_id", selectedStore);
@@ -2390,6 +2390,16 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                 }`}
               >
                 Group Wise Sale
+              </button>
+              <button
+                onClick={() => setActiveTab("BrandWise")}
+                className={`min-w-28 py-2.5 sm:py-3 px-5 sm:px-8 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-sm cursor-pointer ${
+                  activeTab === "BrandWise"
+                    ? "bg-[#180e5b] text-white shadow-indigo-950/20"
+                    : "bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700"
+                }`}
+              >
+                Brand wise sale
               </button>
             </div>
 
@@ -3839,6 +3849,13 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
           {/* ========================================================= */}
           {activeTab === "GroupWise" && (
             <GroupWiseStoreWiseSale liveRecords={records} />
+          )}
+
+          {/* ========================================================= */}
+          {/* BRAND WISE SALE TAB — Brand/Item/Company/Trader Pivot */}
+          {/* ========================================================= */}
+          {activeTab === "BrandWise" && (
+            <BrandWiseSale liveRecords={records} />
           )}
         </main>
       </div>
