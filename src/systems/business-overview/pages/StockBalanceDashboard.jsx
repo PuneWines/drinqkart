@@ -3,6 +3,7 @@ import { supabase } from "../../../lib/supabase";
 import DashboardFilterSidebar from "../components/DashboardFilterSidebar";
 import GroupWiseStoreWiseSale from "../components/GroupWiseStoreWiseSale";
 import BrandWiseSale from "../components/BrandWiseSale";
+import SaleExplorationTab from "../components/SaleExplorationTab";
 import {
   TrendingUp,
   Eraser,
@@ -514,8 +515,8 @@ const DonutChart = ({
   data = [],
   centerValue = "0",
   centerLabel = "Total",
-  size = 145,
-  strokeWidth = 22,
+  size = 125,
+  strokeWidth = 18,
   onHoverSlice,
   hoveredIndex = null,
 }) => {
@@ -568,10 +569,10 @@ const DonutChart = ({
       </svg>
       {/* Center Label perfectly fitted inside hole */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-1">
-        <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-none truncate max-w-20 transition-all">
+        <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-none truncate max-w-24 transition-all">
           {centerValue}
         </span>
-        <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-wider truncate max-w-20">
+        <span className="text-[10px] sm:text-[11px] font-black text-slate-600 mt-1 uppercase tracking-wider truncate max-w-24">
           {centerLabel}
         </span>
       </div>
@@ -583,12 +584,12 @@ const DonutChart = ({
 // DAY-WISE SPLINE CHART COMPONENT (WITH CROSSHAIR PROBE)
 // ==========================================
 const DayWiseChart = ({ dayMap = {}, onHoverDay, hoveredDay = null }) => {
-  const width = 380;
-  const height = 185;
-  const padL = 48;
-  const padR = 14;
-  const padT = 16;
-  const padB = 34;
+  const width = 360;
+  const height = 145;
+  const padL = 36;
+  const padR = 12;
+  const padT = 12;
+  const padB = 26;
 
   // Days 1 to 31
   const daysList = [];
@@ -716,7 +717,7 @@ const DayWiseChart = ({ dayMap = {}, onHoverDay, hoveredDay = null }) => {
           y={(height - padB + padT) / 2}
           textAnchor="middle"
           transform={`rotate(-90, 12, ${(height - padB + padT) / 2})`}
-          className="text-[10px] font-bold fill-slate-700 select-none"
+          className="text-[11.5px] font-black fill-slate-800 select-none"
         >
           Total Cases
         </text>
@@ -724,7 +725,7 @@ const DayWiseChart = ({ dayMap = {}, onHoverDay, hoveredDay = null }) => {
           x={(width + padL - padR) / 2}
           y={height - 4}
           textAnchor="middle"
-          className="text-[10px] font-bold fill-slate-700 select-none"
+          className="text-[11.5px] font-black fill-slate-800 select-none"
         >
           Day
         </text>
@@ -829,12 +830,12 @@ const CardMetricSelector = ({ value, onChange }) => (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-[#6366f1]/10 hover:bg-[#6366f1]/20 text-[#3730a3] text-[11px] font-extrabold py-1 pl-2.5 pr-7 rounded-lg border border-[#6366f1]/30 appearance-none cursor-pointer outline-none transition-all shadow-xs"
+      className="bg-[#6366f1]/10 hover:bg-[#6366f1]/20 text-[#3730a3] text-xs font-black py-1.5 pl-3 pr-8 rounded-xl border border-[#6366f1]/30 appearance-none cursor-pointer outline-none transition-all shadow-xs"
     >
       <option value="amount">Total Amount</option>
       <option value="cases">Total Cases</option>
     </select>
-    <ChevronDown className="w-3.5 h-3.5 text-[#3730a3] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+    <ChevronDown className="w-4 h-4 text-[#3730a3] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
   </div>
 );
 
@@ -991,7 +992,7 @@ const DateSalesProfitChart = ({
           y={(padT + height - padB) / 2}
           textAnchor="middle"
           transform={`rotate(-90, 16, ${(padT + height - padB) / 2})`}
-          className="text-[11.5px] fill-slate-700 font-extrabold select-none"
+          className="text-[12.5px] fill-slate-800 font-black select-none"
         >
           {isAmount ? "Total Amount (₹)" : "Total Cases"}
         </text>
@@ -999,7 +1000,7 @@ const DateSalesProfitChart = ({
           x={(width + padL - padR) / 2}
           y={height - 4}
           textAnchor="middle"
-          className="text-[11.5px] fill-slate-700 font-extrabold select-none"
+          className="text-[12.5px] fill-slate-800 font-black select-none"
         >
           Date
         </text>
@@ -1394,7 +1395,7 @@ const TargetActualDifferenceChart = ({
           y={(padT + height - padB) / 2}
           textAnchor="middle"
           transform={`rotate(-90, 16, ${(padT + height - padB) / 2})`}
-          className="text-[11.5px] fill-slate-700 font-extrabold select-none"
+          className="text-[12.5px] fill-slate-800 font-black select-none"
         >
           {isAmount ? "Total Sales (₹)" : "Total Cases"}
         </text>
@@ -1402,7 +1403,7 @@ const TargetActualDifferenceChart = ({
           x={(width + padL - padR) / 2}
           y={height - 4}
           textAnchor="middle"
-          className="text-[11.5px] fill-slate-700 font-extrabold select-none"
+          className="text-[12.5px] fill-slate-800 font-black select-none"
         >
           Day
         </text>
@@ -1508,7 +1509,7 @@ const TargetActualDifferenceChart = ({
 };
 
 // ==========================================
-// 4. SELL BY SUB HEAD CATEGORY (HORIZONTAL BAR CHART)
+// 4. SALE BY SUB HEAD CATEGORY (HORIZONTAL BAR CHART)
 // ==========================================
 const CategoryHorizontalBarChart = ({
   categories = [],
@@ -1613,7 +1614,7 @@ const CategoryHorizontalBarChart = ({
           </div>
         </div>
         <p className="text-center text-[11.5px] font-extrabold text-slate-700">
-          Total Sell
+          Total Sale
         </p>
       </div>
     </div>
@@ -2330,29 +2331,33 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
   }, [records, startDate, endDate]);
 
   return (
-    <div className="min-h-screen bg-[#f5f0e8] p-2.5 sm:p-4 font-sans text-slate-800 flex justify-center">
-      <div className="w-full max-w-[1680px] bg-white rounded-3xl border border-[#C9A84C]/30 shadow-xl overflow-hidden flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-[#edf6fd] p-2.5 sm:p-4 font-sans text-slate-800 flex justify-center">
+      <div className="w-full max-w-[1680px] bg-white rounded-3xl border-2 border-[#b8ddf8] shadow-xl overflow-hidden flex flex-col lg:flex-row">
         {/* ========================================================= */}
-        {/* COMMON SIDEBAR CONTROLS & BRANDING ACROSS ALL TABS */}
+        {/* COMMON SIDEBAR CONTROLS & BRANDING (Hidden in Group Wise, Brand Wise & Sale) */}
         {/* ========================================================= */}
-        <DashboardFilterSidebar
-          computed={computed}
-          activeLiquorType={activeLiquorType}
-          selectedStore={selectedStore}
-          setSelectedStore={setSelectedStore}
-          storeOptions={storeOptions}
-          selectedLiquorType={selectedLiquorType}
-          setSelectedLiquorType={setSelectedLiquorType}
-          liquorTypeOptions={liquorTypeOptions}
-          selectedSubhead={selectedSubhead}
-          setSelectedSubhead={setSelectedSubhead}
-          subheadOptions={subheadOptions}
-          startDate={startDate}
-          setStartDate={setStartDate}
-          endDate={endDate}
-          setEndDate={setEndDate}
-          formatIndianDate={formatIndianDate}
-        />
+        {activeTab !== "GroupWise" &&
+          activeTab !== "BrandWise" &&
+          activeTab !== "SaleExploration" && (
+          <DashboardFilterSidebar
+            computed={computed}
+            activeLiquorType={activeLiquorType}
+            selectedStore={selectedStore}
+            setSelectedStore={setSelectedStore}
+            storeOptions={storeOptions}
+            selectedLiquorType={selectedLiquorType}
+            setSelectedLiquorType={setSelectedLiquorType}
+            liquorTypeOptions={liquorTypeOptions}
+            selectedSubhead={selectedSubhead}
+            setSelectedSubhead={setSelectedSubhead}
+            subheadOptions={subheadOptions}
+            startDate={startDate}
+            setStartDate={setStartDate}
+            endDate={endDate}
+            setEndDate={setEndDate}
+            formatIndianDate={formatIndianDate}
+          />
+        )}
 
         {/* ========================================================= */}
         {/* MAIN DASHBOARD CONTENT AREA */}
@@ -2400,6 +2405,16 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                 }`}
               >
                 Brand wise sale
+              </button>
+              <button
+                onClick={() => setActiveTab("SaleExploration")}
+                className={`min-w-28 py-2.5 sm:py-3 px-5 sm:px-8 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-sm cursor-pointer ${
+                  activeTab === "SaleExploration"
+                    ? "bg-[#180e5b] text-white shadow-indigo-950/20"
+                    : "bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700"
+                }`}
+              >
+                Sale
               </button>
             </div>
 
@@ -2469,23 +2484,23 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
               {/* ========================================================= */}
               {/* MIDDLE ROW: 3 MAJOR REAL VISUALIZATIONS */}
               {/* ========================================================= */}
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
+              <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                 {/* Card 1: Liquor Type Wise Sale Amount (Real DB) */}
                 <div
                   ref={card1Ref}
-                  className={`bg-[#f8fcff] rounded-2xl p-3.5 sm:p-4 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs relative ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
+                  className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs relative min-h-75 justify-between ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
                   onMouseLeave={() => {
                     hideTooltip();
                   }}
                 >
                   {/* Centered Title with absolute badges */}
-                  <div className="relative mb-2.5 min-w-0 flex items-center justify-center">
-                    <h2 className="text-center text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
+                  <div className="relative mb-2 min-w-0 flex items-center justify-center">
+                    <h2 className="text-center text-xs sm:text-sm font-extrabold text-slate-800 tracking-tight">
                       Liquor Type Wise Sale Amount
                     </h2>
                     {clickedLiquorType ? (
                       <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300 flex items-center gap-1 shadow-2xs">
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300 flex items-center gap-1 shadow-2xs">
                           <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                           Showing: {clickedLiquorType}
                         </span>
@@ -2503,17 +2518,17 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                       </div>
                     ) : hoveredLiquorRow ? (
                       <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[9px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full shadow-2xs shrink-0 truncate max-w-36 animate-fade-in">
-                        Click div to view related data
+                        Click to filter
                       </span>
                     ) : null}
                   </div>
 
                   <div className="flex-1 flex items-center min-w-0 overflow-hidden">
-                    <div className="w-5 -rotate-90 text-[10px] font-bold text-slate-700 text-center whitespace-nowrap select-none shrink-0">
+                    <div className="w-5 -rotate-90 text-[9px] font-bold text-slate-700 text-center whitespace-nowrap select-none shrink-0">
                       Liquor Type
                     </div>
 
-                    <div className="flex-1 min-w-0 flex flex-col justify-center gap-2.5 py-1">
+                    <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5 py-0.5">
                       {computed.liquorTypeSalesList.map((item, idx) => {
                         const widthPercent = Math.min(
                           (item.amount / computed.maxLiquorSale) * 100,
@@ -2542,7 +2557,6 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                             }`}
                             onMouseEnter={(e) => {
                               setHoveredLiquorRow(item.type);
-                              // When clicked, hide any tooltip and don't show hover div for it
                               if (clickedLiquorType === item.type) {
                                 hideTooltip();
                                 return;
@@ -2593,13 +2607,12 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                             onMouseLeave={() => {
                               setHoveredLiquorRow(null);
                               hideTooltip();
-                              // NOTE: do NOT unclick on hover-out — only global click-outside deselects
                             }}
                             onClick={() => {
                               setClickedLiquorType((prev) =>
                                 prev === item.type ? null : item.type,
                               );
-                              hideTooltip(); // Hide hover div immediately when clicked!
+                              hideTooltip();
                             }}
                           >
                             <span
@@ -2613,7 +2626,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                             </span>
                             <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden pointer-events-none">
                               <div
-                                className={`h-7 rounded-r-xs transition-all duration-300 shrink-0 shadow-xs ${
+                                className={`h-6.5 rounded-r-xs transition-all duration-300 shrink-0 shadow-xs ${
                                   isSelected
                                     ? "bg-indigo-600 scale-y-110 shadow-md ring-2 ring-indigo-300"
                                     : "bg-[#818cf8] group-hover/bar:bg-indigo-500"
@@ -2639,7 +2652,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                   </div>
 
                   {/* X Axis scale */}
-                  <div className="border-t border-[#b8ddf8] pt-1.5 mt-2 min-w-0">
+                  <div className="border-t border-[#b8ddf8] pt-1.5 mt-1.5 min-w-0">
                     <div className="flex justify-between text-[9px] font-semibold text-slate-500 pl-14 pr-1 min-w-0">
                       <span>0</span>
                       <span className="truncate px-1">
@@ -2652,7 +2665,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                         {formatCurrency(computed.maxLiquorSale)}
                       </span>
                     </div>
-                    <p className="text-center text-[10px] font-bold text-slate-700 mt-0.5">
+                    <p className="text-center text-xs font-black text-slate-800 mt-0.5">
                       Sales Amount (₹)
                     </p>
                   </div>
@@ -2660,11 +2673,11 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
 
                 {/* Card 2: Liquor Type Wise Case Sale (Real DB) */}
                 <div
-                  className={`bg-[#f8fcff] rounded-2xl p-3.5 sm:p-4 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
+                  className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs min-h-75 justify-between ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
                 >
                   {/* Centered Title with absolute badge */}
-                  <div className="relative mb-2.5 min-w-0 flex items-center justify-center">
-                    <h2 className="text-center text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
+                  <div className="relative mb-2 min-w-0 flex items-center justify-center">
+                    <h2 className="text-center text-xs sm:text-sm font-extrabold text-slate-800 tracking-tight">
                       Liquor Type Wise Case Sale
                     </h2>
                     {activeLiquorType && (
@@ -2674,8 +2687,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     )}
                   </div>
 
-                  <div className="flex-1 flex flex-col sm:flex-row items-center justify-center gap-2 py-1 min-w-0 overflow-hidden">
-                    <div className="relative p-1 shrink-0">
+                  <div className="flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 py-0.5 min-w-0 overflow-hidden">
+                    <div className="relative p-0.5 shrink-0">
                       <DonutChart
                         data={computed.liquorTypeCaseList}
                         centerValue={
@@ -2694,8 +2707,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                               ? hoveredLiquorItem.type
                               : "Total Cases"
                         }
-                        size={140}
-                        strokeWidth={20}
+                        size={125}
+                        strokeWidth={18}
                         hoveredIndex={
                           activeLiquorType
                             ? computed.liquorTypeCaseList.findIndex(
@@ -2739,7 +2752,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     </div>
 
                     {/* Legend with real cases and percentages */}
-                    <div className="flex flex-col gap-1.5 min-w-0 flex-1 max-w-[130px] pl-1">
+                    <div className="flex flex-col gap-1.5 min-w-0 flex-1 max-w-32.5 pl-1">
                       <span className="text-[11px] font-black text-slate-800 mb-0.5">
                         Liquor Type
                       </span>
@@ -2833,11 +2846,11 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
 
                 {/* Card 3: Store Wise Sale Amount (Real DB) */}
                 <div
-                  className={`bg-[#f8fcff] rounded-2xl p-3.5 sm:p-4 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
+                  className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs min-h-75 justify-between ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
                 >
                   {/* Centered Title with absolute badge */}
-                  <div className="relative mb-2.5 min-w-0 flex items-center justify-center">
-                    <h2 className="text-center text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
+                  <div className="relative mb-2 min-w-0 flex items-center justify-center">
+                    <h2 className="text-center text-xs sm:text-sm font-extrabold text-slate-800 tracking-tight">
                       Store Wise Sale Amount
                     </h2>
                     {activeLiquorType && (
@@ -2848,7 +2861,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                   </div>
 
                   <div className="flex-1 flex items-center min-w-0 overflow-hidden">
-                    <div className="w-5 -rotate-90 text-[10px] font-bold text-slate-700 text-center whitespace-nowrap select-none shrink-0">
+                    <div className="w-5 -rotate-90 text-[9px] font-bold text-slate-700 text-center whitespace-nowrap select-none shrink-0">
                       Store
                     </div>
 
@@ -3000,7 +3013,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                         {formatCurrency(computed.maxStoreSale)}
                       </span>
                     </div>
-                    <p className="text-center text-[10px] font-bold text-slate-700 mt-0.5">
+                    <p className="text-center text-xs font-black text-slate-800 mt-0.5">
                       {activeLiquorType
                         ? `${activeLiquorType} Sales Amount (₹)`
                         : "Sales Amount (₹)"}
@@ -3012,19 +3025,19 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
               {/* ========================================================= */}
               {/* BOTTOM ROW: 3 MAJOR REAL VISUALIZATIONS */}
               {/* ========================================================= */}
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
+              <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                 {/* Card 4: Monthly Liquor Type Case Sold (Real DB Stacked Columns) */}
                 <div
-                  className={`bg-[#f8fcff] rounded-2xl p-3.5 sm:p-4 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
+                  className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs min-h-75 justify-between ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
                 >
                   {/* Centered Title with absolute badge */}
-                  <div className="relative mb-2 min-w-0 flex items-center justify-center">
-                    <h2 className="text-center text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
+                  <div className="relative mb-1.5 min-w-0 flex items-center justify-center">
+                    <h2 className="text-center text-xs sm:text-sm font-extrabold text-slate-800 tracking-tight">
                       Monthly Liquor Type Case Sold
                     </h2>
                     {activeLiquorType && (
                       <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 shrink-0">
-                        Linked: {activeLiquorType} Cases
+                        Linked: {activeLiquorType}
                       </span>
                     )}
                   </div>
@@ -3074,7 +3087,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                       Total Cases
                     </div>
 
-                    <div className="flex-1 flex items-end justify-around gap-2 px-2 pt-2 pb-1 h-40 overflow-hidden">
+                    <div className="flex-1 flex items-end justify-around gap-2 px-2 pt-1 pb-0.5 h-36 overflow-hidden">
                       {computed.monthlyStackedCases.map((m, idx) => {
                         const maxTotalCases = Math.max(
                           ...computed.monthlyStackedCases.map(
@@ -3082,10 +3095,10 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                           ),
                           1,
                         );
-                        const maxStackH = 105; // fixed max stack height in px
+                        const maxStackH = 88; // compact stack height in px
                         const stackHeight = Math.max(
                           (m.totalCases / maxTotalCases) * maxStackH,
-                          14,
+                          12,
                         );
                         const sumCases = m.imfl + m.beer + m.mml + m.wine || 1;
 
@@ -3329,21 +3342,21 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     </div>
                   </div>
 
-                  <p className="text-center text-[10px] font-bold text-slate-700 border-t border-[#b8ddf8] pt-1">
+                  <p className="text-center text-xs font-black text-slate-800 border-t border-[#b8ddf8] pt-1">
                     Month
                   </p>
                 </div>
 
                 {/* Card 5: Day Wise Case Sold (Real DB Spline Curve with Probe) */}
-                <div className="bg-[#f8fcff] rounded-2xl p-3.5 sm:p-4 border-2 border-[#b8ddf8] shadow-xs flex flex-col min-w-0 overflow-hidden">
+                <div className="bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 border-2 border-[#b8ddf8] shadow-xs flex flex-col min-w-0 overflow-hidden min-h-75 justify-between">
                   {/* Centered Title */}
-                  <div className="relative mb-2.5 min-w-0 flex items-center justify-center">
-                    <h2 className="text-center text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
+                  <div className="relative mb-1.5 min-w-0 flex items-center justify-center">
+                    <h2 className="text-center text-xs sm:text-sm font-extrabold text-slate-800 tracking-tight">
                       Day Wise Case Sold
                     </h2>
                   </div>
 
-                  <div className="flex-1 flex items-center justify-center py-1 min-w-0 overflow-hidden">
+                  <div className="flex-1 flex items-center justify-center py-0.5 min-w-0 overflow-hidden">
                     <DayWiseChart
                       dayMap={computed.dayWiseCasesMap}
                       hoveredDay={hoveredDayProbe}
@@ -3389,16 +3402,16 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
 
                 {/* Card 6: Subhead Category Wise Sale Amount (Real DB Donut & Legend) */}
                 <div
-                  className={`bg-[#f8fcff] rounded-2xl p-3.5 sm:p-4 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
+                  className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 border-2 transition-all flex flex-col min-w-0 overflow-hidden shadow-xs min-h-75 justify-between ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
                 >
                   {/* Centered Title with absolute badge */}
-                  <div className="relative mb-2.5 min-w-0 flex items-center justify-center">
-                    <h2 className="text-center text-sm sm:text-base font-extrabold text-slate-800 tracking-tight">
+                  <div className="relative mb-1.5 min-w-0 flex items-center justify-center">
+                    <h2 className="text-center text-xs sm:text-sm font-extrabold text-slate-800 tracking-tight">
                       Subhead Category Wise Sale Amount
                     </h2>
                     {activeLiquorType && (
                       <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 shrink-0">
-                        {activeLiquorType} Subheads
+                        {activeLiquorType}
                       </span>
                     )}
                   </div>
@@ -3435,8 +3448,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                                   ? `${activeLiquorType} Total`
                                   : "Total Sales"
                             }
-                            size={135}
-                            strokeWidth={20}
+                            size={125}
+                            strokeWidth={18}
                             hoveredIndex={hoveredSubheadIndex}
                             onHoverSlice={(slice, idx, e) => {
                               setHoveredSubheadIndex(idx);
@@ -3478,7 +3491,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                         </div>
 
                         {/* Subhead Categories Legend strictly from real DB with interactive hover */}
-                        <div className="flex-1 min-w-0 max-h-40 overflow-y-auto pr-1 w-full flex flex-col gap-1 custom-scrollbar">
+                        <div className="flex-1 min-w-0 max-h-36 overflow-y-auto pr-1 w-full flex flex-col gap-1 custom-scrollbar">
                           {displayedSubheads.map((cat, idx) => (
                             <div
                               key={idx}
@@ -3570,14 +3583,14 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     />
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-indigo-700">
+                      <span className="flex items-center gap-1.5 text-xs font-black text-indigo-700">
                         <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block" />
                         {card1Metric === "amount"
                           ? "Total Amount"
                           : "Total Cases"}
                       </span>
                       {card1Metric === "amount" && (
-                        <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-emerald-600">
+                        <span className="flex items-center gap-1.5 text-xs font-black text-emerald-600">
                           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
                           Profit
                         </span>
@@ -3719,11 +3732,11 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     />
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-purple-700">
+                      <span className="flex items-center gap-1.5 text-xs font-black text-purple-700">
                         <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
                         Total Sales
                       </span>
-                      <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-sky-600">
+                      <span className="flex items-center gap-1.5 text-xs font-black text-sky-600">
                         <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" />
                         Average Sales
                       </span>
@@ -3773,13 +3786,13 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                   </div>
                 </div>
 
-                {/* Card 4: Sell by Sub Head Category (Horizontal Bar Chart) */}
+                {/* Card 4: Sale by Sub Head Category (Horizontal Bar Chart) */}
                 <div
                   className={`bg-[#f8fcff] rounded-2xl p-4 sm:p-5 border-2 transition-all shadow-xs flex flex-col min-w-0 overflow-hidden min-h-[340px] ${activeLiquorType ? "border-indigo-400 ring-2 ring-indigo-200/50" : "border-[#b8ddf8]"}`}
                 >
                   {/* Centered Title at top */}
                   <h2 className="text-center text-sm sm:text-base font-extrabold text-slate-800 tracking-tight mb-2">
-                    Sell by Sub Head Category
+                    Sale by Sub Head Category
                   </h2>
 
                   {/* Card Controls Bar */}
@@ -3848,14 +3861,39 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
           {/* GROUP WISE SALE TAB — Multi-Dimensional Pivot Tables */}
           {/* ========================================================= */}
           {activeTab === "GroupWise" && (
-            <GroupWiseStoreWiseSale liveRecords={records} />
+            <GroupWiseStoreWiseSale
+              liveRecords={records}
+              startDate={startDate}
+              setStartDate={setStartDate}
+              endDate={endDate}
+              setEndDate={setEndDate}
+            />
           )}
 
           {/* ========================================================= */}
           {/* BRAND WISE SALE TAB — Brand/Item/Company/Trader Pivot */}
           {/* ========================================================= */}
           {activeTab === "BrandWise" && (
-            <BrandWiseSale liveRecords={records} />
+            <BrandWiseSale
+              liveRecords={records}
+              startDate={startDate}
+              setStartDate={setStartDate}
+              endDate={endDate}
+              setEndDate={setEndDate}
+            />
+          )}
+
+          {/* ========================================================= */}
+          {/* 5TH TAB: SALE EXPLORATION (Pareto 80/20, Orange Hero, Weekly Trend, Store Matrix) */}
+          {/* ========================================================= */}
+          {activeTab === "SaleExploration" && (
+            <SaleExplorationTab
+              liveRecords={records}
+              startDate={startDate}
+              setStartDate={setStartDate}
+              endDate={endDate}
+              setEndDate={setEndDate}
+            />
           )}
         </main>
       </div>
