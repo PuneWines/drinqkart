@@ -1834,7 +1834,7 @@ export default function EmployeeManagement() {
                       required
                     >
                       <option value="">Select Designation</option>
-                      <option value="Employee">Employee</option>
+                      <option value="User">User</option>
                       <option value="Manager">Manager</option>
                       <option value="HOD">HOD</option>
                       <option value="Admin">Admin</option>
@@ -2204,7 +2204,7 @@ export default function EmployeeManagement() {
                           required
                         >
                           <option value="">Select Designation</option>
-                          <option value="Employee">Employee</option>
+                          <option value="User">User</option>
                           <option value="Manager">Manager</option>
                           <option value="HOD">HOD</option>
                           <option value="Admin">Admin</option>

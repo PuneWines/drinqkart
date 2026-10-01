@@ -248,7 +248,7 @@ export default function MasterSetting() {
   const [userStatusInput, setUserStatusInput] = useState('active');
   const [usernameInput, setUsernameInput] = useState('');
   const [mobileInput, setMobileInput] = useState('');
-  const [roleInput, setRoleInput] = useState('Employee');
+  const [roleInput, setRoleInput] = useState('User');
   const [passwordInput, setPasswordInput] = useState('');
   const [primaryShopInput, setPrimaryShopInput] = useState(''); // Primary assigned shop (single shop)
   const [shopNameInput, setShopNameInput] = useState(''); // Multi-shop permissions access list (comma-separated)
@@ -776,12 +776,12 @@ export default function MasterSetting() {
     setUsernameInput(user.user_name || user.username || '');
     setMobileInput(user.number || user.mobile || user.phone || '');
 
-    let normalizedRole = 'Employee';
+    let normalizedRole = 'User';
     const rLower = (user.role || '').toLowerCase().trim();
     if (rLower === 'manager') normalizedRole = 'Manager';
     else if (rLower === 'hod') normalizedRole = 'HOD';
     else if (rLower === 'admin') normalizedRole = 'Admin';
-    else if (rLower === 'employee' || rLower === 'user') normalizedRole = 'Employee';
+    else if (rLower === 'employee' || rLower === 'user') normalizedRole = 'User';
     else if (user.role) normalizedRole = user.role;
     setRoleInput(normalizedRole);
 
@@ -1446,7 +1446,7 @@ export default function MasterSetting() {
                         <td className="py-2 px-3 capitalize font-medium text-[#1A1A1A]/70 whitespace-nowrap">
                           <div className="flex flex-col gap-0.5 items-start">
                             <span className="px-1.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[9.5px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                              {u.role || 'user'}
+                              {(u.role || 'user').toLowerCase() === 'employee' ? 'user' : (u.role || 'user')}
                             </span>
                             {u.can_self_assign ? (
                               <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[8.5px] font-bold uppercase tracking-wider">
@@ -1663,7 +1663,7 @@ export default function MasterSetting() {
                     onChange={(e) => setRoleInput(e.target.value)}
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                   >
-                    <option value="Employee">Employee</option>
+                    <option value="User">User</option>
                     <option value="Manager">Manager</option>
                     <option value="HOD">HOD</option>
                     <option value="Admin">Admin</option>
@@ -2302,7 +2302,7 @@ export default function MasterSetting() {
                       onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                     >
-                      <option value="Employee">Employee</option>
+                      <option value="User">User</option>
                       <option value="Manager">Manager</option>
                       <option value="HOD">HOD</option>
                       <option value="Admin">Admin</option>
