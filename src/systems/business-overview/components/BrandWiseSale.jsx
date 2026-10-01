@@ -1,20 +1,25 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
-import { Download, Search, ChevronDown, Layers } from "lucide-react";
+import { Download, Calendar } from "lucide-react";
 
 const SEGS = ["Sale", "Purchase", "Closing qty", "Closing case"];
-const SEARCH_BY_OPTIONS = ["Brand Name"];
+const SEARCH_BY_OPTIONS = ["Item Name", "Brand Name", "Company", "Trader Wise"];
 const KPI_OPTIONS = ["Amount", "Qty", "Case"];
 const AGG_OPTIONS = ["Total", "Avg"];
 
 // Indian number formatters
 const nf0 = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
-const nf1 = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf1 = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 });
 
 /**
- * MultiSelectDropdown component with 'Select all' / 'Clear' and checkboxes
+ * Custom MultiSelectDropdown matching the exact UI spec
  */
-function MultiSelectDropdown({ label, options = [], selected = new Set(), onChange, placeholder = "Select" }) {
+function MultiSelectDropdown({
+  label,
+  options = [],
+  selected = new Set(),
+  onChange,
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -39,50 +44,51 @@ function MultiSelectDropdown({ label, options = [], selected = new Set(), onChan
   const isAll = options.length > 0 && selected.size === options.length;
 
   return (
-    <div className="relative flex flex-col gap-1 min-w-[160px] flex-1" ref={dropdownRef}>
-      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+    <div className="relative" ref={dropdownRef}>
+      <span className="block text-[12px] font-semibold text-[#6a7488] mb-1">
+        {label}
+      </span>
       <div className="relative">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full py-2 px-3 border rounded-xl text-left font-medium text-xs flex items-center justify-between transition-all cursor-pointer shadow-xs ${
+          className={`w-full py-2 px-2.5 border rounded-lg text-left text-sm flex items-center justify-between cursor-pointer transition-colors bg-white ${
             count > 0 && !isAll
-              ? "border-blue-500 text-blue-600 font-bold bg-blue-50/50"
-              : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+              ? "border-[#1f6feb] text-[#1f6feb] font-semibold"
+              : "border-[#dde2ea] text-[#1b2230]"
           }`}
         >
-          <span className="truncate pr-2">{buttonText}</span>
-          <ChevronDown size={14} className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          <span className="truncate pr-1">{buttonText}</span>
+          <span className="text-xs text-[#6a7488] shrink-0">▾</span>
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 top-full left-0 mt-1.5 w-full min-w-[200px] max-h-64 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100 text-[11px] font-bold text-blue-600 mb-1">
-              <button
-                type="button"
+          <div className="absolute z-30 top-full left-0 right-0 min-w-45 mt-1 bg-white border border-[#dde2ea] rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.2)] max-h-64 overflow-y-auto">
+            <div className="flex justify-between py-1.5 px-2.5 border-b border-[#dde2ea] text-xs font-semibold">
+              <a
                 onClick={() => onChange(new Set(options))}
-                className="hover:underline cursor-pointer"
+                className="text-[#1f6feb] cursor-pointer hover:underline"
               >
                 Select all
-              </button>
-              <button
-                type="button"
+              </a>
+              <a
                 onClick={() => onChange(new Set())}
-                className="text-slate-400 hover:text-slate-600 hover:underline cursor-pointer"
+                className="text-[#6a7488] cursor-pointer hover:underline"
               >
                 Clear
-              </button>
+              </a>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="py-1">
               {options.map((opt) => {
                 const checked = selected.has(opt);
                 return (
                   <label
                     key={opt}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer select-none"
+                    className="flex gap-2 items-center py-1.5 px-2.5 cursor-pointer text-sm text-[#1b2230] hover:bg-[#eef2fb] select-none"
                   >
                     <input
                       type="checkbox"
+                      value={opt}
                       checked={checked}
                       onChange={() => {
                         const next = new Set(selected);
@@ -93,7 +99,7 @@ function MultiSelectDropdown({ label, options = [], selected = new Set(), onChan
                         }
                         onChange(next);
                       }}
-                      className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      className="cursor-pointer"
                     />
                     <span className="truncate">{opt}</span>
                   </label>
@@ -107,7 +113,13 @@ function MultiSelectDropdown({ label, options = [], selected = new Set(), onChan
   );
 }
 
-export default function BrandWiseSale({ liveRecords = [] }) {
+export default function BrandWiseSale({
+  liveRecords = [],
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+}) {
   // 1. Dynamic stores list extracted from live records
   const availableStores = useMemo(() => {
     const sSet = new Set();
@@ -126,10 +138,9 @@ export default function BrandWiseSale({ liveRecords = [] }) {
   const [aggregation, setAggregation] = useState("Total");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Initialize store selection when stores load
+  // Initialize store selection
   useEffect(() => {
     if (availableStores.length > 0 && selectedStores.size === 0) {
-      // Default to first 2 or all if fewer
       setSelectedStores(new Set(availableStores.slice(0, Math.min(2, availableStores.length))));
     }
   }, [availableStores]);
@@ -219,7 +230,7 @@ export default function BrandWiseSale({ liveRecords = [] }) {
 
       if (!grid[rowLabel]) grid[rowLabel] = {};
       if (!grid[rowLabel][store]) {
-        grid[rowLabel][store] = [0, 0, 0, 0, 0]; // [sale, pur, closeQty, closeCase, recordCount]
+        grid[rowLabel][store] = [0, 0, 0, 0, 0];
       }
 
       for (let sIdx = 0; sIdx < 4; sIdx++) {
@@ -233,7 +244,7 @@ export default function BrandWiseSale({ liveRecords = [] }) {
 
     const sortedRowKeys = Object.keys(grid).sort((a, b) => a.localeCompare(b));
 
-    // Calculate column totals for bottom total row
+    // Calculate column totals
     const totals = {};
     sortedRowKeys.forEach((rowKey) => {
       activeStores.forEach((store) => {
@@ -243,7 +254,11 @@ export default function BrandWiseSale({ liveRecords = [] }) {
           const colKey = `${store}__${segName}`;
           let val = 0;
           if (storeData) {
-            val = isAvg ? (storeData[4] > 0 ? storeData[segIdx] / Math.max(1, dateCounts[store]?.size || 1) : 0) : storeData[segIdx];
+            val = isAvg
+              ? storeData[4] > 0
+                ? storeData[segIdx] / Math.max(1, dateCounts[store]?.size || 1)
+                : 0
+              : storeData[segIdx];
           }
           totals[colKey] = (totals[colKey] || 0) + val;
         });
@@ -319,48 +334,49 @@ export default function BrandWiseSale({ liveRecords = [] }) {
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      {/* Header Banner */}
-      <div className="bg-[#1f6feb] text-white rounded-2xl p-5 sm:p-6 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="w-full text-[#1b2230] font-sans">
+      {/* Header matching exact UI spec */}
+      <header className="bg-[#1f6feb] text-white rounded-xl p-4 sm:px-5 mb-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2.5">
-            <Layers className="w-6 h-6 shrink-0" />
+          <h1 className="m-0 text-xl sm:text-[22px] font-bold leading-tight">
             Brand Wise Item Wise Trader Wise Sale
           </h1>
-          <p className="text-blue-100 text-xs sm:text-sm mt-1 font-medium">
-            Pick stores and segments, choose how to view, then type in the search bar to filter real records.
+          <p className="mt-0.5 opacity-85 text-xs sm:text-[13px]">
+            Pick stores and segments, choose how to view, then type in the search bar to filter rows.
           </p>
         </div>
         {rowKeys.length > 0 && (
           <button
             onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white border border-white/25 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+            title="Export to Excel"
           >
             <Download size={14} />
-            Export Excel
+            <span>Export Excel</span>
           </button>
         )}
-      </div>
+      </header>
 
-      {/* Control Card with Filters */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {/* Select Store Dropdown */}
+      {/* Filter Card matching exact UI spec */}
+      <div className="bg-white border border-[#dde2ea] rounded-xl p-3.5 mb-3.5 shadow-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+          {/* 1. Select Store Multi-Select */}
           <MultiSelectDropdown
             label="Select Store"
             options={availableStores}
             selected={selectedStores}
             onChange={setSelectedStores}
-            placeholder="All Stores"
           />
 
-          {/* Search By Select */}
-          <div className="flex flex-col gap-1 min-w-[140px]">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Search By</span>
+          {/* 2. Search By Select */}
+          <div>
+            <span className="block text-[12px] font-semibold text-[#6a7488] mb-1">
+              Search By
+            </span>
             <select
               value={searchBy}
               onChange={(e) => setSearchBy(e.target.value)}
-              className="py-2 px-3 border border-slate-200 rounded-xl bg-white text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none cursor-pointer"
+              className="w-full py-2 px-2.5 border border-[#dde2ea] rounded-lg bg-white text-[#1b2230] text-sm cursor-pointer outline-none focus:border-[#1f6feb]"
             >
               {SEARCH_BY_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
@@ -370,22 +386,23 @@ export default function BrandWiseSale({ liveRecords = [] }) {
             </select>
           </div>
 
-          {/* Select Segment Dropdown */}
+          {/* 3. Select Segment Multi-Select */}
           <MultiSelectDropdown
             label="Select Segment"
             options={SEGS}
             selected={selectedSegments}
             onChange={setSelectedSegments}
-            placeholder="All Segments"
           />
 
-          {/* KPI Metric Select */}
-          <div className="flex flex-col gap-1 min-w-[130px]">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">KPI</span>
+          {/* 4. KPI Select */}
+          <div>
+            <span className="block text-[12px] font-semibold text-[#6a7488] mb-1">
+              KPI
+            </span>
             <select
               value={kpi}
               onChange={(e) => setKpi(e.target.value)}
-              className="py-2 px-3 border border-slate-200 rounded-xl bg-white text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none cursor-pointer"
+              className="w-full py-2 px-2.5 border border-[#dde2ea] rounded-lg bg-white text-[#1b2230] text-sm cursor-pointer outline-none focus:border-[#1f6feb]"
             >
               {KPI_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
@@ -395,13 +412,15 @@ export default function BrandWiseSale({ liveRecords = [] }) {
             </select>
           </div>
 
-          {/* Aggregation Select */}
-          <div className="flex flex-col gap-1 min-w-[130px]">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Aggregation</span>
+          {/* 5. Aggregation Select */}
+          <div>
+            <span className="block text-[12px] font-semibold text-[#6a7488] mb-1">
+              Aggregation
+            </span>
             <select
               value={aggregation}
               onChange={(e) => setAggregation(e.target.value)}
-              className="py-2 px-3 border border-slate-200 rounded-xl bg-white text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none cursor-pointer"
+              className="w-full py-2 px-2.5 border border-[#dde2ea] rounded-lg bg-white text-[#1b2230] text-sm cursor-pointer outline-none focus:border-[#1f6feb]"
             >
               {AGG_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
@@ -410,41 +429,64 @@ export default function BrandWiseSale({ liveRecords = [] }) {
               ))}
             </select>
           </div>
-        </div>
 
-        {/* Search Bar & Row Count Badge */}
-        <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-100">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          {/* 6. Start Date */}
+          <div>
+            <span className="block text-[12px] font-semibold text-[#6a7488] mb-1">
+              Start Date
+            </span>
             <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search ${searchBy}...`}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all outline-none"
+              type="date"
+              value={startDate || ""}
+              onChange={(e) => setStartDate && setStartDate(e.target.value)}
+              className="w-full py-2 px-2.5 border border-[#dde2ea] rounded-lg bg-white text-[#1b2230] text-sm cursor-pointer outline-none focus:border-[#1f6feb]"
             />
           </div>
-          <span className="text-xs font-bold text-slate-500 shrink-0">
+
+          {/* 7. End Date */}
+          <div>
+            <span className="block text-[12px] font-semibold text-[#6a7488] mb-1">
+              End Date
+            </span>
+            <input
+              type="date"
+              value={endDate || ""}
+              onChange={(e) => setEndDate && setEndDate(e.target.value)}
+              className="w-full py-2 px-2.5 border border-[#dde2ea] rounded-lg bg-white text-[#1b2230] text-sm cursor-pointer outline-none focus:border-[#1f6feb]"
+            />
+          </div>
+        </div>
+
+        {/* Search row matching exact UI spec */}
+        <div className="mt-3 flex gap-2.5 items-center flex-wrap">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Search ${searchBy}...`}
+            className="flex-1 min-w-[200px] text-sm sm:text-[15px] py-2 px-3 border border-[#dde2ea] rounded-lg bg-white text-[#1b2230] outline-none focus:border-[#1f6feb]"
+          />
+          <span className="text-[#6a7488] text-xs whitespace-nowrap font-medium">
             {rowKeys.length} {searchBy.toLowerCase()} rows
           </span>
         </div>
       </div>
 
-      {/* Main Pivot Table Viewport */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-2">
-        <div className="overflow-x-auto max-h-[70vh] border border-slate-200 rounded-xl bg-slate-50 custom-scrollbar shadow-inner relative">
+      {/* Table Card matching exact UI spec */}
+      <div className="bg-white border border-[#dde2ea] rounded-xl p-3.5 shadow-xs">
+        <div className="overflow-auto max-h-[70vh] border border-[#dde2ea] rounded-lg relative custom-scrollbar">
           {rowKeys.length === 0 ? (
-            <div className="py-20 text-center text-slate-400 font-medium text-xs">
-              No matching records found for the selected store/search criteria.
+            <div className="p-8 text-center text-[#6a7488] text-sm">
+              No matching rows. Try a different search.
             </div>
           ) : (
-            <table className="border-collapse border-spacing-0 w-full text-xs">
+            <table className="border-collapse border-spacing-0 w-full text-sm">
               <thead>
-                {/* Header Row 1: Dimension Label + Stores (Colspan = Active Segments Count) */}
+                {/* Header Row 1: Dimension Label (Yellow) + Store Names (Green) */}
                 <tr>
                   <th
                     rowSpan={2}
-                    className="sticky top-0 left-0 z-20 bg-[#ffe699] text-[#1b2230] font-bold text-left px-3.5 py-2.5 border-b border-r border-slate-300 min-w-[230px] shadow-sm select-none"
+                    className="sticky top-0 left-0 z-20 bg-[#ffe699] text-[#1b2230] font-bold text-left py-2 px-3 border-b border-r border-[#dde2ea] min-w-57.5 whitespace-nowrap align-middle"
                   >
                     {searchBy}
                   </th>
@@ -452,20 +494,20 @@ export default function BrandWiseSale({ liveRecords = [] }) {
                     <th
                       key={store}
                       colSpan={activeSegments.length}
-                      className="sticky top-0 z-10 bg-[#c6e0b4] text-[#1b2230] font-extrabold text-center px-3 py-2 border-b border-r border-slate-300 whitespace-nowrap shadow-2xs select-none"
+                      className="sticky top-0 z-10 bg-[#c6e0b4] text-[#1b2230] font-bold text-center py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap"
                     >
                       {store}
                     </th>
                   ))}
                 </tr>
 
-                {/* Header Row 2: Segments under each Store */}
+                {/* Header Row 2: Segments (Light Green) */}
                 <tr>
                   {activeStores.map((store) =>
                     activeSegments.map((segName) => (
                       <th
                         key={`${store}__${segName}`}
-                        className="sticky top-[37px] z-10 bg-[#e2efda] text-[#1b2230] font-bold text-center px-3 py-1.5 border-b border-r border-slate-300 whitespace-nowrap select-none text-[11px]"
+                        className="sticky top-[37px] z-10 bg-[#e2efda] text-[#1b2230] font-semibold text-center py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap text-xs"
                       >
                         {segName}
                       </th>
@@ -474,11 +516,11 @@ export default function BrandWiseSale({ liveRecords = [] }) {
                 </tr>
               </thead>
 
-              <tbody className="bg-white divide-y divide-slate-200">
+              <tbody className="bg-white">
                 {rowKeys.map((rowKey) => (
-                  <tr key={rowKey} className="hover:bg-[#eef2fb] transition-colors group">
+                  <tr key={rowKey} className="hover:bg-[#eef2fb] transition-colors">
                     {/* Sticky Left Label Column */}
-                    <td className="sticky left-0 z-1 bg-white group-hover:bg-[#eef2fb] text-slate-900 font-semibold px-3.5 py-2 border-r border-slate-200 text-left min-w-[230px] whitespace-nowrap shadow-2xs">
+                    <td className="sticky left-0 z-1 bg-white text-[#1b2230] font-semibold text-left py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap">
                       {rowKey}
                     </td>
 
@@ -500,7 +542,7 @@ export default function BrandWiseSale({ liveRecords = [] }) {
                         return (
                           <td
                             key={`${store}__${segName}`}
-                            className="px-3 py-2 text-right border-r border-slate-200 whitespace-nowrap text-slate-800 font-medium tabular-nums text-xs"
+                            className="py-2 px-3 border-b border-r border-[#dde2ea] text-right text-[#1b2230] whitespace-nowrap tabular-nums"
                           >
                             {formatValue(val)}
                           </td>
@@ -511,8 +553,8 @@ export default function BrandWiseSale({ liveRecords = [] }) {
                 ))}
 
                 {/* Sticky Total Row */}
-                <tr className="sticky bottom-0 z-10 bg-[#eef2fb] font-extrabold border-t-2 border-slate-300">
-                  <td className="sticky left-0 z-20 bg-[#eef2fb] text-slate-900 font-black px-3.5 py-2.5 border-r border-slate-300 text-left shadow-xs">
+                <tr className="sticky bottom-0 z-10 bg-[#eef2fb] font-bold">
+                  <td className="sticky left-0 z-20 bg-[#eef2fb] text-[#1b2230] font-bold text-left py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap">
                     Total
                   </td>
                   {activeStores.map((store) =>
@@ -522,7 +564,7 @@ export default function BrandWiseSale({ liveRecords = [] }) {
                       return (
                         <td
                           key={colKey}
-                          className="px-3 py-2.5 text-right border-r border-slate-300 whitespace-nowrap text-slate-900 font-black tabular-nums text-xs"
+                          className="py-2 px-3 border-b border-r border-[#dde2ea] text-right text-[#1b2230] font-bold whitespace-nowrap tabular-nums bg-[#eef2fb]"
                         >
                           {formatTotalValue(totalVal)}
                         </td>
@@ -535,10 +577,10 @@ export default function BrandWiseSale({ liveRecords = [] }) {
           )}
         </div>
 
-        <div className="text-[11px] font-medium text-slate-500 pt-1">
+        <div className="text-[#6a7488] text-xs mt-2 font-medium">
           {aggregation === "Total"
-            ? "Total = sum of selected stock records. Closing values reflect total closing stock."
-            : "Avg = average per recorded entry date. No selection in Store or Segment shows all."}
+            ? "Total = sum of selected stock records. (Closing = latest recorded stock); Avg = average per recorded period. No selection in Store or Segment shows all."
+            : "Avg = average per recorded period. No selection in Store or Segment shows all."}
         </div>
       </div>
     </div>

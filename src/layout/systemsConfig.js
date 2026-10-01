@@ -8,6 +8,7 @@ import {
   MessageSquare,
   BarChart3,
   FileSpreadsheet,
+  TrendingUp,
 } from 'lucide-react';
 
 export const systems = [
@@ -152,13 +153,21 @@ export const systems = [
     ]
   },
   {
-    id: 'stock-balance',
-    label: 'Stock Balance',
-    base: '/systems/business-overview/stock-balance',
+    id: 'sale-analytics',
+    label: 'Sale Analytics',
+    base: '/systems/business-overview/sales-analytics',
+    icon: TrendingUp,
+    subtabs: [
+      { label: 'Dashboard', to: '/systems/business-overview/sales-analytics' }
+    ]
+  },
+  {
+    id: 'stock-report',
+    label: 'Stock / Report',
+    base: '/systems/business-overview/stock-report',
     icon: FileSpreadsheet,
     subtabs: [
-      { label: 'Dashboard', to: '/systems/business-overview/stock-balance' },
-      { label: 'Stock Balance Sheet', to: '/systems/business-overview/stock-balance/sheet' }
+      { label: 'Stock Balance Sheet', to: '/systems/business-overview/stock-report' }
     ]
   }
 ];
@@ -298,6 +307,12 @@ export const getVisibleSystems = (user) => {
         if (sub.label === 'User & System Access') {
           labelsToCheck.push('User & System Access', 'Master Setting', 'User Access');
         }
+      }
+      if (systemId === 'sale-analytics' || systemId === 'sale_analytics') {
+        labelsToCheck.push('Sale Analytics', 'Dashboard', 'Stock Balance', 'Sales Analytics', 'Stock Balance Dashboard');
+      }
+      if (systemId === 'stock-report' || systemId === 'stock_report' || systemId === 'stock-balance') {
+        labelsToCheck.push('Stock / Report', 'Stock Balance Sheet', 'Stock Balance', 'Stock Report', 'Sheet');
       }
 
       const hasMasterPerm = labelsToCheck.some((lbl) => {

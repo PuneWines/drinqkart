@@ -755,7 +755,7 @@ export default function StockBalance() {
 
           {/* Executive Dashboard Button */}
           <button
-            onClick={() => navigate('/systems/business-overview/stock-balance')}
+            onClick={() => navigate('/systems/business-overview/sales-analytics')}
             className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl shadow-sm hover:shadow transition-all cursor-pointer"
             id="view-executive-dashboard-btn"
           >

@@ -21,7 +21,8 @@ function BusinessOverviewApp({ onCollapseSidebar }) {
             <Route path="feedback/assigned" element={<AssignedComplaints />} />
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
-            <Route path="shop-visit" element={<ShopVisit />} />
+            <Route path="sales-analytics" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
+            <Route path="stock-report" element={<StockBalance />} />
             <Route path="stock-balance" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
             <Route path="stock-balance/dashboard" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
             <Route path="stock-balance/sheet" element={<StockBalance />} />
