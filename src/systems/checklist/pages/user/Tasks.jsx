@@ -34,25 +34,20 @@ const getWorkTaskTimeBounds = (task) => {
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
-  if (task.status === "APPROVED") return "APPROVED";
-  if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
+  const wStatus = (task.work_status || task.status || "").toUpperCase();
+  if (wStatus === "APPROVED") return "APPROVED";
+  if (wStatus === "SUBMITTED" || wStatus === "DONE" || task.submission_date) return "SUBMITTED";
   
-  if (task.status === "REJECTED") {
-    // Rejected task has to be completed again on same day as rejected date
-    const rejectionDateStr = task.admin_approval_date || task.manager_approval_date;
-    if (rejectionDateStr) {
-      const rejDate = new Date(rejectionDateStr);
-      const rejDateStr = `${rejDate.getFullYear()}-${String(rejDate.getMonth() + 1).padStart(2, '0')}-${String(rejDate.getDate()).padStart(2, '0')}`;
-      
-      const today = new Date(currentTime);
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      
-      if (rejDateStr === todayStr) {
-        // Time constraint will NOT appear for rejected task! It is always ACTIVE on the same day.
-        return "ACTIVE";
-      }
+  if (wStatus === "REJECTED") {
+    // If the task date has passed (day ended), it is NOT_DONE and cannot be resubmitted
+    const taskDateStr = task.current_date ? (task.current_date.includes('T') ? task.current_date.split('T')[0] : task.current_date) : "";
+    const today = new Date(currentTime);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (taskDateStr && taskDateStr < todayStr) {
+      return "NOT_DONE";
     }
-    return "NOT_DONE";
+    // Same day: ACTIVE for immediate resubmission
+    return "ACTIVE";
   }
 
   const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
@@ -409,18 +404,20 @@ const UserTasks = () => {
                   key={task.id}
                   onClick={() => {
                     const dynamicStatus = getWorkTaskDynamicStatus(task, currentTime);
-                    if (dynamicStatus === "ACTIVE" || dynamicStatus === "NOT_DONE" || dynamicStatus === "REJECTED") {
+                    if (dynamicStatus === "ACTIVE") {
                       handleTaskSelection(task.id);
                     }
                   }}
-                  className={`group relative p-5 rounded-3xl border-2 transition-all cursor-pointer ${
+                  className={`group relative p-5 rounded-3xl border-2 transition-all ${
+                    getWorkTaskDynamicStatus(task, currentTime) === "ACTIVE" ? "cursor-pointer" : "cursor-default"
+                  } ${
                     selectedTasks.includes(task.id)
                       ? "border-purple-600 bg-purple-50/30"
                       : "border-gray-50 bg-white hover:border-purple-200"
                   } ${
                     (() => {
                       const ds = getWorkTaskDynamicStatus(task, currentTime);
-                      return (ds === "APPROVED" || ds === "SUBMITTED" || ds === "UPCOMING") ? "opacity-60 cursor-default" : "";
+                      return (ds === "APPROVED" || ds === "SUBMITTED" || ds === "UPCOMING" || ds === "NOT_DONE") ? "opacity-60" : "";
                     })()
                   }`}
                 >

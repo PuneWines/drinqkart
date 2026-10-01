@@ -1,28 +1,25 @@
-
-
 // import { createClient } from "@supabase/supabase-js";
 
 // const supabaseURL =import.meta.env.VITE_SUPABASE_URL
-// const supabaseKey=import.meta.env.VITE_SUPABASE_ANON_KEY 
-// const supabase =  createClient(supabaseURL,supabaseKey)    
+// const supabaseKey=import.meta.env.VITE_SUPABASE_ANON_KEY
+// const supabase =  createClient(supabaseURL,supabaseKey)
 
 // export default supabase;
 
-
-
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseURL = import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const supabaseURL =
+  import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 const supabase = createClient(supabaseURL, supabaseKey, {
   realtime: { params: { eventsPerSecond: 10 } },
 });
 
 export default supabase;
-
-
-
 
 // import { createClient } from "@supabase/supabase-js";
 
