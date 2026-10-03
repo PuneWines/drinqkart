@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getVisibleSystems, getActiveSystem } from './systemsConfig';
-import { LogOut, HelpCircle, Menu, X, ChevronDown, Video, PlayCircle } from 'lucide-react';
+import { LogOut, HelpCircle, Menu, X, ChevronDown, Video, PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import HelpCenterModal from '../components/help-center/HelpCenterModal';
 import AddTutorialVideoModal from '../components/AddTutorialVideoModal';
 import TutorialVideosModal from '../components/TutorialVideosModal';
@@ -15,8 +15,48 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [isTutorialModalOpen, setIsTutorialModalOpen] = useState(false);
 
+  const tabsContainerRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
   const visibleSystems = getVisibleSystems(user);
   const activeSystem = getActiveSystem(visibleSystems, location.pathname);
+
+  // Check scroll bounds
+  const checkScroll = () => {
+    const el = tabsContainerRef.current;
+    if (el) {
+      setCanScrollLeft(el.scrollLeft > 4);
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [visibleSystems]);
+
+  // Scroll active system into view
+  useEffect(() => {
+    const el = tabsContainerRef.current;
+    if (el && activeSystem) {
+      const activeBtn = el.querySelector(`[data-system-id="${activeSystem.id}"]`);
+      if (activeBtn) {
+        activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+      setTimeout(checkScroll, 300);
+    }
+  }, [activeSystem?.id, location.pathname]);
+
+  const scrollTabs = (direction) => {
+    const el = tabsContainerRef.current;
+    if (el) {
+      const scrollAmount = direction === 'left' ? -260 : 260;
+      el.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      setTimeout(checkScroll, 300);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -29,7 +69,7 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
   const isAdmin = role === 'admin' || role === 'masteradmin' || userName.toLowerCase() === 'admin' || userName.toLowerCase() === 'masteradmin';
 
   return (
-    <header className="w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20">
+    <header className="w-full max-w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20 min-w-0 overflow-hidden">
       {/* Mobile Top Header (< 768px): Upper left hamburger button opens sidebar drawer */}
       <div className="md:hidden bg-white px-3 py-2 flex items-center justify-between border-b border-gray-200 shadow-xs">
         <div className="flex items-center gap-2.5">
@@ -73,7 +113,7 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
 
           {activeSystem && (
             <div className="px-2.5 py-1 bg-[#2C1D11] text-[#C9A84C] rounded-full text-[11px] font-bold shadow-xs">
-              <span className="truncate max-w-[100px] block">{activeSystem.label}</span>
+              <span className="truncate max-w-25 block">{activeSystem.label}</span>
             </div>
           )}
 
@@ -166,15 +206,26 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
         currentUser={userObj}
       />
 
-      {/* Desktop Main Top Navigation Tabs Bar (>= 768px) */}
-      <nav
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        className="hidden md:flex bg-[#C9A84C] text-[#1c120c] px-2 items-center shadow-inner border-t border-[#8C6D23]/30 overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0"
-      >
-        {/* System Module Tabs */}
+      {/* Desktop Main Top Navigation Tabs Bar (>= 768px) with Horizontal Scroll & Containment */}
+      <nav className="hidden md:flex bg-[#C9A84C] text-[#1c120c] items-center shadow-inner border-t border-[#8C6D23]/30 w-full min-w-0 max-w-full relative overflow-hidden">
+        {/* Left Scroll Button */}
+        {canScrollLeft && (
+          <button
+            type="button"
+            onClick={() => scrollTabs('left')}
+            className="absolute left-0 top-0 bottom-0 z-20 px-1.5 bg-linear-to-r from-[#B5943B] via-[#C9A84C] to-transparent flex items-center justify-center text-[#2C1D11] hover:text-black hover:scale-110 transition-all cursor-pointer shadow-sm"
+            title="Scroll Left"
+          >
+            <ChevronLeft size={18} className="stroke-[2.5]" />
+          </button>
+        )}
+
+        {/* System Module Tabs Strip */}
         <div
+          ref={tabsContainerRef}
+          onScroll={checkScroll}
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          className="flex items-center overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0"
+          className="flex items-center w-full min-w-0 overflow-x-auto [ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0 scroll-smooth px-1"
         >
           {visibleSystems.map((system) => {
             const isActive = activeSystem?.id === system.id && location.pathname !== '/systems/profile';
@@ -184,7 +235,8 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
               <Link
                 key={system.id}
                 to={defaultSubtabUrl}
-                className={`px-4 py-2.5 text-xs font-bold tracking-wider uppercase whitespace-nowrap transition-all duration-150 shrink-0 cursor-pointer border-b-2 ${
+                data-system-id={system.id}
+                className={`px-3.5 py-2.5 text-xs font-bold tracking-wider uppercase whitespace-nowrap transition-all duration-150 shrink-0 cursor-pointer border-b-2 flex items-center gap-1.5 select-none ${
                   isActive
                     ? 'bg-[#2C1D11] text-[#C9A84C] border-[#1c120c] font-extrabold shadow-md transform scale-[1.01]'
                     : 'text-[#1c120c] hover:bg-black/10 border-transparent'
@@ -195,6 +247,18 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
             );
           })}
         </div>
+
+        {/* Right Scroll Button */}
+        {canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scrollTabs('right')}
+            className="absolute right-0 top-0 bottom-0 z-20 px-1.5 bg-linear-to-l from-[#B5943B] via-[#C9A84C] to-transparent flex items-center justify-center text-[#2C1D11] hover:text-black hover:scale-110 transition-all cursor-pointer shadow-sm"
+            title="Scroll Right"
+          >
+            <ChevronRight size={18} className="stroke-[2.5]" />
+          </button>
+        )}
       </nav>
     </header>
   );

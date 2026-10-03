@@ -155,19 +155,19 @@ export const systems = [
   {
     id: 'sale-analytics',
     label: 'Sale Analytics',
-    base: '/systems/business-overview/sales-analytics',
+    base: '/systems/sales-analytics',
     icon: TrendingUp,
     subtabs: [
-      { label: 'Dashboard', to: '/systems/business-overview/sales-analytics' }
+      { label: 'Dashboard', to: '/systems/sales-analytics' }
     ]
   },
   {
     id: 'stock-report',
     label: 'Stock / Report',
-    base: '/systems/business-overview/stock-report',
+    base: '/systems/stock-report',
     icon: FileSpreadsheet,
     subtabs: [
-      { label: 'Stock Balance Sheet', to: '/systems/business-overview/stock-report' }
+      { label: 'Stock Balance Sheet', to: '/systems/stock-report' }
     ]
   }
 ];
@@ -238,6 +238,14 @@ export const getVisibleSystems = (user) => {
     }
     if (systemId === 'business-overview') {
       const hasFullAccess = masterAccessList.some(item => typeof item === 'string' && item.toLowerCase().trim() === 'business-overview');
+      if (hasFullAccess) return true;
+    }
+    if (systemId === 'sale-analytics' || systemId === 'sale_analytics') {
+      const hasFullAccess = masterAccessList.some(item => typeof item === 'string' && (item.toLowerCase().trim() === 'sale-analytics' || item.toLowerCase().trim() === 'sales-analytics' || item.toLowerCase().trim() === 'sale_analytics' || item.toLowerCase().trim() === 'sales_analytics'));
+      if (hasFullAccess) return true;
+    }
+    if (systemId === 'stock-report' || systemId === 'stock_report') {
+      const hasFullAccess = masterAccessList.some(item => typeof item === 'string' && (item.toLowerCase().trim() === 'stock-report' || item.toLowerCase().trim() === 'stock_report'));
       if (hasFullAccess) return true;
     }
     if (sub.type === 'header') return true;
