@@ -21,11 +21,12 @@ function BusinessOverviewApp({ onCollapseSidebar }) {
             <Route path="feedback/assigned" element={<AssignedComplaints />} />
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
-            <Route path="sales-analytics" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
-            <Route path="stock-report" element={<StockBalance />} />
-            <Route path="stock-balance" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
-            <Route path="stock-balance/dashboard" element={<StockBalanceDashboard onCollapseSidebar={onCollapseSidebar} />} />
-            <Route path="stock-balance/sheet" element={<StockBalance />} />
+            <Route path="shop-visit" element={<ShopVisit />} />
+            <Route path="sales-analytics" element={<Navigate to="/systems/sales-analytics" replace />} />
+            <Route path="stock-report" element={<Navigate to="/systems/stock-report" replace />} />
+            <Route path="stock-balance" element={<Navigate to="/systems/sales-analytics" replace />} />
+            <Route path="stock-balance/dashboard" element={<Navigate to="/systems/sales-analytics" replace />} />
+            <Route path="stock-balance/sheet" element={<Navigate to="/systems/stock-report" replace />} />
             <Route path="help-center" element={<Navigate to="help-center/all" replace />} />
             <Route path="help-center/all" element={<HelpCenterRecords activeTab="all" />} />
             <Route path="help-center/follow-up" element={<HelpCenterRecords activeTab="follow-up" />} />

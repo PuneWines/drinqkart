@@ -734,24 +734,24 @@ export default function StockBalance() {
   const isPartiallySelected = selectedIds.size > 0 && !isAllSelected;
 
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-[1680px] mx-auto">
+    <div className="w-full max-w-full min-w-0 p-3 sm:p-4 md:p-6 space-y-4 overflow-x-hidden flex flex-col flex-1">
       <Toaster position="top-right" />
 
       {/* Page Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-indigo-50 text-indigo-700 rounded-2xl border border-indigo-100/80 shadow-sm">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-3 bg-indigo-50 text-indigo-700 rounded-2xl border border-indigo-100/80 shadow-sm shrink-0">
             <FileSpreadsheet size={24} />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Stock Balance Management</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight truncate">Stock Balance Management</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
               Record, import, and monitor Purchase, Sale & Stock Balances across shop locations
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
 
           {/* Executive Dashboard Button */}
           <button
@@ -788,7 +788,7 @@ export default function StockBalance() {
 
       {/* Bulk Action Sticky Bar (Shows when records are selected) */}
       {isSelectMode && selectedIds.size > 0 && (
-        <div className="bg-indigo-900 text-white px-5 py-3 rounded-2xl shadow-lg border border-indigo-800 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+        <div className="bg-indigo-900 text-white px-4 sm:px-5 py-3 rounded-2xl shadow-lg border border-indigo-800 flex flex-wrap items-center justify-between gap-3 min-w-0 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-700 text-white font-bold text-xs">
               {selectedIds.size}
@@ -832,10 +832,10 @@ export default function StockBalance() {
       )}
 
       {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 w-full lg:w-auto flex-wrap min-w-0">
           {/* Search Box */}
-          <div className="relative w-full sm:w-72">
+          <div className="relative flex-1 sm:flex-none sm:w-64 md:w-72 min-w-50">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -848,9 +848,9 @@ export default function StockBalance() {
           </div>
 
           {/* Date Range Filters */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-              <Calendar size={13} className="text-slate-400" />
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
+              <Calendar size={13} className="text-slate-400 shrink-0" />
               <span className="text-[11px] font-semibold text-slate-500">From:</span>
               <input
                 type="date"
@@ -860,8 +860,8 @@ export default function StockBalance() {
                 id="filter-start-date"
               />
             </div>
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-              <Calendar size={13} className="text-slate-400" />
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
+              <Calendar size={13} className="text-slate-400 shrink-0" />
               <span className="text-[11px] font-semibold text-slate-500">To:</span>
               <input
                 type="date"
@@ -910,9 +910,9 @@ export default function StockBalance() {
         </div>
 
         {/* Shop Dropdown & Total Counter */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+        <div className="flex items-center gap-2.5 w-full lg:w-auto justify-between lg:justify-end shrink-0">
           <div className="flex items-center gap-1.5">
-            <Store size={14} className="text-slate-400" />
+            <Store size={14} className="text-slate-400 shrink-0" />
             <select
               value={shopFilter}
               onChange={(e) => setShopFilter(e.target.value)}
@@ -925,17 +925,18 @@ export default function StockBalance() {
               ))}
             </select>
           </div>
-          <span className="text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/60">
+          <span className="text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/60 whitespace-nowrap">
             Loaded: <b className="text-indigo-900">{stockRecords.length.toLocaleString()}</b>
           </span>
         </div>
       </div>
 
-      {/* Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-slate-800 text-slate-200 uppercase font-bold text-[10px] tracking-wider select-none">
+      {/* Data Table Container */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col min-w-0 w-full">
+        {/* Table Viewport with 2x height and prominent independent vertical and horizontal scrollbars */}
+        <div className="overflow-x-auto overflow-y-auto h-[75vh] min-h-150 max-h-[85vh] w-full table-scrollbar">
+          <table className="w-full text-left text-xs whitespace-nowrap border-collapse">
+            <thead className="bg-slate-800 text-slate-200 uppercase font-bold text-[10px] tracking-wider select-none sticky top-0 z-20 shadow-xs">
               <tr>
                 {/* Select All Checkbox Column: ONLY opens when Select button is pressed */}
                 {isSelectMode && (

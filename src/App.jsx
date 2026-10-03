@@ -26,6 +26,8 @@ import InventoryApp from './systems/inventory/App';
 import PettyCashApp from './systems/petty-cash/App';
 import PurchaseApp from './systems/purchase/App';
 import BusinessOverviewApp from './systems/business-overview/App';
+import StockBalanceDashboard from './systems/business-overview/pages/StockBalanceDashboard';
+import StockBalance from './systems/business-overview/pages/StockBalance';
 import PublicRegister from './systems/hr/pages/PublicRegister';
 import VendorConfirmation from './systems/purchase/pages/VendorConfirmation';
 import TransporterConfirmation from './systems/purchase/pages/TransporterConfirmation';
@@ -53,20 +55,20 @@ const ConsoleRoute = ({ children }) => {
   );
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-100 font-sans">
+    <div className="flex flex-col min-h-screen w-full bg-gray-100 font-sans">
       <AppHeader
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
       />
-      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+      <div className="flex flex-1 relative min-h-0">
         <AppSidebar
           isMobileMenuOpen={isMobileMenuOpen}
           onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
           externalCollapsed={isSidebarCollapsed}
           onExternalCollapse={setIsSidebarCollapsed}
         />
-        <main className="flex-1 bg-gray-100 overflow-auto h-full flex flex-col min-w-0">
-          <div className="flex-1 overflow-auto min-h-0 flex flex-col p-1.5 sm:p-3 md:p-4">
+        <main className="flex-1 bg-gray-100 overflow-y-auto overflow-x-hidden min-w-0 min-h-0">
+          <div className="min-w-0 max-w-full p-1.5 sm:p-3 md:p-4">
             {childrenWithProps}
           </div>
         </main>
@@ -182,6 +184,22 @@ const AppLayout = () => {
             element={
               <ConsoleRoute>
                 <BroadcastDashboard />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/sales-analytics/*"
+            element={
+              <ConsoleRoute>
+                <StockBalanceDashboard />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/stock-report/*"
+            element={
+              <ConsoleRoute>
+                <StockBalance />
               </ConsoleRoute>
             }
           />

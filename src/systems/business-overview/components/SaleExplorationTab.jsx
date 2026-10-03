@@ -8,6 +8,18 @@ import {
   ArrowUpRight,
   Layers,
   ShoppingBag,
+  BarChart2,
+  BarChart3,
+  Table,
+  Search,
+  SlidersHorizontal,
+  X,
+  Filter,
+  Eye,
+  EyeOff,
+  ArrowUpDown,
+  Split,
+  Layers2,
 } from "lucide-react";
 
 // Formatters
@@ -72,6 +84,11 @@ export default function SaleExplorationTab({
   const [trendFreq, setTrendFreq] = useState("Weekly"); // "Daily" | "Weekly" | "Monthly"
   const [paretoThreshold, setParetoThreshold] = useState(80); // 80% default threshold (editable)
   const [categoryViewMode, setCategoryViewMode] = useState("category"); // "category" | "product"
+  const [categoryDisplayStyle, setCategoryDisplayStyle] = useState("stacked"); // "stacked" | "grouped" | "table"
+  const [categorySearch, setCategorySearch] = useState("");
+  const [categoryLimit, setCategoryLimit] = useState("10"); // "5" | "10" | "20" | "all"
+  const [hideZeroSales, setHideZeroSales] = useState(true);
+  const [categorySort, setCategorySort] = useState("total"); // "total" | "name" | "shop"
   const [expandedCats, setExpandedCats] = useState({}); // { [catName]: boolean }
   const [hoveredParetoIdx, setHoveredParetoIdx] = useState(null);
   const [hoveredTrendPt, setHoveredTrendPt] = useState(null);
@@ -346,6 +363,66 @@ export default function SaleExplorationTab({
       ? aggregations.trendList.reduce((acc, t) => acc + t.value, 0) /
         aggregations.trendList.length
       : 0;
+
+  // Filtered & Sorted Category/Product list for the breakdown section
+  const breakdownData = useMemo(() => {
+    const rawList =
+      categoryViewMode === "category"
+        ? aggregations.categoryListWithShops
+        : aggregations.productListWithShops;
+
+    let items = [...rawList];
+
+    // Filter out zero sales if toggle is on
+    if (hideZeroSales) {
+      items = items.filter((item) => item.totalVal > 0);
+    }
+
+    // Filter by search term
+    if (categorySearch.trim()) {
+      const q = categorySearch.toLowerCase().trim();
+      items = items.filter((item) => item.name.toLowerCase().includes(q));
+    }
+
+    // Sort items
+    if (categorySort === "name") {
+      items.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (categorySort === "shop" && pinnedShop) {
+      items.sort((a, b) => {
+        const aShopVal = a.shopPartitions.find((sp) => sp.shop === pinnedShop)?.val || 0;
+        const bShopVal = b.shopPartitions.find((sp) => sp.shop === pinnedShop)?.val || 0;
+        return bShopVal - aShopVal;
+      });
+    } else {
+      // Default: Total sale descending
+      items.sort((a, b) => b.totalVal - a.totalVal);
+    }
+
+    const totalMatchingCount = items.length;
+    const maxVal = items.length > 0 ? Math.max(...items.map((it) => it.totalVal)) : 1;
+
+    // Apply limit
+    if (categoryLimit !== "all") {
+      const limitNum = parseInt(categoryLimit, 10) || 10;
+      items = items.slice(0, limitNum);
+    }
+
+    return {
+      items,
+      totalMatchingCount,
+      rawCount: rawList.length,
+      maxVal,
+    };
+  }, [
+    categoryViewMode,
+    aggregations.categoryListWithShops,
+    aggregations.productListWithShops,
+    hideZeroSales,
+    categorySearch,
+    categorySort,
+    pinnedShop,
+    categoryLimit,
+  ]);
 
   return (
     <div className="w-full flex flex-col gap-4 font-sans text-slate-800 animate-in fade-in duration-200">
@@ -958,54 +1035,179 @@ export default function SaleExplorationTab({
           </div>
         </div>
 
-        {/* RIGHT 50%: HORIZONTAL CATEGORY & PRODUCT BREAKDOWN WITH SHOP-PARTITIONED BARS */}
-        <div className="bg-[#f8fcff] rounded-2xl p-4 sm:p-5 border-2 border-[#b8ddf8] shadow-xs flex flex-col justify-between min-h-85">
-          {/* Header with Title & View Switcher */}
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200">
+        {/* RIGHT 50%: HORIZONTAL CATEGORY & PRODUCT BREAKDOWN WITH MULTI-MODE SHOP PARTITIONS */}
+        <div className="bg-[#f8fcff] rounded-2xl p-4 sm:p-5 border-2 border-[#b8ddf8] shadow-xs flex flex-col justify-between min-h-95">
+          {/* Header with Title & View Mode Switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 mb-2.5 pb-2.5 border-b border-slate-200">
             <div>
-              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-indigo-600" />
+              <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+                <Layers className="w-4.5 h-4.5 text-indigo-600" />
                 {categoryViewMode === "category" ? "Category Breakdown" : "Product Breakdown"} by Shop
               </h2>
               <p className="text-[11px] font-bold text-slate-500">
-                Showing {categoryViewMode === "category" ? "Categories" : "Products"} with horizontal progress bars partitioned on shop basis
+                Showing {breakdownData.items.length} of {breakdownData.totalMatchingCount} {categoryViewMode === "category" ? "categories" : "products"}
+                {pinnedShop ? ` (Focused on ${pinnedShop})` : ""}
               </p>
             </div>
 
-            {/* Category / Product Switcher */}
-            <div className="flex items-center gap-1 bg-white border border-slate-200 p-0.5 rounded-xl shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setCategoryViewMode("category")}
-                className={`px-2.5 py-1 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                  categoryViewMode === "category"
-                    ? "bg-indigo-900 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                By Category
-              </button>
-              <button
-                type="button"
-                onClick={() => setCategoryViewMode("product")}
-                className={`px-2.5 py-1 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                  categoryViewMode === "product"
-                    ? "bg-indigo-900 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <ShoppingBag className="w-3.5 h-3.5" />
-                By Product
-              </button>
+            {/* View Switchers: Scope & Visual Style */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Category / Product Scope Toggle */}
+              <div className="flex items-center gap-0.5 bg-white border border-slate-200 p-0.5 rounded-xl shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setCategoryViewMode("category")}
+                  className={`px-2 py-1 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryViewMode === "category"
+                      ? "bg-indigo-900 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="View by Category"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  Category
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryViewMode("product")}
+                  className={`px-2 py-1 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryViewMode === "product"
+                      ? "bg-indigo-900 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="View by Product"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  Product
+                </button>
+              </div>
+
+              {/* Display Style Toggle (Stacked vs Side-by-Side vs Table) */}
+              <div className="flex items-center gap-0.5 bg-white border border-slate-200 p-0.5 rounded-xl shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setCategoryDisplayStyle("stacked")}
+                  className={`p-1.5 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryDisplayStyle === "stacked"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                  title="Segmented / Stacked Bars"
+                >
+                  <Layers2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[10.5px]">Segmented</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryDisplayStyle("grouped")}
+                  className={`p-1.5 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryDisplayStyle === "grouped"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                  title="Side-by-Side Comparison"
+                >
+                  <Split className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[10.5px]">Compare</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryDisplayStyle("table")}
+                  className={`p-1.5 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryDisplayStyle === "table"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                  title="Matrix Data Table"
+                >
+                  <Table className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[10.5px]">Matrix</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Shop Legend / Color Palette Key */}
-          <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
-            <span className="text-[10.5px] font-black text-slate-700 flex items-center gap-1">
+          {/* Controls Bar: Search, Limit, Zero Filter, Sort */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            {/* Search Input */}
+            {/* <div className="relative flex-1 min-w-[140px] max-w-xs"> */}
+              <div className="relative flex-1 min-w-35 max-w-xs">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+                placeholder={`Search ${categoryViewMode}...`}
+                className="w-full pl-8 pr-7 py-1 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:border-indigo-400 shadow-2xs text-slate-800"
+              />
+              {categorySearch && (
+                <button
+                  type="button"
+                  onClick={() => setCategorySearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filters Row */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Top N Limit */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-xl shadow-2xs text-[11px] font-bold text-slate-700">
+                <span className="text-slate-500 font-extrabold text-[10px]">Show:</span>
+                <select
+                  value={categoryLimit}
+                  onChange={(e) => setCategoryLimit(e.target.value)}
+                  className="bg-transparent font-black text-slate-900 focus:outline-hidden cursor-pointer text-xs"
+                >
+                  <option value="5">Top 5</option>
+                  <option value="10">Top 10</option>
+                  <option value="20">Top 20</option>
+                  <option value="all">All ({breakdownData.totalMatchingCount})</option>
+                </select>
+              </div>
+
+              {/* Hide Zero Sales Filter Toggle */}
+              <button
+                type="button"
+                onClick={() => setHideZeroSales((prev) => !prev)}
+                className={`px-2 py-1 text-[11px] font-bold rounded-xl border transition-all flex items-center gap-1 cursor-pointer shadow-2xs ${
+                  hideZeroSales
+                    ? "bg-indigo-50 border-indigo-200 text-indigo-900 font-black"
+                    : "bg-white border-slate-200 text-slate-600 hover:text-slate-900"
+                }`}
+                title={hideZeroSales ? "Showing only items with sales > 0" : "Showing all items including zero sales"}
+              >
+                {hideZeroSales ? (
+                  <EyeOff className="w-3 h-3 text-indigo-600" />
+                ) : (
+                  <Eye className="w-3 h-3 text-slate-400" />
+                )}
+                <span>Hide ₹0</span>
+              </button>
+
+              {/* Sort By Selector */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-xl shadow-2xs text-[11px] font-bold text-slate-700">
+                <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                <select
+                  value={categorySort}
+                  onChange={(e) => setCategorySort(e.target.value)}
+                  className="bg-transparent font-black text-slate-900 focus:outline-hidden cursor-pointer text-xs"
+                >
+                  <option value="total">High → Low</option>
+                  <option value="name">Name (A-Z)</option>
+                  {pinnedShop && <option value="shop">{pinnedShop} Share</option>}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Shop Legend / Interactive Pinned Filter Key */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-3 px-1">
+            <span className="text-[10.5px] font-black text-slate-700 flex items-center gap-1 mr-0.5">
               <Store className="w-3.5 h-3.5 text-slate-500" />
-              Shop:
+              Shops:
             </span>
             {aggregations.distinctShops.map((shopName) => {
               const color = getShopColor(shopName, aggregations.distinctShops);
@@ -1017,231 +1219,523 @@ export default function SaleExplorationTab({
                 <button
                   key={shopName}
                   type="button"
-                  onClick={() =>
-                    setPinnedShop((prev) => (prev === shopName ? null : shopName))
-                  }
+                  onClick={() => {
+                    setPinnedShop((prev) => (prev === shopName ? null : shopName));
+                    if (!pinnedShop) setCategorySort("shop");
+                  }}
                   className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold transition-all cursor-pointer ${
                     isPinned
-                      ? "ring-2 ring-indigo-500 bg-white shadow-xs scale-105 font-black text-slate-900"
+                      ? "ring-2 ring-indigo-600 bg-indigo-900 text-white shadow-xs font-black scale-105"
                       : isOther
-                        ? "opacity-35 bg-white/60 text-slate-400"
+                        ? "opacity-40 bg-white/60 text-slate-400 border border-slate-200"
                         : "bg-white border border-slate-200 text-slate-800 hover:border-slate-400 shadow-2xs"
                   }`}
+                  title={isPinned ? `Click to unpin ${shopName}` : `Click to focus on ${shopName}`}
                 >
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="truncate max-w-28">{shopName}</span>
-                  <span className="text-[9.5px] text-slate-500 font-extrabold">
+                  <span className="truncate max-w-32">{shopName}</span>
+                  <span
+                    className={`text-[9.5px] font-extrabold ${
+                      isPinned ? "text-indigo-200" : "text-slate-500"
+                    }`}
+                  >
                     ({formatMetricValue(storeTotal, metric)})
                   </span>
                 </button>
               );
             })}
+
+            {pinnedShop && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPinnedShop(null);
+                  setCategorySort("total");
+                }}
+                className="text-[10px] font-black text-indigo-700 hover:text-indigo-900 underline ml-1 cursor-pointer"
+              >
+                Reset Focus
+              </button>
+            )}
           </div>
 
-          {/* Horizontal List of Items (Categories or Products) */}
-          <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto max-h-75 pr-1 custom-scrollbar">
-            {(categoryViewMode === "category"
-              ? aggregations.categoryListWithShops
-              : aggregations.productListWithShops
-            ).map((item, idx) => {
-              const isExpanded = !!expandedCats[item.name];
-              const maxVal =
-                categoryViewMode === "category"
-                  ? aggregations.categoryListWithShops[0]?.totalVal || 1
-                  : aggregations.productListWithShops[0]?.totalVal || 1;
-              const relativeBarWidth = Math.max(
-                (item.totalVal / (maxVal || 1)) * 100,
-                15,
-              );
-
-              return (
-                <div
-                  key={item.name}
-                  className="bg-white border border-slate-200/90 rounded-xl p-2.5 shadow-2xs hover:border-indigo-300 transition-all"
-                >
-                  {/* Item Header */}
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-black flex items-center justify-center shrink-0">
-                        {idx + 1}
-                      </span>
-                      <span
-                        className="text-xs font-black text-slate-800 truncate"
-                        title={item.name}
-                      >
-                        {item.name}
-                      </span>
-                      {categoryViewMode === "category" && item.products && item.products.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedCats((prev) => ({
-                              ...prev,
-                              [item.name]: !prev[item.name],
-                            }))
-                          }
-                          className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 transition-colors cursor-pointer"
+          {/* MAIN VISUALIZATION CONTAINER */}
+          <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto max-h-80 pr-1 custom-scrollbar">
+            {breakdownData.items.length === 0 ? (
+              <div className="w-full py-12 flex flex-col items-center justify-center text-slate-400 text-xs font-bold gap-1 bg-white/60 rounded-xl border border-dashed border-slate-200">
+                <Search className="w-6 h-6 text-slate-300" />
+                <span>No matching items found</span>
+                {categorySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCategorySearch("")}
+                    className="text-indigo-600 text-xs font-black underline mt-1"
+                  >
+                    Clear search filter
+                  </button>
+                )}
+              </div>
+            ) : categoryDisplayStyle === "table" ? (
+              /* ======================================================= */
+              /* MODE 3: MATRIX DATA TABLE VIEW                          */
+              /* ======================================================= */
+              <div className="w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/90 border-b border-slate-200 text-[10.5px] font-black text-slate-600 uppercase tracking-wider">
+                      <th className="py-2 px-2.5 w-8 text-center">#</th>
+                      <th className="py-2 px-3">
+                        {categoryViewMode === "category" ? "Category" : "Product"}
+                      </th>
+                      <th className="py-2 px-3 text-right">Total {metric}</th>
+                      <th className="py-2 px-2.5 text-right">% Share</th>
+                      {aggregations.distinctShops.map((st) => (
+                        <th key={st} className="py-2 px-3 text-right">
+                          <span className="flex items-center justify-end gap-1">
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{
+                                backgroundColor: getShopColor(
+                                  st,
+                                  aggregations.distinctShops,
+                                ),
+                              }}
+                            />
+                            {st}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                    {breakdownData.items.map((item, idx) => {
+                      return (
+                        <tr
+                          key={item.name}
+                          className="hover:bg-indigo-50/40 transition-colors font-semibold"
                         >
-                          {item.products.length} Products
-                          {isExpanded ? (
-                            <ChevronUp className="w-3 h-3" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3" />
+                          <td className="py-2 px-2.5 text-center text-[10px] font-black text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-44">
+                            {item.name}
+                          </td>
+                          <td className="py-2 px-3 text-right font-black text-slate-900">
+                            {formatMetricValue(item.totalVal, metric)}
+                          </td>
+                          <td className="py-2 px-2.5 text-right">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-extrabold text-slate-700">
+                              {item.percentOfTotal.toFixed(1)}%
+                            </span>
+                          </td>
+                          {aggregations.distinctShops.map((st) => {
+                            const partition = item.shopPartitions.find(
+                              (sp) => sp.shop === st,
+                            );
+                            const val = partition?.val || 0;
+                            const pct = partition?.pct || 0;
+                            const hasSale = val > 0;
+
+                            return (
+                              <td
+                                key={st}
+                                className={`py-2 px-3 text-right ${
+                                  hasSale ? "font-bold text-slate-900" : "text-slate-300 font-normal"
+                                }`}
+                              >
+                                {hasSale ? (
+                                  <div className="flex flex-col items-end">
+                                    <span>{formatMetricValue(val, metric)}</span>
+                                    <span className="text-[9.5px] text-slate-500 font-extrabold">
+                                      {pct.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : categoryDisplayStyle === "grouped" ? (
+              /* ======================================================= */
+              /* MODE 2: SIDE-BY-SIDE SHOP COMPARISON BARS               */
+              /* ======================================================= */
+              breakdownData.items.map((item, idx) => {
+                const isExpanded = !!expandedCats[item.name];
+
+                return (
+                  <div
+                    key={item.name}
+                    className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs hover:border-indigo-300 transition-all"
+                  >
+                    {/* Header: Rank + Name + Total + Share */}
+                    <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-100">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-black flex items-center justify-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <span
+                          className="text-xs font-black text-slate-800 truncate"
+                          title={item.name}
+                        >
+                          {item.name}
+                        </span>
+                        {categoryViewMode === "category" &&
+                          item.products &&
+                          item.products.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedCats((prev) => ({
+                                  ...prev,
+                                  [item.name]: !prev[item.name],
+                                }))
+                              }
+                              className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 transition-colors cursor-pointer"
+                            >
+                              {item.products.length} Products
+                              {isExpanded ? (
+                                <ChevronUp className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
                           )}
-                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-xs font-black text-slate-900">
+                          {formatMetricValue(item.totalVal, metric)}
+                        </span>
+                        <span className="text-[10px] font-black text-indigo-900 bg-indigo-50 px-1.5 py-0.5 rounded-md">
+                          {item.percentOfTotal.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Side-by-Side Shop Bars */}
+                    <div className="flex flex-col gap-1.5">
+                      {item.shopPartitions
+                        .filter((sp) => !hideZeroSales || sp.val > 0)
+                        .map((sp) => {
+                          const color = getShopColor(
+                            sp.shop,
+                            aggregations.distinctShops,
+                          );
+                          const isPinned = pinnedShop === sp.shop;
+                          const barWidthPct = Math.max(Number(sp.pct || 0), 2);
+
+                          return (
+                            <div
+                              key={sp.shop}
+                              className={`flex items-center gap-2 text-xs py-0.5 px-1.5 rounded-lg transition-colors ${
+                                isPinned ? "bg-indigo-50/80 font-black" : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 w-28 shrink-0">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: color }}
+                                />
+                                <span
+                                  className="truncate text-[11px] font-bold text-slate-700"
+                                  title={sp.shop}
+                                >
+                                  {sp.shop}
+                                </span>
+                              </div>
+
+                              {/* Shop Comparison Bar */}
+                              <div className="flex-1 bg-slate-100 rounded-md h-3.5 overflow-hidden flex shadow-inner">
+                                <div
+                                  style={{
+                                    width: `${barWidthPct}%`,
+                                    backgroundColor: color,
+                                  }}
+                                  className="h-full rounded-sm transition-all duration-300"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0 w-24 justify-end">
+                                <span className="text-[11px] font-black text-slate-900">
+                                  {formatMetricValue(sp.val, metric)}
+                                </span>
+                                <span className="text-[9.5px] font-extrabold text-slate-500 w-10 text-right">
+                                  {Number(sp.pct || 0).toFixed(1)}%
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Expandable Top Products Breakdown under this Category */}
+                    {categoryViewMode === "category" && isExpanded && item.products && (
+                      <div className="mt-2.5 flex flex-col gap-2 pl-3 border-l-2 border-indigo-300 bg-slate-50/70 rounded-lg p-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
+                          Top Products in {item.name}:
+                        </span>
+                        {item.products.map((prod) => (
+                          <div key={prod.name} className="flex flex-col gap-0.5">
+                            <div className="flex justify-between items-center text-[10.5px] font-bold">
+                              <span className="truncate max-w-45 text-slate-700">
+                                {prod.name}
+                              </span>
+                              <span className="font-black text-slate-900">
+                                {formatMetricValue(prod.totalVal, metric)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200/80 rounded-md h-2.5 overflow-hidden flex shadow-2xs">
+                              {prod.shopPartitions.map((psp) => (
+                                <div
+                                  key={psp.shop}
+                                  style={{
+                                    width: `${Number(psp.pct || 0)}%`,
+                                    backgroundColor: getShopColor(
+                                      psp.shop,
+                                      aggregations.distinctShops,
+                                    ),
+                                  }}
+                                  className="h-full hover:brightness-125 transition-all"
+                                  title={`${prod.name} • ${psp.shop}: ${formatMetricValue(psp.val, metric)} (${Number(psp.pct || 0).toFixed(1)}%)`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              /* ======================================================= */
+              /* MODE 1: MODERN SEGMENTED / STACKED BARS                 */
+              /* ======================================================= */
+              breakdownData.items.map((item, idx) => {
+                const isExpanded = !!expandedCats[item.name];
+                const relativeBarWidth = Math.max(
+                  (item.totalVal / (breakdownData.maxVal || 1)) * 100,
+                  10,
+                );
+
+                // Active non-zero partitions
+                const activePartitions = item.shopPartitions.filter(
+                  (sp) => sp.val > 0,
+                );
+
+                return (
+                  <div
+                    key={item.name}
+                    className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-2xs hover:border-indigo-300 transition-all"
+                  >
+                    {/* Item Header */}
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-black flex items-center justify-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <span
+                          className="text-xs font-black text-slate-800 truncate"
+                          title={item.name}
+                        >
+                          {item.name}
+                        </span>
+                        {categoryViewMode === "category" &&
+                          item.products &&
+                          item.products.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedCats((prev) => ({
+                                  ...prev,
+                                  [item.name]: !prev[item.name],
+                                }))
+                              }
+                              className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 transition-colors cursor-pointer"
+                            >
+                              {item.products.length} Products
+                              {isExpanded ? (
+                                <ChevronUp className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-black text-slate-900">
+                          {formatMetricValue(item.totalVal, metric)}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                          {item.percentOfTotal.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Horizontal Multi-Segment Shop Partitioned Progress Bar */}
+                    <div className="w-full bg-slate-100 rounded-lg h-4.5 overflow-hidden flex border border-slate-200 shadow-inner">
+                      <div
+                        style={{ width: `${relativeBarWidth}%` }}
+                        className="h-full flex overflow-hidden rounded-md transition-all duration-500"
+                      >
+                        {item.shopPartitions.map((sp) => {
+                          const color = getShopColor(
+                            sp.shop,
+                            aggregations.distinctShops,
+                          );
+                          const isPinned = pinnedShop === sp.shop;
+                          const isOther = pinnedShop && !isPinned;
+
+                          if (sp.val <= 0) return null;
+
+                          return (
+                            <div
+                              key={sp.shop}
+                              style={{
+                                width: `${Number(sp.pct || 0)}%`,
+                                backgroundColor: color,
+                              }}
+                              className={`h-full flex items-center justify-center text-[9px] font-black text-white truncate px-1 transition-all cursor-pointer ${
+                                isPinned
+                                  ? "brightness-125 ring-1 ring-white"
+                                  : isOther
+                                    ? "opacity-30 grayscale-30"
+                                    : "hover:brightness-125"
+                              }`}
+                              onMouseEnter={() =>
+                                setHoveredShopPartition({
+                                  item: item.name,
+                                  shop: sp.shop,
+                                  val: sp.val,
+                                  pct: Number(sp.pct || 0),
+                                })
+                              }
+                              onMouseLeave={() => setHoveredShopPartition(null)}
+                              title={`${item.name} • ${sp.shop}: ${formatExactNumber(sp.val, metric)} (${Number(sp.pct || 0).toFixed(1)}%)`}
+                            >
+                              {Number(sp.pct || 0) >= 15 ? (
+                                <span className="drop-shadow-xs truncate select-none">
+                                  {Number(sp.pct || 0).toFixed(0)}%
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Clean Contributing Shop Badges (Only Active Stores with Sales > 0) */}
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px] text-slate-600 font-bold">
+                      {activePartitions.length === 0 ? (
+                        <span className="text-slate-400 italic">No sales recorded</span>
+                      ) : (
+                        activePartitions.map((sp) => {
+                          const color = getShopColor(
+                            sp.shop,
+                            aggregations.distinctShops,
+                          );
+                          const isPinned = pinnedShop === sp.shop;
+                          return (
+                            <span
+                              key={sp.shop}
+                              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 ${
+                                isPinned
+                                  ? "font-black text-indigo-950 bg-indigo-50 border-indigo-300"
+                                  : ""
+                              }`}
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full inline-block shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className="text-slate-700 font-semibold">{sp.shop}:</span>
+                              <span className="font-extrabold text-slate-900">
+                                {formatMetricValue(sp.val, metric)}
+                              </span>
+                              <span className="text-slate-500 font-bold text-[9px]">
+                                ({Number(sp.pct || 0).toFixed(1)}%)
+                              </span>
+                            </span>
+                          );
+                        })
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs font-black text-slate-900">
-                        {formatMetricValue(item.totalVal, metric)}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
-                        {item.percentOfTotal.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Horizontal Multi-Segment Shop Partitioned Progress Bar */}
-                  <div className="w-full bg-slate-100 rounded-lg h-5.5 overflow-hidden flex border border-slate-200/80 shadow-inner">
-                    <div
-                      style={{ width: `${relativeBarWidth}%` }}
-                      className="h-full flex overflow-hidden rounded-md transition-all duration-500"
-                    >
-                      {item.shopPartitions.map((sp) => {
-                        const color = getShopColor(
-                          sp.shop,
-                          aggregations.distinctShops,
-                        );
-                        const isPinned = pinnedShop === sp.shop;
-                        const isOther = pinnedShop && !isPinned;
-
-                        return (
-                          <div
-                            key={sp.shop}
-                            style={{
-                              width: `${Number(sp.pct || 0)}%`,
-                              backgroundColor: color,
-                            }}
-                            className={`h-full flex items-center justify-center text-[9px] font-black text-white truncate px-1 transition-all cursor-pointer ${
-                              isPinned
-                                ? "brightness-125 ring-1 ring-white"
-                                : isOther
-                                  ? "opacity-30 grayscale-30"
-                                  : "hover:brightness-125"
-                            }`}
-                            onMouseEnter={() =>
-                              setHoveredShopPartition({
-                                item: item.name,
-                                shop: sp.shop,
-                                val: sp.val,
-                                pct: Number(sp.pct || 0),
-                              })
-                            }
-                            onMouseLeave={() => setHoveredShopPartition(null)}
-                            title={`${item.name} • ${sp.shop}: ${formatExactNumber(sp.val, metric)} (${Number(sp.pct || 0).toFixed(1)}%)`}
-                          >
-                            {Number(sp.pct || 0) >= 14 ? (
-                              <span className="drop-shadow-xs truncate select-none">
-                                {Number(sp.pct || 0).toFixed(0)}%
-                              </span>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Shop Partition Micro Chips */}
-                  <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px] text-slate-600 font-bold">
-                    {item.shopPartitions.map((sp) => {
-                      const color = getShopColor(
-                        sp.shop,
-                        aggregations.distinctShops,
-                      );
-                      const isPinned = pinnedShop === sp.shop;
-                      return (
-                        <span
-                          key={sp.shop}
-                          className={`flex items-center gap-1 ${
-                            isPinned ? "font-black text-slate-900" : ""
-                          }`}
-                        >
-                          <span
-                            className="w-2 h-2 rounded-full inline-block"
-                            style={{ backgroundColor: color }}
-                          />
-                          <span>{sp.shop}:</span>
-                          <span className="font-extrabold text-slate-900">
-                            {formatMetricValue(sp.val, metric)} (
-                            {Number(sp.pct || 0).toFixed(1)}%)
-                          </span>
+                    {/* Expandable Top Products Breakdown under this Category */}
+                    {categoryViewMode === "category" && isExpanded && item.products && (
+                      <div className="mt-2.5 flex flex-col gap-2 pl-3 border-l-2 border-indigo-300 bg-slate-50/70 rounded-lg p-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
+                          Top Products in {item.name}:
                         </span>
-                      );
-                    })}
+                        {item.products.map((prod) => (
+                          <div key={prod.name} className="flex flex-col gap-0.5">
+                            <div className="flex justify-between items-center text-[10.5px] font-bold">
+                              <span className="truncate max-w-45 text-slate-700">
+                                {prod.name}
+                              </span>
+                              <span className="font-black text-slate-900">
+                                {formatMetricValue(prod.totalVal, metric)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200/80 rounded-md h-2.5 overflow-hidden flex shadow-2xs">
+                              {prod.shopPartitions.map((psp) => (
+                                <div
+                                  key={psp.shop}
+                                  style={{
+                                    width: `${Number(psp.pct || 0)}%`,
+                                    backgroundColor: getShopColor(
+                                      psp.shop,
+                                      aggregations.distinctShops,
+                                    ),
+                                  }}
+                                  className="h-full hover:brightness-125 transition-all"
+                                  title={`${prod.name} • ${psp.shop}: ${formatMetricValue(psp.val, metric)} (${Number(psp.pct || 0).toFixed(1)}%)`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Expandable Top Products Breakdown under this Category */}
-                  {categoryViewMode === "category" && isExpanded && item.products && (
-                    <div className="mt-2.5 flex flex-col gap-2 pl-3 border-l-2 border-indigo-300 bg-slate-50/70 rounded-lg p-2">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
-                        Top Products in {item.name}:
-                      </span>
-                      {item.products.map((prod) => (
-                        <div key={prod.name} className="flex flex-col gap-0.5">
-                          <div className="flex justify-between items-center text-[10.5px] font-bold">
-                            <span className="truncate max-w-45 text-slate-700">
-                              {prod.name}
-                            </span>
-                            <span className="font-black text-slate-900">
-                              {formatMetricValue(prod.totalVal, metric)}
-                            </span>
-                          </div>
-                          {/* Product Shop Partition Bar */}
-                          <div className="w-full bg-slate-200/80 rounded-md h-3 overflow-hidden flex border border-slate-300/60 shadow-2xs">
-                            {prod.shopPartitions.map((psp) => (
-                              <div
-                                key={psp.shop}
-                                style={{
-                                  width: `${Number(psp.pct || 0)}%`,
-                                  backgroundColor: getShopColor(
-                                    psp.shop,
-                                    aggregations.distinctShops,
-                                  ),
-                                }}
-                                className="h-full hover:brightness-125 transition-all"
-                                title={`${prod.name} • ${psp.shop}: ${formatMetricValue(psp.val, metric)} (${Number(psp.pct || 0).toFixed(1)}%)`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           {/* Hover Detail Callout */}
           {hoveredShopPartition && (
-            <div className="bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl px-2.5 py-1 text-[11px] font-bold flex items-center justify-between mt-2 animate-fade-in">
-              <span>
-                {hoveredShopPartition.item} • {hoveredShopPartition.shop}
+            <div className="bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl px-3 py-1.5 text-[11px] font-bold flex items-center justify-between mt-2 animate-fade-in shadow-2xs">
+              <span className="flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{hoveredShopPartition.item}</span>
+                <span className="text-slate-400">•</span>
+                <span className="font-black text-indigo-950">{hoveredShopPartition.shop}</span>
               </span>
-              <span className="font-black text-indigo-950">
+              <span className="font-black text-indigo-950 text-xs">
                 {formatMetricValue(hoveredShopPartition.val, metric)} (
-                {Number(hoveredShopPartition.pct || 0).toFixed(1)}%)
+                {Number(hoveredShopPartition.pct || 0).toFixed(1)}% of category)
               </span>
             </div>
           )}
 
-          <p className="text-center text-[11px] font-black text-slate-700 border-t border-[#b8ddf8] pt-1.5 mt-2">
-            Category Breakdown by Shop
-          </p>
+          <div className="flex items-center justify-between text-[11px] font-black text-slate-600 border-t border-[#b8ddf8] pt-2 mt-2 px-1">
+            <span>Category Breakdown by Shop</span>
+            <span className="text-slate-500 font-bold text-[10.5px]">
+              {categoryDisplayStyle === "stacked" ? "Segmented Proportion Bar" : categoryDisplayStyle === "grouped" ? "Side-by-Side Comparison" : "Tabular Matrix View"}
+            </span>
+          </div>
         </div>
       </div>
     </div>
