@@ -17,7 +17,7 @@ export async function getItems(shopId = null) {
       `);
 
     if (shopId) {
-      query = query.eq('shop_id', parseInt(shopId, 10));
+      query = query.or(`shop_id.eq.${parseInt(shopId, 10)},shop_id.is.null`);
     }
 
     const { data, error } = await query
@@ -69,7 +69,7 @@ export async function getVendors(shopId = null) {
       `);
 
     if (shopId) {
-      query = query.eq('shop_id', parseInt(shopId, 10));
+      query = query.or(`shop_id.eq.${parseInt(shopId, 10)},shop_id.is.null`);
     }
 
     const { data, error } = await query
@@ -361,21 +361,21 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
 
     // Get shop name
     let shopNameStr = '';
-    const { data: shopData } = await supabase
-      .from('shop')
-      .select('shop_name, name')
+    const { data: invShopData } = await supabase
+      .from('Inventory_shop')
+      .select('shop_name')
       .eq('id', parseInt(shopId, 10))
       .maybeSingle();
 
-    if (shopData) {
-      shopNameStr = shopData.shop_name || shopData.name || '';
+    if (invShopData?.shop_name) {
+      shopNameStr = invShopData.shop_name;
     } else {
-      const { data: invShopData } = await supabase
-        .from('Inventory_shop')
-        .select('shop_name')
+      const { data: shopData } = await supabase
+        .from('shop')
+        .select('shop_name, name')
         .eq('id', parseInt(shopId, 10))
         .maybeSingle();
-      shopNameStr = invShopData?.shop_name || '';
+      shopNameStr = shopData?.shop_name || shopData?.name || '';
     }
 
     // Get previous balance for this shop
@@ -570,8 +570,9 @@ export async function getStockLedgerView({ fromDate, toDate, itemName } = {}) {
 export async function getShops() {
   try {
     const { data, error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .select('*')
+      .neq('shop_name', 'TEST Shop')
       .order('shop_name', { ascending: true });
 
     if (error) throw error;
@@ -588,7 +589,7 @@ export async function addShop(shopName) {
   }
   try {
     const { data, error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .insert([{ shop_name: shopName.trim() }])
       .select()
       .single();
@@ -607,7 +608,7 @@ export async function updateShop(shopId, shopName) {
   }
   try {
     const { data, error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .update({ shop_name: shopName.trim() })
       .eq('id', shopId)
       .select()
@@ -627,7 +628,7 @@ export async function deleteShop(shopId) {
   }
   try {
     const { error } = await supabase
-      .from('shop')
+      .from('Inventory_shop')
       .delete()
       .eq('id', shopId);
 
