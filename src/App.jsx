@@ -55,12 +55,12 @@ const ConsoleRoute = ({ children }) => {
   );
 
   return (
-    <div className="flex flex-col min-h-screen w-full bg-gray-100 font-sans">
+    <div className="flex flex-col h-dvh w-full bg-gray-100 font-sans overflow-hidden">
       <AppHeader
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
       />
-      <div className="flex flex-1 relative min-h-0">
+      <div className="flex flex-1 relative min-h-0 overflow-hidden">
         <AppSidebar
           isMobileMenuOpen={isMobileMenuOpen}
           onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
