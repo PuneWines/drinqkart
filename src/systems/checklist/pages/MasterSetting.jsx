@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import {
   Search,
   Eye,
@@ -13,58 +13,124 @@ import {
   Key,
   UserCheck,
   Building,
-  Trash2
-} from 'lucide-react';
-import supabase from '../SupabaseClient';
+  Trash2,
+} from "lucide-react";
+import supabase from "../SupabaseClient";
 
 // Systems and standard page modules in Drinqkart Master App
 const AVAILABLE_SYSTEMS = [
   {
-    id: 'checklist',
-    name: 'Checklist Delegation',
-    pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'Admin Approval', 'Settings']
+    id: "checklist",
+    name: "Checklist Delegation",
+    pages: [
+      "Dashboard",
+      "Announcements",
+      "Quick Task",
+      "Assign Task",
+      "Work Records",
+      "Delegation",
+      "Task",
+      "Calendar",
+      "Holiday List",
+      "Working Day Calendar",
+      "Admin Approval",
+      "Settings",
+    ],
   },
   {
-    id: 'hr',
-    name: 'HR System',
-    pages: ['Dashboard', 'Employees', 'Joining shop', 'Leave Management', 'Daily Attendance', 'Payroll', 'Roster', 'Admin advanced']
+    id: "hr",
+    name: "HR System",
+    pages: [
+      "Dashboard",
+      "Employees",
+      "Joining shop",
+      "Leave Management",
+      "Daily Attendance",
+      "Payroll",
+      "Roster",
+      "Admin advanced",
+    ],
   },
   {
-    id: 'inventory',
-    name: 'SNACKS INVENTRY',
-    pages: ['Dashboard', 'Form Entry', 'Stock Ledger', 'Master Items', 'Users Management']
+    id: "inventory",
+    name: "SNACKS INVENTRY",
+    pages: [
+      "Dashboard",
+      "Form Entry",
+      "Stock Ledger",
+      "Master Items",
+      "Users Management",
+    ],
   },
   {
-    id: 'petty-cash',
-    name: 'Petty Cash',
-    pages: ['Dashboard', 'Form Entry', 'Counter 1', 'Counter 2', 'Counter 3', 'Financial Reports']
+    id: "petty-cash",
+    name: "Petty Cash",
+    pages: [
+      "Dashboard",
+      "Form Entry",
+      "Counter 1",
+      "Counter 2",
+      "Counter 3",
+      "Financial Reports",
+    ],
   },
   {
-    id: 'purchase',
-    name: 'Purchase System',
-    pages: ['Dashboard', 'Indent', 'Approval', 'PO', 'PO History', 'Orders Pipeline', 'Trader', 'Transporter', 'Receiving', 'Settings']
-  }
+    id: "purchase",
+    name: "Purchase System",
+    pages: [
+      "Dashboard",
+      "Indent",
+      "Approval",
+      "PO",
+      "PO History",
+      "Orders Pipeline",
+      "Trader",
+      "Transporter",
+      "Receiving",
+      "Settings",
+    ],
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp Broadcast",
+    pages: ["Broadcast"],
+  },
+  {
+    id: "business-overview",
+    name: "Business overview",
+    pages: ["Feedback", "Trader Invoices", "Shop Visit", "Help Center"],
+  },
+  {
+    id: "sale-analytics",
+    name: "Sale Analytics",
+    pages: ["Dashboard"],
+  },
+  {
+    id: "stock-report",
+    name: "Stock / Report",
+    pages: ["Stock Balance Sheet"],
+  },
 ];
 
 export default function MasterSetting() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [showPassword, setShowPassword] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
   const [availableShops, setAvailableShops] = useState([]);
 
   // Modal / Editing state
   const [editingUser, setEditingUser] = useState(null);
-  const [passwordInput, setPasswordInput] = useState('');
-  const [shopNameInput, setShopNameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState("");
+  const [shopNameInput, setShopNameInput] = useState("");
   const [accessPermissions, setAccessPermissions] = useState({});
   const [jsonMode, setJsonMode] = useState(false);
-  const [rawJsonText, setRawJsonText] = useState('[]');
-  const [jsonError, setJsonError] = useState('');
+  const [rawJsonText, setRawJsonText] = useState("[]");
+  const [jsonError, setJsonError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const showToast = (msg, type = 'info') => {
+  const showToast = (msg, type = "info") => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -74,18 +140,18 @@ export default function MasterSetting() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('user_name', { ascending: true });
+        .from("users")
+        .select("*")
+        .order("user_name", { ascending: true });
 
       if (error) {
-        console.error('Error fetching users:', error);
-        showToast(`Error fetching users: ${error.message}`, 'error');
+        console.error("Error fetching users:", error);
+        showToast(`Error fetching users: ${error.message}`, "error");
       } else {
         setUsers(data || []);
       }
     } catch (err) {
-      console.error('Exception fetching users:', err);
+      console.error("Exception fetching users:", err);
     } finally {
       setLoading(false);
     }
@@ -95,15 +161,15 @@ export default function MasterSetting() {
   const fetchShops = async () => {
     try {
       const { data, error } = await supabase
-        .from('shop')
-        .select('shop_name')
-        .order('shop_name', { ascending: true });
+        .from("shop")
+        .select("shop_name")
+        .order("shop_name", { ascending: true });
       if (!error && data) {
-        const names = data.map(s => s.shop_name).filter(Boolean);
+        const names = data.map((s) => s.shop_name).filter(Boolean);
         setAvailableShops(names);
       }
     } catch (err) {
-      console.error('Exception fetching shops:', err);
+      console.error("Exception fetching shops:", err);
     }
   };
 
@@ -113,24 +179,27 @@ export default function MasterSetting() {
   }, []);
 
   const selectedShopsList = shopNameInput
-    ? shopNameInput.split(',').map(s => s.trim()).filter(Boolean)
+    ? shopNameInput
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
 
   const handleToggleShop = (shopName) => {
     let updated;
     if (selectedShopsList.includes(shopName)) {
-      updated = selectedShopsList.filter(s => s !== shopName);
+      updated = selectedShopsList.filter((s) => s !== shopName);
     } else {
       updated = [...selectedShopsList, shopName];
     }
-    setShopNameInput(updated.join(', '));
+    setShopNameInput(updated.join(", "));
   };
 
   const handleSelectAllShops = () => {
     if (selectedShopsList.length === availableShops.length) {
-      setShopNameInput('');
+      setShopNameInput("");
     } else {
-      setShopNameInput(availableShops.join(', '));
+      setShopNameInput(availableShops.join(", "));
     }
   };
 
@@ -139,41 +208,45 @@ export default function MasterSetting() {
   };
 
   const handleDeleteUser = async (userToDelete) => {
-    const name = userToDelete.user_name || userToDelete.username || 'this user';
-    if (!window.confirm(`Are you sure you want to delete user "${name}"? This action cannot be undone.`)) {
+    const name = userToDelete.user_name || userToDelete.username || "this user";
+    if (
+      !window.confirm(
+        `Are you sure you want to delete user "${name}"? This action cannot be undone.`,
+      )
+    ) {
       return;
     }
 
     try {
       const { error } = await supabase
-        .from('users')
+        .from("users")
         .delete()
-        .eq('id', userToDelete.id);
+        .eq("id", userToDelete.id);
 
       if (error) {
-        showToast(`Failed to delete user: ${error.message}`, 'error');
+        showToast(`Failed to delete user: ${error.message}`, "error");
       } else {
-        showToast(`User "${name}" deleted successfully!`, 'success');
+        showToast(`User "${name}" deleted successfully!`, "success");
         fetchUsers();
       }
     } catch (err) {
-      console.error('Error deleting user:', err);
-      showToast('Unexpected error deleting user', 'error');
+      console.error("Error deleting user:", err);
+      showToast("Unexpected error deleting user", "error");
     }
   };
 
   // Open Edit User Modal
   const handleOpenEdit = (user) => {
     setEditingUser(user);
-    setPasswordInput(user.password || '');
-    setShopNameInput(user.shop_name || '');
+    setPasswordInput(user.password || "");
+    setShopNameInput(user.shop_name || "");
 
     // Parse master_user_system_page_access
     let permObj = {};
     const rawVal = user.master_user_system_page_access;
     let parsed = rawVal;
 
-    if (typeof rawVal === 'string') {
+    if (typeof rawVal === "string") {
       try {
         parsed = JSON.parse(rawVal);
       } catch (e) {
@@ -183,11 +256,11 @@ export default function MasterSetting() {
 
     if (Array.isArray(parsed)) {
       parsed.forEach((item) => {
-        if (typeof item === 'string') {
+        if (typeof item === "string") {
           permObj[item] = item;
         }
       });
-    } else if (parsed && typeof parsed === 'object') {
+    } else if (parsed && typeof parsed === "object") {
       permObj = { ...parsed };
     } else if (Array.isArray(user.page_access)) {
       user.page_access.forEach((p) => {
@@ -200,14 +273,14 @@ export default function MasterSetting() {
     const initialArray = Object.keys(permObj);
     setRawJsonText(JSON.stringify(initialArray, null, 2));
     setJsonMode(false);
-    setJsonError('');
+    setJsonError("");
   };
 
   // Permission Key Helpers
   const getPageLevel = (systemId, pageName) => {
-    if (accessPermissions[`${systemId}.${pageName}.modify`]) return 'modify';
-    if (accessPermissions[`${systemId}.${pageName}.view`]) return 'view';
-    return 'none';
+    if (accessPermissions[`${systemId}.${pageName}.modify`]) return "modify";
+    if (accessPermissions[`${systemId}.${pageName}.view`]) return "view";
+    return "none";
   };
 
   const setPageLevel = (systemId, pageName, level) => {
@@ -218,9 +291,9 @@ export default function MasterSetting() {
     delete updated[viewKey];
     delete updated[modifyKey];
 
-    if (level === 'view') {
+    if (level === "view") {
       updated[viewKey] = viewKey;
-    } else if (level === 'modify') {
+    } else if (level === "modify") {
       updated[modifyKey] = modifyKey;
     }
 
@@ -234,14 +307,16 @@ export default function MasterSetting() {
       const parsed = JSON.parse(val);
       let updated = {};
       if (Array.isArray(parsed)) {
-        parsed.forEach((k) => { updated[k] = k; });
-      } else if (parsed && typeof parsed === 'object') {
+        parsed.forEach((k) => {
+          updated[k] = k;
+        });
+      } else if (parsed && typeof parsed === "object") {
         updated = { ...parsed };
       }
       setAccessPermissions(updated);
-      setJsonError('');
+      setJsonError("");
     } catch (err) {
-      setJsonError('Invalid JSON format');
+      setJsonError("Invalid JSON format");
     }
   };
 
@@ -255,32 +330,35 @@ export default function MasterSetting() {
     const shopVal = shopNameInput.trim() || null;
     try {
       const { error } = await supabase
-        .from('users')
+        .from("users")
         .update({
           password: passwordInput,
           shop_name: shopVal,
           user_access: shopVal,
-          master_user_system_page_access: finalAccess
+          master_user_system_page_access: finalAccess,
         })
-        .eq('id', editingUser.id);
+        .eq("id", editingUser.id);
 
       if (error) {
-        showToast(`Failed to update user: ${error.message}`, 'error');
+        showToast(`Failed to update user: ${error.message}`, "error");
       } else {
-        showToast(`User ${editingUser.user_name || editingUser.username} updated successfully!`, 'success');
+        showToast(
+          `User ${editingUser.user_name || editingUser.username} updated successfully!`,
+          "success",
+        );
         setEditingUser(null);
         fetchUsers();
       }
     } catch (err) {
-      console.error('Update error:', err);
-      showToast('Unexpected error during update', 'error');
+      console.error("Update error:", err);
+      showToast("Unexpected error during update", "error");
     } finally {
       setSaving(false);
     }
   };
 
   const filteredUsers = users.filter((u) => {
-    const name = (u.user_name || u.username || '').toLowerCase();
+    const name = (u.user_name || u.username || "").toLowerCase();
     return name.includes(searchTerm.toLowerCase());
   });
 
@@ -289,10 +367,11 @@ export default function MasterSetting() {
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          className={`fixed top-5 right-5 z-50 px-5 py-3 rounded border text-xs font-bold uppercase tracking-wider shadow-xl transition-all ${toastMessage.type === 'error'
-            ? 'bg-red-950 text-red-100 border-red-800'
-            : 'bg-[#1A1A1A] text-[#C9A84C] border-[#C9A84C]'
-            }`}
+          className={`fixed top-5 right-5 z-50 px-5 py-3 rounded border text-xs font-bold uppercase tracking-wider shadow-xl transition-all ${
+            toastMessage.type === "error"
+              ? "bg-red-950 text-red-100 border-red-800"
+              : "bg-[#1A1A1A] text-[#C9A84C] border-[#C9A84C]"
+          }`}
         >
           {toastMessage.msg}
         </div>
@@ -317,7 +396,7 @@ export default function MasterSetting() {
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#C9A84C] rounded-none text-xs font-bold uppercase tracking-widest transition-colors border border-[#C9A84C]/30 shadow-sm"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             <span>Refresh</span>
           </button>
         </div>
@@ -326,7 +405,10 @@ export default function MasterSetting() {
       {/* Search Filter & Count Summary */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="relative max-w-md flex-1 min-w-[240px]">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40" />
+          <Search
+            size={16}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40"
+          />
           <input
             type="text"
             value={searchTerm}
@@ -336,7 +418,13 @@ export default function MasterSetting() {
           />
         </div>
         <div className="text-xs font-bold text-[#1A1A1A]/70 px-1 font-mono">
-          Showing <span className="text-[#C9A84C] font-extrabold">{filteredUsers.length}</span> of <span className="text-[#1A1A1A] font-extrabold">{users.length}</span> users
+          Showing{" "}
+          <span className="text-[#C9A84C] font-extrabold">
+            {filteredUsers.length}
+          </span>{" "}
+          of{" "}
+          <span className="text-[#1A1A1A] font-extrabold">{users.length}</span>{" "}
+          users
         </div>
       </div>
 
@@ -357,38 +445,56 @@ export default function MasterSetting() {
             <tbody className="divide-y divide-[#1A1A1A]/10">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50">
-                    <RefreshCw size={24} className="animate-spin mx-auto mb-3 text-[#C9A84C]" />
-                    <span className="uppercase tracking-widest text-xs font-bold">Loading User Directory...</span>
+                  <td
+                    colSpan={6}
+                    className="py-16 text-center text-[#1A1A1A]/50"
+                  >
+                    <RefreshCw
+                      size={24}
+                      className="animate-spin mx-auto mb-3 text-[#C9A84C]"
+                    />
+                    <span className="uppercase tracking-widest text-xs font-bold">
+                      Loading User Directory...
+                    </span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
+                  <td
+                    colSpan={6}
+                    className="py-16 text-center text-[#1A1A1A]/50 font-serif"
+                  >
                     No users found matching your search term.
                   </td>
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
-                  const name = u.user_name || u.username || 'N/A';
+                  const name = u.user_name || u.username || "N/A";
                   const isPassVisible = !!showPassword[u.id];
 
                   // Parse master access tags
                   let accessKeys = [];
                   if (u.master_user_system_page_access) {
                     let raw = u.master_user_system_page_access;
-                    if (typeof raw === 'string') {
-                      try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+                    if (typeof raw === "string") {
+                      try {
+                        raw = JSON.parse(raw);
+                      } catch (e) {
+                        raw = [];
+                      }
                     }
                     if (Array.isArray(raw)) {
                       accessKeys = raw;
-                    } else if (raw && typeof raw === 'object') {
+                    } else if (raw && typeof raw === "object") {
                       accessKeys = Object.keys(raw);
                     }
                   }
 
                   return (
-                    <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
+                    <tr
+                      key={u.id}
+                      className="hover:bg-[#FAFAFA] transition-colors"
+                    >
                       {/* Column 1: Actions */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -423,7 +529,7 @@ export default function MasterSetting() {
                       {/* Column 3: Role */}
                       <td className="py-3.5 px-4 capitalize font-medium text-[#1A1A1A]/70">
                         <span className="px-2.5 py-1 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[10px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                          {u.role || 'user'}
+                          {u.role || "user"}
                         </span>
                       </td>
 
@@ -434,7 +540,9 @@ export default function MasterSetting() {
                             {u.shop_name}
                           </span>
                         ) : (
-                          <span className="text-[#1A1A1A]/40 italic text-[11px]">N/A</span>
+                          <span className="text-[#1A1A1A]/40 italic text-[11px]">
+                            N/A
+                          </span>
                         )}
                       </td>
 
@@ -442,14 +550,20 @@ export default function MasterSetting() {
                       <td className="py-3.5 px-4 font-mono">
                         <div className="flex items-center gap-2">
                           <span className="text-[#1A1A1A] font-medium">
-                            {isPassVisible ? u.password : '••••••••'}
+                            {isPassVisible ? u.password : "••••••••"}
                           </span>
                           <button
                             onClick={() => togglePasswordVisibility(u.id)}
                             className="text-[#1A1A1A]/40 hover:text-[#C9A84C] p-1 transition-colors"
-                            title={isPassVisible ? 'Hide Password' : 'Show Password'}
+                            title={
+                              isPassVisible ? "Hide Password" : "Show Password"
+                            }
                           >
-                            {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                            {isPassVisible ? (
+                              <EyeOff size={14} />
+                            ) : (
+                              <Eye size={14} />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -459,14 +573,15 @@ export default function MasterSetting() {
                         {accessKeys.length > 0 ? (
                           <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto custom-scrollbar">
                             {accessKeys.map((key) => {
-                              const isModify = key.endsWith('.modify');
+                              const isModify = key.endsWith(".modify");
                               return (
                                 <span
                                   key={key}
-                                  className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${isModify
-                                    ? 'bg-[#C9A84C]/15 text-[#1A1A1A] border-[#C9A84C]/40 font-bold'
-                                    : 'bg-[#1A1A1A]/5 text-[#1A1A1A] border-[#1A1A1A]/10'
-                                    }`}
+                                  className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${
+                                    isModify
+                                      ? "bg-[#C9A84C]/15 text-[#1A1A1A] border-[#C9A84C]/40 font-bold"
+                                      : "bg-[#1A1A1A]/5 text-[#1A1A1A] border-[#1A1A1A]/10"
+                                  }`}
                                 >
                                   {key}
                                 </span>
@@ -504,7 +619,8 @@ export default function MasterSetting() {
                 </span>
                 <h3 className="text-xl font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
                   <UserCheck size={20} className="text-[#C9A84C]" />
-                  Edit User Access: {editingUser.user_name || editingUser.username}
+                  Edit User Access:{" "}
+                  {editingUser.user_name || editingUser.username}
                 </h3>
               </div>
 
@@ -527,7 +643,7 @@ export default function MasterSetting() {
                   <input
                     type="text"
                     disabled
-                    value={editingUser.user_name || editingUser.username || ''}
+                    value={editingUser.user_name || editingUser.username || ""}
                     className="w-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold cursor-not-allowed"
                   />
                 </div>
@@ -544,7 +660,10 @@ export default function MasterSetting() {
                       placeholder="Enter user password"
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:border-[#C9A84C]"
                     />
-                    <Key size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
+                    <Key
+                      size={14}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none"
+                    />
                   </div>
                 </div>
               </div>
@@ -557,7 +676,14 @@ export default function MasterSetting() {
                       master_user_system_page_access
                     </h4>
                     <p className="text-[11px] text-[#1A1A1A]/60 mt-0.5">
-                      Set permission level per page: <code className="font-mono text-[#C9A84C] font-bold">.view</code> or <code className="font-mono text-[#C9A84C] font-bold">.modify</code>
+                      Set permission level per page:{" "}
+                      <code className="font-mono text-[#C9A84C] font-bold">
+                        .view
+                      </code>{" "}
+                      or{" "}
+                      <code className="font-mono text-[#C9A84C] font-bold">
+                        .modify
+                      </code>
                     </p>
                   </div>
                 </div>
@@ -565,20 +691,31 @@ export default function MasterSetting() {
                 {/* Interactive UI - One Row Per Page */}
                 <div className="space-y-6 border border-[#1A1A1A]/10 p-5 bg-white">
                   {AVAILABLE_SYSTEMS.map((sys) => (
-                    <div key={sys.id} className="space-y-3 border-b border-[#1A1A1A]/10 pb-5 last:border-0 last:pb-0">
+                    <div
+                      key={sys.id}
+                      className="space-y-3 border-b border-[#1A1A1A]/10 pb-5 last:border-0 last:pb-0"
+                    >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-serif font-bold text-[#1A1A1A] uppercase tracking-wider bg-[#FAFAFA] border border-[#1A1A1A]/10 px-3 py-1">
-                          {sys.name} (<span className="font-mono text-[#C9A84C] font-bold">{sys.id}</span>)
+                          {sys.name} (
+                          <span className="font-mono text-[#C9A84C] font-bold">
+                            {sys.id}
+                          </span>
+                          )
                         </span>
                       </div>
 
                       {/* Shop Access Section inside Checklist Delegation */}
-                      {sys.id === 'checklist' && (
+                      {sys.id === "checklist" && (
                         <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
                           <div className="flex items-center justify-between">
                             <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
                               <Building size={16} className="text-[#C9A84C]" />
-                              Shop Access (<code className="font-mono text-[#8C6D23] lowercase">shop_name</code>)
+                              Shop Access (
+                              <code className="font-mono text-[#8C6D23] lowercase">
+                                shop_name
+                              </code>
+                              )
                             </label>
                             {availableShops.length > 0 && (
                               <button
@@ -586,33 +723,47 @@ export default function MasterSetting() {
                                 onClick={handleSelectAllShops}
                                 className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
                               >
-                                {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
+                                {selectedShopsList.length ===
+                                availableShops.length
+                                  ? "Deselect All"
+                                  : "Select All Shops"}
                               </button>
                             )}
                           </div>
 
                           <p className="text-[11px] text-slate-500 font-medium">
-                            Select assigned shop locations from the database <code className="font-mono font-bold text-[#1C120C]">shop</code> table:
+                            Select assigned shop locations from the database{" "}
+                            <code className="font-mono font-bold text-[#1C120C]">
+                              shop
+                            </code>{" "}
+                            table:
                           </p>
 
                           {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
                           {availableShops.length > 0 ? (
                             <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
                               {availableShops.map((shop) => {
-                                const isSelected = selectedShopsList.includes(shop);
+                                const isSelected =
+                                  selectedShopsList.includes(shop);
                                 return (
                                   <button
                                     key={shop}
                                     type="button"
                                     onClick={() => handleToggleShop(shop)}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
-                                        ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
-                                        : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
-                                      }`}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                                      isSelected
+                                        ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
+                                        : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100"
+                                    }`}
                                   >
-                                    <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                                      }`}>
-                                      {isSelected && '✓'}
+                                    <span
+                                      className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
+                                        isSelected
+                                          ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
+                                          : "border-slate-400 bg-white"
+                                      }`}
+                                    >
+                                      {isSelected && "✓"}
                                     </span>
                                     <span>{shop}</span>
                                   </button>
@@ -620,7 +771,9 @@ export default function MasterSetting() {
                               })}
                             </div>
                           ) : (
-                            <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
+                            <div className="text-[11px] text-slate-400 italic">
+                              Loading options from shop table...
+                            </div>
                           )}
 
                           {/* Comma-Separated Text Input */}
@@ -660,11 +813,14 @@ export default function MasterSetting() {
                                 {/* None Button */}
                                 <button
                                   type="button"
-                                  onClick={() => setPageLevel(sys.id, pg, 'none')}
-                                  className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${currentLevel === 'none'
-                                    ? 'bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20'
-                                    : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
-                                    }`}
+                                  onClick={() =>
+                                    setPageLevel(sys.id, pg, "none")
+                                  }
+                                  className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                    currentLevel === "none"
+                                      ? "bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20"
+                                      : "text-[#1A1A1A]/50 hover:text-[#1A1A1A]"
+                                  }`}
                                 >
                                   None
                                 </button>
@@ -672,11 +828,14 @@ export default function MasterSetting() {
                                 {/* View Button */}
                                 <button
                                   type="button"
-                                  onClick={() => setPageLevel(sys.id, pg, 'view')}
-                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${currentLevel === 'view'
-                                    ? 'bg-[#1A1A1A] text-white font-bold shadow-sm'
-                                    : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                    }`}
+                                  onClick={() =>
+                                    setPageLevel(sys.id, pg, "view")
+                                  }
+                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
+                                    currentLevel === "view"
+                                      ? "bg-[#1A1A1A] text-white font-bold shadow-sm"
+                                      : "text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
+                                  }`}
                                 >
                                   .view
                                 </button>
@@ -684,11 +843,14 @@ export default function MasterSetting() {
                                 {/* Modify Button */}
                                 <button
                                   type="button"
-                                  onClick={() => setPageLevel(sys.id, pg, 'modify')}
-                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${currentLevel === 'modify'
-                                    ? 'bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm'
-                                    : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                    }`}
+                                  onClick={() =>
+                                    setPageLevel(sys.id, pg, "modify")
+                                  }
+                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
+                                    currentLevel === "modify"
+                                      ? "bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm"
+                                      : "text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
+                                  }`}
                                 >
                                   .modify
                                 </button>
@@ -719,7 +881,7 @@ export default function MasterSetting() {
                 className="px-6 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm"
               >
                 <Save size={14} />
-                <span>{saving ? 'Saving...' : 'Save User Access'}</span>
+                <span>{saving ? "Saving..." : "Save User Access"}</span>
               </button>
             </div>
           </motion.div>

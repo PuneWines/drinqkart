@@ -204,7 +204,7 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
             </div>
 
             {/* Subtabs Menu - Displays page options for selected system, collapses drawer on link click */}
-            <div className="flex-1 p-3 space-y-1.5 overflow-y-auto">
+            <div className="flex-1 min-h-0 p-3 space-y-1.5 overflow-y-auto">
               {isTrainingMode ? (
                 <>
                   <div className="text-[10px] font-extrabold tracking-widest text-[#8C6D23] uppercase pt-1 pb-2 px-3">
@@ -354,7 +354,7 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
             </div>
 
             {/* Bottom Footer */}
-            <div className="p-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-xs">
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-xs shrink-0 mt-auto">
               <div className="flex items-center gap-2">
                 <span className="text-[#8C6D23] font-semibold">{user?.user_name || user?.username || 'User'}</span>
                 <button
@@ -381,45 +381,46 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
         </div>
       )}
 
-      {/* ─── Desktop Sidebar (>= 768px): 100% Unchanged Desktop Sidebar ────────── */}
+      {/* ─── Desktop Sidebar (>= 768px): Full Height Fixed Sidebar ────────── */}
       <div className="hidden md:flex h-full shrink-0">
         <motion.aside
           animate={{ width: isCollapsed ? 64 : 250 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className="h-full bg-white border-r border-[#C9A84C]/20 flex flex-col justify-between text-[#1A1A1A] font-sans shrink-0 relative select-none shadow-sm"
+          className="h-full bg-white border-r border-[#C9A84C]/20 flex flex-col text-[#1A1A1A] font-sans shrink-0 relative select-none shadow-sm overflow-hidden"
         >
-          <div className="flex flex-col h-full overflow-hidden">
-            {/* Active System Header Title Card - Brown Yellow & Gold Styling */}
-            <div className="p-3 flex items-center justify-between shadow-xs border-b border-[#C9A84C]/30"> 
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="p-1.5 rounded-md bg-[#C9A84C] text-[#1c120c] shrink-0 font-bold shadow-xs">
-                  <ActiveIcon size={18} />
-                </div>
-                {!isCollapsed && (
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-sm font-bold leading-tight truncate text-black">
-                      {activeSystem.label}
-                    </h2>
-                  </div>
-                )}
+          {/* Active System Header Title Card - Brown Yellow & Gold Styling */}
+          <div className="p-3 flex items-center justify-between shadow-xs border-b border-[#C9A84C]/30 shrink-0"> 
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="p-1.5 rounded-md bg-[#C9A84C] text-[#1c120c] shrink-0 font-bold shadow-xs">
+                <ActiveIcon size={18} />
               </div>
-
-              <button
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                className="text-[#E5D7B7] hover:text-[#C9A84C] p-1 rounded hover:bg-white/10 cursor-pointer transition-colors shrink-0"
-              >
-                {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-              </button>
+              {!isCollapsed && (
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-sm font-bold leading-tight truncate text-black">
+                    {activeSystem.label}
+                  </h2>
+                </div>
+              )}
             </div>
 
-            {/* Purchase System Shop Filter in Sidebar */}
-            {activeSystem?.id === 'purchase' && (
-              <ShopFilter isCollapsed={isCollapsed} />
-            )}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              className="text-[#E5D7B7] hover:text-[#C9A84C] p-1 rounded hover:bg-white/10 cursor-pointer transition-colors shrink-0"
+            >
+              {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+          </div>
 
-            {/* Subtabs Menu */}
-            <div className="flex-1 p-3 space-y-1.5 overflow-y-auto overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Purchase System Shop Filter in Sidebar */}
+          {activeSystem?.id === 'purchase' && (
+            <div className="shrink-0">
+              <ShopFilter isCollapsed={isCollapsed} />
+            </div>
+          )}
+
+          {/* Subtabs Menu */}
+          <div className="flex-1 min-h-0 p-3 space-y-1.5 overflow-y-auto overflow-x-hidden [ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {isTrainingMode ? (
                 <>
                   {!isCollapsed && (
@@ -573,32 +574,31 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
               )}
             </div>
 
-            {/* Bottom Attribution */}
-            <div className="p-3 border-t border-[#C9A84C]/20 bg-[#FAFAFA] text-left shrink-0">
-              {!isCollapsed ? (
-                <p className="text-[10px] text-gray-400 font-sans">
-                  Powered by{' '}
-                  <a
-                    href="https://www.botivate.in"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-bold text-[#8C6D23] hover:text-[#C9A84C] hover:underline"
-                  >
-                    Botivate
-                  </a>
-                </p>
-              ) : (
+          {/* Bottom Attribution */}
+          <div className="p-3 border-t border-[#C9A84C]/20 bg-[#FAFAFA] text-left shrink-0 mt-auto">
+            {!isCollapsed ? (
+              <p className="text-[10px] text-gray-400 font-sans">
+                Powered by{' '}
                 <a
                   href="https://www.botivate.in"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[10px] font-bold text-[#8C6D23] block text-center"
-                  title="Powered by Botivate"
+                  className="font-bold text-[#8C6D23] hover:text-[#C9A84C] hover:underline"
                 >
-                  B
+                  Botivate
                 </a>
-              )}
-            </div>
+              </p>
+            ) : (
+              <a
+                href="https://www.botivate.in"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-bold text-[#8C6D23] block text-center"
+                title="Powered by Botivate"
+              >
+                B
+              </a>
+            )}
           </div>
         </motion.aside>
       </div>

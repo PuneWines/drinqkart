@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
   Search,
   Eye,
@@ -23,141 +23,203 @@ import {
   Columns,
   ChevronDown,
   Check,
-} from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
-import JoiningCompany from '../systems/hr/pages/JoiningCompany';
-import PurchaseSettings from '../systems/purchase/pages/Settings';
-import CounterManagement from './CounterManagement';
-import ExpensesManagement from './ExpensesManagement';
+} from "lucide-react";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+import JoiningCompany from "../systems/hr/pages/JoiningCompany";
+import PurchaseSettings from "../systems/purchase/pages/Settings";
+import CounterManagement from "./CounterManagement";
+import ExpensesManagement from "./ExpensesManagement";
 
 // Systems and standard page modules in Drinqkart Master App
 const AVAILABLE_SYSTEMS = [
   {
-    id: 'checklist',
-    name: 'Checklist Delegation',
+    id: "checklist",
+    name: "Checklist Delegation",
     sections: [
       {
-        title: 'CHECKLIST DELEGATION MODULES',
-        pages: ['Dashboard', 'Announcements', 'Quick Task', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Holiday List', 'Working Day Calendar', 'MIS Report', 'Admin Approval', 'Users Management', 'Settings']
-      }
-    ]
-  },
-  {
-    id: 'hr',
-    name: 'HR System',
-    sections: [
-      {
-        title: 'HR SYSTEM MODULES',
-        pages: ['Dashboard','Employee Learning', 'Employees', 'Joining shop', 'Leave Management', 'Daily Attendance', 'Payroll', 'Roster', 'Admin advanced']
-      }
-    ]
-  },
-  {
-    id: 'inventory',
-    name: 'SNACKS INVENTRY',
-    sections: [
-      {
-        title: 'DAILY ENTRY DASHBOARD & FORMS',
+        title: "CHECKLIST DELEGATION MODULES",
         pages: [
-          'Daily Entry Dashboard Logs',
-          'Purchase Form Entry',
-          'Closing Stock Form Entry',
-          'Cash Tally Form Entry'
-        ]
+          "Dashboard",
+          "Announcements",
+          "Quick Task",
+          "Assign Task",
+          "Work Records",
+          "Delegation",
+          "Task",
+          "Calendar",
+          "Holiday List",
+          "Working Day Calendar",
+          "MIS Report",
+          "Admin Approval",
+          "Users Management",
+          "Settings",
+        ],
       },
+    ],
+  },
+  {
+    id: "hr",
+    name: "HR System",
+    sections: [
       {
-        title: 'STOCK LEDGER & AUDITS',
+        title: "HR SYSTEM MODULES",
         pages: [
-          'Table View',
-          'Reports & Charts',
-          'Purchase Items',
-          'Sales History',
-          'Current Stock Details',
-          'Manager Report'
-        ]
+          "Dashboard",
+          "Employee Learning",
+          "Employees",
+          "Joining shop",
+          "Leave Management",
+          "Daily Attendance",
+          "Payroll",
+          "Roster",
+          "Admin advanced",
+        ],
       },
+    ],
+  },
+  {
+    id: "inventory",
+    name: "SNACKS INVENTRY",
+    sections: [
       {
-        title: 'MASTER CATALOG DIRECTORY',
+        title: "DAILY ENTRY DASHBOARD & FORMS",
         pages: [
-          'Master Items',
-          'Vendors Directory'
-        ]
+          "Daily Entry Dashboard Logs",
+          "Purchase Form Entry",
+          "Closing Stock Form Entry",
+          "Cash Tally Form Entry",
+        ],
       },
       {
-        title: 'USER MANAGEMENT',
+        title: "STOCK LEDGER & AUDITS",
         pages: [
-          'Users Management'
-        ]
-      }
-    ]
-  },
-  {
-    id: 'petty-cash',
-    name: 'Petty Cash',
-    sections: [
-      {
-        title: 'PETTY CASH MODULES',
-        pages: ['Form Entry', 'Cash Tally Counter', 'Financial Reports', 'Bank Audit']
-      }
-    ]
-  },
-  {
-    id: 'purchase',
-    name: 'Purchase System',
-    sections: [
-      {
-        title: 'OVERVIEW',
-        pages: ['Dashboard']
+          "Table View",
+          "Reports & Charts",
+          "Purchase Items",
+          "Sales History",
+          "Current Stock Details",
+          "Manager Report",
+        ],
       },
       {
-        title: 'PROCUREMENT',
-        pages: ['Indent', 'Approval', 'PO', 'PO History', 'Orders Pipeline']
+        title: "MASTER CATALOG DIRECTORY",
+        pages: ["Master Items", "Vendors Directory"],
       },
       {
-        title: 'VERIFICATION',
-        pages: ['Trader', 'Transporter', 'Receiving']
+        title: "USER MANAGEMENT",
+        pages: ["Users Management"],
+      },
+    ],
+  },
+  {
+    id: "petty-cash",
+    name: "Petty Cash",
+    sections: [
+      {
+        title: "PETTY CASH MODULES",
+        pages: [
+          "Form Entry",
+          "Cash Tally Counter",
+          "Financial Reports",
+          "Bank Audit",
+        ],
+      },
+    ],
+  },
+  {
+    id: "purchase",
+    name: "Purchase System",
+    sections: [
+      {
+        title: "OVERVIEW",
+        pages: ["Dashboard"],
       },
       {
-        title: 'ADMIN',
-        pages: ['Settings']
-      }
-    ]
+        title: "PROCUREMENT",
+        pages: ["Indent", "Approval", "PO", "PO History", "Orders Pipeline"],
+      },
+      {
+        title: "VERIFICATION",
+        pages: ["Trader", "Transporter", "Receiving"],
+      },
+      {
+        title: "ADMIN",
+        pages: ["Settings"],
+      },
+    ],
   },
   {
-    id: 'whatsapp',
-    name: 'WhatsApp Broadcast'
+    id: "whatsapp",
+    name: "WhatsApp Broadcast",
   },
   {
-    id: 'business-overview',
-    name: 'Business overview',
+    id: "business-overview",
+    name: "Business overview",
     sections: [
       {
-        title: 'BUSINESS OVERVIEW MODULES',
-        pages: ['Feedback', 'Trader Invoices', 'Shop Visit', 'Help Center']
-      }
-    ]
+        title: "BUSINESS OVERVIEW MODULES",
+        pages: ["Feedback", "Trader Invoices", "Shop Visit", "Help Center"],
+      },
+    ],
   },
   {
-    id: 'master-setting',
-    name: 'Master settings',
+    id: "master-setting",
+    name: "Master settings",
     sections: [
       {
-        title: 'MASTER SETTINGS ACCESS',
-        pages: ['User & System Access', 'Shop', 'Counter', 'Expenses', 'Purchase Settings']
-      }
-    ]
+        title: "MASTER SETTINGS ACCESS",
+        pages: [
+          "User & System Access",
+          "Shop",
+          "Counter",
+          "Expenses",
+          "Purchase Settings",
+        ],
+      },
+    ],
   },
   {
-    id: 'system-training',
-    name: 'System Training Videos',
+    id: "sale-analytics",
+    name: "Sale Analytics",
     sections: [
       {
-        title: 'SYSTEM TRAINING PAGES ACCESS',
-        pages: ['Checklist Delegation', 'HR System', 'SNACKS INVENTRY', 'Petty Cash', 'Purchase System', 'Master Setting', 'WhatsApp Broadcast', 'Business overview', 'Stock / Report','Sale Analytics']
-      }
-    ]
-  }
+        title: "SALES & STOCK ANALYTICS",
+        pages: ["Dashboard"],
+      },
+    ],
+  },
+  {
+    id: "stock-report",
+    name: "Stock / Report",
+    sections: [
+      {
+        title: "STOCK BALANCE MANAGEMENT",
+        pages: ["Stock Balance Sheet"],
+      },
+    ],
+  },
+  {
+    id: "system-training",
+    name: "System Training Videos",
+    sections: [
+      {
+        title: "SYSTEM TRAINING PAGES ACCESS",
+        pages: [
+          "Checklist Delegation",
+          "HR System",
+          "SNACKS INVENTRY",
+          "Petty Cash",
+          "Purchase System",
+          "Master Setting",
+          "WhatsApp Broadcast",
+          "Business overview",
+          "Stock / Report",
+          "Sale Analytics",
+        ],
+      },
+    ],
+  },
 ];
 
 export default function MasterSetting() {
@@ -167,77 +229,90 @@ export default function MasterSetting() {
   // Determine if logged-in user has modify access vs view-only access on Master Settings
   const isMasterSettingModifyAllowed = useMemo(() => {
     if (!currentUserObj) return false;
-    const userName = (currentUserObj.user_name || currentUserObj.username || '').toLowerCase();
-    if (userName === 'masteradmin') return true;
+    const userName = (
+      currentUserObj.user_name ||
+      currentUserObj.username ||
+      ""
+    ).toLowerCase();
+    if (userName === "masteradmin") return true;
 
     let masterAccess = [];
-    const rawVal = currentUserObj.master_user_system_page_access || localStorage.getItem('master_user_system_page_access');
+    const rawVal =
+      currentUserObj.master_user_system_page_access ||
+      localStorage.getItem("master_user_system_page_access");
     let parsed = rawVal;
-    if (typeof rawVal === 'string') {
-      try { parsed = JSON.parse(rawVal); } catch (e) { parsed = []; }
+    if (typeof rawVal === "string") {
+      try {
+        parsed = JSON.parse(rawVal);
+      } catch (e) {
+        parsed = [];
+      }
     }
     if (Array.isArray(parsed)) {
       masterAccess = parsed;
-    } else if (parsed && typeof parsed === 'object') {
+    } else if (parsed && typeof parsed === "object") {
       masterAccess = Object.keys(parsed);
     }
 
     if (masterAccess.length > 0) {
       return masterAccess.some((item) => {
-        if (typeof item !== 'string') return false;
+        if (typeof item !== "string") return false;
         const itemLower = item.toLowerCase().trim();
         return (
-          itemLower === 'master-setting.user & system access.modify' ||
-          itemLower === 'master-setting.master setting.modify' ||
-          itemLower === 'master_setting.user & system access.modify' ||
-          itemLower === 'master_setting.master setting.modify'
+          itemLower === "master-setting.user & system access.modify" ||
+          itemLower === "master-setting.master setting.modify" ||
+          itemLower === "master_setting.user & system access.modify" ||
+          itemLower === "master_setting.master setting.modify"
         );
       });
     }
 
-    const role = (currentUserObj.role || '').toLowerCase();
-    return role === 'admin';
+    const role = (currentUserObj.role || "").toLowerCase();
+    return role === "admin";
   }, [currentUserObj]);
   const COLUMN_DEFINITIONS = [
-    { key: 'employee_id', label: 'Employee ID' },
-    { key: 'emp_name', label: 'Emp Name' },
-    { key: 'user_name', label: 'User Name' },
-    { key: 'role', label: 'Role' },
-    { key: 'shop_name', label: 'Shop Name' },
-    { key: 'number', label: 'Mobile Number' },
-    { key: 'password', label: 'Password' },
-    { key: 'page_access', label: 'Master System Page Access' },
-    { key: 'counter_access', label: 'Master System Counter Access' },
+    { key: "employee_id", label: "Employee ID" },
+    { key: "emp_name", label: "Emp Name" },
+    { key: "user_name", label: "User Name" },
+    { key: "role", label: "Role" },
+    { key: "shop_name", label: "Shop Name" },
+    { key: "number", label: "Mobile Number" },
+    { key: "password", label: "Password" },
+    { key: "page_access", label: "Master System Page Access" },
+    { key: "counter_access", label: "Master System Counter Access" },
   ];
 
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnDropdownRef = useRef(null);
 
   const [visibleColumns, setVisibleColumns] = useState([
-    'employee_id',
-    'emp_name',
-    'user_name',
-    'role',
-    'shop_name',
-    'number'
+    "employee_id",
+    "emp_name",
+    "user_name",
+    "role",
+    "shop_name",
+    "number",
   ]);
 
   // Click outside listener for column selection dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (columnDropdownRef.current && !columnDropdownRef.current.contains(event.target)) {
+      if (
+        columnDropdownRef.current &&
+        !columnDropdownRef.current.contains(event.target)
+      ) {
         setShowColumnDropdown(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [shopFilter, setShopFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [shopFilter, setShopFilter] = useState("");
   const [showPassword, setShowPassword] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
   const [availableShops, setAvailableShops] = useState([]);
@@ -245,30 +320,30 @@ export default function MasterSetting() {
 
   // Modal / Editing state
   const [editingUser, setEditingUser] = useState(null);
-  const [userStatusInput, setUserStatusInput] = useState('active');
-  const [usernameInput, setUsernameInput] = useState('');
-  const [mobileInput, setMobileInput] = useState('');
-  const [roleInput, setRoleInput] = useState('User');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [primaryShopInput, setPrimaryShopInput] = useState(''); // Primary assigned shop (single shop)
-  const [shopNameInput, setShopNameInput] = useState(''); // Multi-shop permissions access list (comma-separated)
+  const [userStatusInput, setUserStatusInput] = useState("active");
+  const [usernameInput, setUsernameInput] = useState("");
+  const [mobileInput, setMobileInput] = useState("");
+  const [roleInput, setRoleInput] = useState("User");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [primaryShopInput, setPrimaryShopInput] = useState(""); // Primary assigned shop (single shop)
+  const [shopNameInput, setShopNameInput] = useState(""); // Multi-shop permissions access list (comma-separated)
   const [showShopAccessReminder, setShowShopAccessReminder] = useState(false);
-  const [reminderShopName, setReminderShopName] = useState('');
+  const [reminderShopName, setReminderShopName] = useState("");
   const [counterAccessInput, setCounterAccessInput] = useState([]);
   const [accessPermissions, setAccessPermissions] = useState({});
   const [jsonMode, setJsonMode] = useState(false);
-  const [rawJsonText, setRawJsonText] = useState('[]');
-  const [jsonError, setJsonError] = useState('');
+  const [rawJsonText, setRawJsonText] = useState("[]");
+  const [jsonError, setJsonError] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Quick Shop Edit State
   const [editingShopUser, setEditingShopUser] = useState(null);
-  const [quickShopInput, setQuickShopInput] = useState('');
+  const [quickShopInput, setQuickShopInput] = useState("");
   const [savingShop, setSavingShop] = useState(false);
 
   const handleOpenQuickShopEdit = (user) => {
     setEditingShopUser(user);
-    setQuickShopInput(user.shop_name || '');
+    setQuickShopInput(user.shop_name || "");
   };
 
   const handleSaveQuickShop = async () => {
@@ -277,39 +352,57 @@ export default function MasterSetting() {
     const shopVal = quickShopInput.trim() || null;
     try {
       const { error } = await supabase
-        .from('users')
+        .from("users")
         .update({
-          shop_name: shopVal
+          shop_name: shopVal,
         })
-        .eq('id', editingShopUser.id);
+        .eq("id", editingShopUser.id);
 
       if (error) {
-        showToast(`Failed to update shop name: ${error.message}`, 'error');
+        showToast(`Failed to update shop name: ${error.message}`, "error");
       } else {
         // Sync to hr_management_employees by employee_id or name matching
         if (shopVal) {
-          const empIdStr = (editingShopUser.employee_id || '').toString().trim();
-          const userNameStr = (editingShopUser.user_name || editingShopUser.username || '').toString().trim();
+          const empIdStr = (editingShopUser.employee_id || "")
+            .toString()
+            .trim();
+          const userNameStr = (
+            editingShopUser.user_name ||
+            editingShopUser.username ||
+            ""
+          )
+            .toString()
+            .trim();
           let targetEmpId = null;
 
           if (empIdStr) {
             const { data } = await supabase
-              .from('hr_management_employees')
-              .select('employee_id')
-              .eq('employee_id', empIdStr)
+              .from("hr_management_employees")
+              .select("employee_id")
+              .eq("employee_id", empIdStr)
               .maybeSingle();
             if (data) targetEmpId = data.employee_id;
           }
 
           if (!targetEmpId && userNameStr) {
             const { data: allEmps } = await supabase
-              .from('hr_management_employees')
-              .select('employee_id, name_as_per_aadhar');
+              .from("hr_management_employees")
+              .select("employee_id, name_as_per_aadhar");
             if (allEmps && allEmps.length > 0) {
-              const uClean = userNameStr.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const matched = allEmps.find(e => {
-                const eNameClean = (e.name_as_per_aadhar || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                return eNameClean && uClean && (eNameClean === uClean || eNameClean.startsWith(uClean) || uClean.startsWith(eNameClean));
+              const uClean = userNameStr
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+              const matched = allEmps.find((e) => {
+                const eNameClean = (e.name_as_per_aadhar || "")
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]/g, "");
+                return (
+                  eNameClean &&
+                  uClean &&
+                  (eNameClean === uClean ||
+                    eNameClean.startsWith(uClean) ||
+                    uClean.startsWith(eNameClean))
+                );
               });
               if (matched) targetEmpId = matched.employee_id;
             }
@@ -317,21 +410,24 @@ export default function MasterSetting() {
 
           if (targetEmpId) {
             await supabase
-              .from('hr_management_employees')
+              .from("hr_management_employees")
               .update({
-                joining_company_name: shopVal
+                joining_company_name: shopVal,
               })
-              .eq('employee_id', targetEmpId);
+              .eq("employee_id", targetEmpId);
           }
         }
 
-        showToast(`Shop name updated for ${editingShopUser.user_name || editingShopUser.username}!`, 'success');
+        showToast(
+          `Shop name updated for ${editingShopUser.user_name || editingShopUser.username}!`,
+          "success",
+        );
         setEditingShopUser(null);
         fetchUsers();
       }
     } catch (err) {
-      console.error('Shop update error:', err);
-      showToast('Unexpected error updating shop name', 'error');
+      console.error("Shop update error:", err);
+      showToast("Unexpected error updating shop name", "error");
     } finally {
       setSavingShop(false);
     }
@@ -341,21 +437,21 @@ export default function MasterSetting() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [employeesList, setEmployeesList] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
-  const [empSearchInput, setEmpSearchInput] = useState('');
+  const [empSearchInput, setEmpSearchInput] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [empStatus, setEmpStatus] = useState(null); // null | 'already_user' | 'not_found' | 'ready'
   const [existingUserInfo, setExistingUserInfo] = useState(null);
 
   const [newUserForm, setNewUserForm] = useState({
-    employee_id: '',
-    username: '',
-    password: '',
-    role: 'user',
-    email: '',
-    shopName: '',
+    employee_id: "",
+    username: "",
+    password: "",
+    role: "user",
+    email: "",
+    shopName: "",
     can_self_assign: false,
-    systemPreset: 'purchase', // 'all', 'purchase', 'checklist', 'hr', 'inventory', 'petty-cash'
-    counterAccess: []
+    systemPreset: "purchase", // 'all', 'purchase', 'checklist', 'hr', 'inventory', 'petty-cash'
+    counterAccess: [],
   });
 
   // Filter employees from hr_management_employees who are NOT present in the users table
@@ -363,7 +459,7 @@ export default function MasterSetting() {
     const existingUserEmpIds = new Set(
       users
         .map((u) => u.employee_id?.toString().trim().toLowerCase())
-        .filter(Boolean)
+        .filter(Boolean),
     );
 
     return employeesList.filter((emp) => {
@@ -372,7 +468,7 @@ export default function MasterSetting() {
     });
   }, [employeesList, users]);
 
-  const showToast = (msg, type = 'info') => {
+  const showToast = (msg, type = "info") => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -382,15 +478,15 @@ export default function MasterSetting() {
     setLoadingEmployees(true);
     try {
       const { data, error } = await supabase
-        .from('hr_management_employees')
-        .select('*')
-        .order('name_as_per_aadhar', { ascending: true });
+        .from("hr_management_employees")
+        .select("*")
+        .order("name_as_per_aadhar", { ascending: true });
 
       if (!error && data) {
         setEmployeesList(data);
       }
     } catch (err) {
-      console.error('Error fetching hr_management_employees:', err);
+      console.error("Error fetching hr_management_employees:", err);
     } finally {
       setLoadingEmployees(false);
     }
@@ -398,20 +494,20 @@ export default function MasterSetting() {
 
   // Open Add User Modal and load employee directory
   const openAddUserModal = () => {
-    setEmpSearchInput('');
+    setEmpSearchInput("");
     setSelectedEmployee(null);
     setEmpStatus(null);
     setExistingUserInfo(null);
     setNewUserForm({
-      employee_id: '',
-      username: '',
-      password: '',
-      role: 'user',
-      email: '',
-      shopName: '',
+      employee_id: "",
+      username: "",
+      password: "",
+      role: "user",
+      email: "",
+      shopName: "",
       can_self_assign: false,
-      systemPreset: 'purchase',
-      counterAccess: []
+      systemPreset: "purchase",
+      counterAccess: [],
     });
     setShowAddModal(true);
     fetchEmployeesList();
@@ -431,11 +527,13 @@ export default function MasterSetting() {
 
     // 1. Check if employee_id already exists in users table
     const existingUser = users.find(
-      (u) => u.employee_id && u.employee_id.toString().trim().toLowerCase() === cleanId
+      (u) =>
+        u.employee_id &&
+        u.employee_id.toString().trim().toLowerCase() === cleanId,
     );
 
     if (existingUser) {
-      setEmpStatus('already_user');
+      setEmpStatus("already_user");
       setExistingUserInfo(existingUser);
       setSelectedEmployee(null);
       return;
@@ -443,22 +541,24 @@ export default function MasterSetting() {
 
     // 2. Check if employee_id exists in hr_management_employees table
     const foundEmp = employeesList.find(
-      (e) => e.employee_id && e.employee_id.toString().trim().toLowerCase() === cleanId
+      (e) =>
+        e.employee_id &&
+        e.employee_id.toString().trim().toLowerCase() === cleanId,
     );
 
     if (foundEmp) {
-      setEmpStatus('ready');
+      setEmpStatus("ready");
       setSelectedEmployee(foundEmp);
       setExistingUserInfo(null);
       setNewUserForm((prev) => ({
         ...prev,
         employee_id: foundEmp.employee_id,
         username: foundEmp.name_as_per_aadhar || foundEmp.employee_id,
-        email: foundEmp.candidate_email || '',
-        shopName: foundEmp.joining_company_name || ''
+        email: foundEmp.candidate_email || "",
+        shopName: foundEmp.joining_company_name || "",
       }));
     } else {
-      setEmpStatus('ready_manual');
+      setEmpStatus("ready_manual");
       setSelectedEmployee(null);
       setExistingUserInfo(null);
       setNewUserForm((prev) => ({
@@ -472,52 +572,66 @@ export default function MasterSetting() {
   const handleCreateUser = async (e) => {
     if (e) e.preventDefault();
 
-    if (empStatus === 'already_user') {
-      showToast(`User already exists for Employee ID: ${newUserForm.employee_id || empSearchInput}`, 'error');
+    if (empStatus === "already_user") {
+      showToast(
+        `User already exists for Employee ID: ${newUserForm.employee_id || empSearchInput}`,
+        "error",
+      );
       return;
     }
 
-    const targetEmpId = newUserForm.employee_id || selectedEmployee?.employee_id;
+    const targetEmpId =
+      newUserForm.employee_id || selectedEmployee?.employee_id;
     if (!targetEmpId) {
-      showToast('Please search and verify a valid Employee ID first', 'error');
+      showToast("Please search and verify a valid Employee ID first", "error");
       return;
     }
 
     if (!newUserForm.username.trim() || !newUserForm.password.trim()) {
-      showToast('Username and password are required', 'error');
+      showToast("Username and password are required", "error");
       return;
     }
 
     setSaving(true);
 
     let initialPerms = [];
-    if (newUserForm.systemPreset === 'all') {
-      AVAILABLE_SYSTEMS.forEach(sys => {
-        const pages = sys.sections ? sys.sections.flatMap(s => s.pages) : (sys.pages || []);
-        pages.forEach(p => initialPerms.push(`${sys.id}.${p}.modify`));
+    if (newUserForm.systemPreset === "all") {
+      AVAILABLE_SYSTEMS.forEach((sys) => {
+        const pages = sys.sections
+          ? sys.sections.flatMap((s) => s.pages)
+          : sys.pages || [];
+        pages.forEach((p) => initialPerms.push(`${sys.id}.${p}.modify`));
       });
     } else if (newUserForm.systemPreset) {
-      const sys = AVAILABLE_SYSTEMS.find(s => s.id === newUserForm.systemPreset);
+      const sys = AVAILABLE_SYSTEMS.find(
+        (s) => s.id === newUserForm.systemPreset,
+      );
       if (sys) {
-        const pages = sys.sections ? sys.sections.flatMap(s => s.pages) : (sys.pages || []);
-        pages.forEach(p => initialPerms.push(`${sys.id}.${p}.modify`));
+        const pages = sys.sections
+          ? sys.sections.flatMap((s) => s.pages)
+          : sys.pages || [];
+        pages.forEach((p) => initialPerms.push(`${sys.id}.${p}.modify`));
       }
     }
 
     try {
-      const targetShop = newUserForm.shopName.trim() || selectedEmployee?.joining_company_name || null;
+      const targetShop =
+        newUserForm.shopName.trim() ||
+        selectedEmployee?.joining_company_name ||
+        null;
       const payload = {
         employee_id: targetEmpId,
         user_name: newUserForm.username.trim(),
         password: newUserForm.password.trim(),
-        role: newUserForm.role || 'user',
-        email_id: newUserForm.email.trim() || selectedEmployee?.candidate_email || null,
+        role: newUserForm.role || "user",
+        email_id:
+          newUserForm.email.trim() || selectedEmployee?.candidate_email || null,
         shop_name: targetShop,
         user_access: targetShop,
         can_self_assign: Boolean(newUserForm.can_self_assign),
-        status: 'active',
+        status: "active",
         master_user_system_page_access: initialPerms,
-        counter_access: newUserForm.counterAccess || []
+        counter_access: newUserForm.counterAccess || [],
       };
 
       if (selectedEmployee?.mobile_no) {
@@ -527,61 +641,80 @@ export default function MasterSetting() {
         }
       }
 
-      console.log('Inserting user with payload:', payload);
+      console.log("Inserting user with payload:", payload);
 
       const { data, error } = await supabase
-        .from('users')
+        .from("users")
         .insert([payload])
         .select();
 
       if (error) {
-        console.error('Supabase user creation error details:', error);
-        showToast(`Failed to create user: ${error.message}${error.details ? ` - ${error.details}` : ''}`, 'error');
+        console.error("Supabase user creation error details:", error);
+        showToast(
+          `Failed to create user: ${error.message}${error.details ? ` - ${error.details}` : ""}`,
+          "error",
+        );
       } else {
-        showToast(`User ${newUserForm.username} created successfully!`, 'success');
+        showToast(
+          `User ${newUserForm.username} created successfully!`,
+          "success",
+        );
         setShowAddModal(false);
         fetchUsers();
       }
     } catch (err) {
-      console.error('Create user exception:', err);
-      showToast(`Unexpected error during user creation: ${err.message || err}`, 'error');
+      console.error("Create user exception:", err);
+      showToast(
+        `Unexpected error during user creation: ${err.message || err}`,
+        "error",
+      );
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeleteUser = async (userObj) => {
-    const currentUserName = (currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim();
-    if (currentUserName !== 'masteradmin') {
-      showToast('Action restricted: Deleting users is only permitted for Master Admin.', 'error');
+    const currentUserName = (
+      currentUserObj?.user_name ||
+      currentUserObj?.username ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+    if (currentUserName !== "masteradmin") {
+      showToast(
+        "Action restricted: Deleting users is only permitted for Master Admin.",
+        "error",
+      );
       return;
     }
 
     const userId = userObj?.id;
-    const username = userObj?.user_name || userObj?.username || 'user';
-    const targetRole = (userObj?.role || '').toLowerCase().trim();
+    const username = userObj?.user_name || userObj?.username || "user";
+    const targetRole = (userObj?.role || "").toLowerCase().trim();
 
-    if (targetRole === 'admin') {
-      showToast('Action restricted: Admin role users cannot be deleted.', 'error');
+    if (targetRole === "admin") {
+      showToast(
+        "Action restricted: Admin role users cannot be deleted.",
+        "error",
+      );
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to delete user "${username}"?`)) return;
+    if (!window.confirm(`Are you sure you want to delete user "${username}"?`))
+      return;
     try {
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', userId);
+      const { error } = await supabase.from("users").delete().eq("id", userId);
 
       if (error) {
-        showToast(`Failed to delete user: ${error.message}`, 'error');
+        showToast(`Failed to delete user: ${error.message}`, "error");
       } else {
-        showToast(`User ${username} deleted successfully`, 'success');
+        showToast(`User ${username} deleted successfully`, "success");
         fetchUsers();
       }
     } catch (err) {
-      console.error('Delete error:', err);
-      showToast('Unexpected error during deletion', 'error');
+      console.error("Delete error:", err);
+      showToast("Unexpected error during deletion", "error");
     }
   };
 
@@ -589,14 +722,20 @@ export default function MasterSetting() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const [{ data: usersData, error: usersErr }, { data: empData, error: empErr }] = await Promise.all([
-        supabase.from('users').select('*').order('user_name', { ascending: true }),
-        supabase.from('hr_management_employees').select('*')
+      const [
+        { data: usersData, error: usersErr },
+        { data: empData, error: empErr },
+      ] = await Promise.all([
+        supabase
+          .from("users")
+          .select("*")
+          .order("user_name", { ascending: true }),
+        supabase.from("hr_management_employees").select("*"),
       ]);
 
       if (usersErr) {
-        console.error('Error fetching users:', usersErr);
-        showToast(`Error fetching users: ${usersErr.message}`, 'error');
+        console.error("Error fetching users:", usersErr);
+        showToast(`Error fetching users: ${usersErr.message}`, "error");
       } else {
         const empMapByEmpId = new Map();
         const empMapByName = new Map();
@@ -615,36 +754,73 @@ export default function MasterSetting() {
               details.mobile_no ||
               details.mobile ||
               details.phone ||
-              ''
-            ).toString().trim();
+              ""
+            )
+              .toString()
+              .trim();
 
-            const fullName = (emp.name_as_per_aadhar || emp.candidate_name || details.name_as_per_aadhar || details.candidate_name || '').toString().trim();
+            const fullName = (
+              emp.name_as_per_aadhar ||
+              emp.candidate_name ||
+              details.name_as_per_aadhar ||
+              details.candidate_name ||
+              ""
+            )
+              .toString()
+              .trim();
 
             const empId = emp.employee_id || details.employee_id;
             if (empId) {
               const cleanEmpId = empId.toString().trim().toLowerCase();
-              if (mobile && mobile !== '-' && mobile !== '—') empMapByEmpId.set(cleanEmpId, mobile);
+              if (mobile && mobile !== "-" && mobile !== "—")
+                empMapByEmpId.set(cleanEmpId, mobile);
               if (fullName) empNameMapByEmpId.set(cleanEmpId, fullName);
             }
 
-            const cleanAadharName = (emp.name_as_per_aadhar || details.name_as_per_aadhar || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const cleanCandName = (emp.candidate_name || details.candidate_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cleanAadharName = (
+              emp.name_as_per_aadhar ||
+              details.name_as_per_aadhar ||
+              ""
+            )
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "");
+            const cleanCandName = (
+              emp.candidate_name ||
+              details.candidate_name ||
+              ""
+            )
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "");
             if (cleanAadharName) {
-              if (mobile && mobile !== '-' && mobile !== '—') empMapByName.set(cleanAadharName, mobile);
+              if (mobile && mobile !== "-" && mobile !== "—")
+                empMapByName.set(cleanAadharName, mobile);
               if (fullName) empNameMapByName.set(cleanAadharName, fullName);
             }
             if (cleanCandName) {
-              if (mobile && mobile !== '-' && mobile !== '—') empMapByName.set(cleanCandName, mobile);
+              if (mobile && mobile !== "-" && mobile !== "—")
+                empMapByName.set(cleanCandName, mobile);
               if (fullName) empNameMapByName.set(cleanCandName, fullName);
             }
           });
         }
 
         const enrichedUsers = (usersData || []).map((u) => {
-          let mobileNum = (u.number || u.mobile || u.mobile_number || u.phone || '').toString().trim();
-          let hrEmpName = '';
-          const uEmpId = u.employee_id ? u.employee_id.toString().trim().toLowerCase() : '';
-          const uName = (u.user_name || u.username || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          let mobileNum = (
+            u.number ||
+            u.mobile ||
+            u.mobile_number ||
+            u.phone ||
+            ""
+          )
+            .toString()
+            .trim();
+          let hrEmpName = "";
+          const uEmpId = u.employee_id
+            ? u.employee_id.toString().trim().toLowerCase()
+            : "";
+          const uName = (u.user_name || u.username || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
 
           if (!mobileNum) {
             if (uEmpId && empMapByEmpId.has(uEmpId)) {
@@ -653,7 +829,11 @@ export default function MasterSetting() {
               mobileNum = empMapByName.get(uName);
             } else {
               for (const [empNameClean, mobile] of empMapByName.entries()) {
-                if (empNameClean && uName && (empNameClean.includes(uName) || uName.includes(empNameClean))) {
+                if (
+                  empNameClean &&
+                  uName &&
+                  (empNameClean.includes(uName) || uName.includes(empNameClean))
+                ) {
                   mobileNum = mobile;
                   break;
                 }
@@ -667,7 +847,11 @@ export default function MasterSetting() {
             hrEmpName = empNameMapByName.get(uName);
           } else {
             for (const [empNameClean, fName] of empNameMapByName.entries()) {
-              if (empNameClean && uName && (empNameClean.includes(uName) || uName.includes(empNameClean))) {
+              if (
+                empNameClean &&
+                uName &&
+                (empNameClean.includes(uName) || uName.includes(empNameClean))
+              ) {
                 hrEmpName = fName;
                 break;
               }
@@ -676,15 +860,15 @@ export default function MasterSetting() {
 
           return {
             ...u,
-            emp_name: hrEmpName || u.user_name || u.username || '—',
-            number: mobileNum || null
+            emp_name: hrEmpName || u.user_name || u.username || "—",
+            number: mobileNum || null,
           };
         });
 
         setUsers(enrichedUsers);
       }
     } catch (err) {
-      console.error('Exception fetching users:', err);
+      console.error("Exception fetching users:", err);
     } finally {
       setLoading(false);
     }
@@ -694,29 +878,29 @@ export default function MasterSetting() {
   const fetchShops = async () => {
     try {
       const { data, error } = await supabase
-        .from('shop')
-        .select('shop_name')
-        .order('shop_name', { ascending: true });
+        .from("shop")
+        .select("shop_name")
+        .order("shop_name", { ascending: true });
       if (!error && data) {
-        const names = data.map(s => s.shop_name).filter(Boolean);
+        const names = data.map((s) => s.shop_name).filter(Boolean);
         setAvailableShops(names);
       }
     } catch (err) {
-      console.error('Exception fetching shops:', err);
+      console.error("Exception fetching shops:", err);
     }
   };
 
   const fetchCounters = async () => {
     try {
       const { data, error } = await supabase
-        .from('master_counter')
-        .select('name')
-        .order('name', { ascending: true });
+        .from("master_counter")
+        .select("name")
+        .order("name", { ascending: true });
       if (!error && data) {
-        setAvailableCounters(data.map(c => c.name));
+        setAvailableCounters(data.map((c) => c.name));
       }
     } catch (err) {
-      console.error('Exception fetching counters:', err);
+      console.error("Exception fetching counters:", err);
     }
   };
 
@@ -727,39 +911,45 @@ export default function MasterSetting() {
   }, []);
 
   const selectedShopsList = shopNameInput
-    ? shopNameInput.split(',').map(s => s.trim()).filter(Boolean)
+    ? shopNameInput
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
 
   const handleToggleShop = (shopName) => {
     let updated;
     if (selectedShopsList.includes(shopName)) {
-      updated = selectedShopsList.filter(s => s !== shopName);
+      updated = selectedShopsList.filter((s) => s !== shopName);
     } else {
       updated = [...selectedShopsList, shopName];
     }
-    setShopNameInput(updated.join(', '));
+    setShopNameInput(updated.join(", "));
   };
 
   const handleSelectAllShops = () => {
     if (selectedShopsList.length === availableShops.length) {
-      setShopNameInput('');
+      setShopNameInput("");
     } else {
-      setShopNameInput(availableShops.join(', '));
+      setShopNameInput(availableShops.join(", "));
     }
   };
 
   const selectedNewUserShopsList = newUserForm.shopName
-    ? newUserForm.shopName.split(',').map(s => s.trim()).filter(Boolean)
+    ? newUserForm.shopName
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
 
   const handleToggleNewUserShop = (shopName) => {
     let updated;
     if (selectedNewUserShopsList.includes(shopName)) {
-      updated = selectedNewUserShopsList.filter(s => s !== shopName);
+      updated = selectedNewUserShopsList.filter((s) => s !== shopName);
     } else {
       updated = [...selectedNewUserShopsList, shopName];
     }
-    setNewUserForm({ ...newUserForm, shopName: updated.join(', ') });
+    setNewUserForm({ ...newUserForm, shopName: updated.join(", ") });
   };
 
   const togglePasswordVisibility = (userId) => {
@@ -770,24 +960,29 @@ export default function MasterSetting() {
   const handleOpenEdit = (user) => {
     setEditingUser({
       ...user,
-      can_self_assign: Boolean(user.can_self_assign)
+      can_self_assign: Boolean(user.can_self_assign),
     });
-    setUserStatusInput((user.status || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active');
-    setUsernameInput(user.user_name || user.username || '');
-    setMobileInput(user.number || user.mobile || user.phone || '');
+    setUserStatusInput(
+      (user.status || "active").toLowerCase() === "inactive"
+        ? "inactive"
+        : "active",
+    );
+    setUsernameInput(user.user_name || user.username || "");
+    setMobileInput(user.number || user.mobile || user.phone || "");
 
-    let normalizedRole = 'User';
-    const rLower = (user.role || '').toLowerCase().trim();
-    if (rLower === 'manager') normalizedRole = 'Manager';
-    else if (rLower === 'hod') normalizedRole = 'HOD';
-    else if (rLower === 'admin') normalizedRole = 'Admin';
-    else if (rLower === 'employee' || rLower === 'user') normalizedRole = 'User';
+    let normalizedRole = "User";
+    const rLower = (user.role || "").toLowerCase().trim();
+    if (rLower === "manager") normalizedRole = "Manager";
+    else if (rLower === "hod") normalizedRole = "HOD";
+    else if (rLower === "admin") normalizedRole = "Admin";
+    else if (rLower === "employee" || rLower === "user")
+      normalizedRole = "User";
     else if (user.role) normalizedRole = user.role;
     setRoleInput(normalizedRole);
 
-    setPasswordInput(user.password || '');
-    setPrimaryShopInput(user.shop_name || '');
-    setShopNameInput(user.user_access || user.shop_name || '');
+    setPasswordInput(user.password || "");
+    setPrimaryShopInput(user.shop_name || "");
+    setShopNameInput(user.user_access || user.shop_name || "");
     setCounterAccessInput(user.counter_access || []);
 
     // Parse master_user_system_page_access
@@ -795,7 +990,7 @@ export default function MasterSetting() {
     const rawVal = user.master_user_system_page_access;
     let parsed = rawVal;
 
-    if (typeof rawVal === 'string') {
+    if (typeof rawVal === "string") {
       try {
         parsed = JSON.parse(rawVal);
       } catch (e) {
@@ -805,19 +1000,25 @@ export default function MasterSetting() {
 
     if (Array.isArray(parsed)) {
       parsed.forEach((item) => {
-        if (typeof item === 'string') {
-          let normalizedItem = item.replace(/^petty_cash\./, 'petty-cash.');
-          if (normalizedItem.includes('.bank audit.')) {
-            normalizedItem = normalizedItem.replace('.bank audit.', '.Bank Audit.');
+        if (typeof item === "string") {
+          let normalizedItem = item.replace(/^petty_cash\./, "petty-cash.");
+          if (normalizedItem.includes(".bank audit.")) {
+            normalizedItem = normalizedItem.replace(
+              ".bank audit.",
+              ".Bank Audit.",
+            );
           }
           permObj[normalizedItem] = normalizedItem;
         }
       });
-    } else if (parsed && typeof parsed === 'object') {
+    } else if (parsed && typeof parsed === "object") {
       Object.keys(parsed).forEach((item) => {
-        let normalizedItem = item.replace(/^petty_cash\./, 'petty-cash.');
-        if (normalizedItem.includes('.bank audit.')) {
-          normalizedItem = normalizedItem.replace('.bank audit.', '.Bank Audit.');
+        let normalizedItem = item.replace(/^petty_cash\./, "petty-cash.");
+        if (normalizedItem.includes(".bank audit.")) {
+          normalizedItem = normalizedItem.replace(
+            ".bank audit.",
+            ".Bank Audit.",
+          );
         }
         permObj[normalizedItem] = normalizedItem;
       });
@@ -832,7 +1033,7 @@ export default function MasterSetting() {
     const initialArray = Object.keys(permObj);
     setRawJsonText(JSON.stringify(initialArray, null, 2));
     setJsonMode(false);
-    setJsonError('');
+    setJsonError("");
   };
 
   // Permission Key Helpers
@@ -842,30 +1043,32 @@ export default function MasterSetting() {
     const keys = Object.keys(accessPermissions);
 
     const aliases = [pageLower];
-    if (pageLower === 'shop') aliases.push('shops', 'joining shop');
-    if (pageLower === 'counter') aliases.push('counters');
-    if (pageLower === 'expenses') aliases.push('expense categories');
-    if (pageLower === 'user & system access') aliases.push('master setting', 'user access');
+    if (pageLower === "shop") aliases.push("shops", "joining shop");
+    if (pageLower === "counter") aliases.push("counters");
+    if (pageLower === "expenses") aliases.push("expense categories");
+    if (pageLower === "user & system access")
+      aliases.push("master setting", "user access");
 
-    let level = 'none';
+    let level = "none";
     keys.forEach((key) => {
-      if (typeof key !== 'string') return;
+      if (typeof key !== "string") return;
       const kLower = key.toLowerCase().trim();
       aliases.forEach((alias) => {
         const sysDash = sysIdLower;
-        const sysUnder = sysIdLower.replace('-', '_');
+        const sysUnder = sysIdLower.replace("-", "_");
         if (
           kLower === `${sysDash}.${alias}.modify` ||
           kLower === `${sysUnder}.${alias}.modify` ||
           kLower === `${sysDash}.${alias}` ||
           kLower === `${sysUnder}.${alias}`
         ) {
-          level = 'modify';
+          level = "modify";
         } else if (
-          (kLower === `${sysDash}.${alias}.view` || kLower === `${sysUnder}.${alias}.view`) &&
-          level !== 'modify'
+          (kLower === `${sysDash}.${alias}.view` ||
+            kLower === `${sysUnder}.${alias}.view`) &&
+          level !== "modify"
         ) {
-          level = 'view';
+          level = "view";
         }
       });
     });
@@ -878,10 +1081,11 @@ export default function MasterSetting() {
     const pageLower = pageName.toLowerCase();
 
     const aliases = [pageName];
-    if (pageLower === 'shop') aliases.push('Shops', 'Joining shop');
-    if (pageLower === 'counter') aliases.push('Counters');
-    if (pageLower === 'expenses') aliases.push('Expense Categories');
-    if (pageLower === 'user & system access') aliases.push('User Access', 'Master Setting');
+    if (pageLower === "shop") aliases.push("Shops", "Joining shop");
+    if (pageLower === "counter") aliases.push("Counters");
+    if (pageLower === "expenses") aliases.push("Expense Categories");
+    if (pageLower === "user & system access")
+      aliases.push("User Access", "Master Setting");
 
     const updated = { ...accessPermissions };
 
@@ -890,7 +1094,7 @@ export default function MasterSetting() {
       aliases.forEach((alias) => {
         const aLower = alias.toLowerCase();
         const sysDash = sysIdLower;
-        const sysUnder = sysIdLower.replace('-', '_');
+        const sysUnder = sysIdLower.replace("-", "_");
         if (
           kLower === `${sysDash}.${aLower}.view` ||
           kLower === `${sysDash}.${aLower}.modify` ||
@@ -905,9 +1109,9 @@ export default function MasterSetting() {
     });
 
     const targetKey = `${systemId}.${pageName}`;
-    if (level === 'view') {
+    if (level === "view") {
       updated[`${targetKey}.view`] = `${targetKey}.view`;
-    } else if (level === 'modify') {
+    } else if (level === "modify") {
       updated[`${targetKey}.modify`] = `${targetKey}.modify`;
     }
 
@@ -918,19 +1122,19 @@ export default function MasterSetting() {
   const setSystemLevel = (system, level) => {
     const allPages = [];
     if (system.sections) {
-      system.sections.forEach(sec => allPages.push(...sec.pages));
+      system.sections.forEach((sec) => allPages.push(...sec.pages));
     } else if (system.pages) {
       allPages.push(...system.pages);
     }
     const updated = { ...accessPermissions };
-    allPages.forEach(pg => {
+    allPages.forEach((pg) => {
       const viewKey = `${system.id}.${pg}.view`;
       const modifyKey = `${system.id}.${pg}.modify`;
       delete updated[viewKey];
       delete updated[modifyKey];
-      if (level === 'view') {
+      if (level === "view") {
         updated[viewKey] = viewKey;
-      } else if (level === 'modify') {
+      } else if (level === "modify") {
         updated[modifyKey] = modifyKey;
       }
     });
@@ -944,14 +1148,16 @@ export default function MasterSetting() {
       const parsed = JSON.parse(val);
       let updated = {};
       if (Array.isArray(parsed)) {
-        parsed.forEach((k) => { updated[k] = k; });
-      } else if (parsed && typeof parsed === 'object') {
+        parsed.forEach((k) => {
+          updated[k] = k;
+        });
+      } else if (parsed && typeof parsed === "object") {
         updated = { ...parsed };
       }
       setAccessPermissions(updated);
-      setJsonError('');
+      setJsonError("");
     } catch (err) {
-      setJsonError('Invalid JSON format');
+      setJsonError("Invalid JSON format");
     }
   };
 
@@ -963,12 +1169,13 @@ export default function MasterSetting() {
     const finalAccess = Object.keys(accessPermissions);
     const primaryShopVal = primaryShopInput.trim() || null;
     const shopAccessVal = shopNameInput.trim() || primaryShopVal || null;
-    const finalUserName = usernameInput.trim() || editingUser.user_name || editingUser.username;
+    const finalUserName =
+      usernameInput.trim() || editingUser.user_name || editingUser.username;
     const finalMobile = mobileInput.trim() || null;
 
     try {
       const { error } = await supabase
-        .from('users')
+        .from("users")
         .update({
           user_name: finalUserName,
           role: roleInput,
@@ -979,50 +1186,74 @@ export default function MasterSetting() {
           user_access: shopAccessVal,
           can_self_assign: Boolean(editingUser.can_self_assign),
           master_user_system_page_access: finalAccess,
-          counter_access: counterAccessInput
+          counter_access: counterAccessInput,
         })
-        .eq('id', editingUser.id);
+        .eq("id", editingUser.id);
 
       if (error) {
-        showToast(`Failed to update user: ${error.message}`, 'error');
+        showToast(`Failed to update user: ${error.message}`, "error");
       } else {
         // Sync status, assigned primary shop, name and mobile number to hr_management_employees table
-        const hrStatusVal = userStatusInput === 'active' ? 'Active' : 'Inactive';
-        const empIdStr = (editingUser.employee_id || '').toString().trim();
+        const hrStatusVal =
+          userStatusInput === "active" ? "Active" : "Inactive";
+        const empIdStr = (editingUser.employee_id || "").toString().trim();
         const userNameStr = finalUserName;
-        const oldMobile = (editingUser.number || editingUser.mobile || '').toString().trim();
+        const oldMobile = (editingUser.number || editingUser.mobile || "")
+          .toString()
+          .trim();
 
         let targetEmpId = null;
 
         // Query all employees to perform multi-stage matching
         const { data: allEmps } = await supabase
-          .from('hr_management_employees')
-          .select('id, employee_id, name_as_per_aadhar, mobile_no, candidate_mobile');
+          .from("hr_management_employees")
+          .select(
+            "id, employee_id, name_as_per_aadhar, mobile_no, candidate_mobile",
+          );
 
         if (allEmps && allEmps.length > 0) {
           // 1. Try matching by employee_id (string comparison)
           if (empIdStr) {
-            const matched = allEmps.find(e => e.employee_id && String(e.employee_id).trim().toLowerCase() === empIdStr.toLowerCase());
+            const matched = allEmps.find(
+              (e) =>
+                e.employee_id &&
+                String(e.employee_id).trim().toLowerCase() ===
+                  empIdStr.toLowerCase(),
+            );
             if (matched) targetEmpId = matched.employee_id;
           }
 
           // 2. Try matching by old or new mobile number
           if (!targetEmpId && (oldMobile || finalMobile)) {
-            const cleanOld = oldMobile.replace(/[^0-9]/g, '');
-            const cleanNew = (finalMobile || '').replace(/[^0-9]/g, '');
-            const matched = allEmps.find(e => {
-              const eMob = String(e.mobile_no || e.candidate_mobile || '').replace(/[^0-9]/g, '');
-              return eMob && ((cleanOld && eMob === cleanOld) || (cleanNew && eMob === cleanNew));
+            const cleanOld = oldMobile.replace(/[^0-9]/g, "");
+            const cleanNew = (finalMobile || "").replace(/[^0-9]/g, "");
+            const matched = allEmps.find((e) => {
+              const eMob = String(
+                e.mobile_no || e.candidate_mobile || "",
+              ).replace(/[^0-9]/g, "");
+              return (
+                eMob &&
+                ((cleanOld && eMob === cleanOld) ||
+                  (cleanNew && eMob === cleanNew))
+              );
             });
             if (matched) targetEmpId = matched.employee_id;
           }
 
           // 3. Try matching by name
           if (!targetEmpId && userNameStr) {
-            const uClean = userNameStr.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const matched = allEmps.find(e => {
-              const eNameClean = (e.name_as_per_aadhar || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              return eNameClean && uClean && (eNameClean === uClean || eNameClean.includes(uClean) || uClean.includes(eNameClean));
+            const uClean = userNameStr.toLowerCase().replace(/[^a-z0-9]/g, "");
+            const matched = allEmps.find((e) => {
+              const eNameClean = (e.name_as_per_aadhar || "")
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+              return (
+                eNameClean &&
+                uClean &&
+                (eNameClean === uClean ||
+                  eNameClean.includes(uClean) ||
+                  uClean.includes(eNameClean))
+              );
             });
             if (matched) targetEmpId = matched.employee_id;
           }
@@ -1032,38 +1263,45 @@ export default function MasterSetting() {
           // Link employee_id back to users table if missing
           if (!empIdStr) {
             await supabase
-              .from('users')
+              .from("users")
               .update({ employee_id: targetEmpId })
-              .eq('id', editingUser.id);
+              .eq("id", editingUser.id);
           }
 
           const hrUpdatePayload = {
             status: hrStatusVal,
             joining_company_name: primaryShopVal,
-            designation: roleInput
+            designation: roleInput,
           };
           if (finalMobile) {
             hrUpdatePayload.mobile_no = finalMobile;
           }
 
           const { error: hrErr } = await supabase
-            .from('hr_management_employees')
+            .from("hr_management_employees")
             .update(hrUpdatePayload)
-            .eq('employee_id', targetEmpId);
+            .eq("employee_id", targetEmpId);
 
           if (hrErr) {
-            console.error('Could not sync status/shop/designation to hr_management_employees:', hrErr);
+            console.error(
+              "Could not sync status/shop/designation to hr_management_employees:",
+              hrErr,
+            );
           }
         }
 
-        showToast(`User ${editingUser.user_name || editingUser.username} updated successfully!`, 'success');
-
-        const isCurrentLoggedIn = currentUserObj && (
-          String(currentUserObj.id) === String(editingUser.id) ||
-          (currentUserObj.user_name || currentUserObj.username) === (editingUser.user_name || editingUser.username)
+        showToast(
+          `User ${editingUser.user_name || editingUser.username} updated successfully!`,
+          "success",
         );
+
+        const isCurrentLoggedIn =
+          currentUserObj &&
+          (String(currentUserObj.id) === String(editingUser.id) ||
+            (currentUserObj.user_name || currentUserObj.username) ===
+              (editingUser.user_name || editingUser.username));
         if (isCurrentLoggedIn) {
-          ['user', 'drinqkart_user', 'currentUser'].forEach(key => {
+          ["user", "drinqkart_user", "currentUser"].forEach((key) => {
             const raw = localStorage.getItem(key);
             if (raw) {
               try {
@@ -1084,8 +1322,8 @@ export default function MasterSetting() {
         fetchUsers();
       }
     } catch (err) {
-      console.error('Update error:', err);
-      showToast('Unexpected error during update', 'error');
+      console.error("Update error:", err);
+      showToast("Unexpected error during update", "error");
     } finally {
       setSaving(false);
     }
@@ -1093,16 +1331,20 @@ export default function MasterSetting() {
 
   const filteredUsers = users.filter((u) => {
     const termLower = searchTerm.toLowerCase().trim();
-    const uName = (u.user_name || u.username || '').toLowerCase();
-    const eName = (u.emp_name || '').toLowerCase();
-    const empId = (u.employee_id || '').toLowerCase();
+    const uName = (u.user_name || u.username || "").toLowerCase();
+    const eName = (u.emp_name || "").toLowerCase();
+    const empId = (u.employee_id || "").toLowerCase();
 
-    const matchesSearch = !termLower || uName.includes(termLower) || eName.includes(termLower) || empId.includes(termLower);
+    const matchesSearch =
+      !termLower ||
+      uName.includes(termLower) ||
+      eName.includes(termLower) ||
+      empId.includes(termLower);
     if (!matchesSearch) return false;
 
     if (shopFilter) {
-      const uShop = (u.shop_name || '').toLowerCase();
-      const uAccess = (u.user_access || '').toLowerCase();
+      const uShop = (u.shop_name || "").toLowerCase();
+      const uAccess = (u.user_access || "").toLowerCase();
       const filterLower = shopFilter.toLowerCase();
       return uShop.includes(filterLower) || uAccess.includes(filterLower);
     }
@@ -1111,36 +1353,47 @@ export default function MasterSetting() {
 
   // Helper to check permission level for a given Master Setting module: returns 'modify' | 'view' | 'none'
   const getMasterSettingPagePermission = (pageLabel) => {
-    if (!currentUserObj) return 'none';
-    const userName = (currentUserObj.user_name || currentUserObj.username || '').toLowerCase().trim();
-    if (userName === 'masteradmin') return 'modify';
+    if (!currentUserObj) return "none";
+    const userName = (currentUserObj.user_name || currentUserObj.username || "")
+      .toLowerCase()
+      .trim();
+    if (userName === "masteradmin") return "modify";
 
-    const role = (currentUserObj.role || '').toLowerCase().trim();
+    const role = (currentUserObj.role || "").toLowerCase().trim();
 
     let masterAccess = [];
-    const rawVal = currentUserObj.master_user_system_page_access || localStorage.getItem('master_user_system_page_access');
+    const rawVal =
+      currentUserObj.master_user_system_page_access ||
+      localStorage.getItem("master_user_system_page_access");
     let parsed = rawVal;
-    if (typeof rawVal === 'string') {
-      try { parsed = JSON.parse(rawVal); } catch (e) { parsed = []; }
+    if (typeof rawVal === "string") {
+      try {
+        parsed = JSON.parse(rawVal);
+      } catch (e) {
+        parsed = [];
+      }
     }
     if (Array.isArray(parsed)) {
       masterAccess = parsed;
-    } else if (parsed && typeof parsed === 'object') {
+    } else if (parsed && typeof parsed === "object") {
       masterAccess = Object.keys(parsed);
     }
 
     if (masterAccess.length > 0) {
       const labelsToCheck = [pageLabel];
-      if (pageLabel.toLowerCase() === 'shop') labelsToCheck.push('shops', 'joining shop');
-      if (pageLabel.toLowerCase() === 'counter') labelsToCheck.push('counters');
-      if (pageLabel.toLowerCase() === 'expenses') labelsToCheck.push('expense categories');
-      if (pageLabel.toLowerCase() === 'user & system access') labelsToCheck.push('master setting', 'user access');
+      if (pageLabel.toLowerCase() === "shop")
+        labelsToCheck.push("shops", "joining shop");
+      if (pageLabel.toLowerCase() === "counter") labelsToCheck.push("counters");
+      if (pageLabel.toLowerCase() === "expenses")
+        labelsToCheck.push("expense categories");
+      if (pageLabel.toLowerCase() === "user & system access")
+        labelsToCheck.push("master setting", "user access");
 
       let hasModify = false;
       let hasView = false;
 
       masterAccess.forEach((item) => {
-        if (typeof item !== 'string') return;
+        if (typeof item !== "string") return;
         const itemLower = item.toLowerCase().trim();
         labelsToCheck.forEach((lbl) => {
           const lblLower = lbl.toLowerCase().trim();
@@ -1160,45 +1413,55 @@ export default function MasterSetting() {
         });
       });
 
-      if (hasModify) return 'modify';
-      if (hasView) return 'view';
-      if (role === 'admin') return 'modify';
-      return 'none';
+      if (hasModify) return "modify";
+      if (hasView) return "view";
+      if (role === "admin") return "modify";
+      return "none";
     }
 
-    if (role === 'admin') return 'modify';
-    return 'none';
+    if (role === "admin") return "modify";
+    return "none";
   };
 
   const location = useLocation();
 
-  const purchaseSettingsPerm = getMasterSettingPagePermission('Purchase Settings');
-  const shopPerm = getMasterSettingPagePermission('Shop');
-  const counterPerm = getMasterSettingPagePermission('Counter');
-  const expensesPerm = getMasterSettingPagePermission('Expenses');
+  const purchaseSettingsPerm =
+    getMasterSettingPagePermission("Purchase Settings");
+  const shopPerm = getMasterSettingPagePermission("Shop");
+  const counterPerm = getMasterSettingPagePermission("Counter");
+  const expensesPerm = getMasterSettingPagePermission("Expenses");
 
   // Sub-route: Purchase Settings
   if (
-    location.pathname.includes('/purchase-settings') ||
-    location.pathname.includes('/purchase-setting') ||
-    location.pathname.endsWith('/settings')
+    location.pathname.includes("/purchase-settings") ||
+    location.pathname.includes("/purchase-setting") ||
+    location.pathname.endsWith("/settings")
   ) {
-    return <PurchaseSettings readOnly={purchaseSettingsPerm === 'view'} />;
+    return <PurchaseSettings readOnly={purchaseSettingsPerm === "view"} />;
   }
 
   // Sub-route: Shop (Joining Company)
-  if (location.pathname.includes('/Shop') || location.pathname.toLowerCase().includes('/shop')) {
-    return <JoiningCompany readOnly={shopPerm === 'view'} />;
+  if (
+    location.pathname.includes("/Shop") ||
+    location.pathname.toLowerCase().includes("/shop")
+  ) {
+    return <JoiningCompany readOnly={shopPerm === "view"} />;
   }
 
   // Sub-route: Counter
-  if (location.pathname.includes('/Counter') || location.pathname.toLowerCase().includes('/counter')) {
-    return <CounterManagement readOnly={counterPerm === 'view'} />;
+  if (
+    location.pathname.includes("/Counter") ||
+    location.pathname.toLowerCase().includes("/counter")
+  ) {
+    return <CounterManagement readOnly={counterPerm === "view"} />;
   }
 
   // Sub-route: Expenses
-  if (location.pathname.includes('/Expenses') || location.pathname.toLowerCase().includes('/expenses')) {
-    return <ExpensesManagement readOnly={expensesPerm === 'view'} />;
+  if (
+    location.pathname.includes("/Expenses") ||
+    location.pathname.toLowerCase().includes("/expenses")
+  ) {
+    return <ExpensesManagement readOnly={expensesPerm === "view"} />;
   }
 
   return (
@@ -1206,10 +1469,11 @@ export default function MasterSetting() {
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          className={`fixed top-5 right-5 z-50 px-5 py-3 rounded border text-xs font-bold uppercase tracking-wider shadow-xl transition-all ${toastMessage.type === 'error'
-            ? 'bg-red-950 text-red-100 border-red-800'
-            : 'bg-[#1A1A1A] text-[#C9A84C] border-[#C9A84C]'
-            }`}
+          className={`fixed top-5 right-5 z-50 px-5 py-3 rounded border text-xs font-bold uppercase tracking-wider shadow-xl transition-all ${
+            toastMessage.type === "error"
+              ? "bg-red-950 text-red-100 border-red-800"
+              : "bg-[#1A1A1A] text-[#C9A84C] border-[#C9A84C]"
+          }`}
         >
           {toastMessage.msg}
         </div>
@@ -1239,7 +1503,8 @@ export default function MasterSetting() {
             </button>
           ) : (
             <span className="px-3.5 py-2 bg-amber-50 text-amber-800 border border-amber-300 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
-              <ShieldCheck size={14} className="text-amber-600" /> View Only Mode
+              <ShieldCheck size={14} className="text-amber-600" /> View Only
+              Mode
             </span>
           )}
 
@@ -1248,7 +1513,7 @@ export default function MasterSetting() {
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#C9A84C] rounded-none text-xs font-bold uppercase tracking-widest transition-colors border border-[#C9A84C]/30 shadow-sm cursor-pointer"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             <span>Refresh</span>
           </button>
         </div>
@@ -1258,7 +1523,10 @@ export default function MasterSetting() {
       <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-1 max-w-xl min-w-[280px]">
           <div className="relative flex-1 min-w-[200px]">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40" />
+            <Search
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40"
+            />
             <input
               type="text"
               value={searchTerm}
@@ -1282,7 +1550,10 @@ export default function MasterSetting() {
                 </option>
               ))}
             </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/50 pointer-events-none" />
+            <ChevronDown
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/50 pointer-events-none"
+            />
           </div>
 
           {/* Select Columns Dropdown */}
@@ -1294,7 +1565,10 @@ export default function MasterSetting() {
             >
               <Columns size={15} className="text-[#C9A84C]" />
               <span>Select Columns</span>
-              <ChevronDown size={14} className={`text-slate-400 transition-transform ${showColumnDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown
+                size={14}
+                className={`text-slate-400 transition-transform ${showColumnDropdown ? "rotate-180" : ""}`}
+              />
             </button>
 
             {showColumnDropdown && (
@@ -1302,7 +1576,7 @@ export default function MasterSetting() {
                 <div className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/50 px-2 py-1 border-b border-[#1A1A1A]/10 mb-1">
                   Toggle Visible Columns
                 </div>
-                {COLUMN_DEFINITIONS.map(col => {
+                {COLUMN_DEFINITIONS.map((col) => {
                   const isChecked = visibleColumns.includes(col.key);
                   return (
                     <label
@@ -1313,10 +1587,10 @@ export default function MasterSetting() {
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => {
-                          setVisibleColumns(prev =>
+                          setVisibleColumns((prev) =>
                             prev.includes(col.key)
-                              ? prev.filter(k => k !== col.key)
-                              : [...prev, col.key]
+                              ? prev.filter((k) => k !== col.key)
+                              : [...prev, col.key],
                           );
                         }}
                         className="w-4 h-4 text-[#C9A84C] accent-[#C9A84C] rounded"
@@ -1331,7 +1605,13 @@ export default function MasterSetting() {
         </div>
 
         <div className="text-xs font-bold text-[#1A1A1A]/70 px-1 font-mono">
-          Showing <span className="text-[#C9A84C] font-extrabold">{filteredUsers.length}</span> of <span className="text-[#1A1A1A] font-extrabold">{users.length}</span> users
+          Showing{" "}
+          <span className="text-[#C9A84C] font-extrabold">
+            {filteredUsers.length}
+          </span>{" "}
+          of{" "}
+          <span className="text-[#1A1A1A] font-extrabold">{users.length}</span>{" "}
+          users
         </div>
       </div>
 
@@ -1342,53 +1622,89 @@ export default function MasterSetting() {
             <thead className="sticky top-0 z-10 bg-[#1A1A1A]">
               <tr className="bg-[#1A1A1A] border-b border-[#1A1A1A] uppercase font-serif text-[#C9A84C] tracking-[0.15em] text-[10.5px]">
                 <th className="py-2.5 px-3 w-20">Actions</th>
-                {visibleColumns.includes('employee_id') && <th className="py-2.5 px-3">Emp ID</th>}
-                {visibleColumns.includes('emp_name') && <th className="py-2.5 px-3">Emp Name</th>}
-                {visibleColumns.includes('user_name') && <th className="py-2.5 px-3">User Name</th>}
-                {visibleColumns.includes('role') && <th className="py-2.5 px-3">Role</th>}
-                {visibleColumns.includes('shop_name') && <th className="py-2.5 px-3">Shop Name</th>}
-                {visibleColumns.includes('number') && <th className="py-2.5 px-3">Mobile Number</th>}
-                {visibleColumns.includes('password') && <th className="py-2.5 px-3">Password</th>}
-                {visibleColumns.includes('page_access') && <th className="py-2.5 px-3">Master System Page Access</th>}
-                {visibleColumns.includes('counter_access') && <th className="py-2.5 px-3">MASTER SYSTEM COUNTER ACCESS</th>}
+                {visibleColumns.includes("employee_id") && (
+                  <th className="py-2.5 px-3">Emp ID</th>
+                )}
+                {visibleColumns.includes("emp_name") && (
+                  <th className="py-2.5 px-3">Emp Name</th>
+                )}
+                {visibleColumns.includes("user_name") && (
+                  <th className="py-2.5 px-3">User Name</th>
+                )}
+                {visibleColumns.includes("role") && (
+                  <th className="py-2.5 px-3">Role</th>
+                )}
+                {visibleColumns.includes("shop_name") && (
+                  <th className="py-2.5 px-3">Shop Name</th>
+                )}
+                {visibleColumns.includes("number") && (
+                  <th className="py-2.5 px-3">Mobile Number</th>
+                )}
+                {visibleColumns.includes("password") && (
+                  <th className="py-2.5 px-3">Password</th>
+                )}
+                {visibleColumns.includes("page_access") && (
+                  <th className="py-2.5 px-3">Master System Page Access</th>
+                )}
+                {visibleColumns.includes("counter_access") && (
+                  <th className="py-2.5 px-3">MASTER SYSTEM COUNTER ACCESS</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1A1A1A]/10">
               {loading ? (
                 <tr>
-                  <td colSpan={1 + visibleColumns.length} className="py-16 text-center text-[#1A1A1A]/50">
-                    <RefreshCw size={24} className="animate-spin mx-auto mb-3 text-[#C9A84C]" />
-                    <span className="uppercase tracking-widest text-xs font-bold">Loading User Directory...</span>
+                  <td
+                    colSpan={1 + visibleColumns.length}
+                    className="py-16 text-center text-[#1A1A1A]/50"
+                  >
+                    <RefreshCw
+                      size={24}
+                      className="animate-spin mx-auto mb-3 text-[#C9A84C]"
+                    />
+                    <span className="uppercase tracking-widest text-xs font-bold">
+                      Loading User Directory...
+                    </span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={1 + visibleColumns.length} className="py-16 text-center text-[#1A1A1A]/50 font-serif">
+                  <td
+                    colSpan={1 + visibleColumns.length}
+                    className="py-16 text-center text-[#1A1A1A]/50 font-serif"
+                  >
                     No users found matching your search term.
                   </td>
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
-                  const name = u.user_name || u.username || 'N/A';
-                  const empName = u.emp_name || '—';
+                  const name = u.user_name || u.username || "N/A";
+                  const empName = u.emp_name || "—";
                   const isPassVisible = !!showPassword[u.id];
 
                   // Parse master access tags
                   let accessKeys = [];
                   if (u.master_user_system_page_access) {
                     let raw = u.master_user_system_page_access;
-                    if (typeof raw === 'string') {
-                      try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+                    if (typeof raw === "string") {
+                      try {
+                        raw = JSON.parse(raw);
+                      } catch (e) {
+                        raw = [];
+                      }
                     }
                     if (Array.isArray(raw)) {
                       accessKeys = raw;
-                    } else if (raw && typeof raw === 'object') {
+                    } else if (raw && typeof raw === "object") {
                       accessKeys = Object.keys(raw);
                     }
                   }
 
                   return (
-                    <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
+                    <tr
+                      key={u.id}
+                      className="hover:bg-[#FAFAFA] transition-colors"
+                    >
                       {/* Actions (Extreme Left Column) */}
                       <td className="py-2 px-3 whitespace-nowrap">
                         {isMasterSettingModifyAllowed ? (
@@ -1400,37 +1716,47 @@ export default function MasterSetting() {
                             >
                               <Edit3 size={13} />
                             </button>
-                            {(currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim() === 'masteradmin' && (u.role || '').toLowerCase().trim() !== 'admin' && (
-                              <button
-                                onClick={() => handleDeleteUser(u)}
-                                className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded transition-colors inline-flex items-center justify-center cursor-pointer"
-                                title="Delete User"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
+                            {(
+                              currentUserObj?.user_name ||
+                              currentUserObj?.username ||
+                              ""
+                            )
+                              .toLowerCase()
+                              .trim() === "masteradmin" &&
+                              (u.role || "").toLowerCase().trim() !==
+                                "admin" && (
+                                <button
+                                  onClick={() => handleDeleteUser(u)}
+                                  className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded transition-colors inline-flex items-center justify-center cursor-pointer"
+                                  title="Delete User"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
                           </div>
                         ) : (
-                          <span className="text-[11px] font-semibold text-slate-400 italic">View Only</span>
+                          <span className="text-[11px] font-semibold text-slate-400 italic">
+                            View Only
+                          </span>
                         )}
                       </td>
 
                       {/* Employee ID Column */}
-                      {visibleColumns.includes('employee_id') && (
+                      {visibleColumns.includes("employee_id") && (
                         <td className="py-2 px-3 font-mono font-bold text-[#1A1A1A]/80 text-xs whitespace-nowrap">
-                          {u.employee_id || '—'}
+                          {u.employee_id || "—"}
                         </td>
                       )}
 
                       {/* Emp Name Column (from HR FMS) */}
-                      {visibleColumns.includes('emp_name') && (
+                      {visibleColumns.includes("emp_name") && (
                         <td className="py-2 px-3 font-semibold text-[#1A1A1A] whitespace-nowrap">
                           <span className="font-serif text-xs">{empName}</span>
                         </td>
                       )}
 
                       {/* User Name Column */}
-                      {visibleColumns.includes('user_name') && (
+                      {visibleColumns.includes("user_name") && (
                         <td className="py-2 px-3 font-semibold text-[#1A1A1A] whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             <div className="w-5 h-5 rounded-full bg-[#1A1A1A] text-[#C9A84C] border border-[#C9A84C]/30 flex items-center justify-center font-bold text-[9px] uppercase shrink-0">
@@ -1442,11 +1768,13 @@ export default function MasterSetting() {
                       )}
 
                       {/* Role Column */}
-                      {visibleColumns.includes('role') && (
+                      {visibleColumns.includes("role") && (
                         <td className="py-2 px-3 capitalize font-medium text-[#1A1A1A]/70 whitespace-nowrap">
                           <div className="flex flex-col gap-0.5 items-start">
                             <span className="px-1.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[9.5px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                              {(u.role || 'user').toLowerCase() === 'employee' ? 'user' : (u.role || 'user')}
+                              {(u.role || "user").toLowerCase() === "employee"
+                                ? "user"
+                                : u.role || "user"}
                             </span>
                             {u.can_self_assign ? (
                               <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[8.5px] font-bold uppercase tracking-wider">
@@ -1462,11 +1790,11 @@ export default function MasterSetting() {
                       )}
 
                       {/* Shop Name Column */}
-                      {visibleColumns.includes('shop_name') && (
+                      {visibleColumns.includes("shop_name") && (
                         <td className="py-2 px-3 font-sans text-xs whitespace-nowrap">
                           <div className="flex flex-wrap gap-1 max-w-[200px]">
                             {u.shop_name ? (
-                              u.shop_name.split(',').map((s, i) => (
+                              u.shop_name.split(",").map((s, i) => (
                                 <span
                                   key={i}
                                   className="px-1.5 py-0.5 bg-[#1A1A1A]/5 text-[#1A1A1A] border border-[#1A1A1A]/10 rounded text-[9.5px] font-medium font-mono truncate max-w-[120px]"
@@ -1476,51 +1804,62 @@ export default function MasterSetting() {
                                 </span>
                               ))
                             ) : (
-                              <span className="text-[#1A1A1A]/40 italic text-[11px]">No Shop</span>
+                              <span className="text-[#1A1A1A]/40 italic text-[11px]">
+                                No Shop
+                              </span>
                             )}
                           </div>
                         </td>
                       )}
 
                       {/* Mobile Number Column */}
-                      {visibleColumns.includes('number') && (
+                      {visibleColumns.includes("number") && (
                         <td className="py-2 px-3 font-mono text-xs text-[#1A1A1A] whitespace-nowrap">
-                          {u.number || '—'}
+                          {u.number || "—"}
                         </td>
                       )}
 
                       {/* Password Column */}
-                      {visibleColumns.includes('password') && (
+                      {visibleColumns.includes("password") && (
                         <td className="py-2 px-3 font-mono whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             <span className="text-[#1A1A1A] font-medium text-xs">
-                              {isPassVisible ? u.password : '••••••••'}
+                              {isPassVisible ? u.password : "••••••••"}
                             </span>
                             <button
                               onClick={() => togglePasswordVisibility(u.id)}
                               className="text-[#1A1A1A]/40 hover:text-[#C9A84C] p-0.5 transition-colors cursor-pointer"
-                              title={isPassVisible ? 'Hide Password' : 'Show Password'}
+                              title={
+                                isPassVisible
+                                  ? "Hide Password"
+                                  : "Show Password"
+                              }
                             >
-                              {isPassVisible ? <EyeOff size={13} /> : <Eye size={13} />}
+                              {isPassVisible ? (
+                                <EyeOff size={13} />
+                              ) : (
+                                <Eye size={13} />
+                              )}
                             </button>
                           </div>
                         </td>
                       )}
 
                       {/* Master System Page Access Column */}
-                      {visibleColumns.includes('page_access') && (
+                      {visibleColumns.includes("page_access") && (
                         <td className="py-3.5 px-4 max-w-md">
                           {accessKeys.length > 0 ? (
                             <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto custom-scrollbar">
                               {accessKeys.map((key) => {
-                                const isModify = key.endsWith('.modify');
+                                const isModify = key.endsWith(".modify");
                                 return (
                                   <span
                                     key={key}
-                                    className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${isModify
-                                      ? 'bg-[#C9A84C]/15 text-[#1A1A1A] border-[#C9A84C]/40 font-bold'
-                                      : 'bg-[#1A1A1A]/5 text-[#1A1A1A] border-[#1A1A1A]/10'
-                                      }`}
+                                    className={`px-2 py-0.5 border rounded text-[10px] font-mono font-medium ${
+                                      isModify
+                                        ? "bg-[#C9A84C]/15 text-[#1A1A1A] border-[#C9A84C]/40 font-bold"
+                                        : "bg-[#1A1A1A]/5 text-[#1A1A1A] border-[#1A1A1A]/10"
+                                    }`}
                                   >
                                     {key}
                                   </span>
@@ -1536,10 +1875,12 @@ export default function MasterSetting() {
                       )}
 
                       {/* Master System Counter Access Column */}
-                      {visibleColumns.includes('counter_access') && (
+                      {visibleColumns.includes("counter_access") && (
                         <td className="py-3.5 px-4 font-sans text-xs">
                           <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">
-                            {u.counter_access && Array.isArray(u.counter_access) && u.counter_access.length > 0 ? (
+                            {u.counter_access &&
+                            Array.isArray(u.counter_access) &&
+                            u.counter_access.length > 0 ? (
                               u.counter_access.map((counter, i) => (
                                 <span
                                   key={i}
@@ -1550,7 +1891,9 @@ export default function MasterSetting() {
                                 </span>
                               ))
                             ) : (
-                              <span className="text-[#1A1A1A]/40 italic text-[11px]">No Counter Access</span>
+                              <span className="text-[#1A1A1A]/40 italic text-[11px]">
+                                No Counter Access
+                              </span>
                             )}
                           </div>
                         </td>
@@ -1580,7 +1923,8 @@ export default function MasterSetting() {
                 </span>
                 <h3 className="text-xl font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
                   <UserCheck size={20} className="text-[#C9A84C]" />
-                  Edit User Access: {editingUser.user_name || editingUser.username}
+                  Edit User Access:{" "}
+                  {editingUser.user_name || editingUser.username}
                 </h3>
               </div>
 
@@ -1601,27 +1945,31 @@ export default function MasterSetting() {
                     Set User Status
                   </span>
                   <span className="text-[11px] text-slate-500 font-normal">
-                    Active users can log in and access assigned modules. Setting to Inactive disables user account and syncs status to HR Employee profile.
+                    Active users can log in and access assigned modules. Setting
+                    to Inactive disables user account and syncs status to HR
+                    Employee profile.
                   </span>
                 </div>
                 <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/20 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setUserStatusInput('active')}
-                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${userStatusInput === 'active'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:bg-slate-100'
-                      }`}
+                    onClick={() => setUserStatusInput("active")}
+                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      userStatusInput === "active"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
                   >
                     Active
                   </button>
                   <button
                     type="button"
-                    onClick={() => setUserStatusInput('inactive')}
-                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${userStatusInput === 'inactive'
-                        ? 'bg-red-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:bg-slate-100'
-                      }`}
+                    onClick={() => setUserStatusInput("inactive")}
+                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      userStatusInput === "inactive"
+                        ? "bg-red-600 text-white shadow-xs"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
                   >
                     Inactive
                   </button>
@@ -1637,7 +1985,7 @@ export default function MasterSetting() {
                   <input
                     type="text"
                     disabled
-                    value={editingUser.employee_id || '—'}
+                    value={editingUser.employee_id || "—"}
                     className="w-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold cursor-not-allowed"
                   />
                 </div>
@@ -1649,7 +1997,7 @@ export default function MasterSetting() {
                   <input
                     type="text"
                     disabled
-                    value={editingUser.user_name || editingUser.username || ''}
+                    value={editingUser.user_name || editingUser.username || ""}
                     className="w-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold cursor-not-allowed"
                   />
                 </div>
@@ -1695,7 +2043,10 @@ export default function MasterSetting() {
                       placeholder="Enter user password"
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:border-[#C9A84C]"
                     />
-                    <Key size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
+                    <Key
+                      size={14}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none"
+                    />
                   </div>
                 </div>
 
@@ -1734,13 +2085,22 @@ export default function MasterSetting() {
                     type="checkbox"
                     id="editUserCanSelfAssign"
                     checked={Boolean(editingUser.can_self_assign)}
-                    onChange={(e) => setEditingUser({ ...editingUser, can_self_assign: e.target.checked })}
+                    onChange={(e) =>
+                      setEditingUser({
+                        ...editingUser,
+                        can_self_assign: e.target.checked,
+                      })
+                    }
                     className="w-4 h-4 text-[#C9A84C] accent-[#C9A84C] rounded cursor-pointer"
                   />
-                  <label htmlFor="editUserCanSelfAssign" className="text-xs font-bold text-[#1A1A1A] cursor-pointer flex flex-col">
+                  <label
+                    htmlFor="editUserCanSelfAssign"
+                    className="text-xs font-bold text-[#1A1A1A] cursor-pointer flex flex-col"
+                  >
                     <span>Allow Self Assignment (can_self_assign)</span>
                     <span className="text-[10px] text-slate-500 font-normal">
-                      Enables user to self-assign tasks and checklist items in the application.
+                      Enables user to self-assign tasks and checklist items in
+                      the application.
                     </span>
                   </label>
                 </div>
@@ -1754,7 +2114,14 @@ export default function MasterSetting() {
                       master_user_system_page_access
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Set permission level per page: <code className="font-mono text-[#8C6D23] font-bold">.view</code> or <code className="font-mono text-[#8C6D23] font-bold">.modify</code>
+                      Set permission level per page:{" "}
+                      <code className="font-mono text-[#8C6D23] font-bold">
+                        .view
+                      </code>{" "}
+                      or{" "}
+                      <code className="font-mono text-[#8C6D23] font-bold">
+                        .modify
+                      </code>
                     </p>
                   </div>
                 </div>
@@ -1762,7 +2129,9 @@ export default function MasterSetting() {
                 {/* Interactive UI - Distinct System Cards, Section Banners & Page Rows */}
                 <div className="space-y-2 bg-slate-50/50  rounded-xl">
                   {AVAILABLE_SYSTEMS.map((sys) => {
-                    const sectionsToRender = sys.sections || [{ title: null, pages: sys.pages || [] }];
+                    const sectionsToRender = sys.sections || [
+                      { title: null, pages: sys.pages || [] },
+                    ];
 
                     return (
                       <div
@@ -1782,53 +2151,71 @@ export default function MasterSetting() {
                               </span>
                             </div>
                           </div>
-
-
                         </div>
 
                         {/* SYSTEM CONTENT (SECTIONS & PAGES) */}
                         <div className="p-5 space-y-6 bg-slate-50/40">
-                          {sys.id === 'whatsapp' ? (
+                          {sys.id === "whatsapp" ? (
                             <div className="flex items-center justify-between p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs">
                               <div className="flex flex-col gap-1 pr-4">
                                 <span className="text-xs font-bold text-[#1C120C] uppercase tracking-wider font-serif">
                                   System Access Toggle
                                 </span>
                                 <span className="text-[11px] text-slate-500 font-medium">
-                                  Enable or disable this user's permission to view the WhatsApp Broadcast system.
+                                  Enable or disable this user's permission to
+                                  view the WhatsApp Broadcast system.
                                 </span>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => {
                                   const updated = { ...accessPermissions };
-                                  if (updated['whatsapp']) {
-                                    delete updated['whatsapp'];
+                                  if (updated["whatsapp"]) {
+                                    delete updated["whatsapp"];
                                   } else {
-                                    updated['whatsapp'] = 'whatsapp';
+                                    updated["whatsapp"] = "whatsapp";
                                   }
                                   setAccessPermissions(updated);
-                                  setRawJsonText(JSON.stringify(Object.keys(updated), null, 2));
+                                  setRawJsonText(
+                                    JSON.stringify(
+                                      Object.keys(updated),
+                                      null,
+                                      2,
+                                    ),
+                                  );
                                 }}
-                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${accessPermissions['whatsapp'] ? 'bg-[#C9A84C]' : 'bg-slate-200'
-                                  }`}
+                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  accessPermissions["whatsapp"]
+                                    ? "bg-[#C9A84C]"
+                                    : "bg-slate-200"
+                                }`}
                               >
                                 <span
-                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${accessPermissions['whatsapp'] ? 'translate-x-5' : 'translate-x-0'
-                                    }`}
+                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                    accessPermissions["whatsapp"]
+                                      ? "translate-x-5"
+                                      : "translate-x-0"
+                                  }`}
                                 />
                               </button>
                             </div>
                           ) : (
                             <>
                               {/* Shop Access Section inside Checklist Delegation */}
-                              {sys.id === 'checklist' && (
+                              {sys.id === "checklist" && (
                                 <>
                                   <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
                                     <div className="flex items-center justify-between">
                                       <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
-                                        <Building size={16} className="text-[#C9A84C]" />
-                                        Shop Access (<code className="font-mono text-[#8C6D23] lowercase">user_access</code>)
+                                        <Building
+                                          size={16}
+                                          className="text-[#C9A84C]"
+                                        />
+                                        Shop Access (
+                                        <code className="font-mono text-[#8C6D23] lowercase">
+                                          user_access
+                                        </code>
+                                        )
                                       </label>
                                       {availableShops.length > 0 && (
                                         <button
@@ -1836,33 +2223,50 @@ export default function MasterSetting() {
                                           onClick={handleSelectAllShops}
                                           className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
                                         >
-                                          {selectedShopsList.length === availableShops.length ? 'Deselect All' : 'Select All Shops'}
+                                          {selectedShopsList.length ===
+                                          availableShops.length
+                                            ? "Deselect All"
+                                            : "Select All Shops"}
                                         </button>
                                       )}
                                     </div>
 
                                     <p className="text-[11px] text-slate-500 font-medium">
-                                      Select allowed shop locations for multi-shop system access (stored in <code className="font-mono font-bold text-[#1C120C]">user_access</code>):
+                                      Select allowed shop locations for
+                                      multi-shop system access (stored in{" "}
+                                      <code className="font-mono font-bold text-[#1C120C]">
+                                        user_access
+                                      </code>
+                                      ):
                                     </p>
 
                                     {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
                                     {availableShops.length > 0 ? (
                                       <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
                                         {availableShops.map((shop) => {
-                                          const isSelected = selectedShopsList.includes(shop);
+                                          const isSelected =
+                                            selectedShopsList.includes(shop);
                                           return (
                                             <button
                                               key={shop}
                                               type="button"
-                                              onClick={() => handleToggleShop(shop)}
-                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
-                                                ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
-                                                : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
-                                                }`}
+                                              onClick={() =>
+                                                handleToggleShop(shop)
+                                              }
+                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                                                isSelected
+                                                  ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
+                                                  : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100"
+                                              }`}
                                             >
-                                              <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                                                }`}>
-                                                {isSelected && '✓'}
+                                              <span
+                                                className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
+                                                  isSelected
+                                                    ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
+                                                    : "border-slate-400 bg-white"
+                                                }`}
+                                              >
+                                                {isSelected && "✓"}
                                               </span>
                                               <span>{shop}</span>
                                             </button>
@@ -1870,18 +2274,23 @@ export default function MasterSetting() {
                                         })}
                                       </div>
                                     ) : (
-                                      <div className="text-[11px] text-slate-400 italic">Loading options from shop table...</div>
+                                      <div className="text-[11px] text-slate-400 italic">
+                                        Loading options from shop table...
+                                      </div>
                                     )}
 
                                     {/* Comma-Separated Text Input */}
                                     <div className="pt-1">
                                       <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                                        Assigned Shop Locations (Comma-separated text)
+                                        Assigned Shop Locations (Comma-separated
+                                        text)
                                       </label>
                                       <input
                                         type="text"
                                         value={shopNameInput}
-                                        onChange={(e) => setShopNameInput(e.target.value)}
+                                        onChange={(e) =>
+                                          setShopNameInput(e.target.value)
+                                        }
                                         placeholder="e.g. BALAJI, FRIENDS, KUNAL"
                                         className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
                                       />
@@ -1892,54 +2301,89 @@ export default function MasterSetting() {
                                   <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3 mt-4">
                                     <div className="flex items-center justify-between">
                                       <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
-                                        <Lock size={16} className="text-[#C9A84C]" />
-                                        Counter Access (<code className="font-mono text-[#8C6D23] lowercase">counter_access</code>)
+                                        <Lock
+                                          size={16}
+                                          className="text-[#C9A84C]"
+                                        />
+                                        Counter Access (
+                                        <code className="font-mono text-[#8C6D23] lowercase">
+                                          counter_access
+                                        </code>
+                                        )
                                       </label>
                                       {availableCounters.length > 0 && (
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            if (counterAccessInput.length === availableCounters.length) {
+                                            if (
+                                              counterAccessInput.length ===
+                                              availableCounters.length
+                                            ) {
                                               setCounterAccessInput([]);
                                             } else {
-                                              setCounterAccessInput([...availableCounters]);
+                                              setCounterAccessInput([
+                                                ...availableCounters,
+                                              ]);
                                             }
                                           }}
                                           className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
                                         >
-                                          {counterAccessInput.length === availableCounters.length ? 'Deselect All' : 'Select All Counters'}
+                                          {counterAccessInput.length ===
+                                          availableCounters.length
+                                            ? "Deselect All"
+                                            : "Select All Counters"}
                                         </button>
                                       )}
                                     </div>
 
                                     <p className="text-[11px] text-slate-500 font-medium">
-                                      Select assigned counters from the database <code className="font-mono font-bold text-[#1C120C]">master_counter</code> table:
+                                      Select assigned counters from the database{" "}
+                                      <code className="font-mono font-bold text-[#1C120C]">
+                                        master_counter
+                                      </code>{" "}
+                                      table:
                                     </p>
 
                                     {/* Dynamic Counter Badges / Checkboxes from 'master_counter' table */}
                                     {availableCounters.length > 0 ? (
                                       <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
                                         {availableCounters.map((counter) => {
-                                          const isSelected = counterAccessInput.includes(counter);
+                                          const isSelected =
+                                            counterAccessInput.includes(
+                                              counter,
+                                            );
                                           return (
                                             <button
                                               key={counter}
                                               type="button"
                                               onClick={() => {
                                                 if (isSelected) {
-                                                  setCounterAccessInput(counterAccessInput.filter(c => c !== counter));
+                                                  setCounterAccessInput(
+                                                    counterAccessInput.filter(
+                                                      (c) => c !== counter,
+                                                    ),
+                                                  );
                                                 } else {
-                                                  setCounterAccessInput([...counterAccessInput, counter]);
+                                                  setCounterAccessInput([
+                                                    ...counterAccessInput,
+                                                    counter,
+                                                  ]);
                                                 }
                                               }}
-                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
-                                                ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
-                                                : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100'
-                                                }`}
+                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                                                isSelected
+                                                  ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
+                                                  : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100"
+                                              }`}
                                             >
-                                              <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                                                }`}>
-                                                {isSelected && '✓'}
+                                              <span
+                                                className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
+                                                  isSelected
+                                                    ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
+                                                    : "border-slate-400 bg-white"
+                                                }`}
+                                              >
+                                                {isSelected && "✓"}
                                               </span>
                                               <span>{counter}</span>
                                             </button>
@@ -1947,7 +2391,10 @@ export default function MasterSetting() {
                                         })}
                                       </div>
                                     ) : (
-                                      <div className="text-[11px] text-slate-400 italic">Loading options from master_counter table...</div>
+                                      <div className="text-[11px] text-slate-400 italic">
+                                        Loading options from master_counter
+                                        table...
+                                      </div>
                                     )}
                                   </div>
                                 </>
@@ -1967,7 +2414,10 @@ export default function MasterSetting() {
                                   {/* PAGE ROWS */}
                                   <div className="space-y-2 pl-0 sm:pl-2">
                                     {sec.pages.map((pg) => {
-                                      const currentLevel = getPageLevel(sys.id, pg);
+                                      const currentLevel = getPageLevel(
+                                        sys.id,
+                                        pg,
+                                      );
 
                                       return (
                                         <div
@@ -1976,12 +2426,15 @@ export default function MasterSetting() {
                                         >
                                           {/* Page Title & Bullet */}
                                           <div className="flex items-center gap-3 min-w-0">
-                                            <span className={`w-2 h-2 rounded-full shrink-0 ${currentLevel === 'modify'
-                                              ? 'bg-[#C9A84C] ring-2 ring-[#C9A84C]/30'
-                                              : currentLevel === 'view'
-                                                ? 'bg-slate-900'
-                                                : 'bg-slate-300'
-                                              }`} />
+                                            <span
+                                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                                currentLevel === "modify"
+                                                  ? "bg-[#C9A84C] ring-2 ring-[#C9A84C]/30"
+                                                  : currentLevel === "view"
+                                                    ? "bg-slate-900"
+                                                    : "bg-slate-300"
+                                              }`}
+                                            />
                                             <span className="text-xs font-bold text-slate-800 tracking-tight font-serif truncate">
                                               {pg}
                                             </span>
@@ -1992,11 +2445,14 @@ export default function MasterSetting() {
                                             {/* None Button */}
                                             <button
                                               type="button"
-                                              onClick={() => setPageLevel(sys.id, pg, 'none')}
-                                              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${currentLevel === 'none'
-                                                ? 'bg-slate-300 text-slate-800 font-extrabold shadow-xs'
-                                                : 'text-slate-500 hover:text-slate-900'
-                                                }`}
+                                              onClick={() =>
+                                                setPageLevel(sys.id, pg, "none")
+                                              }
+                                              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${
+                                                currentLevel === "none"
+                                                  ? "bg-slate-300 text-slate-800 font-extrabold shadow-xs"
+                                                  : "text-slate-500 hover:text-slate-900"
+                                              }`}
                                             >
                                               None
                                             </button>
@@ -2004,11 +2460,14 @@ export default function MasterSetting() {
                                             {/* View Button */}
                                             <button
                                               type="button"
-                                              onClick={() => setPageLevel(sys.id, pg, 'view')}
-                                              className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'view'
-                                                ? 'bg-[#1C120C] text-white font-extrabold shadow-sm'
-                                                : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]'
-                                                }`}
+                                              onClick={() =>
+                                                setPageLevel(sys.id, pg, "view")
+                                              }
+                                              className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
+                                                currentLevel === "view"
+                                                  ? "bg-[#1C120C] text-white font-extrabold shadow-sm"
+                                                  : "text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
+                                              }`}
                                             >
                                               .view
                                             </button>
@@ -2016,11 +2475,18 @@ export default function MasterSetting() {
                                             {/* Modify Button */}
                                             <button
                                               type="button"
-                                              onClick={() => setPageLevel(sys.id, pg, 'modify')}
-                                              className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${currentLevel === 'modify'
-                                                ? 'bg-[#C9A84C] text-[#1C120C] font-black shadow-sm'
-                                                : 'text-slate-600 hover:text-slate-900'
-                                                }`}
+                                              onClick={() =>
+                                                setPageLevel(
+                                                  sys.id,
+                                                  pg,
+                                                  "modify",
+                                                )
+                                              }
+                                              className={`px-3 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
+                                                currentLevel === "modify"
+                                                  ? "bg-[#C9A84C] text-[#1C120C] font-black shadow-sm"
+                                                  : "text-slate-600 hover:text-slate-900"
+                                              }`}
                                             >
                                               .modify
                                             </button>
@@ -2048,7 +2514,7 @@ export default function MasterSetting() {
                 onClick={() => setEditingUser(null)}
                 className="px-5 py-2.5 bg-white hover:bg-gray-100 text-[#1A1A1A] border border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider transition-colors"
               >
-                {isMasterSettingModifyAllowed ? 'Cancel' : 'Close'}
+                {isMasterSettingModifyAllowed ? "Cancel" : "Close"}
               </button>
               {isMasterSettingModifyAllowed && (
                 <button
@@ -2058,7 +2524,7 @@ export default function MasterSetting() {
                   className="px-6 py-2.5 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm"
                 >
                   <Save size={14} />
-                  <span>{saving ? 'Saving...' : 'Save User Access'}</span>
+                  <span>{saving ? "Saving..." : "Save User Access"}</span>
                 </button>
               )}
             </div>
@@ -2094,7 +2560,10 @@ export default function MasterSetting() {
             </div>
 
             {/* Modal Form Body */}
-            <form onSubmit={handleCreateUser} className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+            <form
+              onSubmit={handleCreateUser}
+              className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1"
+            >
               {/* Step 1: Employee ID Search & Selection */}
               <div className="bg-slate-50 p-4 border border-slate-200 space-y-3">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
@@ -2114,20 +2583,24 @@ export default function MasterSetting() {
                   >
                     <option value="">
                       {loadingEmployees
-                        ? '-- Loading Employees... --'
+                        ? "-- Loading Employees... --"
                         : unassignedEmployees.length > 0
                           ? `-- Choose Employee Not Yet Created as User (${unassignedEmployees.length} Available) --`
-                          : '-- All Employees Already Have User Accounts --'}
+                          : "-- All Employees Already Have User Accounts --"}
                     </option>
                     {unassignedEmployees.map((emp) => (
                       <option key={emp.id} value={emp.employee_id}>
-                        {emp.employee_id} - {emp.name_as_per_aadhar} ({emp.designation || 'No Designation'}) - {emp.joining_company_name || 'No Shop'}
+                        {emp.employee_id} - {emp.name_as_per_aadhar} (
+                        {emp.designation || "No Designation"}) -{" "}
+                        {emp.joining_company_name || "No Shop"}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">- OR TYPE EMPLOYEE ID MANUALLY -</div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">
+                  - OR TYPE EMPLOYEE ID MANUALLY -
+                </div>
 
                 {/* Manual Input Search */}
                 <div className="flex gap-2">
@@ -2153,34 +2626,53 @@ export default function MasterSetting() {
               </div>
 
               {/* Status Verification Feedback */}
-              {empStatus === 'already_user' && existingUserInfo && (
+              {empStatus === "already_user" && existingUserInfo && (
                 <div className="bg-amber-50 border border-amber-300 p-4 flex items-start gap-3 rounded-none">
-                  <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                  <AlertCircle
+                    size={20}
+                    className="text-amber-600 shrink-0 mt-0.5"
+                  />
                   <div>
-                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Already Registered as User!</h4>
+                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                      Already Registered as User!
+                    </h4>
                     <p className="text-xs text-amber-800 mt-1">
-                      Employee ID <span className="font-bold">{empSearchInput}</span> is already assigned to active user account{' '}
-                      <span className="font-bold text-amber-950">{existingUserInfo.user_name || existingUserInfo.username}</span> (Role:{' '}
-                      <span className="font-bold">{existingUserInfo.role || 'user'}</span>).
+                      Employee ID{" "}
+                      <span className="font-bold">{empSearchInput}</span> is
+                      already assigned to active user account{" "}
+                      <span className="font-bold text-amber-950">
+                        {existingUserInfo.user_name ||
+                          existingUserInfo.username}
+                      </span>{" "}
+                      (Role:{" "}
+                      <span className="font-bold">
+                        {existingUserInfo.role || "user"}
+                      </span>
+                      ).
                     </p>
                   </div>
                 </div>
               )}
 
-              {empStatus === 'not_found' && (
+              {empStatus === "not_found" && (
                 <div className="bg-red-50 border border-red-300 p-4 flex items-start gap-3 rounded-none">
                   <X size={20} className="text-red-600 shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-xs font-bold text-red-900 uppercase tracking-wider">Employee Not Found</h4>
+                    <h4 className="text-xs font-bold text-red-900 uppercase tracking-wider">
+                      Employee Not Found
+                    </h4>
                     <p className="text-xs text-red-800 mt-1">
-                      No matching employee found with Employee ID <span className="font-bold">{empSearchInput}</span> in employee records. Please verify the ID or register the employee first.
+                      No matching employee found with Employee ID{" "}
+                      <span className="font-bold">{empSearchInput}</span> in
+                      employee records. Please verify the ID or register the
+                      employee first.
                     </p>
                   </div>
                 </div>
               )}
 
               {/* Employee Summary Card */}
-              {empStatus === 'ready' && selectedEmployee && (
+              {empStatus === "ready" && selectedEmployee && (
                 <div className="bg-emerald-50/80 border border-emerald-300 p-4 rounded-none space-y-3 shadow-sm">
                   <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-800 flex items-center gap-1.5">
@@ -2203,7 +2695,8 @@ export default function MasterSetting() {
                         />
                       ) : (
                         <div className="w-16 h-16 bg-emerald-200 text-emerald-800 rounded-full flex items-center justify-center font-bold text-xl border-2 border-emerald-400 shadow-sm">
-                          {selectedEmployee.name_as_per_aadhar?.charAt(0) || 'E'}
+                          {selectedEmployee.name_as_per_aadhar?.charAt(0) ||
+                            "E"}
                         </div>
                       )}
                     </div>
@@ -2211,43 +2704,70 @@ export default function MasterSetting() {
                     {/* Grid of Details */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs flex-1 w-full">
                       <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Employee Name</span>
-                        <span className="font-bold text-slate-900">{selectedEmployee.name_as_per_aadhar}</span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">
+                          Employee Name
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {selectedEmployee.name_as_per_aadhar}
+                        </span>
                       </div>
 
                       <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Joining Shop Name</span>
-                        <span className="font-bold text-slate-900">{selectedEmployee.joining_company_name || '—'}</span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">
+                          Joining Shop Name
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {selectedEmployee.joining_company_name || "—"}
+                        </span>
                       </div>
 
                       <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Mobile No</span>
-                        <span className="font-semibold text-slate-800">{selectedEmployee.mobile_no || '—'}</span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">
+                          Mobile No
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {selectedEmployee.mobile_no || "—"}
+                        </span>
                       </div>
 
                       <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Email Address</span>
-                        <span className="font-semibold text-slate-800">{selectedEmployee.candidate_email || '—'}</span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">
+                          Email Address
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {selectedEmployee.candidate_email || "—"}
+                        </span>
                       </div>
 
                       <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Designation</span>
-                        <span className="font-semibold text-slate-800">{selectedEmployee.designation || '—'}</span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">
+                          Designation
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {selectedEmployee.designation || "—"}
+                        </span>
                       </div>
 
                       <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Attendance Mode & Status</span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">
+                          Attendance Mode & Status
+                        </span>
                         <span className="font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[11px]">
-                          {selectedEmployee.mode_of_attendance || 'Biometric'} ({selectedEmployee.status || 'Active'})
+                          {selectedEmployee.mode_of_attendance || "Biometric"} (
+                          {selectedEmployee.status || "Active"})
                         </span>
                       </div>
 
                       <div className="sm:col-span-2">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Checklist Task Details</span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">
+                          Checklist Task Details
+                        </span>
                         <span className="font-medium text-slate-700 text-[11px] block bg-white/80 p-1.5 rounded border border-emerald-200 mt-0.5">
-                          {selectedEmployee.HR_SYSTEM_employee_data?.checklist_details ||
-                            selectedEmployee.HR_SYSTEM_employee_data?.task_details ||
-                            `Active Employee Profile (${selectedEmployee.joining_company_name || 'All Shops Access'})`}
+                          {selectedEmployee.HR_SYSTEM_employee_data
+                            ?.checklist_details ||
+                            selectedEmployee.HR_SYSTEM_employee_data
+                              ?.task_details ||
+                            `Active Employee Profile (${selectedEmployee.joining_company_name || "All Shops Access"})`}
                         </span>
                       </div>
                     </div>
@@ -2256,7 +2776,9 @@ export default function MasterSetting() {
               )}
 
               {/* Step 2: Set User Password & Credentials */}
-              <div className={`space-y-4 ${(empStatus === 'ready' || empStatus === 'ready_manual') ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+              <div
+                className={`space-y-4 ${empStatus === "ready" || empStatus === "ready_manual" ? "opacity-100" : "opacity-50 pointer-events-none"}`}
+              >
                 <div className="border-t border-[#1A1A1A]/10 pt-4">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A] block mb-3">
                     2. User Account & Password Credentials
@@ -2271,7 +2793,12 @@ export default function MasterSetting() {
                     type="text"
                     required
                     value={newUserForm.username}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                    onChange={(e) =>
+                      setNewUserForm({
+                        ...newUserForm,
+                        username: e.target.value,
+                      })
+                    }
                     placeholder="e.g. John Doe"
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                   />
@@ -2286,7 +2813,12 @@ export default function MasterSetting() {
                     type="text"
                     required
                     value={newUserForm.password}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    onChange={(e) =>
+                      setNewUserForm({
+                        ...newUserForm,
+                        password: e.target.value,
+                      })
+                    }
                     placeholder="Enter password for user login"
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-semibold focus:outline-none focus:border-[#C9A84C]"
                   />
@@ -2299,7 +2831,9 @@ export default function MasterSetting() {
                     </label>
                     <select
                       value={newUserForm.role}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                      onChange={(e) =>
+                        setNewUserForm({ ...newUserForm, role: e.target.value })
+                      }
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                     >
                       <option value="User">User</option>
@@ -2315,7 +2849,12 @@ export default function MasterSetting() {
                     </label>
                     <select
                       value={newUserForm.systemPreset}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, systemPreset: e.target.value })}
+                      onChange={(e) =>
+                        setNewUserForm({
+                          ...newUserForm,
+                          systemPreset: e.target.value,
+                        })
+                      }
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                     >
                       <option value="purchase">Purchase System Only</option>
@@ -2323,7 +2862,11 @@ export default function MasterSetting() {
                       <option value="hr">HR System Only</option>
                       <option value="inventory">Inventory System Only</option>
                       <option value="petty-cash">Petty Cash Only</option>
-                      <option value="business-overview">Business Overview Only</option>
+                      <option value="business-overview">
+                        Business Overview Only
+                      </option>
+                      <option value="sale-analytics">Sale Analytics Only</option>
+                      <option value="stock-report">Stock / Report Only</option>
                       <option value="all">Full Access (All Systems)</option>
                       <option value="">Custom Access (Configure Later)</option>
                     </select>
@@ -2335,13 +2878,22 @@ export default function MasterSetting() {
                     type="checkbox"
                     id="newUserCanSelfAssign"
                     checked={Boolean(newUserForm.can_self_assign)}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, can_self_assign: e.target.checked })}
+                    onChange={(e) =>
+                      setNewUserForm({
+                        ...newUserForm,
+                        can_self_assign: e.target.checked,
+                      })
+                    }
                     className="w-4 h-4 text-[#C9A84C] accent-[#C9A84C] rounded cursor-pointer"
                   />
-                  <label htmlFor="newUserCanSelfAssign" className="text-xs font-bold text-[#1A1A1A] cursor-pointer flex flex-col">
+                  <label
+                    htmlFor="newUserCanSelfAssign"
+                    className="text-xs font-bold text-[#1A1A1A] cursor-pointer flex flex-col"
+                  >
                     <span>Allow Self Assignment (can_self_assign)</span>
                     <span className="text-[10px] text-slate-500 font-normal">
-                      Enables user to self-assign tasks and checklist items in the application.
+                      Enables user to self-assign tasks and checklist items in
+                      the application.
                     </span>
                   </label>
                 </div>
@@ -2353,7 +2905,9 @@ export default function MasterSetting() {
                   <input
                     type="email"
                     value={newUserForm.email}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                    onChange={(e) =>
+                      setNewUserForm({ ...newUserForm, email: e.target.value })
+                    }
                     placeholder="user@example.com"
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-[#C9A84C]"
                   />
@@ -2371,20 +2925,27 @@ export default function MasterSetting() {
                   {availableShops.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto custom-scrollbar bg-slate-50 p-2.5 rounded border border-slate-200">
                       {availableShops.map((shop) => {
-                        const isSelected = selectedNewUserShopsList.includes(shop);
+                        const isSelected =
+                          selectedNewUserShopsList.includes(shop);
                         return (
                           <button
                             key={shop}
                             type="button"
                             onClick={() => handleToggleNewUserShop(shop)}
-                            className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${isSelected
-                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]'
-                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
-                              }`}
+                            className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${
+                              isSelected
+                                ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]"
+                                : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]"
+                            }`}
                           >
-                            <span className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                              }`}>
-                              {isSelected && '✓'}
+                            <span
+                              className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${
+                                isSelected
+                                  ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
+                                  : "border-slate-400 bg-white"
+                              }`}
+                            >
+                              {isSelected && "✓"}
                             </span>
                             <span>{shop}</span>
                           </button>
@@ -2395,7 +2956,12 @@ export default function MasterSetting() {
                   <input
                     type="text"
                     value={newUserForm.shopName}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, shopName: e.target.value })}
+                    onChange={(e) =>
+                      setNewUserForm({
+                        ...newUserForm,
+                        shopName: e.target.value,
+                      })
+                    }
                     placeholder="e.g. BALAJI, FRIENDS, KUNAL ULWE"
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:border-[#C9A84C]"
                   />
@@ -2414,26 +2980,38 @@ export default function MasterSetting() {
                   {availableCounters.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto custom-scrollbar bg-slate-50 p-2.5 rounded border border-slate-200">
                       {availableCounters.map((counter) => {
-                        const isSelected = (newUserForm.counterAccess || []).includes(counter);
+                        const isSelected = (
+                          newUserForm.counterAccess || []
+                        ).includes(counter);
                         return (
                           <button
                             key={counter}
                             type="button"
                             onClick={() => {
-                              const currentList = newUserForm.counterAccess || [];
+                              const currentList =
+                                newUserForm.counterAccess || [];
                               const updated = currentList.includes(counter)
-                                ? currentList.filter(c => c !== counter)
+                                ? currentList.filter((c) => c !== counter)
                                 : [...currentList, counter];
-                              setNewUserForm({ ...newUserForm, counterAccess: updated });
+                              setNewUserForm({
+                                ...newUserForm,
+                                counterAccess: updated,
+                              });
                             }}
-                            className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${isSelected
-                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]'
-                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
-                              }`}
+                            className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer border ${
+                              isSelected
+                                ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C]"
+                                : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]"
+                            }`}
                           >
-                            <span className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'
-                              }`}>
-                              {isSelected && '✓'}
+                            <span
+                              className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${
+                                isSelected
+                                  ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
+                                  : "border-slate-400 bg-white"
+                              }`}
+                            >
+                              {isSelected && "✓"}
                             </span>
                             <span>{counter}</span>
                           </button>
@@ -2441,7 +3019,9 @@ export default function MasterSetting() {
                       })}
                     </div>
                   ) : (
-                    <div className="text-xs text-slate-400 italic">Loading options from master_counter table...</div>
+                    <div className="text-xs text-slate-400 italic">
+                      Loading options from master_counter table...
+                    </div>
                   )}
                 </div>
               </div>
@@ -2457,14 +3037,18 @@ export default function MasterSetting() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || (empStatus !== 'ready' && empStatus !== 'ready_manual')}
-                  className={`px-5 py-2 text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm ${(empStatus === 'ready' || empStatus === 'ready_manual')
-                    ? 'bg-[#C9A84C] hover:bg-[#b8973b] cursor-pointer'
-                    : 'bg-slate-300 opacity-60 cursor-not-allowed text-slate-600'
-                    }`}
+                  disabled={
+                    saving ||
+                    (empStatus !== "ready" && empStatus !== "ready_manual")
+                  }
+                  className={`px-5 py-2 text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm ${
+                    empStatus === "ready" || empStatus === "ready_manual"
+                      ? "bg-[#C9A84C] hover:bg-[#b8973b] cursor-pointer"
+                      : "bg-slate-300 opacity-60 cursor-not-allowed text-slate-600"
+                  }`}
                 >
                   <Plus size={14} />
-                  <span>{saving ? 'Creating...' : 'Create User Account'}</span>
+                  <span>{saving ? "Creating..." : "Create User Account"}</span>
                 </button>
               </div>
             </form>
@@ -2488,7 +3072,8 @@ export default function MasterSetting() {
                 </span>
                 <h3 className="text-base font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
                   <Building size={16} className="text-[#C9A84C]" />
-                  Edit Shop Name: {editingShopUser.user_name || editingShopUser.username}
+                  Edit Shop Name:{" "}
+                  {editingShopUser.user_name || editingShopUser.username}
                 </h3>
               </div>
               <button
@@ -2510,16 +3095,26 @@ export default function MasterSetting() {
                     <button
                       type="button"
                       onClick={() => {
-                        const currentList = quickShopInput ? quickShopInput.split(',').map(s => s.trim()).filter(Boolean) : [];
+                        const currentList = quickShopInput
+                          ? quickShopInput
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean)
+                          : [];
                         if (currentList.length === availableShops.length) {
-                          setQuickShopInput('');
+                          setQuickShopInput("");
                         } else {
-                          setQuickShopInput(availableShops.join(', '));
+                          setQuickShopInput(availableShops.join(", "));
                         }
                       }}
                       className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
                     >
-                      {quickShopInput.split(',').map(s => s.trim()).filter(Boolean).length === availableShops.length ? 'Deselect All' : 'Select All'}
+                      {quickShopInput
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean).length === availableShops.length
+                        ? "Deselect All"
+                        : "Select All"}
                     </button>
                   )}
                 </div>
@@ -2527,7 +3122,12 @@ export default function MasterSetting() {
                 {availableShops.length > 0 ? (
                   <div className="flex flex-wrap gap-2 py-2 max-h-44 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded border border-slate-200">
                     {availableShops.map((shop) => {
-                      const selectedList = quickShopInput ? quickShopInput.split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const selectedList = quickShopInput
+                        ? quickShopInput
+                            .split(",")
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                        : [];
                       const isSelected = selectedList.includes(shop);
                       return (
                         <button
@@ -2536,19 +3136,22 @@ export default function MasterSetting() {
                           onClick={() => {
                             let updated;
                             if (isSelected) {
-                              updated = selectedList.filter(s => s !== shop);
+                              updated = selectedList.filter((s) => s !== shop);
                             } else {
                               updated = [...selectedList, shop];
                             }
-                            setQuickShopInput(updated.join(', '));
+                            setQuickShopInput(updated.join(", "));
                           }}
-                          className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${isSelected
-                              ? 'bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]'
-                            }`}
+                          className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                            isSelected
+                              ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
+                              : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]"
+                          }`}
                         >
-                          <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]' : 'border-slate-400 bg-white'}`}>
-                            {isSelected && '✓'}
+                          <span
+                            className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${isSelected ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]" : "border-slate-400 bg-white"}`}
+                          >
+                            {isSelected && "✓"}
                           </span>
                           <span>{shop}</span>
                         </button>
@@ -2556,7 +3159,9 @@ export default function MasterSetting() {
                     })}
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-400 italic">No shops found in database `shop` table.</div>
+                  <div className="text-xs text-slate-400 italic">
+                    No shops found in database `shop` table.
+                  </div>
                 )}
               </div>
 
@@ -2590,7 +3195,7 @@ export default function MasterSetting() {
                 className="px-5 py-2 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <Save size={14} />
-                <span>{savingShop ? 'Saving...' : 'Save Shop Name'}</span>
+                <span>{savingShop ? "Saving..." : "Save Shop Name"}</span>
               </button>
             </div>
           </motion.div>
@@ -2605,21 +3210,35 @@ export default function MasterSetting() {
               <Building size={28} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900 font-serif">Update Shop Access Required</h3>
+              <h3 className="text-lg font-bold text-slate-900 font-serif">
+                Update Shop Access Required
+              </h3>
               <p className="text-sm text-slate-700 mt-2 font-medium">
-                Primary shop updated to <span className="font-bold text-[#8C6D23] font-mono">{reminderShopName}</span>.
+                Primary shop updated to{" "}
+                <span className="font-bold text-[#8C6D23] font-mono">
+                  {reminderShopName}
+                </span>
+                .
               </p>
               <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                Now please update shop access so user can assign his new access to shops.
+                Now please update shop access so user can assign his new access
+                to shops.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => {
-                  const currentShops = shopNameInput ? shopNameInput.split(',').map(s => s.trim()).filter(Boolean) : [];
+                  const currentShops = shopNameInput
+                    ? shopNameInput
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                    : [];
                   if (!currentShops.includes(reminderShopName)) {
-                    const updated = [...currentShops, reminderShopName].join(', ');
+                    const updated = [...currentShops, reminderShopName].join(
+                      ", ",
+                    );
                     setShopNameInput(updated);
                   }
                   setShowShopAccessReminder(false);
