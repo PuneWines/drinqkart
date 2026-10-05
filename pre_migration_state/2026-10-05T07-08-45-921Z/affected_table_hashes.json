@@ -1,0 +1,26 @@
+{
+  "Inventory_items": {
+    "affected_count": 179,
+    "sha256": "3cfaea2c7dda23a8404fe40f81b598c3ec2bcc0dadfabb53a4da585579a7ab62"
+  },
+  "Inventory_vendors": {
+    "affected_count": 40,
+    "sha256": "4946707a59dbe4d173356c47dae760e8a61e7922b1c6b8c29573df474d213301"
+  },
+  "Inventory_inventory_transactions": {
+    "affected_count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "Inventory_closing_stock_items": {
+    "affected_count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "Inventory_sale_history": {
+    "affected_count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "Inventory_manager_report": {
+    "affected_count": 307,
+    "sha256": "7c8b9c6740c850d08090e9aa3214142dabe51a61133906e9ed32e21ad039df9c"
+  }
+}

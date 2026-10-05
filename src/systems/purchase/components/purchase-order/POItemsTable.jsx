@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react";
+import { Trash2, PauseCircle } from "lucide-react";
 
 const inputCellStyle = {
   width: "100%",
@@ -15,7 +15,7 @@ const inputCellStyle = {
   boxSizing: "border-box"
 };
 
-const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdateItem, headerActions }) => {
+const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onHoldItem, onUpdateItem, headerActions }) => {
   const orderQtyRows = items;
 
   const totalPoBoxes = orderQtyRows.reduce((s, r) => {
@@ -56,7 +56,7 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdat
             <th className="po-text-center" style={{ color: "#4338ca" }}>PO Box (Boxes)</th>
             <th className="po-text-center" style={{ color: "#4338ca" }}>PO Qty (Bottles)</th>
             <th className="po-text-center">Qty Type</th>
-            {!isReceiver && onRemoveItem && <th className="po-text-center">Action</th>}
+            {!isReceiver && (onRemoveItem || onHoldItem) && <th className="po-text-center">Action</th>}
           </tr>
         </thead>
         <tbody>
@@ -73,6 +73,20 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdat
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <strong>{item.itemName || "—"}</strong>
+                      {item.is_on_hold && (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          backgroundColor: '#fef3c7',
+                          color: '#d97706',
+                          border: '1px solid #fde68a'
+                        }}>
+                          On Hold
+                        </span>
+                      )}
                       {item.is_excluded && (
                         <span style={{
                           display: 'inline-block',
@@ -156,29 +170,55 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onUpdat
                 <td className="po-text-center" style={{ color: "#64748b", fontSize: "0.8rem" }}>
                   {item.qtyType || "—"}
                 </td>
-                {!isReceiver && onRemoveItem && (
+                {!isReceiver && (onRemoveItem || onHoldItem) && (
                   <td className="po-text-center">
-                    <button
-                      onClick={() => onRemoveItem(item.id)}
-                      className="po-item-delete-btn"
-                      title="Remove item"
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#ef4444",
-                        cursor: "pointer",
-                        padding: "4px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: "4px",
-                        transition: "background-color 0.2s"
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#fee2e2"}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                      {onHoldItem && (
+                        <button
+                          onClick={() => onHoldItem(item.id)}
+                          title={item.is_on_hold ? "Unhold item" : "Hold item"}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: item.is_on_hold ? "#d97706" : "#f59e0b",
+                            cursor: "pointer",
+                            padding: "4px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: "4px",
+                            transition: "background-color 0.2s"
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#fef3c7"}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                        >
+                          <PauseCircle size={15} />
+                        </button>
+                      )}
+                      {onRemoveItem && (
+                        <button
+                          onClick={() => onRemoveItem(item.id)}
+                          className="po-item-delete-btn"
+                          title="Remove item"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#ef4444",
+                            cursor: "pointer",
+                            padding: "4px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: "4px",
+                            transition: "background-color 0.2s"
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#fee2e2"}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>

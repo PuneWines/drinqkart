@@ -1,0 +1,84 @@
+{
+  "Inventory_items": {
+    "column": "shop_id",
+    "total_rows": 340,
+    "distribution": {
+      "9": 161,
+      "13": 94,
+      "15": 78,
+      "16": 2,
+      "17": 5
+    },
+    "null_count": 0
+  },
+  "Inventory_vendors": {
+    "column": "shop_id",
+    "total_rows": 75,
+    "distribution": {
+      "9": 35,
+      "13": 13,
+      "15": 25,
+      "16": 1,
+      "17": 1
+    },
+    "null_count": 0
+  },
+  "Inventory_inventory_transactions": {
+    "column": "shop_id",
+    "total_rows": 16054,
+    "distribution": {
+      "9": 5848,
+      "13": 5684,
+      "15": 4416,
+      "16": 3,
+      "17": 34
+    },
+    "null_count": 69
+  },
+  "Inventory_closing_stock_items": {
+    "column": "shop_id",
+    "total_rows": 12385,
+    "distribution": {
+      "9": 4802,
+      "13": 4430,
+      "15": 3097,
+      "16": 2,
+      "17": 2
+    },
+    "null_count": 52
+  },
+  "Inventory_purchase_items": {
+    "column": "shop_name",
+    "total_rows": 4047,
+    "distribution": {},
+    "null_count": 4047
+  },
+  "Inventory_daily_sales_summary": {
+    "column": "shop_name",
+    "total_rows": 308,
+    "distribution": {},
+    "null_count": 308
+  },
+  "Inventory_sale_history": {
+    "column": "shop_id",
+    "total_rows": 9769,
+    "distribution": {
+      "9": 4631,
+      "13": 2674,
+      "15": 2434,
+      "16": 3,
+      "17": 27
+    },
+    "null_count": 0
+  },
+  "Inventory_manager_report": {
+    "column": "shop_name",
+    "total_rows": 307,
+    "distribution": {
+      "KUNAL FINE WINE": 96,
+      "FRIENDS": 109,
+      "vishal shop\n": 102
+    },
+    "null_count": 0
+  }
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "source_table": "Inventory_items",
+    "source_column": "shop_id",
+    "target_table": "Inventory_shop",
+    "target_column": "id",
+    "on_delete": "CASCADE",
+    "on_update": "NO ACTION"
+  },
+  {
+    "source_table": "Inventory_vendors",
+    "source_column": "shop_id",
+    "target_table": "Inventory_shop",
+    "target_column": "id",
+    "on_delete": "NO ACTION",
+    "on_update": "NO ACTION"
+  },
+  {
+    "source_table": "Inventory_inventory_transactions",
+    "source_column": "shop_id",
+    "target_table": "Inventory_shop",
+    "target_column": "id",
+    "on_delete": "NO ACTION",
+    "on_update": "NO ACTION"
+  },
+  {
+    "source_table": "Inventory_closing_stock_items",
+    "source_column": "shop_id",
+    "target_table": "Inventory_shop",
+    "target_column": "id",
+    "on_delete": "NO ACTION",
+    "on_update": "NO ACTION"
+  },
+  {
+    "source_table": "Inventory_purchase_items",
+    "source_column": "shop_name",
+    "target_table": "Inventory_shop",
+    "target_column": "id",
+    "on_delete": "NO ACTION",
+    "on_update": "NO ACTION"
+  },
+  {
+    "source_table": "Inventory_daily_sales_summary",
+    "source_column": "shop_name",
+    "target_table": "Inventory_shop",
+    "target_column": "id",
+    "on_delete": "NO ACTION",
+    "on_update": "NO ACTION"
+  },
+  {
+    "source_table": "Inventory_sale_history",
+    "source_column": "shop_id",
+    "target_table": "Inventory_shop",
+    "target_column": "id",
+    "on_delete": "SET NULL",
+    "on_update": "NO ACTION"
+  }
+]

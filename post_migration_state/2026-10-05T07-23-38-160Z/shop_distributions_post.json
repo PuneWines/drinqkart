@@ -1,0 +1,62 @@
+{
+  "Inventory_items": {
+    "column": "shop_id",
+    "total_rows": 340,
+    "distribution": {
+      "5": 78,
+      "7": 2,
+      "8": 5,
+      "9": 161,
+      "12": 94
+    },
+    "null_count": 0
+  },
+  "Inventory_vendors": {
+    "column": "shop_id",
+    "total_rows": 75,
+    "distribution": {
+      "5": 25,
+      "7": 1,
+      "8": 1,
+      "9": 35,
+      "12": 13
+    },
+    "null_count": 0
+  },
+  "Inventory_inventory_transactions": {
+    "column": "shop_id",
+    "total_rows": 16054,
+    "distribution": {
+      "5": 4416,
+      "7": 3,
+      "8": 34,
+      "9": 5848,
+      "12": 5684
+    },
+    "null_count": 69
+  },
+  "Inventory_closing_stock_items": {
+    "column": "shop_id",
+    "total_rows": 12385,
+    "distribution": {
+      "5": 3097,
+      "7": 2,
+      "8": 2,
+      "9": 4802,
+      "12": 4430
+    },
+    "null_count": 52
+  },
+  "Inventory_sale_history": {
+    "column": "shop_id",
+    "total_rows": 9769,
+    "distribution": {
+      "5": 2434,
+      "7": 3,
+      "8": 27,
+      "9": 4631,
+      "12": 2674
+    },
+    "null_count": 0
+  }
+}

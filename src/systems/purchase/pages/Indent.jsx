@@ -1226,8 +1226,11 @@ const Indent = () => {
                   onChange={(e) => setDaysDivisor(Number(e.target.value))}
                   className="px-3 py-1.5 border border-[#cbd5e1] rounded-md outline-none font-medium text-[#0f172a] text-xs cursor-pointer bg-white hover:border-[#4f46e5]"
                 >
-                  <option value={7}>7 Days (Weekly)</option>
-                  <option value={30}>30 Days (Monthly)</option>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>
+                      {day} {day === 1 ? 'Day' : 'Days'} {day === 7 ? '(Weekly)' : day === 30 ? '(Monthly - 30)' : day === 31 ? '(Monthly - 31)' : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

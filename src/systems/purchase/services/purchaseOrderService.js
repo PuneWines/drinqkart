@@ -35,11 +35,11 @@ export const fetchPageData = async () => {
     { data: transpData, error: transpError },
     { data: recvData, error: recvError }
   ] = await Promise.all([
-    // Query 1: Fetch pending approved items (both pending and null po_status)
+    // Query 1: Fetch approved items (pending, null, or on_hold po_status)
     supabase
       .from("purchase_approved_indent_items")
       .select("*")
-      .or("po_status.eq.pending,po_status.is.null")
+      .or("po_status.eq.pending,po_status.is.null,po_status.eq.on_hold")
       .order("id", { ascending: false }),
 
     // Query 2: Fetch indents to resolve shop_name reliably
@@ -84,22 +84,25 @@ export const fetchPageData = async () => {
     return acc;
   }, {});
 
-  // Map for backward compatibility with frontend code expecting indentsData and resolved shop_name
-  const enrichedIndentData = (rawIndentItems || []).map(item => ({
+  const enrichedAllItems = (rawIndentItems || []).map(item => ({
     ...item,
     approval_status: "approved",
-    is_excluded: false,
+    is_excluded: item.po_status === "excluded",
     shop_name: indentMap[item.indent_id] || item.purchase_indents?.shop_name || "Unknown"
   }));
 
+  const pendingItems = enrichedAllItems.filter(item => item.po_status !== "on_hold");
+  const heldItems = enrichedAllItems.filter(item => item.po_status === "on_hold");
+
   // Create a minimal indents list compatible with any other parts expecting it
-  const formattedIndentsData = (rawIndentItems || []).map(item => ({
+  const formattedIndentsData = pendingItems.map(item => ({
     id: item.indent_id,
-    shop_name: indentMap[item.indent_id] || item.purchase_indents?.shop_name || "Unknown"
+    shop_name: item.shop_name
   }));
 
   return {
-    indentData: enrichedIndentData,
+    indentData: pendingItems,
+    heldIndentData: heldItems,
     poData: rawPoData || [],
     indentsData: formattedIndentsData,
     vendorsData: vendorsData || [],
@@ -255,6 +258,44 @@ export const excludeIndentItems = async (ids, reason) => {
     is_excluded: true,
     exclusion_reason: reason
   }));
+};
+
+export const holdIndentItems = async (ids) => {
+  if (!ids || ids.length === 0) return [];
+  const chunkSize = 50;
+  let allUpdatedData = [];
+
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { data, error } = await supabase
+      .from("purchase_approved_indent_items")
+      .update({ po_status: "on_hold", updated_at: new Date().toISOString() })
+      .in("id", chunk)
+      .select();
+
+    if (error) throw error;
+    if (data) allUpdatedData = [...allUpdatedData, ...data];
+  }
+  return allUpdatedData;
+};
+
+export const restoreHeldIndentItems = async (ids) => {
+  if (!ids || ids.length === 0) return [];
+  const chunkSize = 50;
+  let allUpdatedData = [];
+
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { data, error } = await supabase
+      .from("purchase_approved_indent_items")
+      .update({ po_status: "pending", updated_at: new Date().toISOString() })
+      .in("id", chunk)
+      .select();
+
+    if (error) throw error;
+    if (data) allUpdatedData = [...allUpdatedData, ...data];
+  }
+  return allUpdatedData;
 };
 
 /**

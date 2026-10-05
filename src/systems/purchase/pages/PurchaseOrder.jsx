@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle } from "lucide-react";
+import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle, PauseCircle, RotateCcw, Clock } from "lucide-react";
 import useCompanyStore from "../store/useCompanyStore";
 import useShopStore from "../store/useShopStore";
 import "../styles/PurchaseOrder.css";
@@ -26,7 +26,9 @@ import {
   excludeIndentItems,
   deleteIndentAfterPO,
   markApprovedItemsAsOrdered,
-  fetchItemList
+  fetchItemList,
+  holdIndentItems,
+  restoreHeldIndentItems
 } from "../services/purchaseOrderService";
 import { generatePdfBlob, uploadPdfBlob, previewPdfInNewTab } from "../services/pdfService";
 import { sendPOConfirmationMessage, sendTransporterConfirmationMessage, sendReceiverConfirmationMessage } from "../services/whatsappService";
@@ -61,8 +63,44 @@ const PurchaseOrder = () => {
   const { toasts, addToast, removeToast } = useToast();
   const [removedItemIds, setRemovedItemIds] = useState(new Set());
 
+  // Held PO states: Standard PO held items persist in Supabase DB (cross-device), Manual PO held items use localStorage
+  const [heldItemIds, setHeldItemIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem("drinqkart_held_item_ids");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [heldPOs, setHeldPOs] = useState(() => {
+    try {
+      const saved = localStorage.getItem("drinqkart_held_pos");
+      const list = saved ? JSON.parse(saved) : [];
+      return list.filter(b => b.batchId && b.batchId.startsWith("manual-hold-"));
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("drinqkart_held_item_ids", JSON.stringify(Array.from(heldItemIds)));
+    } catch (e) {
+      console.error("Failed to save held item ids to localStorage", e);
+    }
+  }, [heldItemIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("drinqkart_held_pos", JSON.stringify(heldPOs));
+    } catch (e) {
+      console.error("Failed to save held POs to localStorage", e);
+    }
+  }, [heldPOs]);
+
   // Manual PO states
-  const [poMode, setPoMode] = useState("standard"); // "standard" or "manual"
+  const [poMode, setPoMode] = useState("standard"); // "standard", "manual", or "hold"
   const [manualItems, setManualItems] = useState([]);
   const [newItemName, setNewItemName] = useState("");
   const [newItemBox, setNewItemBox] = useState("");
@@ -159,6 +197,50 @@ const PurchaseOrder = () => {
       });
 
       setApprovedItems(filteredIndentData);
+
+      // Process database held items from pageDataResponse
+      const dbHeldItems = pageDataResponse.heldIndentData || [];
+      const dbHeldItemIds = new Set(dbHeldItems.map(i => i.id));
+
+      setHeldItemIds(prev => {
+        const manualIds = Array.from(prev).filter(id => typeof id === "string" && id.startsWith("manual-"));
+        return new Set([...Array.from(dbHeldItemIds), ...manualIds]);
+      });
+
+      // Group DB held items by party_name
+      const groupedByParty = {};
+      dbHeldItems.forEach(rawItem => {
+        const party = rawItem.party_name || "Unspecified Vendor";
+        if (!groupedByParty[party]) {
+          groupedByParty[party] = [];
+        }
+        groupedByParty[party].push({
+          id: rawItem.id,
+          itemName: rawItem.item_name,
+          brandName: rawItem.item_name,
+          poBox: rawItem.po_box ?? rawItem.approved_box ?? rawItem.order_box ?? 0,
+          poQty: rawItem.po_qty ?? rawItem.approved_qty ?? rawItem.order_qty ?? 0,
+          orderBox: rawItem.order_box,
+          orderQty: rawItem.order_qty,
+          shopName: rawItem.shop_name,
+          partyName: rawItem.party_name,
+          is_on_hold: true
+        });
+      });
+
+      const dbBatches = Object.entries(groupedByParty).map(([party, items]) => ({
+        batchId: `db-hold-${party.replace(/\s+/g, '-')}`,
+        type: "complete_po",
+        partyName: party,
+        shopName: items[0]?.shopName || "",
+        heldAt: new Date().toLocaleDateString(),
+        items
+      }));
+
+      setHeldPOs(prev => {
+        const manualBatches = prev.filter(b => b.batchId && b.batchId.startsWith("manual-hold-"));
+        return [...dbBatches, ...manualBatches];
+      });
     }
   }, [pageDataResponse]);
 
@@ -228,7 +310,7 @@ const PurchaseOrder = () => {
     } else {
       const rawItems = transformActivePartyItems(filteredApprovedItems, activeParty);
       const combined = [...rawItems, ...addedExcludedItems];
-      list = combined.filter(item => !removedItemIds.has(item.id));
+      list = combined.filter(item => !removedItemIds.has(item.id) && !heldItemIds.has(item.id));
     }
 
     list = list.map(item => normalizePoItem({
@@ -247,7 +329,7 @@ const PurchaseOrder = () => {
       const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
       return mlA - mlB;
     });
-  }, [filteredApprovedItems, activeParty, removedItemIds, poMode, manualItems, addedExcludedItems, itemOverrides]);
+  }, [filteredApprovedItems, activeParty, removedItemIds, heldItemIds, poMode, manualItems, addedExcludedItems, itemOverrides]);
 
   const alreadyAddedIds = useMemo(() => {
     return itemsForActiveParty.map(i => i.id);
@@ -313,6 +395,152 @@ const PurchaseOrder = () => {
       });
       addToast(`Removed "${itemName}" from current PO view.`, "info");
     }
+  };
+
+  // Hold a single item from active PO
+  const handleHoldItem = async (itemId) => {
+    const itemToHold = itemsForActiveParty.find(i => i.id === itemId);
+    if (!itemToHold) return;
+
+    if (poMode !== "manual" && itemToHold.id) {
+      try {
+        await holdIndentItems([itemToHold.id]);
+        addToast(`Placed "${itemToHold.itemName}" on hold in database.`, "info");
+        await loadPageData(false);
+      } catch (err) {
+        console.error("Error holding item in database:", err);
+      }
+      return;
+    }
+
+    setHeldItemIds(prev => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
+
+    const holdBatchId = `manual-hold-item-${Date.now()}`;
+    const newHeldRecord = {
+      batchId: holdBatchId,
+      type: "single_item",
+      partyName: activeParty,
+      shopName: selectedShop,
+      heldAt: new Date().toLocaleString(),
+      items: [{ ...itemToHold, is_on_hold: true }]
+    };
+
+    setHeldPOs(prev => [newHeldRecord, ...prev]);
+    addToast(`Placed "${itemToHold.itemName}" on hold.`, "info");
+  };
+
+  // Hold complete Purchase Order for active vendor
+  const handleHoldCompletePO = async () => {
+    if (!activeParty || itemsForActiveParty.length === 0) {
+      addToast("No items available to hold for this vendor.", "warning");
+      return;
+    }
+
+    const itemIdsToHold = itemsForActiveParty.map(i => i.id);
+
+    if (poMode !== "manual") {
+      try {
+        await holdIndentItems(itemIdsToHold);
+        addToast(`Complete Purchase Order for "${activeParty}" placed on hold in database.`, "success");
+        await loadPageData(false);
+      } catch (err) {
+        console.error("Error holding PO in database:", err);
+      }
+      return;
+    }
+
+    setHeldItemIds(prev => {
+      const next = new Set(prev);
+      itemIdsToHold.forEach(id => next.add(id));
+      return next;
+    });
+
+    const holdBatchId = `manual-hold-po-${Date.now()}`;
+    const newHeldRecord = {
+      batchId: holdBatchId,
+      type: "complete_po",
+      partyName: activeParty,
+      shopName: selectedShop,
+      heldAt: new Date().toLocaleString(),
+      items: itemsForActiveParty.map(item => ({ ...item, is_on_hold: true }))
+    };
+
+    setHeldPOs(prev => [newHeldRecord, ...prev]);
+    addToast(`Complete Purchase Order for "${activeParty}" placed on hold.`, "success");
+  };
+
+  // Restore held batch or item
+  const handleRestoreHeldBatch = async (batchId) => {
+    const targetBatch = heldPOs.find(b => b.batchId === batchId);
+    if (!targetBatch) return;
+
+    const itemIdsToRestore = targetBatch.items.map(i => i.id);
+
+    try {
+      await restoreHeldIndentItems(itemIdsToRestore);
+    } catch (err) {
+      console.error("Error restoring held batch in database:", err);
+    }
+
+    setHeldItemIds(prev => {
+      const next = new Set(prev);
+      itemIdsToRestore.forEach(id => next.delete(id));
+      return next;
+    });
+
+    setHeldPOs(prev => prev.filter(b => b.batchId !== batchId));
+    if (targetBatch.partyName) setActiveParty(targetBatch.partyName);
+    setPoMode("standard");
+    addToast(`Restored held items for "${targetBatch.partyName || 'PO'}" back to Purchase Order.`, "success");
+    await loadPageData(false);
+  };
+
+  const handleRestoreHeldItem = async (batchId, itemId) => {
+    try {
+      await restoreHeldIndentItems([itemId]);
+    } catch (err) {
+      console.error("Error restoring held item in database:", err);
+    }
+
+    setHeldItemIds(prev => {
+      const next = new Set(prev);
+      next.delete(itemId);
+      return next;
+    });
+
+    setHeldPOs(prev => {
+      return prev.map(batch => {
+        if (batch.batchId !== batchId) return batch;
+        const remaining = batch.items.filter(i => i.id !== itemId);
+        if (remaining.length === 0) return null;
+        return { ...batch, items: remaining };
+      }).filter(Boolean);
+    });
+
+    setPoMode("standard");
+    addToast("Restored held item back to active Purchase Order.", "success");
+    await loadPageData(false);
+  };
+
+  const handleDeleteHeldBatch = async (batchId) => {
+    if (!window.confirm("Are you sure you want to delete this held item/PO batch?")) return;
+    const targetBatch = heldPOs.find(b => b.batchId === batchId);
+    if (targetBatch) {
+      const itemIdsToDelete = targetBatch.items.map(i => i.id);
+      try {
+        await excludeIndentItems(itemIdsToDelete, "deleted_from_hold");
+      } catch (err) {
+        console.error("Error excluding held items in database:", err);
+      }
+    }
+
+    setHeldPOs(prev => prev.filter(b => b.batchId !== batchId));
+    addToast("Held item/PO deleted.", "info");
+    await loadPageData(false);
   };
 
   const handleItemSelection = (item) => {
@@ -873,47 +1101,38 @@ const PurchaseOrder = () => {
 
   const poDate = today();
 
-  const headerActions = activeParty && poMode !== "manual" ? (
-    <div style={{ display: 'flex', gap: '8px' }}>
+  const headerActions = activeParty ? (
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+      {poMode !== "manual" && (
+        <>
+          <button
+            type="button"
+            className="po-btn-secondary"
+            onClick={() => setIsRejectedModalOpen(true)}
+            disabled={!activeParty}
+            style={{ fontSize: '11px', padding: '4px 8px' }}
+          >
+            + Add Rejected
+          </button>
+          <button
+            type="button"
+            className="po-btn-secondary"
+            onClick={() => setIsExcludedModalOpen(true)}
+            disabled={!activeParty}
+            style={{ fontSize: '11px', padding: '4px 8px' }}
+          >
+            + Add Excluded
+          </button>
+        </>
+      )}
       <button
         type="button"
-        onClick={() => setIsRejectedModalOpen(true)}
-        style={{
-          padding: '7px 14px',
-          borderRadius: '8px',
-          border: '1px solid #fecaca',
-          backgroundColor: '#fef2f2',
-          color: '#dc2626',
-          fontSize: '13px',
-          fontWeight: '600',
-          cursor: 'pointer',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-        }}
+        className="po-btn-secondary"
+        onClick={handleHoldCompletePO}
+        disabled={!activeParty || itemsForActiveParty.length === 0 || poMode === "hold"}
+        style={{ fontSize: '11px', padding: '4px 8px', backgroundColor: '#fef3c7', color: '#92400e', borderColor: '#fcd34d', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
       >
-        <XCircle size={15} /> + Add Rejected
-      </button>
-      <button
-        type="button"
-        onClick={() => setIsExcludedModalOpen(true)}
-        style={{
-          padding: '7px 14px',
-          borderRadius: '8px',
-          border: '1px solid #fde68a',
-          backgroundColor: '#fffbeb',
-          color: '#b45309',
-          fontSize: '13px',
-          fontWeight: '600',
-          cursor: 'pointer',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-        }}
-      >
-        <AlertTriangle size={15} /> + Add Excluded
+        <PauseCircle size={13} /> Hold PO
       </button>
     </div>
   ) : null;
@@ -952,7 +1171,7 @@ const PurchaseOrder = () => {
           <button
             className="po-btn-secondary"
             onClick={handlePreviewPDF}
-            disabled={!activeParty || isUploading}
+            disabled={!activeParty || isUploading || poMode === "hold"}
             style={{ margin: 0 }}
           >
             <FileText size={15} /> Preview PDF
@@ -960,7 +1179,7 @@ const PurchaseOrder = () => {
           <button
             className="po-btn-secondary"
             onClick={handleDownloadPDF}
-            disabled={!activeParty || isUploading}
+            disabled={!activeParty || isUploading || poMode === "hold"}
             style={{ margin: 0 }}
           >
             <Printer size={15} /> {isUploading ? "Submitting..." : "Generate & Submit PO"}
@@ -971,56 +1190,145 @@ const PurchaseOrder = () => {
       {/* Mode Selector Tab Replacement */}
       {/* Mode Toggle */}
       <div className="flex justify-center px-5 pt-3 bg-white border border-b-0 border-slate-200 rounded-t-xl">
-        <div
-          role="switch"
-          aria-checked={poMode === "manual"}
-          tabIndex={0}
-          onClick={() => {
-            const next = poMode === "standard" ? "manual" : "standard";
-            setPoMode(next);
-            setActiveParty("");
-            if (next === "manual") setManualItems([]);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === ' ' || e.key === 'Enter') {
-              e.preventDefault();
-              const next = poMode === "standard" ? "manual" : "standard";
-              setPoMode(next);
-              setActiveParty("");
-              if (next === "manual") setManualItems([]);
-            }
-          }}
-          className="relative flex items-center bg-slate-100 border border-slate-300 rounded-full p-[3px] cursor-pointer select-none w-64"
-        >
+        <div className="relative flex items-center bg-slate-100 border border-slate-300 rounded-full p-[3px] select-none w-80">
           {/* Sliding thumb */}
           <div
-            className={`absolute top-[3px] left-[3px] bottom-[3px] w-[calc(50%-3px)] bg-white rounded-full border border-slate-200 shadow-sm pointer-events-none transition-transform duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] ${poMode === "manual" ? "translate-x-[calc(100%+3px)]" : "translate-x-0"
-              }`}
+            className={`absolute top-[3px] bottom-[3px] w-[calc(33.333%-2px)] bg-white rounded-full border border-slate-200 shadow-sm pointer-events-none transition-transform duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+              poMode === "manual" ? "translate-x-[calc(100%+3px)]" : poMode === "hold" ? "translate-x-[calc(200%+4px)]" : "translate-x-0"
+            }`}
           />
 
           {/* Standard PO */}
-          <div className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[12.5px] relative z-10 pointer-events-none transition-colors duration-150 ${poMode === "standard" ? "font-medium text-slate-800" : "font-normal text-slate-400"
-            }`}>
+          <button
+            type="button"
+            onClick={() => { setPoMode("standard"); setActiveParty(""); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-[12px] relative z-10 transition-colors duration-150 rounded-full ${
+              poMode === "standard" ? "font-medium text-slate-800" : "font-normal text-slate-500 hover:text-slate-700"
+            }`}
+          >
             <ShoppingCart size={13} />
             Standard PO
-          </div>
+          </button>
 
           {/* Manual PO */}
-          <div className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[12.5px] relative z-10 pointer-events-none transition-colors duration-150 ${poMode === "manual" ? "font-medium text-slate-800" : "font-normal text-slate-400"
-            }`}>
+          <button
+            type="button"
+            onClick={() => { setPoMode("manual"); setActiveParty(""); setManualItems([]); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-[12px] relative z-10 transition-colors duration-150 rounded-full ${
+              poMode === "manual" ? "font-medium text-slate-800" : "font-normal text-slate-500 hover:text-slate-700"
+            }`}
+          >
             <FileText size={13} />
             Manual PO
-          </div>
+          </button>
+
+          {/* Hold PO */}
+          <button
+            type="button"
+            onClick={() => { setPoMode("hold"); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-[12px] relative z-10 transition-colors duration-150 rounded-full ${
+              poMode === "hold" ? "font-semibold text-amber-900" : "font-normal text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <PauseCircle size={13} className={poMode === "hold" ? "text-amber-600" : ""} />
+            Hold PO {heldPOs.length > 0 && <span className="ml-0.5 px-1.5 py-0.2 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full">{heldPOs.length}</span>}
+          </button>
         </div>
       </div>
       <div className="h-2.5 bg-white border-x border-slate-200" />
 
       {/* ✅ Single closing panel — wraps ALL states together */}
-      <div className="border border-t-0 border-slate-200 rounded-b-xl bg-white">
+      <div className="border border-t-0 border-slate-200 rounded-b-xl bg-white p-4">
 
         {isLoading && (
           <div className="po-empty" style={{ border: 'none', boxShadow: 'none' }}>
             <h2 style={{ color: '#64748b' }}>Loading data...</h2>
+          </div>
+        )}
+
+        {/* Hold PO Tab View */}
+        {!isLoading && poMode === "hold" && (
+          <div className="flex flex-col gap-6 p-2">
+            <div className="flex items-center justify-between border-b pb-3 border-amber-200">
+              <div className="flex items-center gap-2">
+                <PauseCircle className="text-amber-600" size={20} />
+                <h2 className="text-base font-semibold text-slate-800">Held Purchase Orders & Items</h2>
+                <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">{heldPOs.length} Batches</span>
+              </div>
+              <p className="text-xs text-slate-500">Items or full POs put on hold are saved here. Click Restore to move them back to active PO.</p>
+            </div>
+
+            {heldPOs.length === 0 ? (
+              <div className="po-empty" style={{ border: 'none', boxShadow: 'none', padding: '40px 0' }}>
+                <Clock size={40} className="text-slate-300 mb-3" />
+                <h3 className="text-slate-600 font-semibold">No Held Purchase Orders</h3>
+                <p className="text-slate-400 text-sm">When you click "Hold PO" or hold individual items, they will appear here.</p>
+              </div>
+            ) : (
+              heldPOs.map((batch) => (
+                <div key={batch.batchId} className="border border-amber-200 rounded-xl bg-amber-50/30 overflow-hidden shadow-sm">
+                  <div className="flex items-center justify-between bg-amber-100/60 px-4 py-3 border-b border-amber-200">
+                    <div className="flex items-center gap-3">
+                      <span className="px-2 py-0.5 bg-amber-600 text-white text-[11px] font-semibold rounded">
+                        {batch.type === "complete_po" ? "Complete PO Hold" : "Item Hold"}
+                      </span>
+                      <h4 className="font-bold text-amber-950 text-sm">{batch.partyName || "Unspecified Vendor"}</h4>
+                      {batch.shopName && <span className="text-xs text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded">Shop: {batch.shopName}</span>}
+                      <span className="text-xs text-slate-500 flex items-center gap-1"><Clock size={12} /> {batch.heldAt}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleRestoreHeldBatch(batch.batchId)}
+                        className="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-1.5 rounded-md font-medium transition cursor-pointer"
+                      >
+                        <RotateCcw size={13} /> Restore All Items
+                      </button>
+                      <button
+                        onClick={() => handleDeleteHeldBatch(batch.batchId)}
+                        className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs px-2.5 py-1.5 rounded-md font-medium transition cursor-pointer"
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-white">
+                    <table className="w-full text-xs text-left text-slate-700 border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 uppercase text-[10px]">
+                          <th className="py-2 px-3">Item Name</th>
+                          <th className="py-2 px-3 text-center">Shop</th>
+                          <th className="py-2 px-3 text-right">PO Box</th>
+                          <th className="py-2 px-3 text-right">PO Qty</th>
+                          <th className="py-2 px-3 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {batch.items.map((item) => (
+                          <tr key={item.id} className="border-b border-slate-100 hover:bg-amber-50/20">
+                            <td className="py-2 px-3 font-medium text-slate-800">
+                              {item.itemName}
+                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800">On Hold</span>
+                            </td>
+                            <td className="py-2 px-3 text-center text-slate-500">{item.shopName || item.shop_name || "—"}</td>
+                            <td className="py-2 px-3 text-right font-medium">{item.poBox ?? item.orderBox ?? 0}</td>
+                            <td className="py-2 px-3 text-right font-medium">{item.poQty ?? item.orderQty ?? 0}</td>
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                onClick={() => handleRestoreHeldItem(batch.batchId, item.id)}
+                                className="text-amber-700 hover:text-amber-900 font-medium text-[11px] underline cursor-pointer"
+                              >
+                                Restore Item
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -1040,7 +1348,7 @@ const PurchaseOrder = () => {
           </div>
         )}
 
-        {!isLoading && (poMode === "manual" ? selectedShop !== "All" : dbParties.length > 0) && (
+        {!isLoading && poMode !== "hold" && (poMode === "manual" ? selectedShop !== "All" : dbParties.length > 0) && (
           <div ref={printRef} style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
             <PurchaseOrderPreview
               id="shipping-details-pdf-trader"
@@ -1060,6 +1368,7 @@ const PurchaseOrder = () => {
               setSelectedReceiver={setSelectedReceiver}
               shippingError={shippingError}
               onRemoveItem={handleRemoveItem}
+              onHoldItem={handleHoldItem}
               onUpdateItem={handleUpdatePoItem}
               onDeleteVendor={poMode === "manual" ? null : handleDeleteVendor}
               poMode={poMode}

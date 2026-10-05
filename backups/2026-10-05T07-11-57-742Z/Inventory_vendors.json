@@ -1,0 +1,527 @@
+[
+  {
+    "id": 6,
+    "vendor_name": "D-MART",
+    "created_at": "2026-08-20T05:25:42.909397+00:00",
+    "shop_id": 9,
+    "contact_number": ""
+  },
+  {
+    "id": 10,
+    "vendor_name": "NAG RANI",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 11,
+    "vendor_name": "LOCAL SNACKS",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 12,
+    "vendor_name": "CASH MEMO",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 13,
+    "vendor_name": "N.R. ENTERPRISES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 14,
+    "vendor_name": "KATE ICE",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 15,
+    "vendor_name": "SHRI BALAJI TRADING COMPANY",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 16,
+    "vendor_name": "KRITIKA ENTERPRISES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 17,
+    "vendor_name": "P R ENTERPRISES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 19,
+    "vendor_name": "POLESTAR ENTERPRISES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 21,
+    "vendor_name": "AKASH MARKETING",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 22,
+    "vendor_name": "SHRI SWAMI SAMARTH",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 24,
+    "vendor_name": "SHREE GURUKRUPA DISTRIBUTORS",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 25,
+    "vendor_name": "B S FOODS",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 27,
+    "vendor_name": "BOMBAY GROUP",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 28,
+    "vendor_name": "AJ FOODS",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 29,
+    "vendor_name": "BINAYAK INTERPRISES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 30,
+    "vendor_name": "ANVI BEVERAGES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 31,
+    "vendor_name": "APARNA LOGITECH PRIVATE LIMITED",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 33,
+    "vendor_name": "GOU MATA TRADERS",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 34,
+    "vendor_name": "ITC",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": null
+  },
+  {
+    "id": 32,
+    "vendor_name": "AAKASH ENTERPRISES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": ""
+  },
+  {
+    "id": 124,
+    "vendor_name": "SAIRAJ SALES",
+    "created_at": "2026-07-17T05:30:13.8496+00:00",
+    "shop_id": 13,
+    "contact_number": "9766613003"
+  },
+  {
+    "id": 125,
+    "vendor_name": "SANSKAAR ENTERPRISES",
+    "created_at": "2026-07-19T05:54:40.510734+00:00",
+    "shop_id": 9,
+    "contact_number": "9850318858"
+  },
+  {
+    "id": 126,
+    "vendor_name": "BRITTA",
+    "created_at": "2026-07-20T13:48:00.779695+00:00",
+    "shop_id": 15,
+    "contact_number": "9833122215"
+  },
+  {
+    "id": 127,
+    "vendor_name": "KAILASH AGENCY",
+    "created_at": "2026-07-29T10:53:13.563332+00:00",
+    "shop_id": 13,
+    "contact_number": "8805232067"
+  },
+  {
+    "id": 128,
+    "vendor_name": "MATA JI TRADING COMPANY",
+    "created_at": "2026-07-30T05:49:08.09013+00:00",
+    "shop_id": 13,
+    "contact_number": "8551900053"
+  },
+  {
+    "id": 129,
+    "vendor_name": "VARAD ENTERPRISES",
+    "created_at": "2026-08-18T05:25:37.62174+00:00",
+    "shop_id": 9,
+    "contact_number": "8805052626"
+  },
+  {
+    "id": 130,
+    "vendor_name": "KT & G",
+    "created_at": "2026-09-24T06:04:10.657547+00:00",
+    "shop_id": 9,
+    "contact_number": "9822354963"
+  },
+  {
+    "id": 131,
+    "vendor_name": "KUCHHAL DISTRIBUTORS LLP",
+    "created_at": "2026-09-30T06:12:42.610823+00:00",
+    "shop_id": 9,
+    "contact_number": "8412909900"
+  },
+  {
+    "id": 132,
+    "vendor_name": "LOTUS",
+    "created_at": "2026-09-30T06:40:29.381955+00:00",
+    "shop_id": 9,
+    "contact_number": "9766502008"
+  },
+  {
+    "id": 58,
+    "vendor_name": "test yk",
+    "created_at": "2026-07-01T09:50:46.563152+00:00",
+    "shop_id": 16,
+    "contact_number": ""
+  },
+  {
+    "id": 18,
+    "vendor_name": "SWARA ENTERPRISES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": "7447555242"
+  },
+  {
+    "id": 20,
+    "vendor_name": "SHUBHAM PRODUCTS",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": "9021919184"
+  },
+  {
+    "id": 23,
+    "vendor_name": "VIRAJ BEVERAGES",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": "9011340706"
+  },
+  {
+    "id": 35,
+    "vendor_name": "OPENING STOCK",
+    "created_at": "2026-06-26T09:52:41.988315+00:00",
+    "shop_id": 13,
+    "contact_number": ""
+  },
+  {
+    "id": 36,
+    "vendor_name": "OPENING VENDORE",
+    "created_at": "2026-06-26T14:20:45.437698+00:00",
+    "shop_id": 15,
+    "contact_number": ""
+  },
+  {
+    "id": 37,
+    "vendor_name": "MAULI ENTERPRISES",
+    "created_at": "2026-06-27T05:03:29.813915+00:00",
+    "shop_id": 13,
+    "contact_number": "7588938387"
+  },
+  {
+    "id": 38,
+    "vendor_name": "ICE",
+    "created_at": "2026-06-27T05:03:57.207373+00:00",
+    "shop_id": 13,
+    "contact_number": ""
+  },
+  {
+    "id": 39,
+    "vendor_name": "new vendore",
+    "created_at": "2026-06-27T13:22:53.396195+00:00",
+    "shop_id": 17,
+    "contact_number": ""
+  },
+  {
+    "id": 40,
+    "vendor_name": "ARYAN ENTERPRISES",
+    "created_at": "2026-06-28T04:50:14.243562+00:00",
+    "shop_id": 13,
+    "contact_number": "9665938305"
+  },
+  {
+    "id": 41,
+    "vendor_name": "ANAND ENTERPRISES",
+    "created_at": "2026-06-28T04:51:40.311633+00:00",
+    "shop_id": 13,
+    "contact_number": "9370447116"
+  },
+  {
+    "id": 42,
+    "vendor_name": "AYEKART RETAIL PRIVATE LIMITED",
+    "created_at": "2026-06-28T04:52:26.073157+00:00",
+    "shop_id": 13,
+    "contact_number": "9812346578"
+  },
+  {
+    "id": 46,
+    "vendor_name": "ice",
+    "created_at": "2026-06-28T07:34:20.111786+00:00",
+    "shop_id": 15,
+    "contact_number": "8976215661"
+  },
+  {
+    "id": 47,
+    "vendor_name": "Om Sai nath",
+    "created_at": "2026-06-28T07:38:21.180589+00:00",
+    "shop_id": 15,
+    "contact_number": "9372224632"
+  },
+  {
+    "id": 48,
+    "vendor_name": "Lockal sanks",
+    "created_at": "2026-06-28T07:40:27.360413+00:00",
+    "shop_id": 15,
+    "contact_number": "9594949811"
+  },
+  {
+    "id": 49,
+    "vendor_name": "Bislar company",
+    "created_at": "2026-06-28T07:41:37.871401+00:00",
+    "shop_id": 15,
+    "contact_number": "7977954839"
+  },
+  {
+    "id": 50,
+    "vendor_name": "Sri Entarpress",
+    "created_at": "2026-06-28T07:43:20.203171+00:00",
+    "shop_id": 15,
+    "contact_number": "9619160487"
+  },
+  {
+    "id": 51,
+    "vendor_name": "Samarth kuripa distibutors",
+    "created_at": "2026-06-28T07:43:58.252736+00:00",
+    "shop_id": 15,
+    "contact_number": ""
+  },
+  {
+    "id": 52,
+    "vendor_name": "Saksham entarpress",
+    "created_at": "2026-06-28T07:45:55.804203+00:00",
+    "shop_id": 15,
+    "contact_number": "7304724638"
+  },
+  {
+    "id": 54,
+    "vendor_name": "RK FOODS",
+    "created_at": "2026-06-28T07:47:06.470712+00:00",
+    "shop_id": 15,
+    "contact_number": "9619160487"
+  },
+  {
+    "id": 55,
+    "vendor_name": "Shree Ganesh Agency",
+    "created_at": "2026-06-28T15:25:12.822676+00:00",
+    "shop_id": 15,
+    "contact_number": ""
+  },
+  {
+    "id": 56,
+    "vendor_name": "DHAVAL MARKETING",
+    "created_at": "2026-06-30T05:59:35.266694+00:00",
+    "shop_id": 15,
+    "contact_number": "8329006572"
+  },
+  {
+    "id": 57,
+    "vendor_name": "S.S.K ENTERPRISES",
+    "created_at": "2026-06-30T06:00:39.465487+00:00",
+    "shop_id": 15,
+    "contact_number": "9167719425"
+  },
+  {
+    "id": 59,
+    "vendor_name": "OM SHAKTI SALES",
+    "created_at": "2026-07-02T12:59:11.917745+00:00",
+    "shop_id": 15,
+    "contact_number": "9833604065"
+  },
+  {
+    "id": 60,
+    "vendor_name": "SWARAJ ENTERISES",
+    "created_at": "2026-07-02T13:00:49.099497+00:00",
+    "shop_id": 15,
+    "contact_number": "9172351338"
+  },
+  {
+    "id": 61,
+    "vendor_name": "JAGWANI FMCG",
+    "created_at": "2026-07-03T13:44:29.190416+00:00",
+    "shop_id": 15,
+    "contact_number": "6394212486"
+  },
+  {
+    "id": 62,
+    "vendor_name": "DAVANISH ENTERPRISES",
+    "created_at": "2026-07-04T06:21:48.444606+00:00",
+    "shop_id": 15,
+    "contact_number": "8766395705"
+  },
+  {
+    "id": 63,
+    "vendor_name": "GM ENTERPRISES",
+    "created_at": "2026-07-04T06:22:59.760998+00:00",
+    "shop_id": 15,
+    "contact_number": "8080074496"
+  },
+  {
+    "id": 64,
+    "vendor_name": "VIGHNESH MARKETING",
+    "created_at": "2026-07-05T04:54:27.445853+00:00",
+    "shop_id": 15,
+    "contact_number": "8450937946"
+  },
+  {
+    "id": 26,
+    "vendor_name": "D MART",
+    "created_at": "2026-06-22T06:31:56.668375+00:00",
+    "shop_id": 9,
+    "contact_number": ""
+  },
+  {
+    "id": 65,
+    "vendor_name": "CHAHAL CORPORATION",
+    "created_at": "2026-07-06T14:08:42.023561+00:00",
+    "shop_id": 15,
+    "contact_number": "7700033111"
+  },
+  {
+    "id": 66,
+    "vendor_name": "BHAGWATI ENTERPRISES",
+    "created_at": "2026-07-07T14:39:13.354635+00:00",
+    "shop_id": 15,
+    "contact_number": "8169844474"
+  },
+  {
+    "id": 67,
+    "vendor_name": "MIRAI PACKAGING",
+    "created_at": "2026-07-07T14:55:44.042136+00:00",
+    "shop_id": 15,
+    "contact_number": "9955165678"
+  },
+  {
+    "id": 81,
+    "vendor_name": "DMART",
+    "created_at": "2026-07-08T06:07:26.54155+00:00",
+    "shop_id": 13,
+    "contact_number": ""
+  },
+  {
+    "id": 82,
+    "vendor_name": "MANE BROTHERS ENTERPRISES",
+    "created_at": "2026-07-09T05:15:10.326669+00:00",
+    "shop_id": 15,
+    "contact_number": "6203990131"
+  },
+  {
+    "id": 83,
+    "vendor_name": "VIGHNESH ENTERPRISES",
+    "created_at": "2026-07-09T05:16:12.283031+00:00",
+    "shop_id": 15,
+    "contact_number": "9594980827"
+  },
+  {
+    "id": 84,
+    "vendor_name": "RAJYOG BUSINESS SOLUTIONS",
+    "created_at": "2026-07-11T05:33:03.955312+00:00",
+    "shop_id": 9,
+    "contact_number": "8956685656"
+  },
+  {
+    "id": 85,
+    "vendor_name": "SMV ENTERPRISES",
+    "created_at": "2026-07-11T05:34:27.379677+00:00",
+    "shop_id": 9,
+    "contact_number": "9208201663"
+  },
+  {
+    "id": 86,
+    "vendor_name": "BHAKTI ENTERPRISES",
+    "created_at": "2026-07-12T06:29:14.557551+00:00",
+    "shop_id": 9,
+    "contact_number": "9208201663"
+  },
+  {
+    "id": 87,
+    "vendor_name": "PROVIE ENTERPRISES",
+    "created_at": "2026-07-14T05:36:35.641165+00:00",
+    "shop_id": 9,
+    "contact_number": "9833271121"
+  },
+  {
+    "id": 88,
+    "vendor_name": "SHREYAN WATER SOLUTJON",
+    "created_at": "2026-07-15T13:40:29.141838+00:00",
+    "shop_id": 15,
+    "contact_number": "9664762006"
+  },
+  {
+    "id": 89,
+    "vendor_name": "Shree Sales",
+    "created_at": "2026-07-17T05:18:37.666136+00:00",
+    "shop_id": 13,
+    "contact_number": "8411939805"
+  },
+  {
+    "id": 90,
+    "vendor_name": "SHAURYA ENTERPRISES",
+    "created_at": "2026-07-17T05:20:47.776505+00:00",
+    "shop_id": 13,
+    "contact_number": ""
+  },
+  {
+    "id": 123,
+    "vendor_name": "SHUBHAM PRODUCT",
+    "created_at": "2026-07-17T05:26:08.482796+00:00",
+    "shop_id": 13,
+    "contact_number": "9821919184"
+  }
+]
