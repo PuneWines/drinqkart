@@ -1,0 +1,39 @@
+[
+  {
+    "sequence_name": "Inventory_shop_id_seq",
+    "current_max_id": 17,
+    "target_max_id": 19
+  },
+  {
+    "sequence_name": "Inventory_items_id_seq",
+    "target_table": "Inventory_items"
+  },
+  {
+    "sequence_name": "Inventory_vendors_id_seq",
+    "target_table": "Inventory_vendors"
+  },
+  {
+    "sequence_name": "Inventory_inventory_transactions_id_seq",
+    "target_table": "Inventory_inventory_transactions"
+  },
+  {
+    "sequence_name": "Inventory_closing_stock_items_id_seq",
+    "target_table": "Inventory_closing_stock_items"
+  },
+  {
+    "sequence_name": "Inventory_purchase_items_id_seq",
+    "target_table": "Inventory_purchase_items"
+  },
+  {
+    "sequence_name": "Inventory_daily_sales_summary_id_seq",
+    "target_table": "Inventory_daily_sales_summary"
+  },
+  {
+    "sequence_name": "Inventory_sale_history_id_seq",
+    "target_table": "Inventory_sale_history"
+  },
+  {
+    "sequence_name": "Inventory_stock_ledger_id_seq",
+    "target_table": "Inventory_stock_ledger"
+  }
+]

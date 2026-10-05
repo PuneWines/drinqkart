@@ -25,6 +25,7 @@ const PurchaseOrderPreview = ({
   setSelectedReceiver,
   shippingError,
   onRemoveItem,
+  onHoldItem,
   onUpdateItem,
   onDeleteVendor,
   poMode,
@@ -68,6 +69,7 @@ const PurchaseOrderPreview = ({
         items={items}
         isReceiver={false}
         onRemoveItem={onRemoveItem}
+        onHoldItem={onHoldItem}
         onUpdateItem={onUpdateItem}
         headerActions={headerActions}
       />

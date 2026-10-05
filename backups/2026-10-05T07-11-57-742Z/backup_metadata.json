@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-10-05T07:12:19.616Z",
+  "backup_directory": "backups\\2026-10-05T07-11-57-742Z",
+  "database_url": "https://yxtvvjijtraobzaqdevz.supabase.co",
+  "total_tables": 10,
+  "grand_total_rows": 54275,
+  "verified_non_zero": true
+}

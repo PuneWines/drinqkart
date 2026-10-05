@@ -235,8 +235,9 @@ const Approval = () => {
 
   const inlineInputStyle = {
     width: '100%',
-    minWidth: '70px',
-    padding: '6px 8px',
+    minWidth: '60px',
+    maxWidth: '85px',
+    padding: '4px 6px',
     border: '1px solid #cbd5e1',
     borderRadius: '4px',
     backgroundColor: '#fff',
@@ -246,7 +247,7 @@ const Approval = () => {
     transition: 'all 0.2s',
     fontWeight: '700',
     color: '#4338ca',
-    textAlign: 'right'
+    textAlign: 'center'
   };
   const queryClient = useQueryClient();
 
@@ -526,24 +527,27 @@ const Approval = () => {
   };
 
   const thStyle = {
-    padding: '12px 16px',
+    padding: '8px 10px',
     textAlign: 'left',
-    fontSize: '12px',
-    fontWeight: '600',
+    fontSize: '11px',
+    fontWeight: '700',
     color: '#475569',
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.03em',
     borderBottom: '2px solid #e2e8f0',
     backgroundColor: '#f8fafc',
-    whiteSpace: 'nowrap'
+    whiteSpace: 'pre-line',
+    lineHeight: '1.25',
+    verticalAlign: 'bottom'
   };
 
   const tdStyle = {
-    padding: '12px 16px',
+    padding: '8px 10px',
     fontSize: '13px',
     color: '#1e293b',
     borderBottom: '1px solid #e2e8f0',
-    fontWeight: '500'
+    fontWeight: '500',
+    verticalAlign: 'middle'
   };
 
   const checkDateRange = (createdAt) => {
@@ -786,13 +790,13 @@ const Approval = () => {
               <thead>
                 <tr>
                   <th style={{ ...thStyle, textAlign: 'center' }}>Action</th>
-                  <th style={thStyle}>Indent ID</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Indent ID</th>
                   <th style={thStyle}>Shop Name</th>
                   {activeTab === 'history' && <th style={{ ...thStyle, textAlign: 'center' }}>Status</th>}
                   <th style={thStyle}>Party Name</th>
-                  <th style={thStyle}>{activeTab === 'pending' ? 'Created At' : 'Approved At'}</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Total Order Qty</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Total Order Box</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>{activeTab === 'pending' ? 'Created At' : 'Approved At'}</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Total Order Qty</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Total Order Box</th>
                 </tr>
               </thead>
               <tbody>
@@ -875,8 +879,8 @@ const Approval = () => {
                         </button>
                       </div>
                     </td>
-                    <td style={{ ...tdStyle, color: '#4338ca', fontWeight: '600' }}>{indentDisplayLabel}</td>
-                    <td style={tdStyle}>{items[0]?.shop_name || "-"}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center', color: '#4338ca', fontWeight: '600' }}>{indentDisplayLabel}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left' }}>{items[0]?.shop_name || "-"}</td>
                     {activeTab === 'history' && (
                       <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8fafc', padding: '4px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)' }}>
@@ -892,10 +896,10 @@ const Approval = () => {
                         </div>
                       </td>
                     )}
-                    <td style={tdStyle}>{items[0]?.party_name || "-"}</td>
-                    <td style={tdStyle}>{formatDateTime(items[0]?.created_at)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>{calculateTotalOrderQty(items)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>{calculateTotalOrderBox(items)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left' }}>{items[0]?.party_name || "-"}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>{formatDateTime(items[0]?.created_at)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center', fontWeight: '700', color: '#0f172a' }}>{calculateTotalOrderQty(items)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center', fontWeight: '700', color: '#0f172a' }}>{calculateTotalOrderBox(items)}</td>
                   </tr>
                   );
                 })}
@@ -922,7 +926,7 @@ const Approval = () => {
             backgroundColor: '#ffffff',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '1200px',
+            maxWidth: '96vw',
             maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
@@ -1053,18 +1057,18 @@ const Approval = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr>
-                      <th style={{ ...thStyle, textAlign: 'center' }}>Approve / Reject</th>
-                      <th style={thStyle}>Indent ID</th>
-                      <th style={thStyle}>Shop Name</th>
-                      <th style={thStyle}>Item Name</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Per Day Sale</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Order Box</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Order Qty</th>
-                      <th style={{ ...thStyle, textAlign: 'right', color: '#4338ca' }}>Approved Box</th>
-                      <th style={{ ...thStyle, textAlign: 'right', color: '#4338ca' }}>Approved Qty</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Closing Qty</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>B/Cs</th>
-                      <th style={thStyle}>Mls</th>
+                      <th style={{ ...thStyle, textAlign: 'center', minWidth: '135px' }}>Approve /{"\n"}Reject</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Indent{"\n"}ID</th>
+                      <th style={{ ...thStyle, textAlign: 'left' }}>Shop{"\n"}Name</th>
+                      <th style={{ ...thStyle, textAlign: 'left', minWidth: '160px' }}>Item Name</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Per Day{"\n"}Sale</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Order{"\n"}Box</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Order{"\n"}Qty</th>
+                      <th style={{ ...thStyle, textAlign: 'center', color: '#4338ca' }}>Approved{"\n"}Box</th>
+                      <th style={{ ...thStyle, textAlign: 'center', color: '#4338ca' }}>Approved{"\n"}Qty</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Closing{"\n"}Qty</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>B/Cs</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Mls</th>
                       <th style={{ ...thStyle, textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
@@ -1075,7 +1079,7 @@ const Approval = () => {
                       const itemId = item.id ?? `fallback-${selectedIndentId}-${index}`;
                       return (
                       <tr key={itemId} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#ffffff' : '#f8fafc'}>
-                        <td style={{ ...tdStyle, textAlign: 'center', minWidth: '160px' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', minWidth: '135px' }}>
                           {activeTab === 'history' ? (
                             <span style={{ 
                               display: 'inline-block', 
@@ -1089,8 +1093,8 @@ const Approval = () => {
                               {indentStatuses[itemId] === 'approved' ? 'Approved' : 'Rejected'}
                             </span>
                           ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'center' }}>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: indentStatuses[itemId] === 'approved' ? '#16a34a' : '#64748b', fontWeight: '500', transition: 'all 0.2s', fontSize: '13px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: indentStatuses[itemId] === 'approved' ? '#16a34a' : '#64748b', fontWeight: '500', transition: 'all 0.2s', fontSize: '13px' }}>
                                 <input 
                                   type="checkbox" 
                                   checked={indentStatuses[itemId] === 'approved'} 
@@ -1099,7 +1103,7 @@ const Approval = () => {
                                 />
                                 Approve
                               </label>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: indentStatuses[itemId] === 'rejected' ? '#dc2626' : '#64748b', fontWeight: '500', transition: 'all 0.2s', fontSize: '13px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: indentStatuses[itemId] === 'rejected' ? '#dc2626' : '#64748b', fontWeight: '500', transition: 'all 0.2s', fontSize: '13px' }}>
                                 <input 
                                   type="checkbox" 
                                   checked={indentStatuses[itemId] === 'rejected'} 
@@ -1111,22 +1115,22 @@ const Approval = () => {
                             </div>
                           )}
                         </td>
-                        <td style={{ ...tdStyle, color: '#64748b' }}>{item.party_indent_id || "-"}</td>
-                        <td style={tdStyle}>{item.shop_name || "-"}</td>
-                        <td style={tdStyle}>{item.item_name}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', color: '#64748b' }}>{item.party_indent_id || "-"}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left' }}>{item.shop_name || "-"}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left' }}>{item.item_name}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: '700', color: '#0f172a' }}>
                           {item.per_day_sale_last_month !== null && item.per_day_sale_last_month !== undefined ? item.per_day_sale_last_month : "—"}
                         </td>
                         {/* Order Box (Read-only System Auto-Calculated) */}
-                        <td style={{ ...tdStyle, textAlign: 'right', color: '#64748b', fontWeight: '600' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', color: '#64748b', fontWeight: '600' }}>
                           {item.order_box !== undefined && item.order_box !== null ? item.order_box : "—"}
                         </td>
                         {/* Order Qty (Read-only System Auto-Calculated) */}
-                        <td style={{ ...tdStyle, textAlign: 'right', color: '#64748b', fontWeight: '600' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', color: '#64748b', fontWeight: '600' }}>
                           {item.order_qty !== undefined && item.order_qty !== null ? item.order_qty : "—"}
                         </td>
                         {/* Approved Box (Editable input pre-filled with approved_box or order_box) */}
-                        <td style={{ ...tdStyle, padding: activeTab === 'history' ? '12px 16px' : '4px 8px' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', padding: activeTab === 'history' ? '8px 10px' : '4px 6px' }}>
                           {activeTab === 'history' ? (
                             <span style={{ fontWeight: '700', color: '#4338ca' }}>{item.approved_box ?? item.order_box ?? "-"}</span>
                           ) : (
@@ -1141,7 +1145,7 @@ const Approval = () => {
                           )}
                         </td>
                         {/* Approved Qty (Editable input pre-filled with approved_qty or order_qty) */}
-                        <td style={{ ...tdStyle, padding: activeTab === 'history' ? '12px 16px' : '4px 8px' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', padding: activeTab === 'history' ? '8px 10px' : '4px 6px' }}>
                           {activeTab === 'history' ? (
                             <span style={{ fontWeight: '700', color: '#4338ca' }}>{item.approved_qty ?? item.order_qty ?? "-"}</span>
                           ) : (
@@ -1155,9 +1159,9 @@ const Approval = () => {
                             />
                           )}
                         </td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{item.closing_qty || "-"}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{item.bcs || "-"}</td>
-                        <td style={tdStyle}>{item.mls || "-"}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{item.closing_qty || "-"}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{item.bcs || "-"}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{item.mls || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                           <button
                             onClick={() => handleDeleteItem(item.id, item.item_name)}
@@ -1203,7 +1207,7 @@ const Approval = () => {
                     backgroundColor: '#ffffff',
                     borderRadius: '16px',
                     width: '100%',
-                    maxWidth: '1000px',
+                    maxWidth: '96vw',
                     maxHeight: '85vh',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1272,13 +1276,13 @@ const Approval = () => {
                           <thead>
                             <tr style={{ backgroundColor: '#fef2f2' }}>
                               <th style={{ ...thStyle, textAlign: 'center', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Action</th>
-                              <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Indent ID</th>
-                              <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Shop Name</th>
+                              <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Indent{"\n"}ID</th>
+                              <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Shop{"\n"}Name</th>
                               <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Item Name</th>
-                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Per Day Sale</th>
-                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Order Box</th>
-                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Order Qty</th>
-                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Closing Qty</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Per Day{"\n"}Sale</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Order{"\n"}Box</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Order{"\n"}Qty</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Closing{"\n"}Qty</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>B/Cs</th>
                               <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Mls</th>
                             </tr>
@@ -1368,7 +1372,7 @@ const Approval = () => {
                     backgroundColor: '#ffffff',
                     borderRadius: '16px',
                     width: '100%',
-                    maxWidth: '1000px',
+                    maxWidth: '96vw',
                     maxHeight: '85vh',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1437,12 +1441,12 @@ const Approval = () => {
                           <thead>
                             <tr style={{ backgroundColor: '#eff6ff' }}>
                               <th style={{ ...thStyle, textAlign: 'center', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Status / Action</th>
-                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Indent ID</th>
-                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Shop Name</th>
+                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Indent{"\n"}ID</th>
+                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Shop{"\n"}Name</th>
                               <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Item Name</th>
-                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order Box</th>
-                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order Qty</th>
-                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Closing Qty</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order{"\n"}Box</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order{"\n"}Qty</th>
+                              <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Closing{"\n"}Qty</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>B/Cs</th>
                               <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Mls</th>
                             </tr>

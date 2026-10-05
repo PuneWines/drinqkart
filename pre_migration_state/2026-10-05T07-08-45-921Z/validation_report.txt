@@ -1,0 +1,77 @@
+========================================================================
+PRE-MIGRATION STATE VALIDATION REPORT
+Timestamp: 2026-10-05T07:09:02.566Z
+Snapshot Directory: pre_migration_state\2026-10-05T07-08-45-921Z
+Target Database: Production Supabase (Project: yxtvvjijtraobzaqdevz)
+========================================================================
+
+1. TABLE ROW COUNTS:
+   - Inventory_shop                     : 6 rows
+   - Inventory_items                    : 340 rows
+   - Inventory_vendors                  : 75 rows
+   - Inventory_inventory_transactions   : 16054 rows
+   - Inventory_closing_stock_items      : 12385 rows
+   - Inventory_purchase_items           : 4047 rows
+   - Inventory_daily_sales_summary      : 308 rows
+   - Inventory_sale_history             : 9769 rows
+   - Inventory_stock_ledger             : 10984 rows
+   - Inventory_manager_report           : 307 rows
+   TOTAL MONITORED ROWS             : 54275 rows
+
+2. CURRENT INVENTORY_SHOP RECORDS:
+   - ID  1: TEST Shop
+   - ID  9: TLS
+   - ID 13: FRIENDS
+   - ID 15: KUNAL ULWE
+   - ID 16: MADHURA
+   - ID 17: BALAJI
+
+3. SHOP ID DISTRIBUTION PER TABLE:
+   [Inventory_items] (Col: shop_id, Total: 340, NULLs: 0)
+     Distribution: {"9":161,"13":94,"15":78,"16":2,"17":5}
+   [Inventory_vendors] (Col: shop_id, Total: 75, NULLs: 0)
+     Distribution: {"9":35,"13":13,"15":25,"16":1,"17":1}
+   [Inventory_inventory_transactions] (Col: shop_id, Total: 16054, NULLs: 69)
+     Distribution: {"9":5848,"13":5684,"15":4416,"16":3,"17":34}
+   [Inventory_closing_stock_items] (Col: shop_id, Total: 12385, NULLs: 52)
+     Distribution: {"9":4802,"13":4430,"15":3097,"16":2,"17":2}
+   [Inventory_purchase_items] (Col: shop_name, Total: 4047, NULLs: 4047)
+     Distribution: {}
+   [Inventory_daily_sales_summary] (Col: shop_name, Total: 308, NULLs: 308)
+     Distribution: {}
+   [Inventory_sale_history] (Col: shop_id, Total: 9769, NULLs: 0)
+     Distribution: {"9":4631,"13":2674,"15":2434,"16":3,"17":27}
+   [Inventory_manager_report] (Col: shop_name, Total: 307, NULLs: 0)
+     Distribution: {"KUNAL FINE WINE":96,"FRIENDS":109,"vishal shop\n":102}
+
+4. EXACT AFFECTED ROWS TO BE MODIFIED (PHASE 5):
+   - Inventory_items               : 179 rows (shop 17: 5, shop 13: 94, shop 15: 78, shop 16: 2)
+   - Inventory_vendors             : 40 rows (shop 17: 1, shop 13: 13, shop 15: 25, shop 16: 1)
+   - Inventory_inventory_transactions: 0 rows (shop 17: 0, shop 13: 0, shop 15: 0, shop 16: 0)
+   - Inventory_closing_stock_items : 0 rows (shop 17: 0, shop 13: 0, shop 15: 0, shop 16: 0)
+   - Inventory_sale_history        : 0 rows (shop 17: 0, shop 13: 0, shop 15: 0, shop 16: 0)
+   TOTAL AFFECTED CHILD ROWS        : 219 rows
+
+5. AFFECTED TABLE DATA HASHES (SHA-256):
+   - Inventory_items                    : 3cfaea2c7dda23a8404fe40f81b598c3ec2bcc0dadfabb53a4da585579a7ab62 (179 records)
+   - Inventory_vendors                  : 4946707a59dbe4d173356c47dae760e8a61e7922b1c6b8c29573df474d213301 (40 records)
+   - Inventory_inventory_transactions   : 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945 (0 records)
+   - Inventory_closing_stock_items      : 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945 (0 records)
+   - Inventory_sale_history             : 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945 (0 records)
+   - Inventory_manager_report           : 7c8b9c6740c850d08090e9aa3214142dabe51a61133906e9ed32e21ad039df9c (307 records)
+
+6. CRITICAL SAFETY AUDIT:
+   - FRIENDS (Current ID 13) collision check: CONFIRMED. ID 13 has active child records.
+     * Items: 94
+     * Vendors: 13
+     * Transactions: 5684
+     * Closing Stock: 4430
+     * Sale History: 2674
+     STATUS: Must migrate 13 -> 12 before 13 can be reused for OFFICE.
+   - Target IDs in Inventory_shop (8, 12, 5, 7, 19):
+     * Currently present in Inventory_shop: NONE. All target IDs are clean and available.
+   - Orphan check: 0 orphan foreign keys found across all tables.
+   - Unmonitored dependencies: 0 external tables reference Inventory_shop.
+
+========================================================================
+PRE-MIGRATION STATE CAPTURED SUCCESSFULLY

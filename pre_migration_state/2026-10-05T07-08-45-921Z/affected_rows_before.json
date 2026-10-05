@@ -1,0 +1,2641 @@
+{
+  "Inventory_items": [
+    {
+      "id": 486,
+      "item_name": "yogesh",
+      "shop_id": 16
+    },
+    {
+      "id": 480,
+      "item_name": "item 2",
+      "shop_id": 17
+    },
+    {
+      "id": 493,
+      "item_name": "ITEM 7",
+      "shop_id": 17
+    },
+    {
+      "id": 551,
+      "item_name": "COCO COLA MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 499,
+      "item_name": "MARLBORO CHOTA ADVANCE MRP 115",
+      "shop_id": 13
+    },
+    {
+      "id": 505,
+      "item_name": "GOLD FLAKE CHOTA LIGHT MRP 115",
+      "shop_id": 13
+    },
+    {
+      "id": 552,
+      "item_name": "MAZA MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 395,
+      "item_name": "LOCAL SNACKS MRP 30",
+      "shop_id": 13
+    },
+    {
+      "id": 557,
+      "item_name": "TONIC WATER MRP 60",
+      "shop_id": 13
+    },
+    {
+      "id": 416,
+      "item_name": "JEERA SODA MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 562,
+      "item_name": "CAMPA MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 567,
+      "item_name": "HALDI RAM MRP 70",
+      "shop_id": 13
+    },
+    {
+      "id": 572,
+      "item_name": "MAKINO MRP 88",
+      "shop_id": 13
+    },
+    {
+      "id": 577,
+      "item_name": "BIKA JI SOYA STICK MRP 80",
+      "shop_id": 13
+    },
+    {
+      "id": 438,
+      "item_name": "KURKURE MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 443,
+      "item_name": "MAKINO CORN MUNCH MRP 70",
+      "shop_id": 15
+    },
+    {
+      "id": 447,
+      "item_name": "MOM CASISU MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 500,
+      "item_name": "CLASSIC MILD MRP 240",
+      "shop_id": 13
+    },
+    {
+      "id": 409,
+      "item_name": "WATER LOCAL MRP 10",
+      "shop_id": 13
+    },
+    {
+      "id": 457,
+      "item_name": "THUMS UP MRP 100",
+      "shop_id": 15
+    },
+    {
+      "id": 460,
+      "item_name": "THUMS UP MRP 50",
+      "shop_id": 15
+    },
+    {
+      "id": 394,
+      "item_name": "LOCAL SNACKS MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 479,
+      "item_name": "LOCAL SNACKS MRP 35",
+      "shop_id": 15
+    },
+    {
+      "id": 468,
+      "item_name": "TONIC WATER MRP 95",
+      "shop_id": 13
+    },
+    {
+      "id": 506,
+      "item_name": "GOLD FLAKE BUTTON MRP 115",
+      "shop_id": 13
+    },
+    {
+      "id": 512,
+      "item_name": "GOLD FLAKE INDI MENT MRP 115",
+      "shop_id": 15
+    },
+    {
+      "id": 518,
+      "item_name": "LAHORI ZEERA MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 459,
+      "item_name": "THUMS UP MRP 40",
+      "shop_id": 15
+    },
+    {
+      "id": 435,
+      "item_name": "GOLD FLAKE MRP 340",
+      "shop_id": 15
+    },
+    {
+      "id": 462,
+      "item_name": "WATER BISLERI MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 442,
+      "item_name": "MAKHANA PUDINA MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 448,
+      "item_name": "NACH MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 450,
+      "item_name": "RED GLASS MRP 5",
+      "shop_id": 15
+    },
+    {
+      "id": 453,
+      "item_name": "SALT AND PAPER MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 456,
+      "item_name": "SPRITE MRP 40",
+      "shop_id": 15
+    },
+    {
+      "id": 437,
+      "item_name": "JEERA SODA MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 422,
+      "item_name": "CHAKALI MRP 50",
+      "shop_id": 15
+    },
+    {
+      "id": 446,
+      "item_name": "MAKINO MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 467,
+      "item_name": "TONIC WATER MRP 85",
+      "shop_id": 13
+    },
+    {
+      "id": 424,
+      "item_name": "CHANNA MRP 40",
+      "shop_id": 15
+    },
+    {
+      "id": 420,
+      "item_name": "BULBUL SADDA MRP 25",
+      "shop_id": 15
+    },
+    {
+      "id": 427,
+      "item_name": "FANTA MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 535,
+      "item_name": "JIMMY MRP 40",
+      "shop_id": 13
+    },
+    {
+      "id": 478,
+      "item_name": "LOCAL SNACKS MRP 40",
+      "shop_id": 15
+    },
+    {
+      "id": 536,
+      "item_name": "JIMMY MRP 60",
+      "shop_id": 13
+    },
+    {
+      "id": 407,
+      "item_name": "THUMS UP MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 402,
+      "item_name": "RED BULL MRP 125",
+      "shop_id": 13
+    },
+    {
+      "id": 412,
+      "item_name": "HALDI RAM MRP 45",
+      "shop_id": 13
+    },
+    {
+      "id": 546,
+      "item_name": "LOCAL SNACKS MRP 15",
+      "shop_id": 13
+    },
+    {
+      "id": 392,
+      "item_name": "LOCAL SNACKS MRP 5",
+      "shop_id": 13
+    },
+    {
+      "id": 524,
+      "item_name": "GOLD FLAKE FOUR SUQER MRP 105",
+      "shop_id": 15
+    },
+    {
+      "id": 410,
+      "item_name": "WATER LOCAL MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 530,
+      "item_name": "DIET COKE MRP 50",
+      "shop_id": 15
+    },
+    {
+      "id": 537,
+      "item_name": "ZERO SUGAR JAMUN MRP 55",
+      "shop_id": 15
+    },
+    {
+      "id": 451,
+      "item_name": "RED BULL MRP 125",
+      "shop_id": 15
+    },
+    {
+      "id": 454,
+      "item_name": "SODA MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 553,
+      "item_name": "MAZA MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 558,
+      "item_name": "PEPPY CHEESE BALLS MRP 60",
+      "shop_id": 13
+    },
+    {
+      "id": 563,
+      "item_name": "CAMPA MRP 30",
+      "shop_id": 13
+    },
+    {
+      "id": 474,
+      "item_name": "PARLES WAFERS MRP 5",
+      "shop_id": 13
+    },
+    {
+      "id": 543,
+      "item_name": "SPRITE MRP 50",
+      "shop_id": 13
+    },
+    {
+      "id": 554,
+      "item_name": "MAZA MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 559,
+      "item_name": "BINGO MAD MRP 50",
+      "shop_id": 13
+    },
+    {
+      "id": 564,
+      "item_name": "DIET COKE MRP 50",
+      "shop_id": 13
+    },
+    {
+      "id": 569,
+      "item_name": "LAYS MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 574,
+      "item_name": "GOLD FLAKE MRP 480",
+      "shop_id": 15
+    },
+    {
+      "id": 560,
+      "item_name": "DORITOS MRP 86",
+      "shop_id": 13
+    },
+    {
+      "id": 414,
+      "item_name": "HALDI RAM MRP 55",
+      "shop_id": 13
+    },
+    {
+      "id": 400,
+      "item_name": "PRINGLES MRP 125",
+      "shop_id": 13
+    },
+    {
+      "id": 565,
+      "item_name": "HALDI RAM MRP 110",
+      "shop_id": 13
+    },
+    {
+      "id": 570,
+      "item_name": "MAKINO MRP 80",
+      "shop_id": 13
+    },
+    {
+      "id": 385,
+      "item_name": "MARLBORO MRP 240",
+      "shop_id": 13
+    },
+    {
+      "id": 473,
+      "item_name": "PARLES WAFERS MRP 10",
+      "shop_id": 13
+    },
+    {
+      "id": 578,
+      "item_name": "RAJAM KELA CHIPS MRP 81",
+      "shop_id": 13
+    },
+    {
+      "id": 423,
+      "item_name": "CHAKALI MRP 60",
+      "shop_id": 15
+    },
+    {
+      "id": 463,
+      "item_name": "WATER LOCAL MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 404,
+      "item_name": "SPRITE MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 398,
+      "item_name": "LOCAL SNACKS MRP 45",
+      "shop_id": 13
+    },
+    {
+      "id": 399,
+      "item_name": "PITARA MRP 5",
+      "shop_id": 13
+    },
+    {
+      "id": 469,
+      "item_name": "TONIC WATER MRP 65",
+      "shop_id": 13
+    },
+    {
+      "id": 403,
+      "item_name": "SODA MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 413,
+      "item_name": "HALDI RAM MRP 40",
+      "shop_id": 13
+    },
+    {
+      "id": 487,
+      "item_name": "BALAJI MRP 40",
+      "shop_id": 13
+    },
+    {
+      "id": 465,
+      "item_name": "CHANNA MRP 35",
+      "shop_id": 15
+    },
+    {
+      "id": 575,
+      "item_name": "Classic MRP 428",
+      "shop_id": 15
+    },
+    {
+      "id": 401,
+      "item_name": "REAL FRUIT JUICE MRP 120",
+      "shop_id": 13
+    },
+    {
+      "id": 579,
+      "item_name": "BUDHANI MRP 10",
+      "shop_id": 13
+    },
+    {
+      "id": 441,
+      "item_name": "LOCAL SNACKS MRP 5",
+      "shop_id": 15
+    },
+    {
+      "id": 418,
+      "item_name": "BANANA CHIPS MRP 50",
+      "shop_id": 15
+    },
+    {
+      "id": 428,
+      "item_name": "GOLD FLAKE MRP 150",
+      "shop_id": 15
+    },
+    {
+      "id": 433,
+      "item_name": "GOLD FLAKE MRP 380",
+      "shop_id": 15
+    },
+    {
+      "id": 417,
+      "item_name": "BANANA CHIPS MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 419,
+      "item_name": "BAZANA DRYFRUIT MRP 50",
+      "shop_id": 15
+    },
+    {
+      "id": 511,
+      "item_name": "CLASSIC CONNECT MRP 390",
+      "shop_id": 15
+    },
+    {
+      "id": 425,
+      "item_name": "CHARLIEE STICKS MRP 65",
+      "shop_id": 15
+    },
+    {
+      "id": 517,
+      "item_name": "LAHORI ZEERA MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 429,
+      "item_name": "GOLD FLAKE MRP 90",
+      "shop_id": 15
+    },
+    {
+      "id": 430,
+      "item_name": "GOLD FLAKE MRP 165",
+      "shop_id": 15
+    },
+    {
+      "id": 523,
+      "item_name": "GOLD FLAKE MRP 125",
+      "shop_id": 15
+    },
+    {
+      "id": 434,
+      "item_name": "GOLD FLAKE MRP 390",
+      "shop_id": 15
+    },
+    {
+      "id": 472,
+      "item_name": "ROASTED SALTED CASHEW MRP 50",
+      "shop_id": 13
+    },
+    {
+      "id": 397,
+      "item_name": "LOCAL SNACKS MRP 40",
+      "shop_id": 13
+    },
+    {
+      "id": 439,
+      "item_name": "LAYS MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 387,
+      "item_name": "HALDI RAM MRP 10",
+      "shop_id": 13
+    },
+    {
+      "id": 432,
+      "item_name": "GOLD FLAKE MRP 115",
+      "shop_id": 15
+    },
+    {
+      "id": 440,
+      "item_name": "LOCAL SNACKS MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 475,
+      "item_name": "WATER LOCAL MRP 30",
+      "shop_id": 15
+    },
+    {
+      "id": 496,
+      "item_name": "MARLBORO LIGHT MRP 240",
+      "shop_id": 13
+    },
+    {
+      "id": 489,
+      "item_name": "MAKINO MRP 66",
+      "shop_id": 13
+    },
+    {
+      "id": 490,
+      "item_name": "BUDHANI MRP 60",
+      "shop_id": 13
+    },
+    {
+      "id": 502,
+      "item_name": "GOLD FLAKE BADI MRP 240",
+      "shop_id": 13
+    },
+    {
+      "id": 508,
+      "item_name": "CLASSIC ICE BUST MRP 240",
+      "shop_id": 13
+    },
+    {
+      "id": 520,
+      "item_name": "JIMMY SPARKLING WATER MRP 60",
+      "shop_id": 15
+    },
+    {
+      "id": 532,
+      "item_name": "CLASSIC MILD BG MRP 440",
+      "shop_id": 15
+    },
+    {
+      "id": 390,
+      "item_name": "HALDI RAM MRP 5",
+      "shop_id": 13
+    },
+    {
+      "id": 466,
+      "item_name": "ICE MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 411,
+      "item_name": "WATER LOCAL MRP 30",
+      "shop_id": 13
+    },
+    {
+      "id": 393,
+      "item_name": "LOCAL SNACKS MRP 10",
+      "shop_id": 13
+    },
+    {
+      "id": 515,
+      "item_name": "REAL FRUIT JUICE MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 513,
+      "item_name": "GOLD FLAKE SUP STAR MRP 79",
+      "shop_id": 15
+    },
+    {
+      "id": 405,
+      "item_name": "SPRITE MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 488,
+      "item_name": "LAYS MRP 48",
+      "shop_id": 13
+    },
+    {
+      "id": 519,
+      "item_name": "SPRITE MRP 35",
+      "shop_id": 15
+    },
+    {
+      "id": 525,
+      "item_name": "GOLD FLAKE BLACK CARSH MRP 120",
+      "shop_id": 15
+    },
+    {
+      "id": 531,
+      "item_name": "GOLD FLAKE INDIE PAAN MRP 390",
+      "shop_id": 15
+    },
+    {
+      "id": 482,
+      "item_name": "yogesh",
+      "shop_id": 17
+    },
+    {
+      "id": 495,
+      "item_name": "BAZANA MRP 25",
+      "shop_id": 15
+    },
+    {
+      "id": 501,
+      "item_name": "CLASSIC MILD MRP 480",
+      "shop_id": 13
+    },
+    {
+      "id": 507,
+      "item_name": "GOLD FLAKE INDI MENT MRP 115",
+      "shop_id": 13
+    },
+    {
+      "id": 538,
+      "item_name": "PEPER BOOT SODA MRP 60",
+      "shop_id": 15
+    },
+    {
+      "id": 514,
+      "item_name": "iamyk",
+      "shop_id": 16
+    },
+    {
+      "id": 408,
+      "item_name": "THUMS UP MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 396,
+      "item_name": "LOCAL SNACKS MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 464,
+      "item_name": "WATER LOCAL MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 458,
+      "item_name": "THUMS UP MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 491,
+      "item_name": "AMUL CHEESE MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 497,
+      "item_name": "MARLBORO BADI ADVANCE MRP 240",
+      "shop_id": 13
+    },
+    {
+      "id": 503,
+      "item_name": "GOLD FLAKE BADI LIGHT MRP 240",
+      "shop_id": 13
+    },
+    {
+      "id": 509,
+      "item_name": "CLASSIC ICE BUST MRP 480",
+      "shop_id": 13
+    },
+    {
+      "id": 386,
+      "item_name": "GLASS MRP 5",
+      "shop_id": 13
+    },
+    {
+      "id": 415,
+      "item_name": "MAKINO CORN MUNCH MRP 70",
+      "shop_id": 13
+    },
+    {
+      "id": 470,
+      "item_name": "PITARA MRP 10",
+      "shop_id": 13
+    },
+    {
+      "id": 445,
+      "item_name": "MAKINO MRP 70",
+      "shop_id": 15
+    },
+    {
+      "id": 477,
+      "item_name": "ICE MRP 50",
+      "shop_id": 15
+    },
+    {
+      "id": 391,
+      "item_name": "HELL MRP 60",
+      "shop_id": 13
+    },
+    {
+      "id": 485,
+      "item_name": "item 6",
+      "shop_id": 17
+    },
+    {
+      "id": 492,
+      "item_name": "test 10",
+      "shop_id": 17
+    },
+    {
+      "id": 498,
+      "item_name": "MARLBORO BADI ADVANCE MRP 480",
+      "shop_id": 13
+    },
+    {
+      "id": 504,
+      "item_name": "GOLD FLAKE CHOTA MRP 115",
+      "shop_id": 13
+    },
+    {
+      "id": 510,
+      "item_name": "CLASSIC CONNECT MRP 390",
+      "shop_id": 13
+    },
+    {
+      "id": 516,
+      "item_name": "THUMS UP MRP 35",
+      "shop_id": 15
+    },
+    {
+      "id": 522,
+      "item_name": "TONIC WATER MRP 60",
+      "shop_id": 15
+    },
+    {
+      "id": 528,
+      "item_name": "LIMCA MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 534,
+      "item_name": "JIMMYS MRP 110",
+      "shop_id": 13
+    },
+    {
+      "id": 540,
+      "item_name": "LOCAL SNACKS MRP 30",
+      "shop_id": 15
+    },
+    {
+      "id": 550,
+      "item_name": "CHHEDA'S MASALA BANANA CHIPS MRP 95",
+      "shop_id": 13
+    },
+    {
+      "id": 556,
+      "item_name": "MAZA MRP 35",
+      "shop_id": 13
+    },
+    {
+      "id": 561,
+      "item_name": "CAMPA MRP 10",
+      "shop_id": 13
+    },
+    {
+      "id": 566,
+      "item_name": "HALDI RAM MRP 120",
+      "shop_id": 13
+    },
+    {
+      "id": 571,
+      "item_name": "MAKINO MRP 83",
+      "shop_id": 13
+    },
+    {
+      "id": 580,
+      "item_name": "BUDHANI MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 476,
+      "item_name": "WATER BISLERI MRP 30",
+      "shop_id": 15
+    },
+    {
+      "id": 421,
+      "item_name": "BALAJI MRP 40",
+      "shop_id": 15
+    },
+    {
+      "id": 426,
+      "item_name": "DORITOS MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 431,
+      "item_name": "GOLD FLAKE MRP 240",
+      "shop_id": 15
+    },
+    {
+      "id": 527,
+      "item_name": "FANTA MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 449,
+      "item_name": "PICNIC TOMATO CHILLI MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 406,
+      "item_name": "STING MRP 20",
+      "shop_id": 13
+    },
+    {
+      "id": 533,
+      "item_name": "WATER BISLERI MRP 10",
+      "shop_id": 15
+    },
+    {
+      "id": 452,
+      "item_name": "RIO MRP 45",
+      "shop_id": 15
+    },
+    {
+      "id": 455,
+      "item_name": "SPRITE MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 461,
+      "item_name": "UNCLE CHIPS MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 539,
+      "item_name": "TWO YUMM CHIPS MRP 20",
+      "shop_id": 15
+    },
+    {
+      "id": 544,
+      "item_name": "THUMS UP MRP 50",
+      "shop_id": 13
+    },
+    {
+      "id": 436,
+      "item_name": "HELL MRP 60",
+      "shop_id": 15
+    },
+    {
+      "id": 549,
+      "item_name": "CHHEDA'S MASALA BANANA CHIPS MRP 90",
+      "shop_id": 13
+    },
+    {
+      "id": 389,
+      "item_name": "HALDI RAM MRP 60",
+      "shop_id": 13
+    },
+    {
+      "id": 388,
+      "item_name": "HALDI RAM MRP 50",
+      "shop_id": 13
+    },
+    {
+      "id": 555,
+      "item_name": "MAZA MRP 35",
+      "shop_id": 13
+    }
+  ],
+  "Inventory_vendors": [
+    {
+      "id": 124,
+      "vendor_name": "SAIRAJ SALES",
+      "shop_id": 13
+    },
+    {
+      "id": 126,
+      "vendor_name": "BRITTA",
+      "shop_id": 15
+    },
+    {
+      "id": 127,
+      "vendor_name": "KAILASH AGENCY",
+      "shop_id": 13
+    },
+    {
+      "id": 128,
+      "vendor_name": "MATA JI TRADING COMPANY",
+      "shop_id": 13
+    },
+    {
+      "id": 58,
+      "vendor_name": "test yk",
+      "shop_id": 16
+    },
+    {
+      "id": 35,
+      "vendor_name": "OPENING STOCK",
+      "shop_id": 13
+    },
+    {
+      "id": 36,
+      "vendor_name": "OPENING VENDORE",
+      "shop_id": 15
+    },
+    {
+      "id": 37,
+      "vendor_name": "MAULI ENTERPRISES",
+      "shop_id": 13
+    },
+    {
+      "id": 38,
+      "vendor_name": "ICE",
+      "shop_id": 13
+    },
+    {
+      "id": 39,
+      "vendor_name": "new vendore",
+      "shop_id": 17
+    },
+    {
+      "id": 40,
+      "vendor_name": "ARYAN ENTERPRISES",
+      "shop_id": 13
+    },
+    {
+      "id": 41,
+      "vendor_name": "ANAND ENTERPRISES",
+      "shop_id": 13
+    },
+    {
+      "id": 42,
+      "vendor_name": "AYEKART RETAIL PRIVATE LIMITED",
+      "shop_id": 13
+    },
+    {
+      "id": 46,
+      "vendor_name": "ice",
+      "shop_id": 15
+    },
+    {
+      "id": 47,
+      "vendor_name": "Om Sai nath",
+      "shop_id": 15
+    },
+    {
+      "id": 48,
+      "vendor_name": "Lockal sanks",
+      "shop_id": 15
+    },
+    {
+      "id": 49,
+      "vendor_name": "Bislar company",
+      "shop_id": 15
+    },
+    {
+      "id": 50,
+      "vendor_name": "Sri Entarpress",
+      "shop_id": 15
+    },
+    {
+      "id": 51,
+      "vendor_name": "Samarth kuripa distibutors",
+      "shop_id": 15
+    },
+    {
+      "id": 52,
+      "vendor_name": "Saksham entarpress",
+      "shop_id": 15
+    },
+    {
+      "id": 54,
+      "vendor_name": "RK FOODS",
+      "shop_id": 15
+    },
+    {
+      "id": 55,
+      "vendor_name": "Shree Ganesh Agency",
+      "shop_id": 15
+    },
+    {
+      "id": 56,
+      "vendor_name": "DHAVAL MARKETING",
+      "shop_id": 15
+    },
+    {
+      "id": 57,
+      "vendor_name": "S.S.K ENTERPRISES",
+      "shop_id": 15
+    },
+    {
+      "id": 59,
+      "vendor_name": "OM SHAKTI SALES",
+      "shop_id": 15
+    },
+    {
+      "id": 60,
+      "vendor_name": "SWARAJ ENTERISES",
+      "shop_id": 15
+    },
+    {
+      "id": 61,
+      "vendor_name": "JAGWANI FMCG",
+      "shop_id": 15
+    },
+    {
+      "id": 62,
+      "vendor_name": "DAVANISH ENTERPRISES",
+      "shop_id": 15
+    },
+    {
+      "id": 63,
+      "vendor_name": "GM ENTERPRISES",
+      "shop_id": 15
+    },
+    {
+      "id": 64,
+      "vendor_name": "VIGHNESH MARKETING",
+      "shop_id": 15
+    },
+    {
+      "id": 65,
+      "vendor_name": "CHAHAL CORPORATION",
+      "shop_id": 15
+    },
+    {
+      "id": 66,
+      "vendor_name": "BHAGWATI ENTERPRISES",
+      "shop_id": 15
+    },
+    {
+      "id": 67,
+      "vendor_name": "MIRAI PACKAGING",
+      "shop_id": 15
+    },
+    {
+      "id": 81,
+      "vendor_name": "DMART",
+      "shop_id": 13
+    },
+    {
+      "id": 82,
+      "vendor_name": "MANE BROTHERS ENTERPRISES",
+      "shop_id": 15
+    },
+    {
+      "id": 83,
+      "vendor_name": "VIGHNESH ENTERPRISES",
+      "shop_id": 15
+    },
+    {
+      "id": 88,
+      "vendor_name": "SHREYAN WATER SOLUTJON",
+      "shop_id": 15
+    },
+    {
+      "id": 89,
+      "vendor_name": "Shree Sales",
+      "shop_id": 13
+    },
+    {
+      "id": 90,
+      "vendor_name": "SHAURYA ENTERPRISES",
+      "shop_id": 13
+    },
+    {
+      "id": 123,
+      "vendor_name": "SHUBHAM PRODUCT",
+      "shop_id": 13
+    }
+  ],
+  "Inventory_inventory_transactions": [],
+  "Inventory_closing_stock_items": [],
+  "Inventory_sale_history": [],
+  "Inventory_manager_report": [
+    {
+      "id": 144,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-13"
+    },
+    {
+      "id": 196,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-25"
+    },
+    {
+      "id": 294,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-06"
+    },
+    {
+      "id": 276,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-18"
+    },
+    {
+      "id": 199,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-24"
+    },
+    {
+      "id": 201,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-26"
+    },
+    {
+      "id": 210,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-29"
+    },
+    {
+      "id": 211,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-30"
+    },
+    {
+      "id": 212,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-30"
+    },
+    {
+      "id": 297,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-29"
+    },
+    {
+      "id": 260,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-02"
+    },
+    {
+      "id": 215,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-31"
+    },
+    {
+      "id": 216,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-31"
+    },
+    {
+      "id": 217,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-01"
+    },
+    {
+      "id": 218,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-01"
+    },
+    {
+      "id": 219,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-02"
+    },
+    {
+      "id": 265,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-07"
+    },
+    {
+      "id": 280,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-22"
+    },
+    {
+      "id": 222,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-02"
+    },
+    {
+      "id": 223,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-03"
+    },
+    {
+      "id": 225,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-03"
+    },
+    {
+      "id": 226,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-04"
+    },
+    {
+      "id": 301,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-09"
+    },
+    {
+      "id": 228,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-05"
+    },
+    {
+      "id": 248,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-21"
+    },
+    {
+      "id": 251,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-24"
+    },
+    {
+      "id": 254,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-27"
+    },
+    {
+      "id": 303,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-07"
+    },
+    {
+      "id": 268,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-10"
+    },
+    {
+      "id": 271,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-13"
+    },
+    {
+      "id": 321,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-14"
+    },
+    {
+      "id": 305,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-10"
+    },
+    {
+      "id": 307,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-11"
+    },
+    {
+      "id": 281,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-23"
+    },
+    {
+      "id": 282,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-24"
+    },
+    {
+      "id": 286,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-29"
+    },
+    {
+      "id": 299,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-08"
+    },
+    {
+      "id": 317,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-11"
+    },
+    {
+      "id": 319,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-13"
+    },
+    {
+      "id": 323,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-16"
+    },
+    {
+      "id": 325,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-14"
+    },
+    {
+      "id": 327,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-17"
+    },
+    {
+      "id": 329,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-17"
+    },
+    {
+      "id": 333,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-19"
+    },
+    {
+      "id": 335,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-19"
+    },
+    {
+      "id": 83,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-06-24"
+    },
+    {
+      "id": 84,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-06-25"
+    },
+    {
+      "id": 85,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-06-26"
+    },
+    {
+      "id": 86,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-06-27"
+    },
+    {
+      "id": 87,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-06-28"
+    },
+    {
+      "id": 139,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-06-29"
+    },
+    {
+      "id": 70,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-06-30"
+    },
+    {
+      "id": 75,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-01"
+    },
+    {
+      "id": 88,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-02"
+    },
+    {
+      "id": 81,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-03"
+    },
+    {
+      "id": 128,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-04"
+    },
+    {
+      "id": 129,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-05"
+    },
+    {
+      "id": 130,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-06"
+    },
+    {
+      "id": 131,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-07"
+    },
+    {
+      "id": 132,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-08"
+    },
+    {
+      "id": 133,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-09"
+    },
+    {
+      "id": 134,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-10"
+    },
+    {
+      "id": 135,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-11"
+    },
+    {
+      "id": 137,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-12"
+    },
+    {
+      "id": 470,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-30"
+    },
+    {
+      "id": 71,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-17"
+    },
+    {
+      "id": 72,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-18"
+    },
+    {
+      "id": 73,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-19"
+    },
+    {
+      "id": 42,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-20"
+    },
+    {
+      "id": 43,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-21"
+    },
+    {
+      "id": 44,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-22"
+    },
+    {
+      "id": 45,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-23"
+    },
+    {
+      "id": 46,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-24"
+    },
+    {
+      "id": 47,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-25"
+    },
+    {
+      "id": 48,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-26"
+    },
+    {
+      "id": 49,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-27"
+    },
+    {
+      "id": 50,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-28"
+    },
+    {
+      "id": 51,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-29"
+    },
+    {
+      "id": 76,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-06-30"
+    },
+    {
+      "id": 77,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-01"
+    },
+    {
+      "id": 79,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-02"
+    },
+    {
+      "id": 82,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-03"
+    },
+    {
+      "id": 91,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-04"
+    },
+    {
+      "id": 95,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-05"
+    },
+    {
+      "id": 197,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-26"
+    },
+    {
+      "id": 151,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-15"
+    },
+    {
+      "id": 149,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-14"
+    },
+    {
+      "id": 238,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-11"
+    },
+    {
+      "id": 172,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-17"
+    },
+    {
+      "id": 178,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-19"
+    },
+    {
+      "id": 184,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-21"
+    },
+    {
+      "id": 193,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-23"
+    },
+    {
+      "id": 101,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-07"
+    },
+    {
+      "id": 100,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-06"
+    },
+    {
+      "id": 111,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-08"
+    },
+    {
+      "id": 138,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-10"
+    },
+    {
+      "id": 127,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-11"
+    },
+    {
+      "id": 126,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-12"
+    },
+    {
+      "id": 145,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-13"
+    },
+    {
+      "id": 147,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-14"
+    },
+    {
+      "id": 153,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-16"
+    },
+    {
+      "id": 174,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-18"
+    },
+    {
+      "id": 180,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-20"
+    },
+    {
+      "id": 186,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-22"
+    },
+    {
+      "id": 192,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-23"
+    },
+    {
+      "id": 112,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-09"
+    },
+    {
+      "id": 244,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-17"
+    },
+    {
+      "id": 262,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-04"
+    },
+    {
+      "id": 266,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-08"
+    },
+    {
+      "id": 269,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-11"
+    },
+    {
+      "id": 272,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-14"
+    },
+    {
+      "id": 283,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-26"
+    },
+    {
+      "id": 277,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-19"
+    },
+    {
+      "id": 258,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-30"
+    },
+    {
+      "id": 261,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-03"
+    },
+    {
+      "id": 249,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-22"
+    },
+    {
+      "id": 252,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-25"
+    },
+    {
+      "id": 255,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-28"
+    },
+    {
+      "id": 231,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-06"
+    },
+    {
+      "id": 232,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-04"
+    },
+    {
+      "id": 233,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-05"
+    },
+    {
+      "id": 234,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-06"
+    },
+    {
+      "id": 235,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-07"
+    },
+    {
+      "id": 278,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-20"
+    },
+    {
+      "id": 279,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-21"
+    },
+    {
+      "id": 284,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-27"
+    },
+    {
+      "id": 245,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-18"
+    },
+    {
+      "id": 246,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-19"
+    },
+    {
+      "id": 247,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-20"
+    },
+    {
+      "id": 250,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-23"
+    },
+    {
+      "id": 253,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-26"
+    },
+    {
+      "id": 285,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-28"
+    },
+    {
+      "id": 287,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-30"
+    },
+    {
+      "id": 289,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-01"
+    },
+    {
+      "id": 291,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-03"
+    },
+    {
+      "id": 292,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-04"
+    },
+    {
+      "id": 293,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-05"
+    },
+    {
+      "id": 295,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-07"
+    },
+    {
+      "id": 298,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-08"
+    },
+    {
+      "id": 300,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-08"
+    },
+    {
+      "id": 302,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-09"
+    },
+    {
+      "id": 324,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-14"
+    },
+    {
+      "id": 306,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-10"
+    },
+    {
+      "id": 310,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-11"
+    },
+    {
+      "id": 312,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-12"
+    },
+    {
+      "id": 326,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-16"
+    },
+    {
+      "id": 239,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-12"
+    },
+    {
+      "id": 241,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-14"
+    },
+    {
+      "id": 242,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-15"
+    },
+    {
+      "id": 328,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-17"
+    },
+    {
+      "id": 330,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-18"
+    },
+    {
+      "id": 304,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-09"
+    },
+    {
+      "id": 316,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-10"
+    },
+    {
+      "id": 318,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-12"
+    },
+    {
+      "id": 320,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-13"
+    },
+    {
+      "id": 322,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-16"
+    },
+    {
+      "id": 259,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-01"
+    },
+    {
+      "id": 263,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-05"
+    },
+    {
+      "id": 264,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-06"
+    },
+    {
+      "id": 267,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-09"
+    },
+    {
+      "id": 270,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-12"
+    },
+    {
+      "id": 273,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-15"
+    },
+    {
+      "id": 274,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-16"
+    },
+    {
+      "id": 275,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-17"
+    },
+    {
+      "id": 332,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-18"
+    },
+    {
+      "id": 336,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-20"
+    },
+    {
+      "id": 339,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-21"
+    },
+    {
+      "id": 331,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-18"
+    },
+    {
+      "id": 334,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-19"
+    },
+    {
+      "id": 337,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-20"
+    },
+    {
+      "id": 340,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-21"
+    },
+    {
+      "id": 342,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-22"
+    },
+    {
+      "id": 344,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-22"
+    },
+    {
+      "id": 343,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-22"
+    },
+    {
+      "id": 338,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-20"
+    },
+    {
+      "id": 341,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-21"
+    },
+    {
+      "id": 345,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-23"
+    },
+    {
+      "id": 347,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-23"
+    },
+    {
+      "id": 348,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-23"
+    },
+    {
+      "id": 349,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-24"
+    },
+    {
+      "id": 350,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-24"
+    },
+    {
+      "id": 351,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-25"
+    },
+    {
+      "id": 352,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-26"
+    },
+    {
+      "id": 353,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-25"
+    },
+    {
+      "id": 354,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-24"
+    },
+    {
+      "id": 355,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-25"
+    },
+    {
+      "id": 356,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-27"
+    },
+    {
+      "id": 357,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-27"
+    },
+    {
+      "id": 358,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-28"
+    },
+    {
+      "id": 359,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-27"
+    },
+    {
+      "id": 360,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-28"
+    },
+    {
+      "id": 361,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-29"
+    },
+    {
+      "id": 362,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-30"
+    },
+    {
+      "id": 364,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-29"
+    },
+    {
+      "id": 365,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-30"
+    },
+    {
+      "id": 366,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-28"
+    },
+    {
+      "id": 367,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-29"
+    },
+    {
+      "id": 368,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-31"
+    },
+    {
+      "id": 369,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-31"
+    },
+    {
+      "id": 370,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-30"
+    },
+    {
+      "id": 371,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-08-31"
+    },
+    {
+      "id": 372,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-01"
+    },
+    {
+      "id": 373,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-01"
+    },
+    {
+      "id": 374,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-01"
+    },
+    {
+      "id": 375,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-02"
+    },
+    {
+      "id": 376,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-02"
+    },
+    {
+      "id": 377,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-03"
+    },
+    {
+      "id": 380,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-03"
+    },
+    {
+      "id": 381,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-04"
+    },
+    {
+      "id": 379,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-02"
+    },
+    {
+      "id": 412,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-15"
+    },
+    {
+      "id": 413,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-14"
+    },
+    {
+      "id": 378,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-03"
+    },
+    {
+      "id": 382,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-04"
+    },
+    {
+      "id": 383,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-04"
+    },
+    {
+      "id": 384,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-05"
+    },
+    {
+      "id": 385,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-05"
+    },
+    {
+      "id": 386,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-05"
+    },
+    {
+      "id": 387,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-06"
+    },
+    {
+      "id": 388,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-06"
+    },
+    {
+      "id": 389,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-07"
+    },
+    {
+      "id": 390,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-06"
+    },
+    {
+      "id": 391,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-07"
+    },
+    {
+      "id": 392,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-07"
+    },
+    {
+      "id": 393,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-08"
+    },
+    {
+      "id": 394,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-08"
+    },
+    {
+      "id": 395,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-08"
+    },
+    {
+      "id": 396,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-09"
+    },
+    {
+      "id": 397,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-09"
+    },
+    {
+      "id": 398,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-09"
+    },
+    {
+      "id": 436,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-20"
+    },
+    {
+      "id": 437,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-21"
+    },
+    {
+      "id": 438,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-21"
+    },
+    {
+      "id": 439,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-21"
+    },
+    {
+      "id": 440,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-22"
+    },
+    {
+      "id": 441,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-22"
+    },
+    {
+      "id": 442,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-22"
+    },
+    {
+      "id": 471,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-30"
+    },
+    {
+      "id": 446,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-24"
+    },
+    {
+      "id": 447,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-24"
+    },
+    {
+      "id": 449,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-26"
+    },
+    {
+      "id": 450,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-26"
+    },
+    {
+      "id": 452,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-27"
+    },
+    {
+      "id": 453,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-27"
+    },
+    {
+      "id": 454,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-28"
+    },
+    {
+      "id": 472,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-30"
+    },
+    {
+      "id": 473,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-10-01"
+    },
+    {
+      "id": 474,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-10-01"
+    },
+    {
+      "id": 475,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-10-01"
+    },
+    {
+      "id": 456,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-28"
+    },
+    {
+      "id": 463,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-26"
+    },
+    {
+      "id": 464,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-27"
+    },
+    {
+      "id": 465,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-28"
+    },
+    {
+      "id": 466,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-29"
+    },
+    {
+      "id": 467,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-24"
+    },
+    {
+      "id": 468,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-29"
+    },
+    {
+      "id": 469,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-29"
+    },
+    {
+      "id": 202,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-27"
+    },
+    {
+      "id": 203,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-27"
+    },
+    {
+      "id": 204,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-28"
+    },
+    {
+      "id": 150,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-15"
+    },
+    {
+      "id": 169,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-16"
+    },
+    {
+      "id": 175,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-18"
+    },
+    {
+      "id": 181,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-20"
+    },
+    {
+      "id": 187,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-22"
+    },
+    {
+      "id": 243,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-16"
+    },
+    {
+      "id": 205,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-28"
+    },
+    {
+      "id": 288,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-07-31"
+    },
+    {
+      "id": 290,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-08-02"
+    },
+    {
+      "id": 237,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-10"
+    },
+    {
+      "id": 240,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-06-13"
+    },
+    {
+      "id": 209,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-07-29"
+    },
+    {
+      "id": 311,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-12"
+    },
+    {
+      "id": 313,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-08-13"
+    },
+    {
+      "id": 171,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-17"
+    },
+    {
+      "id": 177,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-19"
+    },
+    {
+      "id": 183,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-07-21"
+    },
+    {
+      "id": 399,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-10"
+    },
+    {
+      "id": 400,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-10"
+    },
+    {
+      "id": 401,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-10"
+    },
+    {
+      "id": 402,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-11"
+    },
+    {
+      "id": 403,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-11"
+    },
+    {
+      "id": 404,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-11"
+    },
+    {
+      "id": 405,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-12"
+    },
+    {
+      "id": 406,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-12"
+    },
+    {
+      "id": 407,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-12"
+    },
+    {
+      "id": 408,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-13"
+    },
+    {
+      "id": 409,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-13"
+    },
+    {
+      "id": 410,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-14"
+    },
+    {
+      "id": 414,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-15"
+    },
+    {
+      "id": 419,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-13"
+    },
+    {
+      "id": 420,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-14"
+    },
+    {
+      "id": 421,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-15"
+    },
+    {
+      "id": 422,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-16"
+    },
+    {
+      "id": 423,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-16"
+    },
+    {
+      "id": 424,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-16"
+    },
+    {
+      "id": 425,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-17"
+    },
+    {
+      "id": 426,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-17"
+    },
+    {
+      "id": 427,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-18"
+    },
+    {
+      "id": 428,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-18"
+    },
+    {
+      "id": 429,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-17"
+    },
+    {
+      "id": 430,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-18"
+    },
+    {
+      "id": 431,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-19"
+    },
+    {
+      "id": 432,
+      "shop_name": "vishal shop\n",
+      "report_date": "2026-09-19"
+    },
+    {
+      "id": 433,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-19"
+    },
+    {
+      "id": 434,
+      "shop_name": "FRIENDS",
+      "report_date": "2026-09-20"
+    },
+    {
+      "id": 435,
+      "shop_name": "KUNAL FINE WINE",
+      "report_date": "2026-09-20"
+    }
+  ]
+}
