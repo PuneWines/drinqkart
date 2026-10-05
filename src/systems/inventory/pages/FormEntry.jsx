@@ -156,8 +156,18 @@ export default function FormEntry({ currentUser }) {
       setVendorsList(vendors);
       setShopsList(shops);
       if (shops && shops.length > 0) {
-        if (currentUser?.role === 'operator' && currentUser?.shop_id) {
-          setSelectedShopId(currentUser.shop_id.toString());
+        if (currentUser?.role === 'operator') {
+          const matched = shops.find(s =>
+            (currentUser?.shop_id && s.id.toString() === currentUser.shop_id.toString()) ||
+            (currentUser?.shop_name && s.shop_name?.trim().toLowerCase() === currentUser.shop_name.trim().toLowerCase())
+          );
+          if (matched) {
+            setSelectedShopId(matched.id.toString());
+          } else if (currentUser?.shop_id) {
+            setSelectedShopId(currentUser.shop_id.toString());
+          } else if (!selectedShopId) {
+            setSelectedShopId(shops[0].id.toString());
+          }
         } else if (!selectedShopId) {
           setSelectedShopId(shops[0].id.toString());
         }
