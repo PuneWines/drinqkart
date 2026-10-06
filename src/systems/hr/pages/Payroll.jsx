@@ -436,6 +436,23 @@ const Payroll = () => {
                 }
             }
 
+            // Fetch company holidays from public.holidays for the month
+            let dbHolidays = [];
+            try {
+                const { data: hData, error: hErr } = await supabase
+                    .from('holidays')
+                    .select('*')
+                    .gte('holiday_date', startDateStr)
+                    .lte('holiday_date', endDateStr);
+                if (!hErr && hData) {
+                    dbHolidays = hData;
+                }
+            } catch (err) {
+                console.warn('Could not fetch holidays in Payroll:', err);
+            }
+
+            const holidayDates = new Set((dbHolidays || []).map(h => (h.holiday_date || '').trim()).filter(Boolean));
+
             const getLocalDayOfWeek = (dateStr) => {
                 if (!dateStr) return -1;
                 const parts = dateStr.split('-');
@@ -491,8 +508,10 @@ const Payroll = () => {
                 if (!loggedDatesMap[matchedKey]) loggedDatesMap[matchedKey] = new Set();
                 loggedDatesMap[matchedKey].add(log.attendance_date);
 
-                const status = log.status?.toString().trim().toLowerCase() || '';
-                const isPresent = status === 'present' || status === 'late' || status === 'half day' || status === 'weekly off' || status === 'day off' || status === 'wo' || status === 'do';
+                const rawStatus = log.status?.toString().trim().toLowerCase() || '';
+                const isHolidayDate = holidayDates.has(log.attendance_date);
+                const isHoliday = rawStatus === 'holiday' || isHolidayDate;
+                const isPresent = rawStatus === 'present' || rawStatus === 'late' || rawStatus === 'half day' || rawStatus === 'weekly off' || rawStatus === 'day off' || rawStatus === 'wo' || rawStatus === 'do' || isHoliday;
 
                 const dayOfWeek = getLocalDayOfWeek(log.attendance_date);
                 const isFriday = dayOfWeek === 5;
@@ -515,11 +534,11 @@ const Payroll = () => {
                         attendanceMap[matchedKey] = { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
                     }
                     if (isPresent) {
-                        attendanceMap[matchedKey].present += (status === 'half day' ? 0.5 : 1);
-                        if (isFriday) attendanceMap[matchedKey].hasFriday = true;
-                        if (isSaturday) attendanceMap[matchedKey].hasSaturday = true;
-                        if (isSunday) attendanceMap[matchedKey].hasSunday = true;
-                    } else if (status === 'absent') {
+                        attendanceMap[matchedKey].present += (rawStatus === 'half day' ? 0.5 : 1);
+                        if (isFriday && !isHoliday) attendanceMap[matchedKey].hasFriday = true;
+                        if (isSaturday && !isHoliday) attendanceMap[matchedKey].hasSaturday = true;
+                        if (isSunday && !isHoliday) attendanceMap[matchedKey].hasSunday = true;
+                    } else if (rawStatus === 'absent' && !isHolidayDate) {
                         attendanceMap[matchedKey].absent++;
                     }
                 } else {
@@ -539,11 +558,11 @@ const Payroll = () => {
                         };
                     }
                     if (isPresent) {
-                        unmatchedMap[unKey].present += (status === 'half day' ? 0.5 : 1);
-                        if (isFriday) unmatchedMap[unKey].hasFriday = true;
-                        if (isSaturday) unmatchedMap[unKey].hasSaturday = true;
-                        if (isSunday) unmatchedMap[unKey].hasSunday = true;
-                    } else if (status === 'absent') {
+                        unmatchedMap[unKey].present += (rawStatus === 'half day' ? 0.5 : 1);
+                        if (isFriday && !isHoliday) unmatchedMap[unKey].hasFriday = true;
+                        if (isSaturday && !isHoliday) unmatchedMap[unKey].hasSaturday = true;
+                        if (isSunday && !isHoliday) unmatchedMap[unKey].hasSunday = true;
+                    } else if (rawStatus === 'absent' && !isHolidayDate) {
                         unmatchedMap[unKey].absent++;
                     }
                 }
@@ -594,6 +613,47 @@ const Payroll = () => {
                         }
                     }
                 }
+            });
+
+            // Process Company Holidays for dates where no punch log overrides it
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1;
+            const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth;
+            const todayStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+            holidayDates.forEach(hDate => {
+                const isElapsed = isCurrentMonth ? hDate <= todayStr : hDate <= endDateStr;
+                if (!isElapsed) return;
+
+                (activeEmployees || []).forEach(emp => {
+                    const empId = emp.employee_id?.toString().trim();
+                    const empName = emp.name_as_per_aadhar?.toString().trim();
+                    const empIdLower = empId ? empId.toLowerCase() : '';
+                    const empNameLower = empName ? empName.toLowerCase() : '';
+                    const matchedKey = empIdToKeyMap[empIdLower] || empIdToKeyMap[empNameLower] || empIdLower || empNameLower;
+
+                    if (isInactiveRecord(empId, empName) || isInactiveRecord(matchedKey)) return;
+
+                    if (!loggedDatesMap[matchedKey]) loggedDatesMap[matchedKey] = new Set();
+
+                    if (!loggedDatesMap[matchedKey].has(hDate)) {
+                        loggedDatesMap[matchedKey].add(hDate);
+
+                        if (!attendanceMap[matchedKey]) {
+                            attendanceMap[matchedKey] = { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
+                        }
+                        attendanceMap[matchedKey].present += 1;
+                    }
+                });
+
+                Object.keys(unmatchedMap).forEach(unKey => {
+                    if (!loggedDatesMap[unKey]) loggedDatesMap[unKey] = new Set();
+                    if (!loggedDatesMap[unKey].has(hDate)) {
+                        loggedDatesMap[unKey].add(hDate);
+                        unmatchedMap[unKey].present += 1;
+                    }
+                });
             });
 
             // 3. Fetch advances from Supabase advance_requests table

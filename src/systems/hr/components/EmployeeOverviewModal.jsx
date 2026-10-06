@@ -125,6 +125,7 @@ export default function EmployeeOverviewModal({
 
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [rosterLogs, setRosterLogs] = useState([]);
+  const [holidayLogs, setHolidayLogs] = useState([]);
   const [learningSubmission, setLearningSubmission] = useState(null);
   const [learningLoading, setLearningLoading] = useState(false);
   const [payrollRecords, setPayrollRecords] = useState([]);
@@ -165,26 +166,32 @@ export default function EmployeeOverviewModal({
       const lastDay = new Date(year, monthNum, 0).getDate();
       const endDate = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      // 1. Fetch attendance from hr_management_attendance_logs and hr_attendance_daily
-      const { data: logsData } = await supabase
+      // 1. Fetch attendance & holidays
+      let logsQuery = supabase
         .from('hr_management_attendance_logs')
         .select('*')
-        .or(`employee_id.eq.${empIdStr},employee_id.eq.${empIdStr.replace(/^0+/, '')}`)
         .gte('attendance_date', startDate)
         .lte('attendance_date', endDate)
         .limit(5000);
 
-      const { data: dailyData } = await supabase
-        .from('hr_attendance_daily')
-        .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .limit(5000);
+      if (empIdStr && empNameStr) {
+        logsQuery = logsQuery.or(`employee_id.eq.${empIdStr},employee_id.eq.${empIdStr.replace(/^0+/, '')},employee_name.ilike.%${empNameStr}%`);
+      } else if (empIdStr) {
+        logsQuery = logsQuery.or(`employee_id.eq.${empIdStr},employee_id.eq.${empIdStr.replace(/^0+/, '')}`);
+      } else if (empNameStr) {
+        logsQuery = logsQuery.ilike('employee_name', `%${empNameStr}%`);
+      }
 
-      const combinedLogs = [
-        ...(logsData || []).map(l => ({ ...l, date: l.date || l.attendance_date })),
-        ...(dailyData || [])
-      ];
+      const [{ data: logsData }, { data: dbHolidays }] = await Promise.all([
+        logsQuery,
+        supabase
+          .from('holidays')
+          .select('*')
+          .gte('holiday_date', startDate)
+          .lte('holiday_date', endDate)
+      ]);
+
+      const combinedLogs = (logsData || []).map(l => ({ ...l, date: l.date || l.attendance_date }));
 
       const filteredAtt = combinedLogs.filter(a => {
         const idCol = String(a.employee_id || a.emp_id || '').trim().toLowerCase();
@@ -208,6 +215,7 @@ export default function EmployeeOverviewModal({
       });
 
       setAttendanceLogs(filteredAtt);
+      setHolidayLogs(dbHolidays || []);
 
       // 2. Fetch rosters
       const { data: rosterData } = await supabase
@@ -218,9 +226,24 @@ export default function EmployeeOverviewModal({
 
       if (rosterData) {
         const filteredRoster = rosterData.filter(r => {
-          const idCol = String(r.employee_id || r.emp_id || '').trim();
+          const idCol = String(r.employee_id || r.emp_id || '').trim().toLowerCase();
           const nameCol = String(r.employee_name || r.name || '').trim().toLowerCase();
-          return (empIdStr && idCol === empIdStr) || (empNameStr && nameCol.includes(empNameStr.toLowerCase()));
+          const eId = empIdStr.toLowerCase();
+          const eName = empNameStr.toLowerCase();
+
+          const idMatches = Boolean(eId && idCol) && (
+            idCol === eId ||
+            idCol.replace(/^0+/, '') === eId.replace(/^0+/, '') ||
+            parseInt(idCol, 10) === parseInt(eId, 10)
+          );
+
+          const nameMatches = Boolean(eName && nameCol) && (
+            nameCol === eName ||
+            nameCol.includes(eName) ||
+            eName.includes(nameCol)
+          );
+
+          return idMatches || nameMatches;
         });
         setRosterLogs(filteredRoster);
       } else {
@@ -361,6 +384,8 @@ export default function EmployeeOverviewModal({
   let totalLate = 0;
   let totalWeeklyOff = 0;
   let totalDayOff = 0;
+  let totalHoliday = 0;
+  let totalUnpunchedHoliday = 0;
   let totalLateMins = 0;
   let totalWorkMs = 0;
 
@@ -369,9 +394,13 @@ export default function EmployeeOverviewModal({
     const dateObj = new Date(pYear, pMonthIdx, d);
     const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
 
+    const hEntry = holidayLogs.find(h => (h.holiday_date || '').trim() === dateStr);
+    const isHoliday = !!hEntry;
+    const holidayName = hEntry ? hEntry.holiday_name : null;
+
     const rEntry = rosterLogs.find(r => r.date === dateStr);
     const hasRoster = !!(rEntry && rEntry.shift_type);
-    const shiftName = hasRoster ? rEntry.shift_type : 'Roster Not Available';
+    const shiftName = isHoliday ? (holidayName || 'Holiday') : hasRoster ? rEntry.shift_type : 'Roster Not Available';
     const scheduledStartStr = hasRoster && rEntry.start_time ? rEntry.start_time.substring(0, 5) : '10:00';
     const scheduledEndStr = hasRoster && rEntry.end_time ? rEntry.end_time.substring(0, 5) : '19:30';
 
@@ -409,74 +438,50 @@ export default function EmployeeOverviewModal({
       }
     }
 
+    const rShiftLower = String(rEntry?.shift_type || '').toLowerCase();
     const isRosterWeeklyOff = hasRoster && (
-      String(rEntry.shift_type).toLowerCase().includes('weekly off') || 
-      String(rEntry.shift_type).toLowerCase() === 'wo' ||
-      String(rEntry.shift_type).toLowerCase() === 'weeklyoff'
+      rShiftLower.includes('weekly off') || 
+      rShiftLower === 'wo' ||
+      rShiftLower === 'weeklyoff'
+    );
+    const isRosterDayOff = hasRoster && (
+      rShiftLower.includes('day off') || 
+      rShiftLower === 'do' ||
+      rShiftLower === 'dayoff'
+    );
+    const isRosterHoliday = hasRoster && (
+      rShiftLower.includes('holiday') ||
+      rShiftLower === 'hd'
     );
 
-    let status = att.status;
-    const hasPunches = Boolean(inTime || outTime || (att.punch_log && att.punch_log !== '-'));
-    const isLate = Boolean((att.late_minutes && att.late_minutes > 0) || (att.late_minute && att.late_minute > 0) || status === 'Late');
-
-    if (hasPunches) {
-      status = isLate ? 'Late' : 'Present';
-    } else if (!status || status === 'Absent') {
-      if (isRosterWeeklyOff) {
-        status = 'Weekly Off';
-      } else {
-        status = 'Absent';
-      }
-    }
-
-    const lateMins = att.late_minutes || 0;
-    
     // Compute lunch break duration dynamically from raw punch_log or manual_punches if not stored
     let computedLunchStr = att.standard_lunch || att.lunch_time || att.lunch_duration || att.lunch_hours || att.lunch || '-';
+    let rawPunchList = [];
+    if (att.punch_log && att.punch_log !== '-') {
+      rawPunchList = att.punch_log.split(/\s*\|\s*/).filter(Boolean).map(p => p.trim());
+    } else if (att.manual_punches && (att.manual_punches.is_manual || att.manual_punches.manual_override)) {
+      const mPunches = att.manual_punches.manual || att.manual_punches;
+      rawPunchList = Object.entries(mPunches)
+        .filter(([k, v]) => v && typeof v === 'string' && k !== 'is_manual' && k !== 'manual_override' && k !== 'absent')
+        .map(([k, v]) => v.trim());
+    }
+
     if (!computedLunchStr || computedLunchStr === '-' || computedLunchStr === '00:00:00') {
-      if (att.punch_log && att.punch_log !== '-') {
-        const rawPunches = att.punch_log
-          .split(/\s*\|\s*/)
-          .filter(Boolean)
-          .map(p => p.trim());
-        if (rawPunches.length >= 3) {
-          let actualLunchMs = 0;
-          for (let i = 1; i < rawPunches.length - 1; i += 2) {
-            const pOut = parseDateTimeHelper(rawPunches[i], dateStr);
-            const pIn = parseDateTimeHelper(rawPunches[i + 1], dateStr);
-            if (pOut && pIn && pIn > pOut) {
-              actualLunchMs += (pIn.getTime() - pOut.getTime());
-            }
-          }
-          if (actualLunchMs > 0) {
-            const totalSecs = Math.floor(actualLunchMs / 1000);
-            const hrs = Math.floor(totalSecs / 3600);
-            const mins = Math.floor((totalSecs % 3600) / 60);
-            const secs = totalSecs % 60;
-            computedLunchStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      if (rawPunchList.length >= 3) {
+        let actualLunchMs = 0;
+        for (let i = 1; i < rawPunchList.length - 1; i += 2) {
+          const pOut = parseDateTimeHelper(rawPunchList[i], dateStr);
+          const pIn = parseDateTimeHelper(rawPunchList[i + 1], dateStr);
+          if (pOut && pIn && pIn > pOut) {
+            actualLunchMs += (pIn.getTime() - pOut.getTime());
           }
         }
-      } else if (att.manual_punches && (att.manual_punches.is_manual || att.manual_punches.manual_override)) {
-        const mPunches = att.manual_punches.manual || att.manual_punches;
-        const mList = Object.entries(mPunches)
-          .filter(([k, v]) => v && typeof v === 'string' && k !== 'is_manual' && k !== 'manual_override' && k !== 'absent')
-          .map(([k, v]) => v.trim());
-        if (mList.length >= 3) {
-          let actualLunchMs = 0;
-          for (let i = 1; i < mList.length - 1; i += 2) {
-            const pOut = parseDateTimeHelper(mList[i], dateStr);
-            const pIn = parseDateTimeHelper(mList[i + 1], dateStr);
-            if (pOut && pIn && pIn > pOut) {
-              actualLunchMs += (pIn.getTime() - pOut.getTime());
-            }
-          }
-          if (actualLunchMs > 0) {
-            const totalSecs = Math.floor(actualLunchMs / 1000);
-            const hrs = Math.floor(totalSecs / 3600);
-            const mins = Math.floor((totalSecs % 3600) / 60);
-            const secs = totalSecs % 60;
-            computedLunchStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-          }
+        if (actualLunchMs > 0) {
+          const totalSecs = Math.floor(actualLunchMs / 1000);
+          const hrs = Math.floor(totalSecs / 3600);
+          const mins = Math.floor((totalSecs % 3600) / 60);
+          const secs = totalSecs % 60;
+          computedLunchStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
       }
     }
@@ -491,7 +496,49 @@ export default function EmployeeOverviewModal({
     const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
     const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;
 
-    if (status === 'Present' || status === 'Late') {
+    // Check if punch is invalid: e.g. single punch around midnight (00:xx) with no work hours and no other logs
+    const isSingleMidnightPunch = (rawPunchList.length <= 1 && !outTime && inTime && (inTime.includes('12:') || inTime.includes('00:')) && dayWorkMs === 0);
+    const hasValidWorkingPunch = Boolean(
+      (inTime && outTime && inTime !== '-' && outTime !== '-' && dayWorkMs > 0) ||
+      (rawPunchList.length >= 2 && dayWorkMs > 0) ||
+      (att.status && att.status !== 'Absent' && att.status !== 'absent' && !isSingleMidnightPunch && (dayWorkMs > 0 || (inTime && !isSingleMidnightPunch)))
+    );
+
+    let status = att.status;
+    const isLate = Boolean((att.late_minutes && att.late_minutes > 0) || (att.late_minute && att.late_minute > 0) || status === 'Late');
+
+    const statusLower = String(status || '').toLowerCase().trim();
+    const isExplicitWeeklyOff = statusLower === 'weekly off' || statusLower === 'wo' || statusLower === 'weeklyoff' || isRosterWeeklyOff;
+    const isExplicitDayOff = statusLower === 'day off' || statusLower === 'do' || statusLower === 'dayoff' || isRosterDayOff;
+    const isExplicitOnLeave = statusLower === 'on leave' || statusLower === 'leave';
+    const isExplicitHalfDay = statusLower === 'half day' || statusLower === 'hd';
+    const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday' || statusLower === 'hd';
+
+    if (isExplicitHoliday) {
+      totalHoliday++;
+      if (hasValidWorkingPunch && !isSingleMidnightPunch) {
+        status = isLate ? 'Late' : 'Present';
+      } else {
+        status = 'HOLIDAY';
+        totalUnpunchedHoliday++;
+      }
+    } else if (hasValidWorkingPunch && !isSingleMidnightPunch) {
+      status = isLate ? 'Late' : (isExplicitHalfDay ? 'Half Day' : (status || 'Present'));
+    } else if (isExplicitWeeklyOff) {
+      status = 'Weekly Off';
+    } else if (isExplicitDayOff) {
+      status = 'Day Off';
+    } else if (isExplicitOnLeave) {
+      status = 'On Leave';
+    } else if (isExplicitHalfDay) {
+      status = 'Half Day';
+    } else {
+      status = 'Absent';
+    }
+
+    const lateMins = att.late_minutes || 0;
+
+    if (status === 'Present' || status === 'Late' || status === 'Half Day') {
       totalPresent++;
       if (lateMins > 0 || status === 'Late') {
         totalLate++;
@@ -507,6 +554,42 @@ export default function EmployeeOverviewModal({
 
     totalWorkMs += dayWorkMs;
 
+    // Build timeline shift segments dynamically
+    let shiftSegments = [];
+    if (rawPunchList.length >= 4) {
+      // 4 punches: in1 -> out1 (morning), out1 -> in2 (lunch), in2 -> out2 (evening)
+      const pIn1 = rawPunchList[0];
+      const pOut1 = rawPunchList[1];
+      const pIn2 = rawPunchList[2];
+      const pOut2 = rawPunchList[3];
+      const mHrs = calculateWorkHours(pIn1, pOut1, dateStr, '00:00:00');
+      const eHrs = calculateWorkHours(pIn2, pOut2, dateStr, '00:00:00');
+      shiftSegments = [
+        { label: 'Morning Shift', time: `${formatTimeIST(pIn1)} – ${formatTimeIST(pOut1)}`, duration: mHrs, type: 'morning' },
+        { label: 'Lunch Break', time: `${formatTimeIST(pOut1)} – ${formatTimeIST(pIn2)}`, duration: lunchStr, type: 'lunch' },
+        { label: 'Evening Shift', time: `${formatTimeIST(pIn2)} – ${formatTimeIST(pOut2)}`, duration: eHrs, type: 'evening' }
+      ];
+    } else if (rawPunchList.length === 2 || (inTime && outTime && inTime !== '-' && outTime !== '-')) {
+      const pIn = rawPunchList[0] || inTime;
+      const pOut = rawPunchList[rawPunchList.length - 1] || outTime;
+      if (lunchStr && lunchStr !== '-') {
+        // Split with lunch
+        shiftSegments = [
+          { label: 'Work Shift (In)', time: `${formatTimeIST(pIn)}`, duration: '', type: 'morning' },
+          { label: 'Lunch', time: lunchStr, duration: lunchStr, type: 'lunch' },
+          { label: 'Work Shift (Out)', time: `${formatTimeIST(pOut)}`, duration: workHrsStr, type: 'evening' }
+        ];
+      } else {
+        shiftSegments = [
+          { label: 'Full Shift', time: `${formatTimeIST(pIn)} – ${formatTimeIST(pOut)}`, duration: workHrsStr, type: 'full' }
+        ];
+      }
+    } else if (inTime && inTime !== '-' && !isSingleMidnightPunch) {
+      shiftSegments = [
+        { label: 'Punch In', time: `${formatTimeIST(inTime)}`, duration: 'Pending Out', type: 'pending' }
+      ];
+    }
+
     dayRows.push({
       dayNum: d,
       dateStr,
@@ -521,6 +604,13 @@ export default function EmployeeOverviewModal({
       workHrsStr,
       lateMins,
       status,
+      holidayName: holidayName || (isRosterHoliday ? rEntry?.shift_type : null) || 'Company Holiday',
+      isHoliday: isExplicitHoliday,
+      isWeeklyOff: isExplicitWeeklyOff,
+      isDayOff: isExplicitDayOff,
+      shiftSegments,
+      rawPunchList,
+      hasValidWorkingPunch: hasValidWorkingPunch && !isSingleMidnightPunch,
       attendance: att
     });
   }
@@ -647,7 +737,7 @@ export default function EmployeeOverviewModal({
             </div>
             <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
               <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
-              <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPresent + totalWeeklyOff + totalDayOff}</p>
+              <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPresent + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff}</p>
             </div>
             <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
               <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
@@ -701,20 +791,40 @@ export default function EmployeeOverviewModal({
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {dayRows.map((row) => {
                       const punchedShopName = resolvePunchedStore(row.attendance);
-                      const isWeekendAbsent = row.status === 'Absent' && ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                      const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                      const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
+                      const hasValidPunches = row.hasValidWorkingPunch;
+                      const isAbsentOrLeave = 
+                        !hasValidPunches ||
+                        row.status === 'Absent' ||
+                        String(row.status || '').toLowerCase() === 'absent' ||
+                        row.status === 'On Leave' ||
+                        String(row.status || '').toLowerCase().includes('leave') ||
+                        row.status === 'Weekly Off' ||
+                        row.status === 'WO' ||
+                        row.status === 'Day Off' ||
+                        row.status === 'DO';
+
+                      const isWeekendAbsent = !isHoliday && isWeekendDay && isAbsentOrLeave;
                       return (
                         <tr 
                           key={row.dayNum} 
                           className={`transition-colors ${
                             isWeekendAbsent 
-                              ? 'bg-red-100/70 hover:bg-red-100' 
+                              ? 'bg-red-100/70 hover:bg-red-100 border-l-4 border-l-red-500' 
+                              : row.status === 'On Leave'
+                              ? 'bg-rose-50/80 hover:bg-rose-100/80 border-l-4 border-l-rose-400'
+                              : row.status === 'Absent'
+                              ? 'bg-red-50/40 hover:bg-red-50/80'
                               : 'hover:bg-slate-50/80'
                           }`}
                         >
                           <td className="px-3 py-2 text-slate-900 font-bold font-mono">
                             {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
                           </td>
-                          <td className="px-3 py-2 font-bold text-slate-500">{row.dayName}</td>
+                          <td className={`px-3 py-2 font-bold ${isWeekendAbsent ? 'text-red-700 font-bold' : row.status === 'Absent' ? 'text-red-900 font-semibold' : 'text-slate-500'}`}>
+                            {row.dayName}
+                          </td>
                           <td className="px-3 py-2">
                             {row.hasRoster ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
@@ -757,6 +867,7 @@ export default function EmployeeOverviewModal({
                           </td>
                           <td className="px-3 py-2 text-center">
                             {(() => {
+                              if (isHoliday) return <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">HOLIDAY</span>;
                               if (row.status === 'Present') return <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">P</span>;
                               if (row.status === 'Late') return <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">L</span>;
                               if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold">HD</span>;
@@ -776,42 +887,135 @@ export default function EmployeeOverviewModal({
           ) : activeTab === 'timeline' ? (
             <div className="space-y-3">
               {dayRows.map((row) => {
-                const hasPunches = Boolean(row.inTimeFormatted || row.outTimeFormatted);
-                const isWeekendAbsent = row.status === 'Absent' && ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
+                const hasValidPunches = row.hasValidWorkingPunch;
+                const isAbsentOrLeave = 
+                  !hasValidPunches ||
+                  row.status === 'Absent' ||
+                  String(row.status || '').toLowerCase() === 'absent' ||
+                  row.status === 'On Leave' ||
+                  String(row.status || '').toLowerCase().includes('leave') ||
+                  row.status === 'Weekly Off' ||
+                  row.status === 'WO' ||
+                  row.status === 'Day Off' ||
+                  row.status === 'DO';
+
+                const isWeekendAbsent = !isHoliday && isWeekendDay && isAbsentOrLeave;
                 return (
                   <div 
                     key={row.dayNum} 
-                    className={`rounded-2xl p-3.5 border transition-colors flex flex-col gap-2 ${
-                      isWeekendAbsent 
-                        ? 'bg-red-50/90 border-red-200 shadow-sm' 
+                    className={`rounded-2xl p-3.5 border transition-colors flex flex-col gap-2.5 ${
+                      row.isHoliday || row.status === 'HOLIDAY'
+                        ? 'bg-purple-50/70 border-purple-200 shadow-xs'
+                        : row.status === 'Weekly Off' || row.status === 'WO'
+                        ? 'bg-indigo-50/60 border-indigo-200 shadow-xs'
+                        : row.status === 'Day Off' || row.status === 'DO'
+                        ? 'bg-slate-50 border-slate-200 shadow-xs'
+                        : isWeekendAbsent 
+                        ? 'bg-red-50/90 border-red-300 ring-1 ring-red-400/30 shadow-sm' 
+                        : row.status === 'Absent'
+                        ? 'bg-red-50/50 border-red-200'
                         : 'bg-white border-slate-200 shadow-sm'
                     }`}
                   >
                     <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold font-mono text-slate-900">
+                        <span className={`text-xs font-bold font-mono ${isWeekendAbsent ? 'text-red-700 font-bold' : 'text-slate-900'}`}>
                           {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)} ({row.dayName})
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold text-[10px]">
-                          📅 {row.shiftName} ({row.scheduledStartStr} – {row.scheduledEndStr})
-                        </span>
+                        {row.isHoliday || row.status === 'HOLIDAY' ? (
+                          <span className="px-2 py-0.5 rounded bg-purple-100 border border-purple-200 text-purple-800 font-bold text-[10px]">
+                            🏖️ {row.holidayName}
+                          </span>
+                        ) : row.status === 'Weekly Off' || row.status === 'WO' ? (
+                          <span className="px-2 py-0.5 rounded bg-indigo-100 border border-indigo-200 text-indigo-800 font-bold text-[10px]">
+                            🌴 Weekly Off
+                          </span>
+                        ) : row.status === 'Day Off' || row.status === 'DO' ? (
+                          <span className="px-2 py-0.5 rounded bg-slate-200 border border-slate-300 text-slate-700 font-bold text-[10px]">
+                            📅 Day Off
+                          </span>
+                        ) : row.hasRoster ? (
+                          <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                            📅 {row.shiftName} ({row.scheduledStartStr} – {row.scheduledEndStr})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                            Roster N/A ({row.scheduledStartStr} – {row.scheduledEndStr})
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 text-xs font-mono">
                         {row.inTimeFormatted && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
                         {row.outTimeFormatted && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
                         <span className="font-bold text-slate-900">Total: {row.workHrsStr}</span>
+                        {row.lateMins > 0 && <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Late: {row.lateMins}m</span>}
                       </div>
                     </div>
 
-                    {hasPunches ? (
-                      <div className="h-6 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200">
-                        <div className="bg-emerald-500 flex-1 flex items-center justify-center text-white text-[10px] font-bold">MORNING SHIFT</div>
-                        <div className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold">LUNCH</div>
-                        <div className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold">EVENING SHIFT</div>
+                    {hasValidPunches && row.shiftSegments && row.shiftSegments.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <div className="h-7 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200 shadow-xs">
+                          {row.shiftSegments.map((seg, sIdx) => {
+                            if (seg.type === 'lunch') {
+                              return (
+                                <div key={sIdx} className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold border-x border-amber-300 shadow-inner">
+                                  <span>🥪 {seg.label} ({seg.duration || seg.time})</span>
+                                </div>
+                              );
+                            }
+                            if (seg.type === 'morning') {
+                              return (
+                                <div key={sIdx} className="bg-emerald-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold px-2 truncate">
+                                  <span>🌅 {seg.label}: {seg.time} {seg.duration ? `(${seg.duration})` : ''}</span>
+                                </div>
+                              );
+                            }
+                            if (seg.type === 'evening') {
+                              return (
+                                <div key={sIdx} className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold px-2 truncate">
+                                  <span>🌆 {seg.label}: {seg.time} {seg.duration ? `(${seg.duration})` : ''}</span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={sIdx} className="bg-emerald-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold px-2 truncate">
+                                <span>⏱ {seg.label}: {seg.time} {seg.duration ? `(${seg.duration})` : ''}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {row.rawPunchList && row.rawPunchList.length > 0 && (
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono overflow-x-auto">
+                            <span className="font-semibold text-slate-600">Punch Logs:</span>
+                            {row.rawPunchList.map((p, pIdx) => (
+                              <span key={pIdx} className="bg-slate-200/70 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                                {formatTimeIST(p)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : row.isHoliday || row.status === 'HOLIDAY' ? (
+                      <div className="py-2.5 px-4 text-center rounded-xl bg-purple-100/70 border border-purple-300 flex items-center justify-center gap-2">
+                        <span className="text-xs font-bold text-purple-900">🏖️ Holiday: {row.holidayName} (Payable Holiday)</span>
+                      </div>
+                    ) : row.status === 'Weekly Off' || row.status === 'WO' ? (
+                      <div className="py-2.5 px-4 text-center rounded-xl bg-indigo-100/70 border border-indigo-300 flex items-center justify-center gap-2">
+                        <span className="text-xs font-bold text-indigo-900">🌴 Weekly Off (Payable Day Off)</span>
+                      </div>
+                    ) : row.status === 'Day Off' || row.status === 'DO' ? (
+                      <div className="py-2.5 px-4 text-center rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center gap-2">
+                        <span className="text-xs font-bold text-slate-800">📅 Day Off (Payable Day Off)</span>
+                      </div>
+                    ) : row.status === 'On Leave' ? (
+                      <div className="py-2.5 px-4 text-center rounded-xl bg-sky-100/80 border border-sky-300 flex items-center justify-center gap-2">
+                        <span className="text-xs font-bold text-sky-900">✈️ Approved Leave</span>
                       </div>
                     ) : (
-                      <div className="py-2 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                        <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
+                      <div className={`py-2 text-center rounded-xl border border-dashed ${isWeekendAbsent ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>
+                        <span className="text-xs font-semibold text-red-600">Absent — No Punch Recorded</span>
                       </div>
                     )}
                   </div>

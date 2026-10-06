@@ -44,6 +44,7 @@ export const systems = [
       { label: 'Employee Learning', to: '/systems/hr/employee-learning' },
       // { label: 'Joining shop', to: '/systems/hr/joining-shop' },
       { label: 'Leave Management', to: '/systems/hr/leave' },
+      { label: 'Holiday', to: '/systems/hr/holiday' },
       {
         label: 'Attendance',
         to: '/systems/hr/attendance/daily',
