@@ -848,13 +848,35 @@ export default function EmployeeOverviewModal({
                           <td className="px-3 py-2 text-center text-slate-600 font-mono">
                             {row.scheduledStartStr} – {row.scheduledEndStr}
                           </td>
-                          <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                            {row.inTimeFormatted || '-'}
-                          </td>
-                          <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                            {row.outTimeFormatted || '-'}
-                          </td>
-                          <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
+                          {isHoliday && !hasValidPunches ? (
+                            <td colSpan={3} className="px-3 py-2 text-center">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-100/90 text-purple-900 border border-purple-200 font-bold text-[11px] shadow-2xs">
+                                🏖️ {row.holidayName}
+                              </span>
+                            </td>
+                          ) : (row.status === 'Weekly Off' || row.status === 'WO') && !hasValidPunches ? (
+                            <td colSpan={3} className="px-3 py-2 text-center">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-100/90 text-indigo-900 border border-indigo-200 font-bold text-[11px] shadow-2xs">
+                                🌴 Weekly Off
+                              </span>
+                            </td>
+                          ) : (row.status === 'Day Off' || row.status === 'DO') && !hasValidPunches ? (
+                            <td colSpan={3} className="px-3 py-2 text-center">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 text-slate-800 border border-slate-300 font-bold text-[11px] shadow-2xs">
+                                📅 Day Off
+                              </span>
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                {row.inTimeFormatted || '-'}
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                {row.outTimeFormatted || '-'}
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
+                            </>
+                          )}
                           <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">
                             {row.workHrsStr}
                           </td>
