@@ -1,9 +1,10 @@
 "use client";
 import aceLogo from "../../assets/logo1.png";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch, useSelector, Provider, ReactReduxContext } from "react-redux";
+import store from "../../redux/store";
 import { fetchNotifications } from "../../redux/slice/notificationSlice";
 import supabase from "../../SupabaseClient";
 import {
@@ -110,7 +111,7 @@ const parseChecklistAllowedPages = (userData) => {
   return Array.from(pageSet);
 };
 
-export default function AdminLayout({ children, darkMode, toggleDarkMode, showLayout = true }) {
+function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = true }) {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -551,4 +552,16 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       </div>
     </div>
   );
+}
+
+export default function AdminLayout(props) {
+  const reduxContext = useContext(ReactReduxContext);
+  if (!reduxContext || !reduxContext.store) {
+    return (
+      <Provider store={store}>
+        <AdminLayoutInner {...props} />
+      </Provider>
+    );
+  }
+  return <AdminLayoutInner {...props} />;
 }

@@ -2918,30 +2918,54 @@ const Roster = () => {
                         }
                     }
 
-                    let status = att.status;
-                    if (!status || status === 'Absent') {
-                        if (!inTime || inTime === '-') {
-                            if (isOnLeaveInTable) {
-                                status = 'On Leave';
-                            } else {
-                                status = 'Absent';
-                            }
-                        } else {
-                            status = lateMins > 0 ? 'Late' : 'Present';
-                        }
+                    let rawPunchList = [];
+                    if (att.punch_log && att.punch_log !== '-') {
+                        rawPunchList = att.punch_log.split(/\s*\|\s*/).filter(Boolean).map(p => p.trim());
+                    } else if (att.manual_punches && (att.manual_punches.is_manual || att.manual_punches.manual_override)) {
+                        const mPunches = att.manual_punches.manual || att.manual_punches;
+                        rawPunchList = Object.entries(mPunches)
+                            .filter(([k, v]) => v && typeof v === 'string' && k !== 'is_manual' && k !== 'manual_override' && k !== 'absent')
+                            .map(([k, v]) => v.trim());
                     }
 
                     // Lunch duration
-                    const lunchStr = att.standard_lunch || '-';
+                    let computedLunchStr = att.standard_lunch || att.lunch_time || att.lunch_duration || att.lunch || '-';
+                    if (!computedLunchStr || computedLunchStr === '-' || computedLunchStr === '00:00:00') {
+                        if (rawPunchList.length >= 3) {
+                            let actualLunchMs = 0;
+                            for (let i = 1; i < rawPunchList.length - 1; i += 2) {
+                                try {
+                                    const pOut = new Date(rawPunchList[i].includes('T') ? rawPunchList[i] : `${dateStr}T${rawPunchList[i]}`);
+                                    const pIn = new Date(rawPunchList[i + 1].includes('T') ? rawPunchList[i + 1] : `${dateStr}T${rawPunchList[i + 1]}`);
+                                    if (!isNaN(pOut.getTime()) && !isNaN(pIn.getTime()) && pIn > pOut) {
+                                        actualLunchMs += (pIn.getTime() - pOut.getTime());
+                                    }
+                                } catch (e) {}
+                            }
+                            if (actualLunchMs > 0) {
+                                const totalSec = Math.floor(actualLunchMs / 1000);
+                                const hrs = Math.floor(totalSec / 3600);
+                                const mins = Math.floor((totalSec % 3600) / 60);
+                                const secs = totalSec % 60;
+                                computedLunchStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                            }
+                        }
+                    }
+                    const lunchStr = (computedLunchStr && computedLunchStr !== '00:00:00') ? computedLunchStr : '-';
 
                     // Compute working hours
                     let workHrsStr = att.working_hour && att.working_hour !== '-' ? att.working_hour : '00:00:00';
                     if ((!workHrsStr || workHrsStr === '00:00:00') && inTime && outTime && inTime !== '-' && outTime !== '-') {
                         try {
-                            const iD = new Date(inTime);
-                            const oD = new Date(outTime);
+                            const iD = new Date(inTime.includes('T') ? inTime : `${dateStr}T${inTime}`);
+                            const oD = new Date(outTime.includes('T') ? outTime : `${dateStr}T${outTime}`);
                             if (!isNaN(iD.getTime()) && !isNaN(oD.getTime()) && oD > iD) {
-                                const diffSec = Math.floor((oD - iD) / 1000);
+                                let diffSec = Math.floor((oD - iD) / 1000);
+                                if (lunchStr !== '-') {
+                                    const [lh, lm, ls] = lunchStr.split(':').map(Number);
+                                    const lunchSec = (lh || 0) * 3600 + (lm || 0) * 60 + (ls || 0);
+                                    diffSec = Math.max(0, diffSec - lunchSec);
+                                }
                                 const hh = Math.floor(diffSec / 3600);
                                 const mm = Math.floor((diffSec % 3600) / 60);
                                 const ss = diffSec % 60;
@@ -2952,6 +2976,13 @@ const Roster = () => {
 
                     const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
                     const dayWorkMs = ((wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0)) * 1000;
+
+                    const isSingleMidnightPunch = (rawPunchList.length <= 1 && !outTime && inTime && (String(inTime).includes('12:') || String(inTime).includes('00:')) && dayWorkMs === 0);
+                    const hasValidWorkingPunch = Boolean(
+                        (inTime && outTime && inTime !== '-' && outTime !== '-' && dayWorkMs > 0) ||
+                        (rawPunchList.length >= 2 && dayWorkMs > 0) ||
+                        (att.status && att.status !== 'Absent' && att.status !== 'absent' && !isSingleMidnightPunch && (dayWorkMs > 0 || (inTime && !isSingleMidnightPunch)))
+                    );
 
                     let inTimeFormatted = null;
                     let outTimeFormatted = null;
@@ -2966,7 +2997,22 @@ const Roster = () => {
                         } catch (e) { outTimeFormatted = outTime; }
                     }
 
-                    if (status === 'Present' || status === 'Late') {
+                    let status = att.status;
+                    if (isSingleMidnightPunch || !hasValidWorkingPunch || !status || status === 'Absent') {
+                        if (!hasValidWorkingPunch || isSingleMidnightPunch) {
+                            if (isOnLeaveInTable) {
+                                status = 'On Leave';
+                            } else {
+                                status = 'Absent';
+                            }
+                        } else {
+                            status = lateMins > 0 ? 'Late' : 'Present';
+                        }
+                    } else if (hasValidWorkingPunch) {
+                        status = lateMins > 0 ? 'Late' : (status === 'Half Day' ? 'Half Day' : 'Present');
+                    }
+
+                    if (status === 'Present' || status === 'Late' || status === 'Half Day') {
                         totalPresent++;
                         if (lateMins > 0 || status === 'Late') {
                             totalLate++;
@@ -2977,6 +3023,32 @@ const Roster = () => {
                     }
 
                     totalWorkMs += dayWorkMs;
+
+                    // Build dynamic shift segments for timeline
+                    let shiftSegments = [];
+                    if (rawPunchList.length >= 4) {
+                        shiftSegments = [
+                            { label: 'Morning Shift', time: `${rawPunchList[0]} – ${rawPunchList[1]}`, type: 'morning' },
+                            { label: 'Lunch Break', time: `${rawPunchList[1]} – ${rawPunchList[2]}`, duration: lunchStr, type: 'lunch' },
+                            { label: 'Evening Shift', time: `${rawPunchList[2]} – ${rawPunchList[3]}`, type: 'evening' }
+                        ];
+                    } else if (rawPunchList.length === 2 || (inTime && outTime && inTime !== '-' && outTime !== '-')) {
+                        if (lunchStr && lunchStr !== '-') {
+                            shiftSegments = [
+                                { label: 'Work Shift (In)', time: inTimeFormatted, type: 'morning' },
+                                { label: 'Lunch Break', time: lunchStr, duration: lunchStr, type: 'lunch' },
+                                { label: 'Work Shift (Out)', time: outTimeFormatted, type: 'evening' }
+                            ];
+                        } else {
+                            shiftSegments = [
+                                { label: 'Full Shift', time: `${inTimeFormatted} – ${outTimeFormatted}`, duration: workHrsStr, type: 'full' }
+                            ];
+                        }
+                    } else if (inTime && inTime !== '-' && !isSingleMidnightPunch) {
+                        shiftSegments = [
+                            { label: 'Punch In', time: inTimeFormatted, duration: 'Pending Out', type: 'pending' }
+                        ];
+                    }
 
                     dayRows.push({
                         dayNum: d,
@@ -2995,6 +3067,9 @@ const Roster = () => {
                         dayWorkMs,
                         lateMins,
                         status,
+                        shiftSegments,
+                        rawPunchList,
+                        hasValidWorkingPunch: hasValidWorkingPunch && !isSingleMidnightPunch,
                         attendance: att,
                         rEntry
                     });
@@ -3139,10 +3214,14 @@ const Roster = () => {
                                 </div>
 
                                 {/* Summary Stat Cards */}
-                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-4 pt-4 border-t border-white/10">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-4 pt-4 border-t border-white/10">
                                     <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
                                         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
                                         <p className="text-base font-bold text-white mt-0.5">{dayRows.length}</p>
+                                    </div>
+                                    <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
+                                        <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
+                                        <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPresent + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff}</p>
                                     </div>
                                     <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
                                         <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
@@ -3189,130 +3268,203 @@ const Roster = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100 font-medium">
-                                                    {dayRows.map((row) => (
-                                                        <tr key={row.dayNum} className="hover:bg-slate-50/80 transition-colors">
-                                                            <td className="px-3 py-2 text-slate-900 font-bold font-mono">
-                                                                {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-slate-500 font-bold">{row.dayName}</td>
-                                                            <td className="px-3 py-2">
-                                                                {row.hasRoster ? (
-                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
-                                                                        📅 {row.shiftName}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
-                                                                        Roster Not Available
-                                                                    </span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-slate-600 font-mono text-[11px]">
-                                                                {row.attendance?.store_name || '-'}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">
-                                                                {row.scheduledStartStr} – {row.scheduledEndStr}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center font-mono">
-                                                                {row.inTimeFormatted ? (
-                                                                    <span className="font-semibold text-emerald-700">{row.inTimeFormatted}</span>
-                                                                ) : (
-                                                                    <span className="text-slate-300">-</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center font-mono">
-                                                                {row.outTimeFormatted ? (
-                                                                    <span className="font-semibold text-slate-700">{row.outTimeFormatted}</span>
-                                                                ) : (
-                                                                    <span className="text-slate-300">-</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center font-mono text-slate-500 text-[11px]">
-                                                                {row.lunchStr}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center font-mono font-bold text-slate-900">
-                                                                {row.workHrsStr}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center">
-                                                                {row.lateMins > 0 ? (
-                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 font-mono">
-                                                                        {row.lateMins}m
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-slate-300">-</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center">
-                                                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold shadow-xs ${
-                                                                    row.status === 'Present'
-                                                                        ? 'bg-emerald-100 text-emerald-800'
-                                                                        : row.status === 'Late'
-                                                                        ? 'bg-orange-100 text-orange-800'
-                                                                        : row.status === 'On Leave'
-                                                                        ? 'bg-blue-100 text-blue-800'
-                                                                        : 'bg-red-100 text-red-800'
-                                                                }`}>
-                                                                    {row.status === 'Present' ? 'P' : row.status === 'Late' ? 'L' : row.status === 'On Leave' ? 'OL' : 'A'}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
+                                                    {dayRows.map((row) => {
+                                                        const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                                                        const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
+                                                        const hasValidPunches = row.hasValidWorkingPunch;
+                                                        const isAbsentOrLeave = 
+                                                            !hasValidPunches ||
+                                                            row.status === 'Absent' ||
+                                                            String(row.status || '').toLowerCase() === 'absent' ||
+                                                            row.status === 'On Leave' ||
+                                                            String(row.status || '').toLowerCase().includes('leave') ||
+                                                            row.status === 'Weekly Off' ||
+                                                            row.status === 'WO' ||
+                                                            row.status === 'Day Off' ||
+                                                            row.status === 'DO';
+
+                                                        const isWeekendAbsent = !isHoliday && isWeekendDay && isAbsentOrLeave;
+                                                        return (
+                                                            <tr 
+                                                                key={row.dayNum} 
+                                                                className={`transition-colors ${
+                                                                    isWeekendAbsent 
+                                                                        ? 'bg-red-100/70 hover:bg-red-100 border-l-4 border-l-red-500' 
+                                                                        : 'hover:bg-slate-50/80'
+                                                                }`}
+                                                            >
+                                                                <td className="px-3 py-2 text-slate-900 font-bold font-mono">
+                                                                    {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
+                                                                </td>
+                                                                <td className={`px-3 py-2 font-bold ${isWeekendAbsent ? 'text-red-700 font-bold' : 'text-slate-500'}`}>
+                                                                    {row.dayName}
+                                                                </td>
+                                                                <td className="px-3 py-2">
+                                                                    {row.hasRoster ? (
+                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                                                            📅 {row.shiftName}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                                                            Roster Not Available
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-slate-600 font-mono text-[11px]">
+                                                                    {row.attendance?.store_name || '-'}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">
+                                                                    {row.scheduledStartStr} – {row.scheduledEndStr}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center font-mono">
+                                                                    {row.inTimeFormatted ? (
+                                                                        <span className="font-semibold text-emerald-700">{row.inTimeFormatted}</span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center font-mono">
+                                                                    {row.outTimeFormatted ? (
+                                                                        <span className="font-semibold text-slate-700">{row.outTimeFormatted}</span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center font-mono text-slate-500 text-[11px]">
+                                                                    {row.lunchStr}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center font-mono font-bold text-slate-900">
+                                                                    {row.workHrsStr}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {row.lateMins > 0 ? (
+                                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 font-mono">
+                                                                            {row.lateMins}m
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {(() => {
+                                                                        if (isHoliday) return <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">HOLIDAY</span>;
+                                                                        return (
+                                                                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold shadow-xs ${
+                                                                                row.status === 'Present'
+                                                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                                                    : row.status === 'Late'
+                                                                                    ? 'bg-orange-100 text-orange-800'
+                                                                                    : row.status === 'On Leave'
+                                                                                    ? 'bg-blue-100 text-blue-800'
+                                                                                    : 'bg-red-100 text-red-800'
+                                                                            }`}>
+                                                                                {row.status === 'Present' ? 'P' : row.status === 'Late' ? 'L' : row.status === 'On Leave' ? 'OL' : 'A'}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>
                                     </div>
                                 ) : previewModal.tab === 'timeline' ? (
                                     <div className="space-y-3">
-                                        {dayRows.map((row) => (
-                                            <div key={row.dayNum} className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3">
-                                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-sm text-slate-900 font-mono">
-                                                            {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx]} ({row.dayName})
-                                                        </span>
-                                                        <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
-                                                            📅 {row.shiftName} ({row.scheduledStartStr} – {row.scheduledEndStr})
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-3 text-xs font-mono">
-                                                        {row.inTimeFormatted && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
-                                                        {row.outTimeFormatted && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
-                                                        <span className="font-bold text-slate-900">Total: {row.workHrsStr}</span>
-                                                        {row.lateMins > 0 && <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Late by {row.lateMins}m</span>}
-                                                    </div>
-                                                </div>
+                                        {dayRows.map((row) => {
+                                            const isWeekendDay = ['Fri', 'Sat', 'Sun'].includes(row.dayName);
+                                            const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
+                                            const hasValidPunches = row.hasValidWorkingPunch;
+                                            const isAbsentOrLeave = 
+                                                !hasValidPunches ||
+                                                row.status === 'Absent' ||
+                                                String(row.status || '').toLowerCase() === 'absent' ||
+                                                row.status === 'On Leave' ||
+                                                String(row.status || '').toLowerCase().includes('leave') ||
+                                                row.status === 'Weekly Off' ||
+                                                row.status === 'WO' ||
+                                                row.status === 'Day Off' ||
+                                                row.status === 'DO';
 
-                                                {row.inTimeFormatted || row.outTimeFormatted ? (
-                                                    <div className="pt-1">
-                                                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
-                                                            <span>Start ({row.scheduledStartStr})</span>
-                                                            <span>Lunch ({row.lunchStr})</span>
-                                                            <span>End ({row.scheduledEndStr})</span>
+                                            const isWeekendAbsent = !isHoliday && isWeekendDay && isAbsentOrLeave;
+                                            return (
+                                                <div 
+                                                    key={row.dayNum} 
+                                                    className={`rounded-2xl p-4 border transition-colors space-y-3 ${
+                                                        isWeekendAbsent 
+                                                            ? 'bg-red-50/90 border-red-300 ring-1 ring-red-400/30 shadow-sm' 
+                                                            : 'bg-white border-slate-200/80 shadow-sm'
+                                                    }`}
+                                                >
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`font-bold text-sm font-mono ${isWeekendAbsent ? 'text-red-700 font-bold' : 'text-slate-900'}`}>
+                                                                {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx]} ({row.dayName})
+                                                            </span>
+                                                            <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                                                📅 {row.shiftName} ({row.scheduledStartStr} – {row.scheduledEndStr})
+                                                            </span>
                                                         </div>
-                                                        <div className="h-6 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200">
-                                                            <div className="bg-emerald-500 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider">
-                                                                MORNING SHIFT
+                                                        <div className="flex items-center gap-3 text-xs font-mono">
+                                                            {row.inTimeFormatted && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
+                                                            {row.outTimeFormatted && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
+                                                            <span className="font-bold text-slate-900">Total: {row.workHrsStr}</span>
+                                                            {row.lateMins > 0 && <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Late by {row.lateMins}m</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    {hasValidPunches && row.shiftSegments && row.shiftSegments.length > 0 ? (
+                                                        <div className="space-y-1.5">
+                                                            <div className="h-7 w-full bg-slate-100 rounded-xl overflow-hidden flex relative border border-slate-200 shadow-xs">
+                                                                {row.shiftSegments.map((seg, sIdx) => {
+                                                                    if (seg.type === 'lunch') {
+                                                                        return (
+                                                                            <div key={sIdx} className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold border-x border-amber-300 shadow-inner">
+                                                                                <span>🥪 {seg.label} ({seg.duration || seg.time})</span>
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    if (seg.type === 'morning') {
+                                                                        return (
+                                                                            <div key={sIdx} className="bg-emerald-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold px-2 truncate">
+                                                                                <span>🌅 {seg.label}: {seg.time}</span>
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    if (seg.type === 'evening') {
+                                                                        return (
+                                                                            <div key={sIdx} className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold px-2 truncate">
+                                                                                <span>🌆 {seg.label}: {seg.time}</span>
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        <div key={sIdx} className="bg-emerald-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold px-2 truncate">
+                                                                            <span>⏱ {seg.label}: {seg.time}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
-                                                            <div className="bg-amber-400 px-3 flex items-center justify-center text-slate-900 text-[10px] font-bold border-x border-amber-300">
-                                                                LUNCH
-                                                            </div>
-                                                            {row.outTimeFormatted ? (
-                                                                <div className="bg-indigo-600 flex-1 flex items-center justify-center text-white text-[10px] font-bold tracking-wider">
-                                                                    EVENING SHIFT
-                                                                </div>
-                                                            ) : (
-                                                                <div className="bg-amber-500/30 border-l border-dashed border-amber-400 flex-1 flex items-center justify-center text-amber-900 text-[10px] font-semibold animate-pulse">
-                                                                    PUNCH OUT PENDING
+                                                            {row.rawPunchList && row.rawPunchList.length > 0 && (
+                                                                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono overflow-x-auto">
+                                                                    <span className="font-semibold text-slate-600">Punch Logs:</span>
+                                                                    {row.rawPunchList.map((p, pIdx) => (
+                                                                        <span key={pIdx} className="bg-slate-200/70 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                                                                            {p}
+                                                                        </span>
+                                                                    ))}
                                                                 </div>
                                                             )}
                                                         </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="py-2 text-center rounded-xl border border-dashed bg-slate-50 border-slate-200">
-                                                        <span className="text-xs font-semibold text-red-500">Absent — No Punch Recorded</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
+                                                    ) : (
+                                                        <div className={`py-2 text-center rounded-xl border border-dashed ${isWeekendAbsent ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>
+                                                            <span className="text-xs font-semibold text-red-600">Absent — No Punch Recorded</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 ) : previewModal.tab === 'learning' ? (
                                     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">

@@ -145,12 +145,26 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 }
             }
 
-            // 2. Fetch shift roster data for the month
-            const { data: rosterData } = await supabase
-                .from('hr_management_shift_roster')
-                .select('*')
-                .gte('date', startDateStr)
-                .lte('date', endDateStr);
+            // 2. Fetch shift roster data for the month & holidays from public.holidays
+            const [{ data: rosterData }, { data: dbHolidays }] = await Promise.all([
+                supabase
+                    .from('hr_management_shift_roster')
+                    .select('*')
+                    .gte('date', startDateStr)
+                    .lte('date', endDateStr),
+                supabase
+                    .from('holidays')
+                    .select('*')
+                    .gte('holiday_date', startDateStr)
+                    .lte('holiday_date', endDateStr)
+            ]);
+
+            const holidayMap = {};
+            (dbHolidays || []).forEach(h => {
+                if (h.holiday_date) {
+                    holidayMap[h.holiday_date.trim()] = h.holiday_name || 'Holiday';
+                }
+            });
 
             // Determine elapsed days in month (if current month, up to today)
             const now = new Date();
@@ -183,6 +197,8 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 let lateCount = 0;
                 let weeklyOffCount = 0;
                 let dayOffCount = 0;
+                let unpunchedHolidayCount = 0;
+                let holidayCount = 0;
                 let totalWorkSecs = 0;
                 let totalLunchSecs = 0;
 
@@ -234,15 +250,33 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     let status = att?.status;
                     const hasPunches = Boolean(inTime || outTime || (att?.punch_log && att.punch_log !== '-'));
                     const isLate = Boolean((att?.late_minutes && att.late_minutes > 0) || (att?.late_minute && att.late_minute > 0) || status === 'Late');
+                    const isHoliday = !!holidayMap[dateStr];
 
-                    if (hasPunches) {
+                    if (isHoliday) {
+                        holidayCount++;
+                        if (hasPunches) {
+                            status = isLate ? 'Late' : 'Present';
+                            presentCount++;
+                            if (isLate) lateCount++;
+                        } else {
+                            status = 'HOLIDAY';
+                            unpunchedHolidayCount++;
+                        }
+                    } else if (hasPunches) {
                         status = isLate ? 'Late' : 'Present';
+                        presentCount++;
+                        if (isLate || status === 'Late') lateCount++;
                     } else if (!status || status === 'Absent') {
                         if (isRosterWeeklyOff) {
                             status = 'Weekly Off';
+                            weeklyOffCount++;
                         } else {
                             status = 'Absent';
                         }
+                    } else if (status === 'Weekly Off' || status === 'WO') {
+                        weeklyOffCount++;
+                    } else if (status === 'Day Off' || status === 'DO') {
+                        dayOffCount++;
                     }
 
                     // Compute lunch time
@@ -283,21 +317,10 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     const [wh, wm, ws] = (workHrsStr || '00:00:00').split(':').map(Number);
                     const dayWorkSec = (wh || 0) * 3600 + (wm || 0) * 60 + (ws || 0);
 
-                    if (status === 'Present' || status === 'Late' || status === 'Half Day') {
-                        presentCount++;
-                        if (isLate || status === 'Late') {
-                            lateCount++;
-                        }
-                    } else if (status === 'Weekly Off' || status === 'WO') {
-                        weeklyOffCount++;
-                    } else if (status === 'Day Off' || status === 'DO') {
-                        dayOffCount++;
-                    }
-
                     totalWorkSecs += dayWorkSec;
                 }
 
-                const absentCount = Math.max(0, elapsedDays - presentCount - weeklyOffCount - dayOffCount);
+                const absentCount = Math.max(0, elapsedDays - presentCount - unpunchedHolidayCount - weeklyOffCount - dayOffCount);
 
                 aggregatedList.push({
                     month: monthNames[selectedMonth - 1],
@@ -313,6 +336,8 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     lateDays: lateCount,
                     weeklyOffDays: weeklyOffCount,
                     dayOffDays: dayOffCount,
+                    unpunchedHolidayDays: unpunchedHolidayCount,
+                    holidayDays: holidayCount,
                     totalWorkSecs: totalWorkSecs,
                     totalLunchSecs: totalLunchSecs,
                     totalWorkHours: formatSecsToHrsMins(totalWorkSecs),
@@ -548,7 +573,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
             'Store Name': item.storeName,
             'Device ID': item.deviceId,
             'Serial NO': item.serialNo,
-            'Payable Days': (item.presentDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0),
+            'Payable Days': (item.presentDays || 0) + (item.unpunchedHolidayDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0),
             'Present': item.presentDays,
             'Weekly Off': item.weeklyOffDays || 0,
             'Day Off': item.dayOffDays || 0,
@@ -769,7 +794,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                     const actualIndex = (activePage - 1) * pageSize + index;
                                     const employeeProfile = employeesData.find(e => e.employee_id === item.employeeCode || e.id === item.employeeCode);
                                     const candidatePhoto = employeeProfile?.candidate_photo;
-                                    const payableDays = (item.presentDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0);
+                                    const payableDays = (item.presentDays || 0) + (item.unpunchedHolidayDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0);
                                     return (
                                         <tr
                                             key={index}
@@ -829,7 +854,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                             <td className="px-2 py-1.5 text-center text-[10px] text-indigo-600 font-semibold">{item.weeklyOffDays || 0}</td>
                                             <td className="px-2 py-1.5 text-center text-[10px] text-purple-600 font-semibold">{item.dayOffDays || 0}</td>
                                             <td className="px-2 py-1.5 text-center">
-                                                <span className="inline-flex px-1.5 py-0.5 text-red-700 rounded text-[10px] font-medium">
+                                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] ${item.absentDays > 0 ? 'bg-red-100 text-red-700 font-bold' : 'text-slate-400 font-medium'}`}>
                                                     {item.absentDays}
                                                 </span>
                                             </td>

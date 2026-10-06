@@ -70,6 +70,7 @@ const AVAILABLE_SYSTEMS = [
           "Employees",
           "Joining shop",
           "Leave Management",
+          "Holiday",
           "Daily Attendance",
           "Payroll",
           "Roster",

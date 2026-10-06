@@ -228,6 +228,7 @@ const STATUS_CONFIG = {
   'Absent': { color: 'bg-red-100 text-red-700', label: 'A', fullLabel: 'Absent', bgColor: 'bg-red-200/40' },
   'Half Day': { color: 'bg-yellow-100 text-yellow-700', label: 'H', fullLabel: 'Half Day', bgColor: 'bg-yellow-200/60' },
   'Weekly Off': { color: 'bg-indigo-100 text-indigo-700', label: 'WO', fullLabel: 'Weekly Off', bgColor: 'bg-indigo-100/60' },
+  'Holiday': { color: 'bg-purple-100 text-purple-700', label: 'HD', fullLabel: 'Holiday', bgColor: 'bg-purple-200/60' },
   'Day Off': { color: 'bg-gray-100 text-gray-700', label: 'DO', fullLabel: 'Day Off', bgColor: 'bg-gray-200' },
   'Future': { color: 'bg-transparent text-gray-300 font-normal', label: '-', fullLabel: 'Future', bgColor: 'bg-transparent' },
 };
@@ -245,6 +246,7 @@ const AttendanceDaily = () => {
   const [selectedDevice, setSelectedDevice] = useState(DEVICES[0]);
   const [selectedStore, setSelectedStore] = useState('ALL');
   const [attendanceData, setAttendanceData] = useState([]);
+  const [holidaysData, setHolidaysData] = useState([]); // Store holidays from public.holidays table
   const [viewMode, setViewMode] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(todayDate);
   const [employeesData, setEmployeesData] = useState([]); // Store employees table data
@@ -411,6 +413,7 @@ const AttendanceDaily = () => {
         fetchEmployeesTable(),
         fetchRosterData(null, selectedDate),
         fetchLeavesData(),
+        fetchHolidaysData(selectedDate),
         syncDeviceLogs()
       ]);
     } catch (err) {
@@ -538,6 +541,37 @@ const AttendanceDaily = () => {
     } catch (e) {
       console.warn('Could not fetch leaves data:', e);
     }
+  };
+
+  // Fetch holidays from public.holidays table
+  const fetchHolidaysData = async (dateStr) => {
+    try {
+      const parsedDate = dateStr ? new Date(dateStr) : currentMonth;
+      const year = parsedDate.getFullYear();
+      const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      const startDayStr = `${year}-${month}-01`;
+      const lastDay = new Date(year, parsedDate.getMonth() + 1, 0).getDate();
+      const endDayStr = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
+      const { data, error } = await supabase
+        .from('holidays')
+        .select('*')
+        .gte('holiday_date', startDayStr)
+        .lte('holiday_date', endDayStr)
+        .order('holiday_date', { ascending: true });
+
+      if (!error && data) {
+        setHolidaysData(data);
+      }
+    } catch (e) {
+      console.warn('Could not fetch holidays data:', e);
+    }
+  };
+
+  // Helper to check if a specific date is a global company holiday
+  const getHolidayForDate = (date) => {
+    if (!holidaysData || holidaysData.length === 0 || !date) return null;
+    return holidaysData.find(h => (h.holiday_date || '').trim() === date.trim()) || null;
   };
 
   // Helper to find leave info or reason for an absent streak
@@ -1171,6 +1205,7 @@ const AttendanceDaily = () => {
       // Fetch roster data for the selected month
       await fetchRosterData(null, startDateStr);
       await fetchLeavesData();
+      await fetchHolidaysData(startDateStr);
 
       console.log(`Loaded ${merged.length} records (month: ${withoutToday.length} + today: ${todayData.length})`);
     } catch (err) {
@@ -2049,7 +2084,7 @@ const AttendanceDaily = () => {
       roster: roster
     });
 
-    setTempStatus(status);
+    setTempStatus((status === 'Holiday' || status === 'HOLIDAY') ? 'Present' : status);
 
     const formatInputVal = (t) => {
       if (!t || t === '-') return '';
@@ -2274,6 +2309,12 @@ const AttendanceDaily = () => {
     setIsSaving(true);
     setSaveError(null);
     try {
+      if (tempStatus === 'Holiday' || tempStatus === 'HOLIDAY') {
+        setSaveError('Holidays cannot be assigned individually per employee. Please use the Holiday section to configure holidays globally for all employees.');
+        setIsSaving(false);
+        return;
+      }
+
       const isOffOrLeave = tempStatus === 'Absent' || tempStatus === 'On Leave' || tempStatus === 'Weekly Off' || tempStatus === 'Day Off';
 
       // ── Validation: Block saving Present/Late/Half Day without at least 1 punch ──
@@ -2342,11 +2383,40 @@ const AttendanceDaily = () => {
     const record = attendanceData.find(
       a => a.employee_id && String(a.employee_id).trim().toLowerCase() === empIdClean && a.attendance_date === date
     );
-    if (record) {
+
+    const hasPunches = record && Boolean(
+      (record.in_time && record.in_time !== '-') || 
+      (record.out_time && record.out_time !== '-') || 
+      (record.punch_log && record.punch_log !== '-')
+    );
+
+    // If actual biometric/manual punches exist, prioritize the worked attendance (e.g. Present, Late, Half Day)
+    if (record && hasPunches) {
       return record;
     }
 
-    // 2. Check approved leave applications from hr_management_leaves
+    // 2. Global Company Holiday: check holidays table
+    const holidayEntry = getHolidayForDate(date);
+    if (holidayEntry) {
+      return {
+        ...(record || {}),
+        employee_id: employeeId,
+        attendance_date: date,
+        status: 'Holiday',
+        in_time: '-',
+        out_time: '-',
+        shift_type: holidayEntry.holiday_name || 'Holiday',
+        holiday_name: holidayEntry.holiday_name || 'Company Holiday',
+        is_holiday: true
+      };
+    }
+
+    // If explicit non-absent record exists (e.g. Day Off, Weekly Off)
+    if (record && record.status && record.status !== 'Absent') {
+      return record;
+    }
+
+    // 3. Check approved leave applications from hr_management_leaves
     if (leavesData && leavesData.length > 0) {
       const approvedLeave = leavesData.find(l => {
         const lEmpId = (l.employee_id || l.employeeId)?.toString().trim().toLowerCase();
@@ -2369,6 +2439,22 @@ const AttendanceDaily = () => {
           reason: approvedLeave.reason || approvedLeave.remarks || 'Approved Leave Application'
         };
       }
+    }
+
+    // 4. Check roster shift for weekly off / day off
+    const empRoster = getEmployeeRoster(employeeId, date);
+    if (empRoster && empRoster.shift_type) {
+      const sType = empRoster.shift_type.trim().toLowerCase();
+      if (sType === 'day off' || sType === 'do') {
+        return { status: 'Day Off', in_time: '-', out_time: '-' };
+      }
+      if (sType === 'weekly off' || sType === 'wo' || sType === 'off') {
+        return { status: 'Weekly Off', in_time: '-', out_time: '-' };
+      }
+    }
+
+    if (record) {
+      return record;
     }
 
     const todayStr = getLocalDateString(new Date());
@@ -2589,6 +2675,7 @@ const AttendanceDaily = () => {
 
   useEffect(() => {
     fetchRosterData(null, selectedDate);
+    fetchHolidaysData(selectedDate);
   }, [selectedDate, currentMonth, viewMode]);
 
   useEffect(() => {
@@ -3870,7 +3957,7 @@ const AttendanceDaily = () => {
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Attendance Status <span className="text-red-500">*</span></label>
                         <select
-                          value={tempStatus}
+                          value={tempStatus === 'HOLIDAY' ? 'Holiday' : tempStatus}
                           onChange={(e) => {
                             const val = e.target.value;
                             setTempStatus(val);
@@ -3882,10 +3969,18 @@ const AttendanceDaily = () => {
                           }}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-gray-800 font-medium"
                         >
-                          {Object.entries(STATUS_CONFIG).filter(([key]) => key !== 'Future').map(([key, config]) => (
+                          {Object.entries(STATUS_CONFIG).filter(([key]) => key !== 'Future' && key !== 'HOLIDAY' && key !== 'Holiday').map(([key, config]) => (
                             <option key={key} value={key}>{config.fullLabel}</option>
                           ))}
                         </select>
+                        {Boolean(getHolidayForDate(selectedEmployee?.date) || selectedEmployee?.attendance?.status === 'Holiday' || selectedEmployee?.attendance?.status === 'HOLIDAY') && (
+                          <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900 flex items-start gap-2 mt-2">
+                            <span className="text-base leading-none">🎉</span>
+                            <div>
+                              <span className="font-bold">Official Holiday:</span> This date is marked as a company holiday ({getHolidayForDate(selectedEmployee?.date)?.holiday_name || 'Holiday'}). Holidays apply globally to all employees via the Holiday section and cannot be assigned individually.
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Clock In */}
