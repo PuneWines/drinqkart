@@ -152,6 +152,8 @@ const Payroll = () => {
         const empShop = row[24]?.toString() || row[2]?.toString() || '';
         const photo = row[25] || empPhotoMap[empId.toLowerCase()] || empPhotoMap[empName.toLowerCase()] || null;
 
+        const empDoj = row[17] && row[17] !== '-' ? row[17] : null;
+
         const empObj = {
             id: empId,
             code: empId,
@@ -160,7 +162,8 @@ const Payroll = () => {
             joining_place: empShop,
             shop_name: empShop,
             designation: 'Staff',
-            candidate_photo: photo
+            candidate_photo: photo,
+            date_of_joining: empDoj
         };
 
         const modalMonth = new Date(selectedYear, selectedMonth - 1, 1);
@@ -471,16 +474,22 @@ const Payroll = () => {
             // Build matching sets for employee_id and employee_name exclusively for ACTIVE employees
             const verifiedIds = new Set();
             const empIdToKeyMap = {};
+            const empDojMap = {};
             (activeEmployees || []).forEach(e => {
                 const code = e.employee_id?.toString().trim().toLowerCase();
                 const name = e.name_as_per_aadhar?.toString().trim().toLowerCase();
+                const rawDoj = e.date_of_joining || e.doj || e.joining_date;
+                const dojStr = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : null;
+
                 if (code) {
                     verifiedIds.add(code);
                     empIdToKeyMap[code] = code;
+                    if (dojStr) empDojMap[code] = dojStr;
                 }
                 if (name) {
                     verifiedIds.add(name);
                     if (code) empIdToKeyMap[name] = code;
+                    if (dojStr) empDojMap[name] = dojStr;
                 }
             });
 
@@ -505,6 +514,9 @@ const Payroll = () => {
                 const empNameLower = empName ? empName.toLowerCase() : '';
                 const matchedKey = empIdToKeyMap[empIdLower] || empIdToKeyMap[empNameLower] || empIdLower || empNameLower;
 
+                const empDoj = empDojMap[matchedKey] || empDojMap[empIdLower] || empDojMap[empNameLower];
+                const isBeforeJoining = Boolean(empDoj && log.attendance_date < empDoj);
+
                 if (!loggedDatesMap[matchedKey]) loggedDatesMap[matchedKey] = new Set();
                 loggedDatesMap[matchedKey].add(log.attendance_date);
 
@@ -525,7 +537,7 @@ const Payroll = () => {
                     isInactiveRecord(matchedKey) ||
                     isInactiveRecord(allMatchedKey);
 
-                if (isInactiveLog) {
+                if (isInactiveLog || isBeforeJoining) {
                     return;
                 }
 
@@ -576,6 +588,10 @@ const Payroll = () => {
                 if (isInactiveRecord(empId) || isInactiveRecord(empIdLower)) return;
                 const matchedKey = empIdToKeyMap[empIdLower] || empIdLower;
                 if (isInactiveRecord(matchedKey)) return;
+
+                const empDoj = empDojMap[matchedKey] || empDojMap[empIdLower];
+                if (empDoj && r.date < empDoj) return;
+
                 const sType = r.shift_type?.toString().trim().toLowerCase() || '';
 
                 if (sType === 'weekly off' || sType === 'wo' || sType === 'day off' || sType === 'do' || sType === 'off') {
@@ -634,6 +650,10 @@ const Payroll = () => {
                     const matchedKey = empIdToKeyMap[empIdLower] || empIdToKeyMap[empNameLower] || empIdLower || empNameLower;
 
                     if (isInactiveRecord(empId, empName) || isInactiveRecord(matchedKey)) return;
+
+                    const rawDoj = emp.date_of_joining || emp.doj || emp.joining_date;
+                    const empDoj = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : null;
+                    if (empDoj && hDate < empDoj) return;
 
                     if (!loggedDatesMap[matchedKey]) loggedDatesMap[matchedKey] = new Set();
 

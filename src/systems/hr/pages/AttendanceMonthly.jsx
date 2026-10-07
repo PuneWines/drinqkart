@@ -145,8 +145,8 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 }
             }
 
-            // 2. Fetch shift roster data for the month & holidays from public.holidays
-            const [{ data: rosterData }, { data: dbHolidays }] = await Promise.all([
+            // 2. Fetch shift roster data for the month & holidays from public.holidays & employees for DOJ
+            const [{ data: rosterData }, { data: dbHolidays }, { data: dbAllEmployees }] = await Promise.all([
                 supabase
                     .from('hr_management_shift_roster')
                     .select('*')
@@ -156,8 +156,20 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     .from('holidays')
                     .select('*')
                     .gte('holiday_date', startDateStr)
-                    .lte('holiday_date', endDateStr)
+                    .lte('holiday_date', endDateStr),
+                supabase
+                    .from('hr_management_employees')
+                    .select('*')
             ]);
+
+            const dojMap = {};
+            (dbAllEmployees || []).forEach(emp => {
+                const eId = String(emp.employee_id || emp.id || '').trim().toLowerCase().replace(/^0+/, '');
+                const rawDoj = emp.date_of_joining || emp.doj || emp.joining_date;
+                if (eId && rawDoj) {
+                    dojMap[eId] = rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10);
+                }
+            });
 
             const holidayMap = {};
             (dbHolidays || []).forEach(h => {
@@ -176,6 +188,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
             monthLogs.forEach(log => {
                 const rawId = (log.employee_id || '').toString().trim();
                 const cleanId = rawId.toLowerCase().replace(/^0+/, '') || rawId;
+                if (!cleanId || cleanId === '?' || cleanId === 'null' || cleanId === 'undefined') return;
                 if (!logsByEmpId.has(cleanId)) {
                     logsByEmpId.set(cleanId, []);
                 }
@@ -193,6 +206,8 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 const deviceId = firstLog.device_id || '-';
                 const serialNo = firstLog.serial_number || '-';
 
+                const empDojStr = dojMap[empKey] || dojMap[String(empId).trim().toLowerCase().replace(/^0+/, '')] || null;
+
                 let presentCount = 0;
                 let lateCount = 0;
                 let weeklyOffCount = 0;
@@ -201,10 +216,15 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 let holidayCount = 0;
                 let totalWorkSecs = 0;
                 let totalLunchSecs = 0;
+                let effectiveDays = 0;
 
                 // Process each day of the elapsed month
                 for (let d = 1; d <= elapsedDays; d++) {
                     const dateStr = `${selectedYear}-${monthStr}-${String(d).padStart(2, '0')}`;
+                    const isBeforeJoining = Boolean(empDojStr && dateStr < empDojStr);
+                    if (isBeforeJoining) continue;
+
+                    effectiveDays++;
                     const att = empLogs.find(a => {
                         const aDate = (a.attendance_date || a.date || '').toString().trim();
                         const key = aDate.includes('T') ? aDate.split('T')[0] : aDate.substring(0, 10);
@@ -320,7 +340,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     totalWorkSecs += dayWorkSec;
                 }
 
-                const absentCount = Math.max(0, elapsedDays - presentCount - unpunchedHolidayCount - weeklyOffCount - dayOffCount);
+                const absentCount = Math.max(0, effectiveDays - presentCount - unpunchedHolidayCount - weeklyOffCount - dayOffCount);
 
                 aggregatedList.push({
                     month: monthNames[selectedMonth - 1],
@@ -338,6 +358,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     dayOffDays: dayOffCount,
                     unpunchedHolidayDays: unpunchedHolidayCount,
                     holidayDays: holidayCount,
+                    date_of_joining: empDojStr,
                     totalWorkSecs: totalWorkSecs,
                     totalLunchSecs: totalLunchSecs,
                     totalWorkHours: formatSecsToHrsMins(totalWorkSecs),
@@ -477,7 +498,9 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
 
                 const matchesSearch =
                     (item.employeeName?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                    (item.employeeCode?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase());
+                    (item.employeeCode?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                    (item.storeName?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                    (item.designation?.toString().toLowerCase() || '').includes(searchTerm.toLowerCase());
 
                 const matchesMonth = selectedMonth ? item.month === monthNames[selectedMonth - 1] : true;
                 const matchesYear = selectedYear ? item.year?.toString() === selectedYear.toString() : true;
@@ -504,6 +527,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 .filter(emp => {
                     const name = emp.user_name || emp.name_as_per_aadhar || '';
                     const id = emp.employee_id || emp.id || '';
+                    if (!id && !name) return false;
 
                     if (isEmpInactive(id, name)) return false;
 
@@ -512,30 +536,50 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
 
                     // Apply search filter
                     const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        id.toString().toLowerCase().includes(searchTerm.toLowerCase());
+                        id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (emp.joining_place || emp.store_name || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (emp.designation || '').toString().toLowerCase().includes(searchTerm.toLowerCase());
 
-                    return matchesSearch;
-                })
-                .map(emp => ({
-                    year: selectedYear,
-                    month: monthNames[selectedMonth - 1],
-                    employeeCode: emp.employee_id || emp.id,
-                    employeeName: emp.user_name || emp.name_as_per_aadhar || 'Employee',
-                    designation: emp.designation || '-',
-                    storeName: emp.joining_place || '-',
-                    deviceId: '-',
-                    serialNo: '-',
-                    presentDays: 0,
-                    absentDays: getDaysInMonth(selectedMonth, selectedYear),
-                    punchMiss: 0,
-                    holidays: getSundaysCount(selectedMonth, selectedYear),
-                    lateDays: 0,
-                    totalWorkHours: '0h 0m',
-                    totalWorkSecs: 0,
-                    totalLunchTime: '0h 0m',
-                    totalLunchSecs: 0,
-                    isRemaining: true
-                }));
+                    const rawDoj = emp.date_of_joining || emp.doj || emp.joining_date;
+                    const empDojStr = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : null;
+
+                    const totalDaysInMonth = getDaysInMonth(selectedMonth, selectedYear);
+                    const monthStr = String(selectedMonth).padStart(2, '0');
+                    const monthStartStr = `${selectedYear}-${monthStr}-01`;
+                    const monthEndStr = `${selectedYear}-${monthStr}-${String(totalDaysInMonth).padStart(2, '0')}`;
+
+                    let effectiveAbsentDays = totalDaysInMonth;
+                    if (empDojStr) {
+                        if (empDojStr > monthEndStr) {
+                            effectiveAbsentDays = 0;
+                        } else if (empDojStr > monthStartStr) {
+                            const dojDay = parseInt(empDojStr.split('-')[2], 10) || 1;
+                            effectiveAbsentDays = Math.max(0, totalDaysInMonth - dojDay + 1);
+                        }
+                    }
+
+                    return {
+                        year: selectedYear,
+                        month: monthNames[selectedMonth - 1],
+                        employeeCode: emp.employee_id || emp.id,
+                        employeeName: emp.user_name || emp.name_as_per_aadhar || 'Employee',
+                        designation: emp.designation || '-',
+                        storeName: emp.joining_place || '-',
+                        deviceId: '-',
+                        serialNo: '-',
+                        presentDays: 0,
+                        absentDays: effectiveAbsentDays,
+                        punchMiss: 0,
+                        holidays: getSundaysCount(selectedMonth, selectedYear),
+                        lateDays: 0,
+                        totalWorkHours: '0h 0m',
+                        totalWorkSecs: 0,
+                        totalLunchTime: '0h 0m',
+                        totalLunchSecs: 0,
+                        date_of_joining: empDojStr,
+                        isRemaining: true
+                    };
+                });
 
             return [...baseList, ...remaining];
         }
@@ -811,7 +855,8 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                                         name: item.employeeName,
                                                         candidate_photo: candidatePhoto,
                                                         designation: item.designation,
-                                                        joining_place: item.storeName
+                                                        joining_place: item.storeName,
+                                                        date_of_joining: item.date_of_joining || employeeProfile?.date_of_joining || employeeProfile?.doj
                                                     })}
                                                     className="flex items-center gap-1.5 cursor-pointer hover:opacity-85 transition-opacity"
                                                     title="Click to view full employee attendance profile"
