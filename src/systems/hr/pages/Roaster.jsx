@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
 import { toast } from 'react-hot-toast';
 import {
     Calendar,
@@ -70,6 +71,36 @@ const addWeeks = (date, weeks) => {
     const d = new Date(date);
     d.setDate(d.getDate() + (weeks * 7));
     return d;
+};
+
+const parseDojToYYYYMMDD = (rawDoj) => {
+    if (!rawDoj) return null;
+    const str = String(rawDoj).trim();
+    if (!str || str === '-' || str === 'null' || str === 'undefined') return null;
+
+    if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+        return str.substring(0, 10);
+    }
+
+    const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (ddmmyyyy) {
+        const d = String(ddmmyyyy[1]).padStart(2, '0');
+        const m = String(ddmmyyyy[2]).padStart(2, '0');
+        const y = ddmmyyyy[3];
+        return `${y}-${m}-${d}`;
+    }
+
+    try {
+        const dObj = new Date(str);
+        if (!isNaN(dObj.getTime())) {
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+    } catch (e) {}
+
+    return null;
 };
 
 const subWeeks = (date, weeks) => {
@@ -159,6 +190,7 @@ const Roster = () => {
     const [overviewLearningLoading, setOverviewLearningLoading] = useState(false);
     const [allRosterRecords, setAllRosterRecords] = useState([]);
     const [leavesData, setLeavesData] = useState([]);
+    const [holidayLogs, setHolidayLogs] = useState([]);
 
     const [customShifts, setCustomShifts] = useState([]);
     const [showManageShiftsModal, setShowManageShiftsModal] = useState(false);
@@ -421,14 +453,45 @@ const Roster = () => {
 
     const fetchEmployees = async () => {
         try {
-            const { data, error } = await supabase
-                .from('hr_management_employees')
-                .select('id, employee_id, name_as_per_aadhar, designation, status, joining_place, candidate_photo')
-                .eq('status', 'Active')
-                .order('name_as_per_aadhar');
+            const [{ data, error }, { data: usersData }] = await Promise.all([
+                supabase
+                    .from('hr_management_employees')
+                    .select('id, employee_id, name_as_per_aadhar, designation, status, joining_place, candidate_photo, date_of_joining')
+                    .eq('status', 'Active')
+                    .order('name_as_per_aadhar'),
+                supabase
+                    .from('users')
+                    .select('employee_id, user_name, username, emp_name, status, is_active')
+            ]);
 
             if (error) throw error;
-            setEmployees(data || []);
+
+            const inactiveEmpIds = new Set();
+            const inactiveEmpNames = new Set();
+            (usersData || []).forEach(u => {
+                const rawStatus = u.status ?? u.is_active ?? 'active';
+                const isInactive =
+                    rawStatus === false ||
+                    rawStatus === 0 ||
+                    ['inactive', 'resigned', 'terminated', 'left', 'disabled', 'false', '0'].includes(String(rawStatus).toLowerCase().trim());
+
+                if (isInactive) {
+                    const empId = (u.employee_id || '').toString().trim().toLowerCase();
+                    const uname = (u.user_name || u.username || u.emp_name || '').toString().trim().toLowerCase();
+                    if (empId) inactiveEmpIds.add(empId);
+                    if (uname) inactiveEmpNames.add(uname);
+                }
+            });
+
+            const activeEmployees = (data || []).filter(emp => {
+                const cleanId = (emp.employee_id || emp.id || '').toString().trim().toLowerCase();
+                const cleanName = (emp.name_as_per_aadhar || '').toString().trim().toLowerCase();
+                if (cleanId && inactiveEmpIds.has(cleanId)) return false;
+                if (cleanName && inactiveEmpNames.has(cleanName)) return false;
+                return true;
+            });
+
+            setEmployees(activeEmployees);
         } catch (error) {
             console.error('Error fetching employees:', error);
             toast.error('Failed to fetch employees');
@@ -517,10 +580,27 @@ const Roster = () => {
         };
     };
 
+    const getEmpDojStr = (empId) => {
+        if (!empId) return null;
+        const clean = String(empId).trim().toLowerCase();
+        const emp = employees.find(e =>
+            (e.employee_id && String(e.employee_id).trim().toLowerCase() === clean) ||
+            (e.id && String(e.id).trim().toLowerCase() === clean)
+        );
+        const raw = emp?.date_of_joining || emp?.doj || emp?.joining_date;
+        return raw ? (raw.includes('T') ? raw.split('T')[0] : raw.substring(0, 10)) : null;
+    };
+
     const handleAssignShift = async () => {
         try {
             if (!assignForm.employee_id || !assignForm.date) {
                 toast.error('Please select employee and date');
+                return;
+            }
+
+            const empDoj = getEmpDojStr(assignForm.employee_id);
+            if (empDoj && assignForm.date < empDoj) {
+                toast.error(`Cannot assign shift before employee's date of joining (${empDoj})`);
                 return;
             }
 
@@ -573,6 +653,8 @@ const Roster = () => {
 
             for (const empId of empIds) {
                 const empIdClean = String(empId).trim().toLowerCase();
+                const empDoj = getEmpDojStr(empId);
+
                 let currentDate = new Date(startDate);
                 while (currentDate <= endDate) {
                     const dayOfWeek = currentDate.getDay();
@@ -580,6 +662,12 @@ const Roster = () => {
 
                     if (bulkAssignForm.days_of_week[dayName]) {
                         const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
+                        // Skip dates before employee's joining date
+                        if (empDoj && dateStr < empDoj) {
+                            currentDate.setDate(currentDate.getDate() + 1);
+                            continue;
+                        }
+
                         const existingKey = `${empIdClean}-${dateStr}`;
                         if (!rosterData.has(existingKey)) {
                             shiftsToInsert.push({
@@ -597,7 +685,7 @@ const Roster = () => {
             }
 
             if (shiftsToInsert.length === 0) {
-                toast.info('No new shifts to assign. All selected dates for these employees already have shifts assigned.');
+                toast.info('No new shifts to assign (shifts already assigned or date range is before employee joining date).');
                 return;
             }
 
@@ -747,6 +835,14 @@ const Roster = () => {
                 .from('hr_management_leaves')
                 .select('*');
             setLeavesData(lData || []);
+
+            // Fetch company holidays
+            const { data: hData } = await supabase
+                .from('holidays')
+                .select('*')
+                .gte('holiday_date', startDateStr)
+                .lte('holiday_date', endDateStr);
+            setHolidayLogs(hData || []);
         } catch (err) {
             console.error('Error fetching overview month data:', err);
         }
@@ -767,6 +863,12 @@ const Roster = () => {
 
     const handleOpenAssignModal = (employeeId, date) => {
         const dateStr = formatDate(date, 'yyyy-MM-dd');
+        const empDoj = getEmpDojStr(employeeId);
+        if (empDoj && dateStr < empDoj) {
+            toast.error(`Cannot assign shift before employee's date of joining (${empDoj})`);
+            return;
+        }
+
         const empIdClean = employeeId ? String(employeeId).trim().toLowerCase() : '';
         const existing = rosterData.get(`${empIdClean}-${dateStr}`);
         const employee = employees.find(emp => emp.employee_id && String(emp.employee_id).trim().toLowerCase() === empIdClean);
@@ -786,6 +888,13 @@ const Roster = () => {
 
     const handleOpenSlidePanel = (employee, date) => {
         const dateStr = formatDate(date, 'yyyy-MM-dd');
+        const rawDoj = employee?.date_of_joining || employee?.doj || employee?.joining_date;
+        const empDoj = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : getEmpDojStr(employee.employee_id);
+        if (empDoj && dateStr < empDoj) {
+            toast.error(`Cannot assign shift before employee's date of joining (${empDoj})`);
+            return;
+        }
+
         const empIdClean = employee.employee_id ? String(employee.employee_id).trim().toLowerCase() : '';
         const existing = rosterData.get(`${empIdClean}-${dateStr}`);
 
@@ -836,7 +945,18 @@ const Roster = () => {
             currentDate.setDate(currentDate.getDate() + 1);
         }
 
-        const startDate = firstAssignedDate || viewStart;
+        const rawDoj = employee?.date_of_joining || employee?.doj || employee?.joining_date;
+        const empDoj = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : null;
+
+        let effectiveStart = viewStart;
+        if (empDoj) {
+            const dojDate = new Date(empDoj);
+            if (dojDate > viewStart) {
+                effectiveStart = dojDate;
+            }
+        }
+
+        const startDate = firstAssignedDate || effectiveStart;
         const endDate = lastAssignedDate || viewEnd;
 
         let shiftType = foundRoster?.shift_type || customShifts[0]?.shift_name || 'General Shift';
@@ -944,24 +1064,37 @@ const Roster = () => {
                 return;
             }
 
+            const empDoj = getEmpDojStr(editSlideForm.employee_id);
+            if (empDoj && formatDate(endDate, 'yyyy-MM-dd') < empDoj) {
+                toast.error(`Cannot assign shift before employee's date of joining (${empDoj})`);
+                return;
+            }
+
             const shiftsToInsert = [];
             let currentDate = new Date(startDate);
             while (currentDate <= endDate) {
                 const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
-                let sTime = editSlideForm.start_time || '09:30:00';
-                let eTime = editSlideForm.end_time || '19:30:00';
-                if (sTime && sTime.length === 5) sTime += ':00';
-                if (eTime && eTime.length === 5) eTime += ':00';
+                if (!empDoj || dateStr >= empDoj) {
+                    let sTime = editSlideForm.start_time || '09:30:00';
+                    let eTime = editSlideForm.end_time || '19:30:00';
+                    if (sTime && sTime.length === 5) sTime += ':00';
+                    if (eTime && eTime.length === 5) eTime += ':00';
 
-                shiftsToInsert.push({
-                    employee_id: editSlideForm.employee_id,
-                    date: dateStr,
-                    shift_type: editSlideForm.shift_type || 'General Shift',
-                    start_time: sTime,
-                    end_time: eTime,
-                    remark: editSlideForm.remark || ''
-                });
+                    shiftsToInsert.push({
+                        employee_id: editSlideForm.employee_id,
+                        date: dateStr,
+                        shift_type: editSlideForm.shift_type || 'General Shift',
+                        start_time: sTime,
+                        end_time: eTime,
+                        remark: editSlideForm.remark || ''
+                    });
+                }
                 currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            if (shiftsToInsert.length === 0) {
+                toast.error(`Selected dates are before employee's date of joining (${empDoj})`);
+                return;
             }
 
             const { error: deleteError } = await supabase
@@ -1704,29 +1837,47 @@ const Roster = () => {
                                             {displayDays.map((day, dayIndex) => {
                                                 const schedule = getEmployeeRosterForDay(employee.employee_id, day);
                                                 const isPast = day < new Date() && !isSameDay(day, new Date());
+                                                const dayStr = formatDate(day, 'yyyy-MM-dd');
+                                                const rawDoj = employee?.date_of_joining || employee?.doj || employee?.joining_date;
+                                                const empDoj = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : getEmpDojStr(employee.employee_id);
+                                                const isBeforeJoining = Boolean(empDoj && dayStr < empDoj);
                                                 const config = getShiftConfig(schedule.shift_type);
 
                                                 return (
                                                     <td
                                                         key={dayIndex}
-                                                        className={`px-0.5 py-1 text-center cursor-pointer transition-all hover:opacity-80 ${day.getDay() === 0 ? 'bg-gray-50' : ''
-                                                            } ${isPast ? 'opacity-60' : ''}`}
-                                                        onClick={() => !isPast && handleOpenSlidePanel(employee, day)}
+                                                        className={`px-0.5 py-1 text-center transition-all ${
+                                                            isBeforeJoining
+                                                                ? 'bg-slate-50 opacity-40 cursor-not-allowed'
+                                                                : day.getDay() === 0 ? 'bg-gray-50' : ''
+                                                        } ${!isBeforeJoining && isPast ? 'opacity-60' : ''} ${!isBeforeJoining && !isPast ? 'cursor-pointer hover:opacity-80' : ''}`}
+                                                        onClick={() => !isPast && !isBeforeJoining && handleOpenSlidePanel(employee, day)}
+                                                        title={isBeforeJoining ? `Not Joined (DOJ: ${empDoj})` : undefined}
                                                     >
-                                                        <div className="inline-flex items-center justify-center px-1 text-[15px] font-medium border border-transparent hover:scale-120 transition-transform">
-                                                            <span className={`px-1.5 py-0.5 h-[4vh] w-[7vw] border border-gray-100 ${config.color} ${config.bgColor}`}>
-                                                                {config.label}
-                                                            </span>
-                                                        </div>
-                                                        {schedule.shift_type !== 'Not Assigned' && schedule.shift_type !== 'Holiday' && schedule.start_time && schedule.end_time && (
-                                                            <div className="text-[8px] text-gray-400 mt-0.5">
-                                                                {schedule.start_time.slice(0, 5)} - {schedule.end_time.slice(0, 5)}
+                                                        {isBeforeJoining ? (
+                                                            <div className="inline-flex items-center justify-center px-1 text-[11px] font-medium text-slate-400">
+                                                                <span className="px-1.5 py-0.5 h-[4vh] w-[7vw] border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-slate-400">
+                                                                    —
+                                                                </span>
                                                             </div>
-                                                        )}
-                                                        {schedule.remark && (
-                                                            <div className="text-[7px] text-gray-400 mt-0.5 truncate max-w-[80px] mx-auto">
-                                                                {schedule.remark}
-                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <div className="inline-flex items-center justify-center px-1 text-[15px] font-medium border border-transparent hover:scale-120 transition-transform">
+                                                                    <span className={`px-1.5 py-0.5 h-[4vh] w-[7vw] border border-gray-100 ${config.color} ${config.bgColor}`}>
+                                                                        {config.label}
+                                                                    </span>
+                                                                </div>
+                                                                {schedule.shift_type !== 'Not Assigned' && schedule.shift_type !== 'Holiday' && schedule.start_time && schedule.end_time && (
+                                                                    <div className="text-[8px] text-gray-400 mt-0.5">
+                                                                        {schedule.start_time.slice(0, 5)} - {schedule.end_time.slice(0, 5)}
+                                                                    </div>
+                                                                )}
+                                                                {schedule.remark && (
+                                                                    <div className="text-[7px] text-gray-400 mt-0.5 truncate max-w-[80px] mx-auto">
+                                                                        {schedule.remark}
+                                                                    </div>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </td>
                                                 );
@@ -2410,9 +2561,15 @@ const Roster = () => {
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Start Date</label>
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <label className="block text-xs font-semibold text-gray-600">Start Date</label>
+                                                {getEmpDojStr(editSlideForm.employee_id) && (
+                                                    <span className="text-[10px] text-amber-700 font-medium">DOJ: {getEmpDojStr(editSlideForm.employee_id)}</span>
+                                                )}
+                                            </div>
                                             <input
                                                 type="date"
+                                                min={getEmpDojStr(editSlideForm.employee_id) || undefined}
                                                 value={editSlideForm.start_date}
                                                 onChange={(e) => setEditSlideForm({ ...editSlideForm, start_date: e.target.value })}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
@@ -2423,6 +2580,7 @@ const Roster = () => {
                                             <label className="block text-xs font-semibold text-gray-600 mb-1.5">End Date</label>
                                             <input
                                                 type="date"
+                                                min={getEmpDojStr(editSlideForm.employee_id) || undefined}
                                                 value={editSlideForm.end_date}
                                                 onChange={(e) => setEditSlideForm({ ...editSlideForm, end_date: e.target.value })}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
@@ -2826,13 +2984,23 @@ const Roster = () => {
                 </div>
             )}
             {/* Employee Attendance Overview Preview Window Modal */}
-            {previewModal.isOpen && previewModal.employee && (() => {
+            <EmployeeOverviewModal
+                isOpen={previewModal.isOpen}
+                onClose={() => setPreviewModal(prev => ({ ...prev, isOpen: false }))}
+                employee={previewModal.employee}
+                initialMonth={previewModal.month}
+                initialTab={previewModal.tab}
+            />
+            {false && previewModal.isOpen && previewModal.employee && (() => {
                 const emp = previewModal.employee;
                 const avatar = emp.candidate_photo;
                 const empName = emp.name_as_per_aadhar || emp.name || 'Employee';
                 const empId = emp.employee_id || emp.id || '—';
                 const empDesignation = emp.designation || '-';
                 const empStore = emp.joining_place || emp.store_name || '-';
+
+                const rawDoj = emp.date_of_joining || emp.doj || emp.joining_date;
+                const empDojStr = parseDojToYYYYMMDD(rawDoj);
 
                 // Selected month dates
                 const pMonth = previewModal.month;
@@ -2851,20 +3019,31 @@ const Roster = () => {
                 let totalPresent = 0;
                 let totalAbsent = 0;
                 let totalLate = 0;
+                let totalWeeklyOff = 0;
+                let totalDayOff = 0;
+                let totalHoliday = 0;
+                let totalUnpunchedHoliday = 0;
                 let totalLateMins = 0;
                 let totalWorkMs = 0;
+                let workingDaysCount = 0;
 
                 for (let d = 1; d <= maxDay; d++) {
                     const dateStr = `${pYear}-${String(pMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                     const dateObj = new Date(pYear, pMonthIdx, d);
                     const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
 
+                    const isBeforeJoining = Boolean(empDojStr && dateStr < empDojStr);
+
+                    const hEntry = holidayLogs.find(h => (h.holiday_date || '').trim() === dateStr);
+                    const isHoliday = !!hEntry;
+                    const holidayName = hEntry ? hEntry.holiday_name : null;
+
                     // Date-specific roster lookup
                     const rEntry = allRosterRecords.find(r => 
                         String(r.employee_id).trim().toLowerCase() === String(empId).trim().toLowerCase() && r.date === dateStr
                     );
                     const hasRoster = !!(rEntry && rEntry.shift_type);
-                    const shiftName = hasRoster ? rEntry.shift_type : 'Roster Not Available';
+                    const shiftName = isHoliday ? (holidayName || 'Holiday') : (hasRoster ? rEntry.shift_type : 'Roster Not Available');
 
                     let scheduledStartStr = '10:00';
                     let scheduledEndStr = '19:30';
@@ -2997,32 +3176,59 @@ const Roster = () => {
                         } catch (e) { outTimeFormatted = outTime; }
                     }
 
+                    const rShiftLower = String(rEntry?.shift_type || '').toLowerCase();
+                    const isRosterWeeklyOff = hasRoster && (rShiftLower.includes('weekly off') || rShiftLower === 'wo' || rShiftLower === 'weeklyoff');
+                    const isRosterDayOff = hasRoster && (rShiftLower.includes('day off') || rShiftLower === 'do' || rShiftLower === 'dayoff');
+                    const isRosterHoliday = hasRoster && (rShiftLower.includes('holiday') || rShiftLower === 'hd');
+
                     let status = att.status;
-                    if (isSingleMidnightPunch || !hasValidWorkingPunch || !status || status === 'Absent') {
-                        if (!hasValidWorkingPunch || isSingleMidnightPunch) {
-                            if (isOnLeaveInTable) {
-                                status = 'On Leave';
+                    const statusLower = String(status || '').toLowerCase().trim();
+                    const isExplicitWeeklyOff = statusLower === 'weekly off' || statusLower === 'wo' || statusLower === 'weeklyoff' || isRosterWeeklyOff;
+                    const isExplicitDayOff = statusLower === 'day off' || statusLower === 'do' || statusLower === 'dayoff' || isRosterDayOff;
+                    const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday' || statusLower === 'hd';
+
+                    if (isBeforeJoining) {
+                        status = '—';
+                    } else {
+                        workingDaysCount++;
+                        if (isExplicitHoliday) {
+                            totalHoliday++;
+                            if (hasValidWorkingPunch && !isSingleMidnightPunch) {
+                                status = lateMins > 0 ? 'Late' : 'Present';
                             } else {
-                                status = 'Absent';
+                                status = 'HOLIDAY';
+                                totalUnpunchedHoliday++;
                             }
+                        } else if (hasValidWorkingPunch && !isSingleMidnightPunch) {
+                            status = lateMins > 0 ? 'Late' : (status === 'Half Day' ? 'Half Day' : (status || 'Present'));
+                        } else if (isExplicitWeeklyOff) {
+                            status = 'Weekly Off';
+                        } else if (isExplicitDayOff) {
+                            status = 'Day Off';
+                        } else if (isOnLeaveInTable || statusLower === 'on leave' || statusLower === 'leave') {
+                            status = 'On Leave';
+                        } else if (statusLower === 'half day' || statusLower === 'hd') {
+                            status = 'Half Day';
                         } else {
-                            status = lateMins > 0 ? 'Late' : 'Present';
+                            status = 'Absent';
                         }
-                    } else if (hasValidWorkingPunch) {
-                        status = lateMins > 0 ? 'Late' : (status === 'Half Day' ? 'Half Day' : 'Present');
-                    }
 
-                    if (status === 'Present' || status === 'Late' || status === 'Half Day') {
-                        totalPresent++;
-                        if (lateMins > 0 || status === 'Late') {
-                            totalLate++;
-                            totalLateMins += lateMins;
+                        if (status === 'Present' || status === 'Late' || status === 'Half Day') {
+                            totalPresent++;
+                            if (lateMins > 0 || status === 'Late') {
+                                totalLate++;
+                                totalLateMins += lateMins;
+                            }
+                        } else if (status === 'Weekly Off' || status === 'WO') {
+                            totalWeeklyOff++;
+                        } else if (status === 'Day Off' || status === 'DO') {
+                            totalDayOff++;
+                        } else if (status === 'Absent') {
+                            totalAbsent++;
                         }
-                    } else if (status === 'Absent') {
-                        totalAbsent++;
-                    }
 
-                    totalWorkMs += dayWorkMs;
+                        totalWorkMs += dayWorkMs;
+                    }
 
                     // Build dynamic shift segments for timeline
                     let shiftSegments = [];
@@ -3217,7 +3423,7 @@ const Roster = () => {
                                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-4 pt-4 border-t border-white/10">
                                     <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
                                         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
-                                        <p className="text-base font-bold text-white mt-0.5">{dayRows.length}</p>
+                                        <p className="text-base font-bold text-white mt-0.5">{workingDaysCount}</p>
                                     </div>
                                     <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
                                         <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
@@ -3299,70 +3505,91 @@ const Roster = () => {
                                                                 <td className={`px-3 py-2 font-bold ${isWeekendAbsent ? 'text-red-700 font-bold' : 'text-slate-500'}`}>
                                                                     {row.dayName}
                                                                 </td>
-                                                                <td className="px-3 py-2">
-                                                                    {row.hasRoster ? (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
-                                                                            📅 {row.shiftName}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
-                                                                            Roster Not Available
-                                                                        </span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-slate-600 font-mono text-[11px]">
-                                                                    {row.attendance?.store_name || '-'}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">
-                                                                    {row.scheduledStartStr} – {row.scheduledEndStr}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center font-mono">
-                                                                    {row.inTimeFormatted ? (
-                                                                        <span className="font-semibold text-emerald-700">{row.inTimeFormatted}</span>
-                                                                    ) : (
-                                                                        <span className="text-slate-300">-</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center font-mono">
-                                                                    {row.outTimeFormatted ? (
-                                                                        <span className="font-semibold text-slate-700">{row.outTimeFormatted}</span>
-                                                                    ) : (
-                                                                        <span className="text-slate-300">-</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center font-mono text-slate-500 text-[11px]">
-                                                                    {row.lunchStr}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center font-mono font-bold text-slate-900">
-                                                                    {row.workHrsStr}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center">
-                                                                    {row.lateMins > 0 ? (
-                                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 font-mono">
-                                                                            {row.lateMins}m
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-300">-</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center">
-                                                                    {(() => {
-                                                                        if (isHoliday) return <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">HOLIDAY</span>;
-                                                                        return (
-                                                                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold shadow-xs ${
-                                                                                row.status === 'Present'
-                                                                                    ? 'bg-emerald-100 text-emerald-800'
-                                                                                    : row.status === 'Late'
-                                                                                    ? 'bg-orange-100 text-orange-800'
-                                                                                    : row.status === 'On Leave'
-                                                                                    ? 'bg-blue-100 text-blue-800'
-                                                                                    : 'bg-red-100 text-red-800'
-                                                                            }`}>
-                                                                                {row.status === 'Present' ? 'P' : row.status === 'Late' ? 'L' : row.status === 'On Leave' ? 'OL' : 'A'}
+                                                                 {row.isBeforeJoining ? (
+                                                                    <>
+                                                                        <td colSpan={7} className="px-3 py-2 text-center">
+                                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-50/80 border border-amber-200/70 text-amber-800 text-[11px] font-medium">
+                                                                                <span>👤</span>
+                                                                                <span>Employee Joined on <strong>{empDojStr ? (() => {
+                                                                                    const [y, m, d] = empDojStr.split('-');
+                                                                                    return `${d} ${monthNames[parseInt(m, 10) - 1]?.substring(0, 3)} ${y}`;
+                                                                                })() : 'Later Date'}</strong></span>
                                                                             </span>
-                                                                        );
-                                                                    })()}
-                                                                </td>
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center font-mono text-slate-400">-</td>
+                                                                        <td className="px-3 py-2 text-center">
+                                                                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px] font-medium">Not Joined</span>
+                                                                        </td>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <td className="px-3 py-2">
+                                                                            {row.hasRoster ? (
+                                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                                                                    📅 {row.shiftName}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                                                                    Roster Not Available
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-slate-600 font-mono text-[11px]">
+                                                                            {row.attendance?.store_name || '-'}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">
+                                                                            {row.scheduledStartStr} – {row.scheduledEndStr}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center font-mono">
+                                                                            {row.inTimeFormatted ? (
+                                                                                <span className="font-semibold text-emerald-700">{row.inTimeFormatted}</span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300">-</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center font-mono">
+                                                                            {row.outTimeFormatted ? (
+                                                                                <span className="font-semibold text-slate-700">{row.outTimeFormatted}</span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300">-</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center font-mono text-slate-500 text-[11px]">
+                                                                            {row.lunchStr}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center font-mono font-bold text-slate-900">
+                                                                            {row.workHrsStr}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center">
+                                                                            {row.lateMins > 0 ? (
+                                                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 font-mono">
+                                                                                    {row.lateMins}m
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300">-</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-center">
+                                                                            {(() => {
+                                                                                if (row.isBeforeJoining) return <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px] font-bold">—</span>;
+                                                                                if (isHoliday) return <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">HOLIDAY</span>;
+                                                                                return (
+                                                                                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold shadow-xs ${
+                                                                                        row.status === 'Present'
+                                                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                                                            : row.status === 'Late'
+                                                                                            ? 'bg-orange-100 text-orange-800'
+                                                                                            : row.status === 'On Leave'
+                                                                                            ? 'bg-blue-100 text-blue-800'
+                                                                                            : 'bg-red-100 text-red-800'
+                                                                                    }`}>
+                                                                                        {row.status === 'Present' ? 'P' : row.status === 'Late' ? 'L' : row.status === 'On Leave' ? 'OL' : 'A'}
+                                                                                    </span>
+                                                                                );
+                                                                            })()}
+                                                                        </td>
+                                                                    </>
+                                                                )}
                                                             </tr>
                                                         );
                                                     })}
@@ -3456,6 +3683,10 @@ const Roster = () => {
                                                                     ))}
                                                                 </div>
                                                             )}
+                                                        </div>
+                                                    ) : row.isBeforeJoining ? (
+                                                        <div className="py-2.5 px-4 text-center rounded-xl bg-amber-50/80 border border-amber-200 flex items-center justify-center gap-2">
+                                                            <span className="text-xs font-semibold text-amber-800">👤 Employee Not Joined Yet</span>
                                                         </div>
                                                     ) : (
                                                         <div className={`py-2 text-center rounded-xl border border-dashed ${isWeekendAbsent ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>

@@ -48,6 +48,36 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
   }
 };
 
+const parseDojToYYYYMMDD = (rawDoj) => {
+  if (!rawDoj) return null;
+  const str = String(rawDoj).trim();
+  if (!str || str === '-' || str === 'null' || str === 'undefined') return null;
+
+  if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return str.substring(0, 10);
+  }
+
+  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (ddmmyyyy) {
+    const d = String(ddmmyyyy[1]).padStart(2, '0');
+    const m = String(ddmmyyyy[2]).padStart(2, '0');
+    const y = ddmmyyyy[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  try {
+    const dObj = new Date(str);
+    if (!isNaN(dObj.getTime())) {
+      const y = dObj.getFullYear();
+      const m = String(dObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  } catch (e) {}
+
+  return null;
+};
+
 const formatTimeIST = (timeStr) => {
   if (!timeStr || timeStr === '-') return null;
   try {
@@ -131,6 +161,8 @@ export default function EmployeeOverviewModal({
   const [payrollRecords, setPayrollRecords] = useState([]);
   const [payrollLoading, setPayrollLoading] = useState(false);
 
+  const [employeeProfile, setEmployeeProfile] = useState(null);
+
   useEffect(() => {
     if (isOpen) {
       setModalMonth(initialMonth || new Date());
@@ -139,10 +171,53 @@ export default function EmployeeOverviewModal({
   }, [isOpen, initialMonth, initialTab]);
 
   useEffect(() => {
+    const fetchEmployeeDetails = async () => {
+      if (!employee) return;
+      const empIdStr = String(employee.employee_id || employee.id || employee.code || '').trim();
+      const rawDbId = employee.db_id ? String(employee.db_id).trim() : '';
+      const empNameStr = String(employee.name || employee.user_name || employee.name_as_per_aadhar || '').trim();
+
+      try {
+        let query = supabase.from('hr_management_employees').select('*');
+        const orConditions = [];
+        if (empIdStr) {
+          orConditions.push(`employee_id.eq.${empIdStr}`);
+          orConditions.push(`employee_id.eq.${empIdStr.replace(/^0+/, '')}`);
+          orConditions.push(`id.eq.${empIdStr}`);
+        }
+        if (rawDbId) {
+          orConditions.push(`id.eq.${rawDbId}`);
+          orConditions.push(`employee_id.eq.${rawDbId}`);
+        }
+        if (empNameStr) {
+          orConditions.push(`name_as_per_aadhar.ilike.%${empNameStr}%`);
+          orConditions.push(`user_name.ilike.%${empNameStr}%`);
+        }
+
+        if (orConditions.length > 0) {
+          query = query.or(orConditions.join(','));
+        }
+        const { data } = await query.limit(1);
+        if (data && data.length > 0) {
+          setEmployeeProfile({ ...employee, ...data[0] });
+        } else {
+          setEmployeeProfile(employee);
+        }
+      } catch (e) {
+        setEmployeeProfile(employee);
+      }
+    };
+
+    if (isOpen && employee) {
+      fetchEmployeeDetails();
+    }
+  }, [isOpen, employee]);
+
+  useEffect(() => {
     if (isOpen && employee) {
       fetchAttendanceData();
     }
-  }, [isOpen, employee, modalMonth]);
+  }, [isOpen, employee, modalMonth, employeeProfile]);
 
   useEffect(() => {
     if (isOpen && employee && activeTab === 'learning') {
@@ -151,14 +226,24 @@ export default function EmployeeOverviewModal({
     if (isOpen && employee && activeTab === 'payslip') {
       fetchPayrollData();
     }
-  }, [isOpen, employee, activeTab]);
+  }, [isOpen, employee, activeTab, employeeProfile]);
 
   const fetchAttendanceData = async () => {
     if (!employee) return;
     setLoading(true);
     try {
-      const empIdStr = String(employee.id || employee.employee_id || employee.code || '').trim();
-      const empNameStr = String(employee.name || employee.user_name || '').trim();
+      const candidateIds = [
+        employee.employee_id,
+        employee.id,
+        employee.code,
+        employee.db_id,
+        employeeProfile?.employee_id,
+        employeeProfile?.id,
+        employeeProfile?.code
+      ].filter(Boolean).map(v => String(v).trim());
+
+      const uniqueIds = Array.from(new Set(candidateIds));
+      const empNameStr = String(employeeProfile?.user_name || employeeProfile?.name_as_per_aadhar || employee.name || employee.user_name || '').trim();
 
       const year = modalMonth.getFullYear();
       const monthNum = modalMonth.getMonth() + 1;
@@ -174,12 +259,20 @@ export default function EmployeeOverviewModal({
         .lte('attendance_date', endDate)
         .limit(5000);
 
-      if (empIdStr && empNameStr) {
-        logsQuery = logsQuery.or(`employee_id.eq.${empIdStr},employee_id.eq.${empIdStr.replace(/^0+/, '')},employee_name.ilike.%${empNameStr}%`);
-      } else if (empIdStr) {
-        logsQuery = logsQuery.or(`employee_id.eq.${empIdStr},employee_id.eq.${empIdStr.replace(/^0+/, '')}`);
-      } else if (empNameStr) {
-        logsQuery = logsQuery.ilike('employee_name', `%${empNameStr}%`);
+      const orClauses = [];
+      uniqueIds.forEach(id => {
+        orClauses.push(`employee_id.eq.${id}`);
+        const stripped = id.replace(/^0+/, '');
+        if (stripped && stripped !== id) {
+          orClauses.push(`employee_id.eq.${stripped}`);
+        }
+      });
+      if (empNameStr) {
+        orClauses.push(`employee_name.ilike.%${empNameStr}%`);
+      }
+
+      if (orClauses.length > 0) {
+        logsQuery = logsQuery.or(orClauses.join(','));
       }
 
       const [{ data: logsData }, { data: dbHolidays }] = await Promise.all([
@@ -196,14 +289,14 @@ export default function EmployeeOverviewModal({
       const filteredAtt = combinedLogs.filter(a => {
         const idCol = String(a.employee_id || a.emp_id || '').trim().toLowerCase();
         const nameCol = String(a.employee_name || a.name || a.emp_name || '').trim().toLowerCase();
-        const eId = empIdStr.toLowerCase();
         const eName = empNameStr.toLowerCase();
 
-        const idMatches = Boolean(eId && idCol) && (
-          idCol === eId ||
-          idCol.replace(/^0+/, '') === eId.replace(/^0+/, '') ||
-          parseInt(idCol, 10) === parseInt(eId, 10)
-        );
+        const idMatches = uniqueIds.some(candId => {
+          const cLower = candId.toLowerCase();
+          return idCol === cLower ||
+            idCol.replace(/^0+/, '') === cLower.replace(/^0+/, '') ||
+            parseInt(idCol, 10) === parseInt(cLower, 10);
+        });
 
         const nameMatches = Boolean(eName && nameCol) && (
           nameCol === eName ||
@@ -228,14 +321,14 @@ export default function EmployeeOverviewModal({
         const filteredRoster = rosterData.filter(r => {
           const idCol = String(r.employee_id || r.emp_id || '').trim().toLowerCase();
           const nameCol = String(r.employee_name || r.name || '').trim().toLowerCase();
-          const eId = empIdStr.toLowerCase();
           const eName = empNameStr.toLowerCase();
 
-          const idMatches = Boolean(eId && idCol) && (
-            idCol === eId ||
-            idCol.replace(/^0+/, '') === eId.replace(/^0+/, '') ||
-            parseInt(idCol, 10) === parseInt(eId, 10)
-          );
+          const idMatches = uniqueIds.some(candId => {
+            const cLower = candId.toLowerCase();
+            return idCol === cLower ||
+              idCol.replace(/^0+/, '') === cLower.replace(/^0+/, '') ||
+              parseInt(idCol, 10) === parseInt(cLower, 10);
+          });
 
           const nameMatches = Boolean(eName && nameCol) && (
             nameCol === eName ||
@@ -260,9 +353,15 @@ export default function EmployeeOverviewModal({
     if (!employee) return;
     setLearningLoading(true);
     try {
-      const empIdStr = String(employee.id || employee.employee_id || employee.code || '').trim();
-      const normEmpId = empIdStr.replace(/^0+/, '');
-      const empNameStr = String(employee.name || employee.user_name || employee.name_as_per_aadhar || '').trim().toLowerCase();
+      const candidateIds = [
+        employee.employee_id,
+        employee.id,
+        employee.code,
+        employeeProfile?.employee_id,
+        employeeProfile?.id
+      ].filter(Boolean).map(v => String(v).trim());
+
+      const empNameStr = String(employeeProfile?.user_name || employeeProfile?.name_as_per_aadhar || employee.name || employee.user_name || '').trim().toLowerCase();
 
       // Query both potential Supabase table names for learning submissions
       const [{ data: data1 }, { data: data2 }] = await Promise.all([
@@ -306,11 +405,12 @@ export default function EmployeeOverviewModal({
           const normSId = sId.replace(/^0+/, '');
           const sName = String(s.employee_name || s.employee || '').trim().toLowerCase();
 
-          const matchId = Boolean(empIdStr && sId && (
-            empIdStr === sId ||
-            (normEmpId && normSId && normEmpId === normSId) ||
-            parseInt(empIdStr, 10) === parseInt(sId, 10)
-          ));
+          const matchId = candidateIds.some(candId => {
+            const normCandId = candId.replace(/^0+/, '');
+            return candId === sId ||
+              (normCandId && normSId && normCandId === normSId) ||
+              parseInt(candId, 10) === parseInt(sId, 10);
+          });
 
           const matchName = Boolean(empNameStr && sName && (
             empNameStr === sName ||
@@ -336,8 +436,15 @@ export default function EmployeeOverviewModal({
     if (!employee) return;
     setPayrollLoading(true);
     try {
-      const empIdStr = String(employee.id || employee.employee_id || employee.code || '').trim();
-      const empNameStr = String(employee.name || employee.user_name || '').trim().toLowerCase();
+      const candidateIds = [
+        employee.employee_id,
+        employee.id,
+        employee.code,
+        employeeProfile?.employee_id,
+        employeeProfile?.id
+      ].filter(Boolean).map(v => String(v).trim().toLowerCase());
+
+      const empNameStr = String(employeeProfile?.user_name || employeeProfile?.name_as_per_aadhar || employee.name || employee.user_name || '').trim().toLowerCase();
 
       const { data } = await supabase
         .from('hr_management_payroll')
@@ -346,9 +453,11 @@ export default function EmployeeOverviewModal({
 
       if (data) {
         const filtered = data.filter(r => {
-          const idCol = String(r.employee_id || r.employee_code || '').trim();
+          const idCol = String(r.employee_id || r.employee_code || '').trim().toLowerCase();
           const nameCol = String(r.employee_name || r.name || '').trim().toLowerCase();
-          return (empIdStr && idCol === empIdStr) || (empNameStr && nameCol.includes(empNameStr));
+          const idMatch = candidateIds.some(candId => idCol === candId || idCol.replace(/^0+/, '') === candId.replace(/^0+/, ''));
+          const nameMatch = empNameStr && nameCol.includes(empNameStr);
+          return idMatch || nameMatch;
         });
         setPayrollRecords(filtered);
       } else {
@@ -363,11 +472,14 @@ export default function EmployeeOverviewModal({
 
   if (!isOpen || !employee) return null;
 
-  const empName = employee.name || employee.user_name || employee.candidate_name || 'Employee';
-  const empId = employee.id || employee.employee_id || employee.code || 'N/A';
-  const avatar = employee.candidate_photo || employee.photo_url;
-  const empDesignation = employee.designation || employee.Designation || 'Staff';
-  const empStore = employee.joining_place || employee.shop_name || employee.store_name || 'MUMBAI';
+  const activeEmp = employeeProfile || employee;
+  const empName = activeEmp?.user_name || activeEmp?.name_as_per_aadhar || activeEmp?.name || activeEmp?.candidate_name || 'Employee';
+  const empId = activeEmp?.employee_id || activeEmp?.id || activeEmp?.code || 'N/A';
+  const avatar = activeEmp?.candidate_photo || activeEmp?.photo_url;
+  const empDesignation = activeEmp?.designation || activeEmp?.Designation || 'Staff';
+  const empStore = activeEmp?.joining_place || activeEmp?.shop_name || activeEmp?.store_name || 'MUMBAI';
+  const rawDoj = activeEmp?.date_of_joining || activeEmp?.doj || activeEmp?.joining_date;
+  const empDojStr = parseDojToYYYYMMDD(rawDoj);
 
   // Build month day rows
   const pYear = modalMonth.getFullYear();
@@ -388,11 +500,14 @@ export default function EmployeeOverviewModal({
   let totalUnpunchedHoliday = 0;
   let totalLateMins = 0;
   let totalWorkMs = 0;
+  let workingDaysCount = 0;
 
   for (let d = 1; d <= maxDay; d++) {
     const dateStr = `${pYear}-${String(pMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const dateObj = new Date(pYear, pMonthIdx, d);
     const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
+
+    const isBeforeJoining = Boolean(empDojStr && dateStr < empDojStr);
 
     const hEntry = holidayLogs.find(h => (h.holiday_date || '').trim() === dateStr);
     const isHoliday = !!hEntry;
@@ -514,103 +629,113 @@ export default function EmployeeOverviewModal({
     const isExplicitHalfDay = statusLower === 'half day' || statusLower === 'hd';
     const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday' || statusLower === 'hd';
 
-    if (isExplicitHoliday) {
-      totalHoliday++;
-      if (hasValidWorkingPunch && !isSingleMidnightPunch) {
-        status = isLate ? 'Late' : 'Present';
-      } else {
-        status = 'HOLIDAY';
-        totalUnpunchedHoliday++;
-      }
-    } else if (hasValidWorkingPunch && !isSingleMidnightPunch) {
-      status = isLate ? 'Late' : (isExplicitHalfDay ? 'Half Day' : (status || 'Present'));
-    } else if (isExplicitWeeklyOff) {
-      status = 'Weekly Off';
-    } else if (isExplicitDayOff) {
-      status = 'Day Off';
-    } else if (isExplicitOnLeave) {
-      status = 'On Leave';
-    } else if (isExplicitHalfDay) {
-      status = 'Half Day';
+    if (isBeforeJoining) {
+      status = '—'; // Employee not joined yet
     } else {
-      status = 'Absent';
-    }
-
-    const lateMins = att.late_minutes || 0;
-
-    if (status === 'Present' || status === 'Late' || status === 'Half Day') {
-      totalPresent++;
-      if (lateMins > 0 || status === 'Late') {
-        totalLate++;
-        totalLateMins += lateMins;
+      workingDaysCount++;
+      if (isExplicitHoliday) {
+        totalHoliday++;
+        if (hasValidWorkingPunch && !isSingleMidnightPunch) {
+          status = isLate ? 'Late' : 'Present';
+        } else {
+          status = 'HOLIDAY';
+          totalUnpunchedHoliday++;
+        }
+      } else if (hasValidWorkingPunch && !isSingleMidnightPunch) {
+        status = isLate ? 'Late' : (isExplicitHalfDay ? 'Half Day' : (status || 'Present'));
+      } else if (isExplicitWeeklyOff) {
+        status = 'Weekly Off';
+      } else if (isExplicitDayOff) {
+        status = 'Day Off';
+      } else if (isExplicitOnLeave) {
+        status = 'On Leave';
+      } else if (isExplicitHalfDay) {
+        status = 'Half Day';
+      } else {
+        status = 'Absent';
       }
-    } else if (status === 'Weekly Off' || status === 'WO') {
-      totalWeeklyOff++;
-    } else if (status === 'Day Off' || status === 'DO') {
-      totalDayOff++;
-    } else if (status === 'Absent') {
-      totalAbsent++;
+
+      const lateMins = att.late_minutes || 0;
+
+      if (status === 'Present' || status === 'Late' || status === 'Half Day') {
+        totalPresent++;
+        if (lateMins > 0 || status === 'Late') {
+          totalLate++;
+          totalLateMins += lateMins;
+        }
+      } else if (status === 'Weekly Off' || status === 'WO') {
+        totalWeeklyOff++;
+      } else if (status === 'Day Off' || status === 'DO') {
+        totalDayOff++;
+      } else if (status === 'Absent') {
+        totalAbsent++;
+      }
+
+      totalWorkMs += dayWorkMs;
     }
 
-    totalWorkMs += dayWorkMs;
+    const lateMins = isBeforeJoining ? 0 : (att.late_minutes || 0);
 
     // Build timeline shift segments dynamically
     let shiftSegments = [];
-    if (rawPunchList.length >= 4) {
-      // 4 punches: in1 -> out1 (morning), out1 -> in2 (lunch), in2 -> out2 (evening)
-      const pIn1 = rawPunchList[0];
-      const pOut1 = rawPunchList[1];
-      const pIn2 = rawPunchList[2];
-      const pOut2 = rawPunchList[3];
-      const mHrs = calculateWorkHours(pIn1, pOut1, dateStr, '00:00:00');
-      const eHrs = calculateWorkHours(pIn2, pOut2, dateStr, '00:00:00');
-      shiftSegments = [
-        { label: 'Morning Shift', time: `${formatTimeIST(pIn1)} – ${formatTimeIST(pOut1)}`, duration: mHrs, type: 'morning' },
-        { label: 'Lunch Break', time: `${formatTimeIST(pOut1)} – ${formatTimeIST(pIn2)}`, duration: lunchStr, type: 'lunch' },
-        { label: 'Evening Shift', time: `${formatTimeIST(pIn2)} – ${formatTimeIST(pOut2)}`, duration: eHrs, type: 'evening' }
-      ];
-    } else if (rawPunchList.length === 2 || (inTime && outTime && inTime !== '-' && outTime !== '-')) {
-      const pIn = rawPunchList[0] || inTime;
-      const pOut = rawPunchList[rawPunchList.length - 1] || outTime;
-      if (lunchStr && lunchStr !== '-') {
-        // Split with lunch
+    if (!isBeforeJoining) {
+      if (rawPunchList.length >= 4) {
+        // 4 punches: in1 -> out1 (morning), out1 -> in2 (lunch), in2 -> out2 (evening)
+        const pIn1 = rawPunchList[0];
+        const pOut1 = rawPunchList[1];
+        const pIn2 = rawPunchList[2];
+        const pOut2 = rawPunchList[3];
+        const mHrs = calculateWorkHours(pIn1, pOut1, dateStr, '00:00:00');
+        const eHrs = calculateWorkHours(pIn2, pOut2, dateStr, '00:00:00');
         shiftSegments = [
-          { label: 'Work Shift (In)', time: `${formatTimeIST(pIn)}`, duration: '', type: 'morning' },
-          { label: 'Lunch', time: lunchStr, duration: lunchStr, type: 'lunch' },
-          { label: 'Work Shift (Out)', time: `${formatTimeIST(pOut)}`, duration: workHrsStr, type: 'evening' }
+          { label: 'Morning Shift', time: `${formatTimeIST(pIn1)} – ${formatTimeIST(pOut1)}`, duration: mHrs, type: 'morning' },
+          { label: 'Lunch Break', time: `${formatTimeIST(pOut1)} – ${formatTimeIST(pIn2)}`, duration: lunchStr, type: 'lunch' },
+          { label: 'Evening Shift', time: `${formatTimeIST(pIn2)} – ${formatTimeIST(pOut2)}`, duration: eHrs, type: 'evening' }
         ];
-      } else {
+      } else if (rawPunchList.length === 2 || (inTime && outTime && inTime !== '-' && outTime !== '-')) {
+        const pIn = rawPunchList[0] || inTime;
+        const pOut = rawPunchList[rawPunchList.length - 1] || outTime;
+        if (lunchStr && lunchStr !== '-') {
+          // Split with lunch
+          shiftSegments = [
+            { label: 'Work Shift (In)', time: `${formatTimeIST(pIn)}`, duration: '', type: 'morning' },
+            { label: 'Lunch', time: lunchStr, duration: lunchStr, type: 'lunch' },
+            { label: 'Work Shift (Out)', time: `${formatTimeIST(pOut)}`, duration: workHrsStr, type: 'evening' }
+          ];
+        } else {
+          shiftSegments = [
+            { label: 'Full Shift', time: `${formatTimeIST(pIn)} – ${formatTimeIST(pOut)}`, duration: workHrsStr, type: 'full' }
+          ];
+        }
+      } else if (inTime && inTime !== '-' && !isSingleMidnightPunch) {
         shiftSegments = [
-          { label: 'Full Shift', time: `${formatTimeIST(pIn)} – ${formatTimeIST(pOut)}`, duration: workHrsStr, type: 'full' }
+          { label: 'Punch In', time: `${formatTimeIST(inTime)}`, duration: 'Pending Out', type: 'pending' }
         ];
       }
-    } else if (inTime && inTime !== '-' && !isSingleMidnightPunch) {
-      shiftSegments = [
-        { label: 'Punch In', time: `${formatTimeIST(inTime)}`, duration: 'Pending Out', type: 'pending' }
-      ];
     }
 
     dayRows.push({
       dayNum: d,
       dateStr,
       dayName,
-      shiftName,
+      shiftName: isBeforeJoining ? '—' : shiftName,
       hasRoster,
       scheduledStartStr,
       scheduledEndStr,
-      inTimeFormatted: formatTimeIST(inTime),
-      outTimeFormatted: formatTimeIST(outTime),
-      lunchStr,
-      workHrsStr,
-      lateMins,
+      inTimeFormatted: isBeforeJoining ? '-' : formatTimeIST(inTime),
+      outTimeFormatted: isBeforeJoining ? '-' : formatTimeIST(outTime),
+      lunchStr: isBeforeJoining ? '-' : lunchStr,
+      workHrsStr: isBeforeJoining ? '00:00:00' : workHrsStr,
+      lateMins: isBeforeJoining ? 0 : lateMins,
       status,
+      isBeforeJoining,
       holidayName: holidayName || (isRosterHoliday ? rEntry?.shift_type : null) || 'Company Holiday',
-      isHoliday: isExplicitHoliday,
-      isWeeklyOff: isExplicitWeeklyOff,
-      isDayOff: isExplicitDayOff,
+      isHoliday: isBeforeJoining ? false : isExplicitHoliday,
+      isWeeklyOff: isBeforeJoining ? false : isExplicitWeeklyOff,
+      isDayOff: isBeforeJoining ? false : isExplicitDayOff,
       shiftSegments,
       rawPunchList,
-      hasValidWorkingPunch: hasValidWorkingPunch && !isSingleMidnightPunch,
+      hasValidWorkingPunch: isBeforeJoining ? false : (hasValidWorkingPunch && !isSingleMidnightPunch),
       attendance: att
     });
   }
@@ -662,6 +787,15 @@ export default function EmployeeOverviewModal({
                   <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-indigo-200 border border-white/10">
                     ID: {empId}
                   </span>
+                  {empDojStr && (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-[10px] font-medium text-amber-200 border border-amber-400/30 flex items-center gap-1">
+                      <span>🗓️ Joined:</span>
+                      <span>{(() => {
+                        const [y, m, d] = empDojStr.split('-');
+                        return `${d} ${monthNames[parseInt(m, 10) - 1]?.substring(0, 3)} ${y}`;
+                      })()}</span>
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-indigo-200 mt-0.5 font-medium">
                   {empDesignation} • {empStore}
@@ -733,7 +867,7 @@ export default function EmployeeOverviewModal({
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-4 pt-4 border-t border-white/10">
             <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
               <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
-              <p className="text-base font-bold text-white mt-0.5">{dayRows.length}</p>
+              <p className="text-base font-bold text-white mt-0.5">{workingDaysCount}</p>
             </div>
             <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
               <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
@@ -795,22 +929,26 @@ export default function EmployeeOverviewModal({
                       const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
                       const hasValidPunches = row.hasValidWorkingPunch;
                       const isAbsentOrLeave = 
-                        !hasValidPunches ||
-                        row.status === 'Absent' ||
-                        String(row.status || '').toLowerCase() === 'absent' ||
-                        row.status === 'On Leave' ||
-                        String(row.status || '').toLowerCase().includes('leave') ||
-                        row.status === 'Weekly Off' ||
-                        row.status === 'WO' ||
-                        row.status === 'Day Off' ||
-                        row.status === 'DO';
+                        !row.isBeforeJoining && (
+                          !hasValidPunches ||
+                          row.status === 'Absent' ||
+                          String(row.status || '').toLowerCase() === 'absent' ||
+                          row.status === 'On Leave' ||
+                          String(row.status || '').toLowerCase().includes('leave') ||
+                          row.status === 'Weekly Off' ||
+                          row.status === 'WO' ||
+                          row.status === 'Day Off' ||
+                          row.status === 'DO'
+                        );
 
                       const isWeekendAbsent = !isHoliday && isWeekendDay && isAbsentOrLeave;
                       return (
                         <tr 
                           key={row.dayNum} 
                           className={`transition-colors ${
-                            isWeekendAbsent 
+                            row.isBeforeJoining
+                              ? 'bg-slate-50/70 text-slate-400'
+                              : isWeekendAbsent 
                               ? 'bg-red-100/70 hover:bg-red-100 border-l-4 border-l-red-500' 
                               : row.status === 'On Leave'
                               ? 'bg-rose-50/80 hover:bg-rose-100/80 border-l-4 border-l-rose-400'
@@ -819,86 +957,106 @@ export default function EmployeeOverviewModal({
                               : 'hover:bg-slate-50/80'
                           }`}
                         >
-                          <td className="px-3 py-2 text-slate-900 font-bold font-mono">
+                          <td className={`px-3 py-2 font-mono ${row.isBeforeJoining ? 'text-slate-400 font-medium' : 'text-slate-900 font-bold'}`}>
                             {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)}
                           </td>
-                          <td className={`px-3 py-2 font-bold ${isWeekendAbsent ? 'text-red-700 font-bold' : row.status === 'Absent' ? 'text-red-900 font-semibold' : 'text-slate-500'}`}>
+                          <td className={`px-3 py-2 ${row.isBeforeJoining ? 'text-slate-400' : isWeekendAbsent ? 'text-red-700 font-bold' : row.status === 'Absent' ? 'text-red-900 font-semibold' : 'text-slate-500'}`}>
                             {row.dayName}
                           </td>
-                          <td className="px-3 py-2">
-                            {row.hasRoster ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
-                                📅 {row.shiftName}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
-                                Roster Not Available
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {punchedShopName ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-semibold text-[10px]">
-                                📍 {punchedShopName}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 text-[10px]">-</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center text-slate-600 font-mono">
-                            {row.scheduledStartStr} – {row.scheduledEndStr}
-                          </td>
-                          {isHoliday && !hasValidPunches ? (
-                            <td colSpan={3} className="px-3 py-2 text-center">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-100/90 text-purple-900 border border-purple-200 font-bold text-[11px] shadow-2xs">
-                                🏖️ {row.holidayName}
-                              </span>
-                            </td>
-                          ) : (row.status === 'Weekly Off' || row.status === 'WO') && !hasValidPunches ? (
-                            <td colSpan={3} className="px-3 py-2 text-center">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-100/90 text-indigo-900 border border-indigo-200 font-bold text-[11px] shadow-2xs">
-                                🌴 Weekly Off
-                              </span>
-                            </td>
-                          ) : (row.status === 'Day Off' || row.status === 'DO') && !hasValidPunches ? (
-                            <td colSpan={3} className="px-3 py-2 text-center">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 text-slate-800 border border-slate-300 font-bold text-[11px] shadow-2xs">
-                                📅 Day Off
-                              </span>
-                            </td>
+                          {row.isBeforeJoining ? (
+                            <>
+                              <td colSpan={7} className="px-3 py-2 text-center">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-50/80 border border-amber-200/70 text-amber-800 text-[11px] font-medium">
+                                  <span>👤</span>
+                                  <span>Employee Joined on <strong>{empDojStr ? (() => {
+                                    const [y, m, d] = empDojStr.split('-');
+                                    return `${d} ${monthNames[parseInt(m, 10) - 1]?.substring(0, 3)} ${y}`;
+                                  })() : 'Later Date'}</strong></span>
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono text-slate-400">-</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px] font-medium">Not Joined</span>
+                              </td>
+                            </>
                           ) : (
                             <>
-                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                                {row.inTimeFormatted || '-'}
+                              <td className="px-3 py-2">
+                                {row.hasRoster ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
+                                    📅 {row.shiftName}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 font-medium text-[10px]">
+                                    Roster Not Available
+                                  </span>
+                                )}
                               </td>
-                              <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
-                                {row.outTimeFormatted || '-'}
+                              <td className="px-3 py-2">
+                                {punchedShopName ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-semibold text-[10px]">
+                                    📍 {punchedShopName}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-[10px]">-</span>
+                                )}
                               </td>
-                              <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
+                              <td className="px-3 py-2 text-center text-slate-600 font-mono">
+                                {`${row.scheduledStartStr} – ${row.scheduledEndStr}`}
+                              </td>
+                              {isHoliday && !hasValidPunches ? (
+                                <td colSpan={3} className="px-3 py-2 text-center">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-100/90 text-purple-900 border border-purple-200 font-bold text-[11px] shadow-2xs">
+                                    🏖️ {row.holidayName}
+                                  </span>
+                                </td>
+                              ) : (row.status === 'Weekly Off' || row.status === 'WO') && !hasValidPunches ? (
+                                <td colSpan={3} className="px-3 py-2 text-center">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-100/90 text-indigo-900 border border-indigo-200 font-bold text-[11px] shadow-2xs">
+                                    🌴 Weekly Off
+                                  </span>
+                                </td>
+                              ) : (row.status === 'Day Off' || row.status === 'DO') && !hasValidPunches ? (
+                                <td colSpan={3} className="px-3 py-2 text-center">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 text-slate-800 border border-slate-300 font-bold text-[11px] shadow-2xs">
+                                    📅 Day Off
+                                  </span>
+                                </td>
+                              ) : (
+                                <>
+                                  <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                    {row.inTimeFormatted || '-'}
+                                  </td>
+                                  <td className="px-3 py-2 text-center font-mono font-semibold text-slate-800">
+                                    {row.outTimeFormatted || '-'}
+                                  </td>
+                                  <td className="px-3 py-2 text-center font-mono text-slate-500">{row.lunchStr}</td>
+                                </>
+                              )}
+                              <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">
+                                {row.workHrsStr}
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono">
+                                {row.lateMins > 0 ? (
+                                  <span className="text-orange-600 font-bold">{row.lateMins}m</span>
+                                ) : (
+                                  <span className="text-slate-400">-</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                {(() => {
+                                  if (isHoliday) return <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">HOLIDAY</span>;
+                                  if (row.status === 'Present') return <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">P</span>;
+                                  if (row.status === 'Late') return <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">L</span>;
+                                  if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold">HD</span>;
+                                  if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">WO</span>;
+                                  if (row.status === 'Day Off') return <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700 text-[10px] font-bold">DO</span>;
+                                  if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">Leave</span>;
+                                  return <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-[10px] font-bold">A</span>;
+                                })()}
+                              </td>
                             </>
                           )}
-                          <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">
-                            {row.workHrsStr}
-                          </td>
-                          <td className="px-3 py-2 text-center font-mono">
-                            {row.lateMins > 0 ? (
-                              <span className="text-orange-600 font-bold">{row.lateMins}m</span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            {(() => {
-                              if (isHoliday) return <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">HOLIDAY</span>;
-                              if (row.status === 'Present') return <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">P</span>;
-                              if (row.status === 'Late') return <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">L</span>;
-                              if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold">HD</span>;
-                              if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">WO</span>;
-                              if (row.status === 'Day Off') return <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700 text-[10px] font-bold">DO</span>;
-                              if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">Leave</span>;
-                              return <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-[10px] font-bold">A</span>;
-                            })()}
-                          </td>
                         </tr>
                       );
                     })}
@@ -913,22 +1071,26 @@ export default function EmployeeOverviewModal({
                 const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
                 const hasValidPunches = row.hasValidWorkingPunch;
                 const isAbsentOrLeave = 
-                  !hasValidPunches ||
-                  row.status === 'Absent' ||
-                  String(row.status || '').toLowerCase() === 'absent' ||
-                  row.status === 'On Leave' ||
-                  String(row.status || '').toLowerCase().includes('leave') ||
-                  row.status === 'Weekly Off' ||
-                  row.status === 'WO' ||
-                  row.status === 'Day Off' ||
-                  row.status === 'DO';
+                  !row.isBeforeJoining && (
+                    !hasValidPunches ||
+                    row.status === 'Absent' ||
+                    String(row.status || '').toLowerCase() === 'absent' ||
+                    row.status === 'On Leave' ||
+                    String(row.status || '').toLowerCase().includes('leave') ||
+                    row.status === 'Weekly Off' ||
+                    row.status === 'WO' ||
+                    row.status === 'Day Off' ||
+                    row.status === 'DO'
+                  );
 
                 const isWeekendAbsent = !isHoliday && isWeekendDay && isAbsentOrLeave;
                 return (
                   <div 
                     key={row.dayNum} 
                     className={`rounded-2xl p-3.5 border transition-colors flex flex-col gap-2.5 ${
-                      row.isHoliday || row.status === 'HOLIDAY'
+                      row.isBeforeJoining
+                        ? 'bg-slate-50 border-slate-200 opacity-60'
+                        : row.isHoliday || row.status === 'HOLIDAY'
                         ? 'bg-purple-50/70 border-purple-200 shadow-xs'
                         : row.status === 'Weekly Off' || row.status === 'WO'
                         ? 'bg-indigo-50/60 border-indigo-200 shadow-xs'
@@ -943,10 +1105,17 @@ export default function EmployeeOverviewModal({
                   >
                     <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold font-mono ${isWeekendAbsent ? 'text-red-700 font-bold' : 'text-slate-900'}`}>
+                        <span className={`text-xs font-bold font-mono ${row.isBeforeJoining ? 'text-slate-400' : isWeekendAbsent ? 'text-red-700 font-bold' : 'text-slate-900'}`}>
                           {String(row.dayNum).padStart(2, '0')} {monthNames[pMonthIdx].substring(0, 3)} ({row.dayName})
                         </span>
-                        {row.isHoliday || row.status === 'HOLIDAY' ? (
+                        {row.isBeforeJoining ? (
+                          <span className="px-2.5 py-0.5 rounded-md bg-amber-50 border border-amber-200/80 text-amber-800 font-medium text-[10px]">
+                            👤 Employee Joined on {empDojStr ? (() => {
+                              const [y, m, d] = empDojStr.split('-');
+                              return `${d} ${monthNames[parseInt(m, 10) - 1]?.substring(0, 3)} ${y}`;
+                            })() : 'Later Date'}
+                          </span>
+                        ) : row.isHoliday || row.status === 'HOLIDAY' ? (
                           <span className="px-2 py-0.5 rounded bg-purple-100 border border-purple-200 text-purple-800 font-bold text-[10px]">
                             🏖️ {row.holidayName}
                           </span>
@@ -969,8 +1138,8 @@ export default function EmployeeOverviewModal({
                         )}
                       </div>
                       <div className="flex items-center gap-3 text-xs font-mono">
-                        {row.inTimeFormatted && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
-                        {row.outTimeFormatted && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
+                        {row.inTimeFormatted && row.inTimeFormatted !== '-' && <span className="text-emerald-700 font-semibold">In: {row.inTimeFormatted}</span>}
+                        {row.outTimeFormatted && row.outTimeFormatted !== '-' && <span className="text-slate-700 font-semibold">Out: {row.outTimeFormatted}</span>}
                         <span className="font-bold text-slate-900">Total: {row.workHrsStr}</span>
                         {row.lateMins > 0 && <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Late: {row.lateMins}m</span>}
                       </div>
@@ -1018,6 +1187,10 @@ export default function EmployeeOverviewModal({
                             ))}
                           </div>
                         )}
+                      </div>
+                    ) : row.isBeforeJoining ? (
+                      <div className="py-2.5 px-4 text-center rounded-xl bg-amber-50/80 border border-amber-200 flex items-center justify-center gap-2">
+                        <span className="text-xs font-semibold text-amber-800">👤 Employee Not Joined Yet</span>
                       </div>
                     ) : row.isHoliday || row.status === 'HOLIDAY' ? (
                       <div className="py-2.5 px-4 text-center rounded-xl bg-purple-100/70 border border-purple-300 flex items-center justify-center gap-2">

@@ -50,6 +50,36 @@ const resolvePunchedStore = (attendance, deviceMapping = []) => {
   return null;
 };
 
+const parseDojToYYYYMMDD = (rawDoj) => {
+  if (!rawDoj) return null;
+  const str = String(rawDoj).trim();
+  if (!str || str === '-' || str === 'null' || str === 'undefined') return null;
+
+  if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return str.substring(0, 10);
+  }
+
+  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (ddmmyyyy) {
+    const d = String(ddmmyyyy[1]).padStart(2, '0');
+    const m = String(ddmmyyyy[2]).padStart(2, '0');
+    const y = ddmmyyyy[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  try {
+    const dObj = new Date(str);
+    if (!isNaN(dObj.getTime())) {
+      const y = dObj.getFullYear();
+      const m = String(dObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  } catch (e) {}
+
+  return null;
+};
+
 
 // IST Timezone offset (UTC+5:30)
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
@@ -300,14 +330,27 @@ const AttendanceDaily = () => {
   });
 
   const openPreviewWindow = (employee) => {
+    const empProfile = employeesData.find(e =>
+      (e.employee_id && (String(e.employee_id) === String(employee.id) || String(e.employee_id) === String(employee.employee_id))) ||
+      (e.id && (String(e.id) === String(employee.id) || String(e.id) === String(employee.employee_id)))
+    );
+    const resolvedEmpId = employee.employee_id || empProfile?.employee_id || employee.id || empProfile?.id;
+    const enrichedEmp = {
+      ...employee,
+      ...(empProfile || {}),
+      id: resolvedEmpId,
+      employee_id: resolvedEmpId,
+      db_id: empProfile?.id || employee.id,
+      date_of_joining: empProfile?.date_of_joining || empProfile?.doj || employee?.date_of_joining || employee?.doj
+    };
     setPreviewModal({
       isOpen: true,
-      employee,
+      employee: enrichedEmp,
       month: new Date(currentMonth),
       tab: 'timecard',
       loading: false
     });
-    fetchEmployeePayroll(employee);
+    fetchEmployeePayroll(enrichedEmp);
   };
 
   // Employee Payroll History state
@@ -2379,6 +2422,14 @@ const AttendanceDaily = () => {
     if (!employeeId || !date) return { status: 'Absent', in_time: '-', out_time: '-' };
     const empIdClean = String(employeeId).trim().toLowerCase();
 
+    // Check if date is before employee's date of joining
+    const empProfile = employeesData.find(e =>
+      (e.employee_id && String(e.employee_id).trim().toLowerCase() === empIdClean) ||
+      (e.id && String(e.id).trim().toLowerCase() === empIdClean)
+    );
+    const rawDoj = empProfile?.date_of_joining || empProfile?.doj || empProfile?.joining_date;
+    const empDojStr = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : null;
+
     // 1. Check if an explicit attendance record exists
     const record = attendanceData.find(
       a => a.employee_id && String(a.employee_id).trim().toLowerCase() === empIdClean && a.attendance_date === date
@@ -2393,6 +2444,10 @@ const AttendanceDaily = () => {
     // If actual biometric/manual punches exist, prioritize the worked attendance (e.g. Present, Late, Half Day)
     if (record && hasPunches) {
       return record;
+    }
+
+    if (empDojStr && date < empDojStr) {
+      return { status: '—', in_time: '-', out_time: '-' };
     }
 
     // 2. Global Company Holiday: check holidays table
@@ -2522,7 +2577,8 @@ const AttendanceDaily = () => {
         );
         return {
           ...emp,
-          name: empProfile ? (empProfile.user_name || empProfile.name_as_per_aadhar || emp.name) : emp.name
+          name: empProfile ? (empProfile.user_name || empProfile.name_as_per_aadhar || emp.name) : emp.name,
+          date_of_joining: empProfile ? (empProfile.date_of_joining || empProfile.doj) : emp.date_of_joining
         };
       })
       .filter(emp => {
@@ -2579,6 +2635,15 @@ const AttendanceDaily = () => {
           // Exclude inactive employees
           if (isEmpInactive(empId, name)) return false;
 
+          // Exclude if date of joining is in future relative to selectedDate in daily view
+          if (viewMode === 'daily' && selectedDate) {
+            const rawDoj = emp.date_of_joining || emp.doj || emp.joining_date;
+            if (rawDoj) {
+              const dojStr = rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10);
+              if (selectedDate < dojStr) return false;
+            }
+          }
+
           // Exclude if already in employees list (meaning they have logs)
           if (hasAttendance(empId)) return false;
 
@@ -2600,6 +2665,7 @@ const AttendanceDaily = () => {
           name: emp.user_name || emp.name_as_per_aadhar || 'No Name',
           designation: emp.Designation || emp.designation || '-',
           store_name: emp.shop_name || emp.joining_place || '-',
+          date_of_joining: emp.date_of_joining || emp.doj,
           isRemaining: true
         }));
 
@@ -3025,6 +3091,7 @@ const AttendanceDaily = () => {
                     const employeeProfile = employeesData.find(e => e.employee_id === employee.id || e.id === employee.id);
                     const candidatePhoto = employeeProfile?.candidate_photo || employee.candidate_photo;
                     const employeeRoster = getEmployeeRoster(employee.id, selectedDate);
+                    const empDojStr = parseDojToYYYYMMDD(employeeProfile?.date_of_joining || employeeProfile?.doj || employeeProfile?.joining_date || employee.date_of_joining || employee.doj);
 
                     return (
                       <tr
@@ -3065,8 +3132,15 @@ const AttendanceDaily = () => {
                                 </span>
                               )}
                             </div>
-                            <div>
-                              <p className="text-xs font-medium text-gray-900">{employee.name}</p>
+                            <div
+                              className="cursor-pointer group flex flex-col"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openPreviewWindow(employee);
+                              }}
+                              title="Click to view employee overview, timecard & timeline"
+                            >
+                              <p className="text-xs font-medium text-gray-900 group-hover:text-indigo-600 transition-colors">{employee.name}</p>
                               <div className="flex items-center gap-1">
                                 <p className="text-[9px] text-gray-500">{employee.id}</p>
                                 {employeeRoster && employeeRoster.shift_type ? (
@@ -3098,7 +3172,7 @@ const AttendanceDaily = () => {
                           </div>
                         </td>
                         {(() => {
-                          // Segment days into single cells or merged streaks (for Approved Leaves & 3+ consecutive absent days)
+                          // Segment days into single cells or merged streaks (for Approved Leaves, Pre-joining & 3+ consecutive absent days)
                           const segments = [];
                           let i = 0;
                           while (i < days.length) {
@@ -3123,7 +3197,28 @@ const AttendanceDaily = () => {
                             }
                             const st = rawStatus || 'Absent';
 
-                            if (st === 'On Leave') {
+                            const isPreJoining = Boolean(empDojStr && d.fullDate < empDojStr);
+
+                            if (isPreJoining) {
+                              let j = i;
+                              const streak = [];
+                              while (j < days.length && empDojStr && days[j].fullDate < empDojStr) {
+                                const nextAtt = getAttendanceForDate(employee.id, days[j].fullDate);
+                                streak.push({ day: days[j], idx: j, attendance: nextAtt, status: 'Pre-Joining' });
+                                j++;
+                              }
+                              segments.push({
+                                type: 'merged_span',
+                                spanKind: 'pre_joining',
+                                colSpan: streak.length,
+                                startIndex: i,
+                                streak: streak,
+                                startDay: streak[0].day,
+                                endDay: streak[streak.length - 1].day,
+                                doj: empDojStr
+                              });
+                              i = j;
+                            } else if (st === 'On Leave') {
                               let j = i;
                               const streak = [];
                               while (j < days.length) {
@@ -3263,6 +3358,16 @@ const AttendanceDaily = () => {
                                 labelText = `Leave (${seg.colSpan}d)`;
                                 popoverTitle = 'Approved Leave';
                                 badgeClass = 'bg-sky-500/20 text-sky-300 border-sky-500/30';
+                              } else if (kind === 'pre_joining') {
+                                themeContainer = 'bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200 hover:border-slate-400';
+                                themeBubbleGradient = 'from-slate-600 to-slate-700';
+                                themeBubbleBorder = 'border-t-slate-700';
+                                themePulseDot = 'bg-slate-400';
+                                themeNodeHovered = 'bg-slate-600 text-white shadow-md scale-110 ring-2 ring-white z-20';
+                                themeNodeDefault = 'text-slate-500 font-medium';
+                                labelText = `Joined ${seg.doj || '16 Sep'}`;
+                                popoverTitle = 'Pre-Joining Period';
+                                badgeClass = 'bg-slate-500/20 text-slate-300 border-slate-500/30';
                               } else {
                                 themeContainer = 'bg-gradient-to-r from-rose-100 via-rose-50 to-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200 hover:border-rose-400';
                                 themeBubbleGradient = 'from-rose-600 to-rose-700';
