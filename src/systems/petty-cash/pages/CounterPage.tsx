@@ -453,6 +453,85 @@ export default function CounterPage({ onClose }: CounterPageProps) {
     groupedByCounter[cVal].push(row);
   });
 
+  // Compute totals and daily averages based on filtered date data
+  const summaryStats = useMemo(() => {
+    const totalCount = filtered.length;
+    const uniqueDates = new Set(filtered.map((r) => r.date).filter(Boolean));
+    const dateDivisor = uniqueDates.size > 0 ? uniqueDates.size : (totalCount > 0 ? totalCount : 1);
+
+    const retailScanTotal = filtered.reduce((s, r) => s + (r.retailScanAmount || 0), 0);
+    const wholesaleTotal = filtered.reduce((s, r) => s + (Number(r.raw?.ws_cash_billing_amount) || 0), 0);
+    const creditReceiptTotal = filtered.reduce((sum, r) => sum + getRowCreditReceipt(r.raw), 0);
+    const homeDeliveryTotal = filtered.reduce((sum, r) => sum + getRowHomeDeliveryAmount(r.raw), 0);
+    const netTotal = filtered.reduce((s, r) => s + ((r.retailScanAmount || 0) - (r.totalExpense || 0)), 0);
+
+    const expenseTotal = filtered.reduce((s, r) => s + (r.totalExpense || 0), 0);
+    const gpayTotal = filtered.reduce((sum, r) => sum + getRowTotalGpay(r.raw), 0);
+    const phonepeTotal = filtered.reduce((sum, r) => sum + getRowTotalPhonePe(r.raw), 0);
+    const paytmTotal = filtered.reduce((sum, r) => sum + getRowTotalPaytm(r.raw), 0);
+    const cardTotal = filtered.reduce((sum, r) => sum + getRowTotalCard(r.raw), 0);
+    const cashTotal = filtered.reduce((sum, r) => sum + getRowTotalCash(r.raw), 0);
+    const voidTotal = filtered.reduce((sum, r) => sum + getRowVoidSale(r.raw), 0);
+    const diffTotal = filtered.reduce((sum, r) => sum + getRowTotalDiff(r.raw), 0);
+
+    return {
+      daysCount: uniqueDates.size,
+      totalCount,
+      retailScan: {
+        total: retailScanTotal,
+        avg: totalCount > 0 ? Math.round(retailScanTotal / dateDivisor) : 0,
+      },
+      wholesale: {
+        total: wholesaleTotal,
+        avg: totalCount > 0 ? Math.round(wholesaleTotal / dateDivisor) : 0,
+      },
+      creditReceipt: {
+        total: creditReceiptTotal,
+        avg: totalCount > 0 ? Math.round(creditReceiptTotal / dateDivisor) : 0,
+      },
+      homeDelivery: {
+        total: homeDeliveryTotal,
+        avg: totalCount > 0 ? Math.round(homeDeliveryTotal / dateDivisor) : 0,
+      },
+      net: {
+        total: netTotal,
+        avg: totalCount > 0 ? Math.round(netTotal / dateDivisor) : 0,
+      },
+      expense: {
+        total: expenseTotal,
+        avg: totalCount > 0 ? Math.round(expenseTotal / dateDivisor) : 0,
+      },
+      gpay: {
+        total: gpayTotal,
+        avg: totalCount > 0 ? Math.round(gpayTotal / dateDivisor) : 0,
+      },
+      phonepe: {
+        total: phonepeTotal,
+        avg: totalCount > 0 ? Math.round(phonepeTotal / dateDivisor) : 0,
+      },
+      paytm: {
+        total: paytmTotal,
+        avg: totalCount > 0 ? Math.round(paytmTotal / dateDivisor) : 0,
+      },
+      card: {
+        total: cardTotal,
+        avg: totalCount > 0 ? Math.round(cardTotal / dateDivisor) : 0,
+      },
+      cash: {
+        total: cashTotal,
+        avg: totalCount > 0 ? Math.round(cashTotal / dateDivisor) : 0,
+      },
+      void: {
+        total: voidTotal,
+        avg: totalCount > 0 ? Math.round(voidTotal / dateDivisor) : 0,
+      },
+      diff: {
+        total: diffTotal,
+        avg: totalCount > 0 ? Math.round(diffTotal / dateDivisor) : 0,
+      },
+    };
+  }, [filtered]);
+
   return (
     <div className="space-y-5">
       {/* ── Paytm-Style Mobile Form Action Card (< 768px) ── */}
@@ -484,14 +563,27 @@ export default function CounterPage({ onClose }: CounterPageProps) {
 
       {/* ── Summary Cards (Over table) ── */}
       {isModifyAllowed && (
-        <div className="space-y-4">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Summary & Average
+            </span>
+            <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full border border-gray-200">
+              Average calculated for {summaryStats.daysCount} date{summaryStats.daysCount !== 1 ? 's' : ''} ({summaryStats.totalCount} record{summaryStats.totalCount !== 1 ? 's' : ''})
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 font-sans">
             {/* 1. Retail Scan Amount */}
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Retail Scan Amount</p>
                 <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((s, r) => s + r.retailScanAmount, 0))}
+                  {fmt(summaryStats.retailScan.total)}
+                </div>
+                <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
+                  <span className="text-gray-400">Avg / Day:</span>
+                  <span className="font-bold text-slate-700">{fmt(summaryStats.retailScan.avg)}</span>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2a5298] flex items-center justify-center shrink-0 border border-blue-100">
@@ -504,7 +596,11 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Wholesale Amount</p>
                 <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((s, r) => s + (Number(r.raw.ws_cash_billing_amount) || 0), 0))}
+                  {fmt(summaryStats.wholesale.total)}
+                </div>
+                <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
+                  <span className="text-gray-400">Avg / Day:</span>
+                  <span className="font-bold text-green-800">{fmt(summaryStats.wholesale.avg)}</span>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0 border border-green-100">
@@ -517,7 +613,11 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Credit Receipt</p>
                 <div className="text-xl font-bold text-teal-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((sum, r) => sum + getRowCreditReceipt(r.raw), 0))}
+                  {fmt(summaryStats.creditReceipt.total)}
+                </div>
+                <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
+                  <span className="text-gray-400">Avg / Day:</span>
+                  <span className="font-bold text-teal-800">{fmt(summaryStats.creditReceipt.avg)}</span>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
@@ -530,7 +630,11 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Home Delivery Amount</p>
                 <div className="text-xl font-bold text-amber-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((sum, r) => sum + getRowHomeDeliveryAmount(r.raw), 0))}
+                  {fmt(summaryStats.homeDelivery.total)}
+                </div>
+                <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
+                  <span className="text-gray-400">Avg / Day:</span>
+                  <span className="font-bold text-amber-800">{fmt(summaryStats.homeDelivery.avg)}</span>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-100">
@@ -543,7 +647,11 @@ export default function CounterPage({ onClose }: CounterPageProps) {
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Net Total</p>
                 <div className="text-xl font-bold text-emerald-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                  {fmt(filtered.reduce((s, r) => s + (r.retailScanAmount - r.totalExpense), 0))}
+                  {fmt(summaryStats.net.total)}
+                </div>
+                <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
+                  <span className="text-gray-400">Avg / Day:</span>
+                  <span className="font-bold text-emerald-800">{fmt(summaryStats.net.avg)}</span>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
@@ -558,7 +666,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Expense</span>
               <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
+                {fmt(summaryStats.expense.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-rose-700">{fmt(summaryStats.expense.avg)}</span>
               </div>
             </div>
 
@@ -566,7 +677,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total GPay</span>
               <div className="text-base font-bold text-blue-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalGpay(r.raw), 0))}
+                {fmt(summaryStats.gpay.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-blue-800">{fmt(summaryStats.gpay.avg)}</span>
               </div>
             </div>
 
@@ -574,7 +688,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total PhonePe</span>
               <div className="text-base font-bold text-purple-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalPhonePe(r.raw), 0))}
+                {fmt(summaryStats.phonepe.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-purple-800">{fmt(summaryStats.phonepe.avg)}</span>
               </div>
             </div>
 
@@ -582,7 +699,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Paytm</span>
               <div className="text-base font-bold text-cyan-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalPaytm(r.raw), 0))}
+                {fmt(summaryStats.paytm.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-cyan-800">{fmt(summaryStats.paytm.avg)}</span>
               </div>
             </div>
 
@@ -590,7 +710,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Card</span>
               <div className="text-base font-bold text-indigo-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalCard(r.raw), 0))}
+                {fmt(summaryStats.card.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-indigo-800">{fmt(summaryStats.card.avg)}</span>
               </div>
             </div>
 
@@ -598,7 +721,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Cash</span>
               <div className="text-base font-bold text-emerald-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalCash(r.raw), 0))}
+                {fmt(summaryStats.cash.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-emerald-800">{fmt(summaryStats.cash.avg)}</span>
               </div>
             </div>
 
@@ -606,7 +732,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total void</span>
               <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowVoidSale(r.raw), 0))}
+                {fmt(summaryStats.void.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-rose-700">{fmt(summaryStats.void.avg)}</span>
               </div>
             </div>
 
@@ -614,7 +743,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Diff</span>
               <div className="text-base font-bold text-slate-800 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-                {fmt(filtered.reduce((sum, r) => sum + getRowTotalDiff(r.raw), 0))}
+                {fmt(summaryStats.diff.total)}
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
+                Avg: <span className="font-bold text-slate-700">{fmt(summaryStats.diff.avg)}</span>
               </div>
             </div>
           </div>
