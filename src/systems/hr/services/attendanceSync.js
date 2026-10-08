@@ -168,7 +168,6 @@ const calculateWorkHoursFromTimes = (inStr, outStr, dateContext = "") => {
   }
 };
 
-/**
 export const syncDeviceLogsToSupabase = async (month, year, device) => {
     const startDay = '01';
     const endDay = getDaysInMonth(month, year);
@@ -236,6 +235,18 @@ export const syncDeviceLogsToSupabase = async (month, year, device) => {
         grouped[key].punches.push(p.LogDate);
     });
 
+    const { data: existingRows } = await supabase
+        .from('hr_management_attendance_logs')
+        .select('*')
+        .gte('attendance_date', fromDate)
+        .lte('attendance_date', toDate);
+
+    const existingMap = new Map();
+    (existingRows || []).forEach(r => {
+        const k = `${String(r.employee_id).trim().toLowerCase()}_${r.attendance_date}`;
+        existingMap.set(k, r);
+    });
+
     const formatTimeISTStr = (timeStr) => {
         if (!timeStr) return '-';
         try {
@@ -258,6 +269,24 @@ export const syncDeviceLogsToSupabase = async (month, year, device) => {
         const outTimeRaw = item.punches.length > 1 ? item.punches[item.punches.length - 1] : item.punches[0];
         const formattedPunches = item.punches.map(p => formatTimeISTStr(p)).join(' | ');
 
+        const existingRec = existingMap.get(`${cleanEmpKey}_${item.date}`);
+        const isManual = existingRec && existingRec.manual_punches && (
+            existingRec.manual_punches.is_manual === true ||
+            existingRec.manual_punches.manual_override === true ||
+            existingRec.manual_punches.absent === true ||
+            existingRec.manual_punches.manual?.is_manual === true ||
+            existingRec.manual_punches.manual?.absent === true ||
+            ['Absent', 'Half Day', 'Weekly Off', 'Day Off', 'On Leave'].includes(existingRec.status)
+        );
+
+        if (isManual) {
+            return {
+                ...existingRec,
+                punch_log: existingRec.punch_log || formattedPunches,
+                updated_at: new Date().toISOString()
+            };
+        }
+
         let workHoursStr = '00:00:00';
         if (item.punches.length > 1) {
             const d1 = new Date(inTimeRaw.replace(/-/g, '/'));
@@ -271,11 +300,15 @@ export const syncDeviceLogsToSupabase = async (month, year, device) => {
             }
         }
 
+        const lateMins = calculateLateMinutes(inTimeRaw);
+        const derivedStatus = lateMins > 0 ? 'Late' : 'Present';
+
         return {
             employee_id: item.empId,
             employee_name: empInfo.name,
             attendance_date: item.date,
-            status: 'Present',
+            status: derivedStatus,
+            late_minute: lateMins,
             in_time: inTimeRaw.replace(' ', 'T'),
             out_time: outTimeRaw.replace(' ', 'T'),
             working_hour: workHoursStr,
