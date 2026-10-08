@@ -50,6 +50,45 @@ const AttendanceMonthly = () => {
         "July", "August", "September", "October", "November", "December"
     ];
 
+const resolveEmployeeProfile = (empOrCode, employeesData = []) => {
+    if (!empOrCode) return null;
+    const targetId = String(typeof empOrCode === 'object' ? (empOrCode.employee_id || empOrCode.employeeCode || empOrCode.id || '') : empOrCode).trim().toLowerCase();
+    const targetIdClean = targetId.replace(/^0+/, '');
+    const targetName = String(typeof empOrCode === 'object' ? (empOrCode.name || empOrCode.employeeName || empOrCode.user_name || empOrCode.name_as_per_aadhar || '') : '').trim().toLowerCase();
+
+    return (employeesData || []).find(e => {
+        const eEmpId = String(e.employee_id || e.employee_code || e.code || '').trim().toLowerCase();
+        const eEmpIdClean = eEmpId.replace(/^0+/, '');
+        const eId = String(e.id || '').trim().toLowerCase();
+        const eName = String(e.name_as_per_aadhar || e.user_name || e.name || '').trim().toLowerCase();
+
+        if (targetId && eEmpId && (targetId === eEmpId || targetIdClean === eEmpIdClean)) return true;
+        if (targetId && eId && targetId === eId) return true;
+        if (targetName && eName && (targetName === eName || targetName.includes(eName) || eName.includes(targetName))) return true;
+        return false;
+    }) || null;
+};
+
+const getEmployeePhoto = (empOrCode, employeesData = []) => {
+    if (!empOrCode) return null;
+    if (typeof empOrCode === 'object') {
+        const directPhoto = empOrCode.candidate_photo || empOrCode.candidatePhoto || empOrCode.photo_url || empOrCode.photo || empOrCode.avatar_url || empOrCode.avatar || empOrCode.profile_photo || empOrCode.image_url || empOrCode.image || empOrCode.HR_SYSTEM_employee_data?.candidate_photo || empOrCode.details?.candidate_photo;
+        if (directPhoto && typeof directPhoto === 'string' && directPhoto.trim().length > 0) {
+            return directPhoto.trim();
+        }
+    }
+
+    const profile = resolveEmployeeProfile(empOrCode, employeesData);
+    if (profile) {
+        const details = profile.HR_SYSTEM_employee_data || profile.details || {};
+        const p = profile.candidate_photo || profile.candidatePhoto || profile.photo_url || profile.photo || profile.avatar_url || profile.avatar || profile.profile_photo || profile.image_url || profile.image || details.candidate_photo || details.candidatePhoto || details.photo_url || details.photo;
+        if (p && typeof p === 'string' && p.trim().length > 0) {
+            return p.trim();
+        }
+    }
+    return null;
+};
+
 const parseDateTimeHelper = (str, dateStr = '') => {
     if (!str || str === '-') return null;
     if (str.includes('T')) return new Date(str);
@@ -209,6 +248,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 const empDojStr = dojMap[empKey] || dojMap[String(empId).trim().toLowerCase().replace(/^0+/, '')] || null;
 
                 let presentCount = 0;
+                let halfDayCount = 0;
                 let lateCount = 0;
                 let weeklyOffCount = 0;
                 let dayOffCount = 0;
@@ -268,20 +308,29 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     }
 
                     let status = att?.status;
+                    const statusLower = String(status || '').toLowerCase().trim();
+                    const isExplicitHalfDay = statusLower === 'half day' || statusLower === 'hd';
                     const hasPunches = Boolean(inTime || outTime || (att?.punch_log && att.punch_log !== '-'));
                     const isLate = Boolean((att?.late_minutes && att.late_minutes > 0) || (att?.late_minute && att.late_minute > 0) || status === 'Late');
-                    const isHoliday = !!holidayMap[dateStr];
+                    const isHoliday = Boolean(holidayMap[dateStr]);
 
                     if (isHoliday) {
                         holidayCount++;
                         if (hasPunches) {
-                            status = isLate ? 'Late' : 'Present';
-                            presentCount++;
+                            status = isLate ? 'Late' : (isExplicitHalfDay ? 'Half Day' : 'Present');
+                            if (isExplicitHalfDay) {
+                                halfDayCount++;
+                            } else {
+                                presentCount++;
+                            }
                             if (isLate) lateCount++;
                         } else {
                             status = 'HOLIDAY';
                             unpunchedHolidayCount++;
                         }
+                    } else if (isExplicitHalfDay) {
+                        halfDayCount++;
+                        if (isLate) lateCount++;
                     } else if (hasPunches) {
                         status = isLate ? 'Late' : 'Present';
                         presentCount++;
@@ -340,7 +389,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     totalWorkSecs += dayWorkSec;
                 }
 
-                const absentCount = Math.max(0, effectiveDays - presentCount - unpunchedHolidayCount - weeklyOffCount - dayOffCount);
+                const absentCount = Math.max(0, effectiveDays - presentCount - halfDayCount - unpunchedHolidayCount - weeklyOffCount - dayOffCount);
 
                 aggregatedList.push({
                     month: monthNames[selectedMonth - 1],
@@ -352,6 +401,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     deviceId: deviceId,
                     serialNo: serialNo,
                     presentDays: presentCount,
+                    halfDayDays: halfDayCount,
                     absentDays: absentCount,
                     lateDays: lateCount,
                     weeklyOffDays: weeklyOffCount,
@@ -518,25 +568,28 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
             });
 
         // 2. If showing verified or all (matchFilter is not UNMATCHED), append remaining employees from employees table
+        let combined = baseList;
         if (matchFilter !== 'UNMATCHED') {
             const hasAttendance = (empId) => {
-                return attendanceData.some(item => item.employeeCode === empId);
+                const cleanEmpId = String(empId || '').trim().toLowerCase();
+                return attendanceData.some(item => String(item.employeeCode || '').trim().toLowerCase() === cleanEmpId);
             };
 
             const remaining = employeesData
                 .filter(emp => {
                     const name = emp.user_name || emp.name_as_per_aadhar || '';
                     const id = emp.employee_id || emp.id || '';
-                    if (!id && !name) return false;
+                    const cleanId = String(id).trim().toLowerCase();
+                    if (!cleanId && !name) return false;
 
-                    if (isEmpInactive(id, name)) return false;
+                    if (isEmpInactive(cleanId, name)) return false;
 
                     // Exclude if already in attendanceData (meaning they have monthly records)
-                    if (hasAttendance(id)) return false;
+                    if (hasAttendance(cleanId)) return false;
 
                     // Apply search filter
                     const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        cleanId.includes(searchTerm.toLowerCase()) ||
                         (emp.joining_place || emp.store_name || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
                         (emp.designation || '').toString().toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -561,8 +614,8 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     return {
                         year: selectedYear,
                         month: monthNames[selectedMonth - 1],
-                        employeeCode: emp.employee_id || emp.id,
-                        employeeName: emp.user_name || emp.name_as_per_aadhar || 'Employee',
+                        employeeCode: String(emp.employee_id || emp.id || '').trim(),
+                        employeeName: emp.name_as_per_aadhar || emp.user_name || 'Employee',
                         designation: emp.designation || '-',
                         storeName: emp.joining_place || '-',
                         deviceId: '-',
@@ -581,10 +634,21 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     };
                 });
 
-            return [...baseList, ...remaining];
+            combined = [...baseList, ...remaining];
         }
 
-        return baseList;
+        // Deduplicate strictly by normalized ID
+        const seenCodes = new Set();
+        const uniqueFiltered = [];
+        for (const item of combined) {
+            const cleanCode = String(item.employeeCode || '').trim().toLowerCase();
+            if (cleanCode && !seenCodes.has(cleanCode)) {
+                seenCodes.add(cleanCode);
+                uniqueFiltered.push(item);
+            }
+        }
+
+        return uniqueFiltered;
     })();
 
     // Apply monthly status filter
@@ -617,8 +681,9 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
             'Store Name': item.storeName,
             'Device ID': item.deviceId,
             'Serial NO': item.serialNo,
-            'Payable Days': (item.presentDays || 0) + (item.unpunchedHolidayDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0),
+            'Payable Days': (item.presentDays || 0) + ((item.halfDayDays || 0) * 0.5) + (item.unpunchedHolidayDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0),
             'Present': item.presentDays,
+            'Half Day': item.halfDayDays || 0,
             'Weekly Off': item.weeklyOffDays || 0,
             'Day Off': item.dayOffDays || 0,
             'Absent': item.absentDays,
@@ -800,8 +865,9 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                 <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-32 min-w-[120px] z-10">Store</th>
                                 <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-28 min-w-[100px] z-10">Device ID</th>
                                 <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-36 min-w-[130px] z-10">Serial No</th>
-                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-20 min-w-[70px] z-10" title="Present Days + Weekly Off + Day Off">Payable</th>
+                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-20 min-w-[70px] z-10" title="Present Days + (Half Day * 0.5) + Weekly Off + Day Off">Payable</th>
                                 <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-16 min-w-[60px] z-10">Present</th>
+                                <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-14 min-w-[50px] z-10">HD</th>
                                 <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-14 min-w-[50px] z-10">WO</th>
                                 <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-14 min-w-[50px] z-10">DO</th>
                                 <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-16 min-w-[60px] z-10">Absent</th>
@@ -836,9 +902,9 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                 paginatedData.map((item, index) => {
                                     const isInEmployeesTable = isEmployeeInTable(item.employeeCode);
                                     const actualIndex = (activePage - 1) * pageSize + index;
-                                    const employeeProfile = employeesData.find(e => e.employee_id === item.employeeCode || e.id === item.employeeCode);
-                                    const candidatePhoto = employeeProfile?.candidate_photo;
-                                    const payableDays = (item.presentDays || 0) + (item.unpunchedHolidayDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0);
+                                    const employeeProfile = resolveEmployeeProfile(item, employeesData);
+                                    const candidatePhoto = getEmployeePhoto(item, employeesData);
+                                    const payableDays = (item.presentDays || 0) + ((item.halfDayDays || 0) * 0.5) + (item.unpunchedHolidayDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0);
                                     return (
                                         <tr
                                             key={index}
@@ -887,13 +953,18 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                             <td className="px-2 py-1.5 text-[10px] font-mono text-gray-500">{item.deviceId || '-'}</td>
                                             <td className="px-2 py-1.5 text-[10px] font-mono text-gray-500">{item.serialNo || '-'}</td>
                                             <td className="px-2 py-1.5 text-center">
-                                                <span className="inline-flex px-1.5 py-0.5 bg-cyan-100 text-cyan-800 rounded text-[10px] font-bold" title="Payable Days (Present + WO + DO)">
+                                                <span className="inline-flex px-1.5 py-0.5 bg-cyan-100 text-cyan-800 rounded text-[10px] font-bold" title="Payable Days (Present + 0.5*HD + WO + DO)">
                                                     {payableDays}
                                                 </span>
                                             </td>
                                             <td className="px-2 py-1.5 text-center">
                                                 <span className="inline-flex px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">
                                                     {item.presentDays}
+                                                </span>
+                                            </td>
+                                            <td className="px-2 py-1.5 text-center">
+                                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] ${item.halfDayDays > 0 ? 'bg-yellow-100 text-yellow-800 font-bold' : 'text-slate-400 font-medium'}`}>
+                                                    {item.halfDayDays || 0}
                                                 </span>
                                             </td>
                                             <td className="px-2 py-1.5 text-center text-[10px] text-indigo-600 font-semibold">{item.weeklyOffDays || 0}</td>

@@ -456,7 +456,7 @@ const Roster = () => {
             const [{ data, error }, { data: usersData }] = await Promise.all([
                 supabase
                     .from('hr_management_employees')
-                    .select('id, employee_id, name_as_per_aadhar, designation, status, joining_place, candidate_photo, date_of_joining')
+                    .select('*')
                     .eq('status', 'Active')
                     .order('name_as_per_aadhar'),
                 supabase
@@ -483,7 +483,18 @@ const Roster = () => {
                 }
             });
 
-            const activeEmployees = (data || []).filter(emp => {
+            const mapped = (data || []).map(emp => {
+                const details = emp.HR_SYSTEM_employee_data || emp.details || {};
+                const photo = emp.candidate_photo || emp.candidatePhoto || emp.photo_url || emp.photo || emp.avatar_url || emp.avatar || emp.profile_photo || emp.image_url || emp.image || details.candidate_photo || details.candidatePhoto || details.photo_url || null;
+                return {
+                    ...emp,
+                    ...details,
+                    candidate_photo: photo,
+                    photo_url: photo
+                };
+            });
+
+            const activeEmployees = mapped.filter(emp => {
                 const cleanId = (emp.employee_id || emp.id || '').toString().trim().toLowerCase();
                 const cleanName = (emp.name_as_per_aadhar || '').toString().trim().toLowerCase();
                 if (cleanId && inactiveEmpIds.has(cleanId)) return false;
@@ -3018,6 +3029,7 @@ const Roster = () => {
                 const dayRows = [];
                 let totalPresent = 0;
                 let totalAbsent = 0;
+                let totalHalfDay = 0;
                 let totalLate = 0;
                 let totalWeeklyOff = 0;
                 let totalDayOff = 0;
@@ -3213,7 +3225,9 @@ const Roster = () => {
                             status = 'Absent';
                         }
 
-                        if (status === 'Present' || status === 'Late' || status === 'Half Day') {
+                        if (status === 'Half Day' || status === 'HD') {
+                            totalHalfDay++;
+                        } else if (status === 'Present' || status === 'Late') {
                             totalPresent++;
                             if (lateMins > 0 || status === 'Late') {
                                 totalLate++;
@@ -3281,11 +3295,13 @@ const Roster = () => {
                     });
                 }
 
+                const totalWorkedDaysCount = totalPresent + totalHalfDay;
                 const totalWorkHrsDec = totalWorkMs / (3600 * 1000);
-                const avgWorkHrsDec = totalPresent > 0 ? (totalWorkHrsDec / totalPresent).toFixed(1) : '0.0';
+                const avgWorkHrsDec = totalWorkedDaysCount > 0 ? (totalWorkHrsDec / totalWorkedDaysCount).toFixed(1) : '0.0';
                 const totalWorkHrsInt = Math.floor(totalWorkHrsDec);
                 const totalWorkMinsInt = Math.round((totalWorkHrsDec - totalWorkHrsInt) * 60);
                 const totalWorkFormatted = `${totalWorkHrsInt}h ${totalWorkMinsInt}m`;
+                const totalPayableDays = totalPresent + (totalHalfDay * 0.5) + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff;
 
                 return (
                     <div
@@ -3420,18 +3436,22 @@ const Roster = () => {
                                 </div>
 
                                 {/* Summary Stat Cards */}
-                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-4 pt-4 border-t border-white/10">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mt-4 pt-4 border-t border-white/10">
                                     <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
                                         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
                                         <p className="text-base font-bold text-white mt-0.5">{workingDaysCount}</p>
                                     </div>
                                     <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
                                         <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
-                                        <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPresent + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff}</p>
+                                        <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPayableDays}</p>
                                     </div>
                                     <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
                                         <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
                                         <p className="text-base font-bold text-emerald-400 mt-0.5">{totalPresent}</p>
+                                    </div>
+                                    <div className="bg-yellow-500/10 rounded-xl p-2 border border-yellow-500/20 text-center">
+                                        <p className="text-[10px] font-medium text-yellow-300 uppercase tracking-wider">Half Day</p>
+                                        <p className="text-base font-bold text-yellow-400 mt-0.5">{totalHalfDay}</p>
                                     </div>
                                     <div className="bg-red-500/10 rounded-xl p-2 border border-red-500/20 text-center">
                                         <p className="text-[10px] font-medium text-red-300 uppercase tracking-wider">Absent</p>

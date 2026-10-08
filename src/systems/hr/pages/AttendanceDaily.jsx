@@ -84,6 +84,46 @@ const parseDojToYYYYMMDD = (rawDoj) => {
 // IST Timezone offset (UTC+5:30)
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 
+// Robust helper to resolve matching employee profile from hr_management_employees cache
+const resolveEmployeeProfile = (emp, employeesData = []) => {
+  if (!emp) return null;
+  const targetId = String(emp.employee_id || emp.id || emp.code || emp.employeeCode || '').trim().toLowerCase();
+  const targetIdClean = targetId.replace(/^0+/, '');
+  const targetName = String(emp.name || emp.user_name || emp.name_as_per_aadhar || emp.employeeName || '').trim().toLowerCase();
+
+  return (employeesData || []).find(e => {
+    const eEmpId = String(e.employee_id || e.employee_code || e.code || '').trim().toLowerCase();
+    const eEmpIdClean = eEmpId.replace(/^0+/, '');
+    const eId = String(e.id || '').trim().toLowerCase();
+    const eName = String(e.name_as_per_aadhar || e.user_name || e.name || '').trim().toLowerCase();
+
+    if (targetId && eEmpId && (targetId === eEmpId || targetIdClean === eEmpIdClean)) return true;
+    if (targetId && eId && targetId === eId) return true;
+    if (targetName && eName && (targetName === eName || targetName.includes(eName) || eName.includes(targetName))) return true;
+    return false;
+  }) || null;
+};
+
+// Robust helper to resolve employee photo / candidate_photo from all possible properties
+const getEmployeePhoto = (emp, employeesData = []) => {
+  if (!emp) return null;
+  const directPhoto = emp.candidate_photo || emp.candidatePhoto || emp.photo_url || emp.photo || emp.avatar_url || emp.avatar || emp.profile_photo || emp.image_url || emp.image || emp.HR_SYSTEM_employee_data?.candidate_photo || emp.HR_SYSTEM_employee_data?.candidatePhoto || emp.details?.candidate_photo || emp.details?.photo_url;
+  if (directPhoto && typeof directPhoto === 'string' && directPhoto.trim().length > 0) {
+    return directPhoto.trim();
+  }
+
+  const profile = resolveEmployeeProfile(emp, employeesData);
+  if (profile) {
+    const details = profile.HR_SYSTEM_employee_data || profile.details || {};
+    const p = profile.candidate_photo || profile.candidatePhoto || profile.photo_url || profile.photo || profile.avatar_url || profile.avatar || profile.profile_photo || profile.image_url || profile.image || details.candidate_photo || details.candidatePhoto || details.photo_url || details.photo;
+    if (p && typeof p === 'string' && p.trim().length > 0) {
+      return p.trim();
+    }
+  }
+
+  return null;
+};
+
 // Format to ISO string in its original timezone (no offset)
 const formatToISTISOString = (timeStr) => {
   if (!timeStr || timeStr === '-') return null;
@@ -330,16 +370,21 @@ const AttendanceDaily = () => {
   });
 
   const openPreviewWindow = (employee) => {
-    const empProfile = employeesData.find(e =>
-      (e.employee_id && (String(e.employee_id) === String(employee.id) || String(e.employee_id) === String(employee.employee_id))) ||
-      (e.id && (String(e.id) === String(employee.id) || String(e.id) === String(employee.employee_id)))
-    );
+    const empProfile = resolveEmployeeProfile(employee, employeesData);
+    const details = empProfile?.HR_SYSTEM_employee_data || empProfile?.details || {};
+    const photo = getEmployeePhoto(employee, employeesData);
     const resolvedEmpId = employee.employee_id || empProfile?.employee_id || employee.id || empProfile?.id;
+    const resolvedName = employee.name || empProfile?.name_as_per_aadhar || empProfile?.user_name || empProfile?.name;
+
     const enrichedEmp = {
       ...employee,
       ...(empProfile || {}),
+      ...(details || {}),
       id: resolvedEmpId,
       employee_id: resolvedEmpId,
+      name: resolvedName,
+      candidate_photo: photo,
+      photo_url: photo,
       db_id: empProfile?.id || employee.id,
       date_of_joining: empProfile?.date_of_joining || empProfile?.doj || employee?.date_of_joining || employee?.doj
     };
@@ -799,6 +844,24 @@ const AttendanceDaily = () => {
     if (!record) return record;
     let modified = { ...record };
 
+    const isManualRecord = Boolean(
+      modified.manual_punches?.is_manual === true ||
+      modified.manual_punches?.manual_override === true ||
+      modified.manual_punches?.absent === true ||
+      modified.manual_punches?.manual?.is_manual === true ||
+      modified.manual_punches?.manual?.absent === true
+    );
+
+    // If marked absent explicitly (or manual punches has absent: true)
+    if (modified.manual_punches?.absent === true || modified.manual_punches?.manual?.absent === true || (isManualRecord && modified.status === 'Absent')) {
+      modified.status = 'Absent';
+      modified.in_time = '-';
+      modified.out_time = '-';
+      modified.working_hour = '00:00:00';
+      modified.late_minute = 0;
+      return modified;
+    }
+
     // Parse punch log if present
     let punchList = [];
     if (modified.punch_log && modified.punch_log !== '-') {
@@ -807,10 +870,6 @@ const AttendanceDaily = () => {
         .filter(Boolean)
         .map(p => map1130PMTo11PM(p));
     }
-
-
-
-
 
     // Filter valid day punches (>= 9:00 AM) - logs between 12 AM to 9 AM are invalid
     const validDayPunches = punchList.filter(p => !isBefore9AM(p));
@@ -833,15 +892,36 @@ const AttendanceDaily = () => {
         const formattedM = String(m).padStart(2, '0');
         modified.in_time = `${modified.attendance_date}T${formattedH}:${formattedM}:00`;
       }
-      if (modified.status === 'Absent' || !modified.status) {
-        modified.status = 'Present';
-      }
     } else if (modified.in_time && modified.in_time !== '-') {
       if (isBefore9AM(modified.in_time)) {
         modified.in_time = '-';
-        modified.status = 'Absent';
-      } else if (modified.status === 'Absent' || !modified.status) {
-        modified.status = 'Present';
+        if (!isManualRecord) modified.status = 'Absent';
+      }
+    }
+
+    // Calculate late minutes if in_time exists
+    if (modified.in_time && modified.in_time !== '-') {
+      const computedLate = calculateLateMinutes(modified.in_time, modified.attendance_date);
+      if (modified.late_minute === undefined || modified.late_minute === null || !isManualRecord) {
+        modified.late_minute = computedLate;
+      }
+    } else {
+      modified.late_minute = 0;
+    }
+
+    // Set status for worked records (preserving custom/manual statuses like Half Day, Weekly Off, Day Off, On Leave, Holiday)
+    const customStatuses = ['Half Day', 'Weekly Off', 'Day Off', 'On Leave', 'Holiday', 'HOLIDAY'];
+    if (!isManualRecord) {
+      if (!customStatuses.includes(modified.status)) {
+        if (modified.in_time && modified.in_time !== '-') {
+          modified.status = (modified.late_minute > 0) ? 'Late' : 'Present';
+        } else {
+          modified.status = modified.status || 'Absent';
+        }
+      }
+    } else if (modified.status === 'Present' || modified.status === 'Late') {
+      if (modified.late_minute > 0 && modified.status !== 'Present') {
+        modified.status = 'Late';
       }
     }
 
@@ -1005,10 +1085,19 @@ const AttendanceDaily = () => {
 
       const rows = aggregatedData.map(item => {
         const existing = existingLogs?.find(
-          r => String(r.employee_id).trim() === String(item.EmployeeID).trim() && r.attendance_date === item.Date
+          r => String(r.employee_id).trim().toLowerCase() === String(item.EmployeeID).trim().toLowerCase() && r.attendance_date === item.Date
         );
 
-        if (existing && existing.manual_punches && (existing.manual_punches.is_manual === true || existing.manual_punches.manual_override === true)) {
+        const isExistingManual = existing && existing.manual_punches && (
+          existing.manual_punches.is_manual === true ||
+          existing.manual_punches.manual_override === true ||
+          existing.manual_punches.absent === true ||
+          existing.manual_punches.manual?.is_manual === true ||
+          existing.manual_punches.manual?.absent === true ||
+          ['Absent', 'Half Day', 'Weekly Off', 'Day Off', 'On Leave'].includes(existing.status)
+        );
+
+        if (isExistingManual) {
           return {
             employee_id: existing.employee_id,
             employee_name: existing.employee_name,
@@ -1026,8 +1115,8 @@ const AttendanceDaily = () => {
             status: existing.status,
             standard_lunch: existing.standard_lunch,
             waste_time: existing.waste_time,
-            punch_log: item.PunchLog, // update to latest API logs
-            punch_log_status: item.PunchLogStatus, // update to latest API logs
+            punch_log: existing.punch_log || item.PunchLog,
+            punch_log_status: existing.punch_log_status || item.PunchLogStatus,
             punch_miss: existing.punch_miss,
             punch_miss_msg: existing.punch_miss_msg,
             manual_punches: existing.manual_punches,
@@ -1055,6 +1144,9 @@ const AttendanceDaily = () => {
           });
         }
 
+        const computedLate = item.LateMinute !== undefined ? item.LateMinute : calculateLateMinutes(item.InTime, item.Date);
+        const derivedStatus = item.Status || (computedLate > 0 ? 'Late' : 'Present');
+
         return {
           employee_id: item.EmployeeID,
           employee_name: item.EmployeeName,
@@ -1068,8 +1160,8 @@ const AttendanceDaily = () => {
           out_time: formatToISTISOString(item.OutTime),
           working_hour: item.WorkingHour,
           overtime: item.Overtime,
-          late_minute: item.LateMinute,
-          status: item.Status,
+          late_minute: computedLate,
+          status: derivedStatus,
           standard_lunch: item.StandardLunch,
           waste_time: item.WasteTime,
           punch_log: item.PunchLog,
@@ -1234,12 +1326,23 @@ const AttendanceDaily = () => {
 
       const uniqueEmployees = [
         ...new Map(
-          merged.map(item => [item.employee_id, {
-            id: item.employee_id,
-            name: item.employee_name,
-            designation: item.designation,
-            store_name: item.store_name
-          }])
+          merged.map(item => {
+            const cleanId = String(item.employee_id || '').trim();
+            const matchedProfile = employeesData.find(e =>
+              (e.employee_id && String(e.employee_id).trim().toLowerCase() === cleanId.toLowerCase()) ||
+              (e.id && String(e.id).trim().toLowerCase() === cleanId.toLowerCase())
+            );
+            const resolvedName = matchedProfile ? (matchedProfile.name_as_per_aadhar || matchedProfile.user_name || matchedProfile.name || item.employee_name) : item.employee_name;
+            return [
+              cleanId.toLowerCase(),
+              {
+                id: cleanId,
+                name: (resolvedName && resolvedName !== 'Unknown') ? resolvedName : (item.employee_name || 'Employee'),
+                designation: item.designation || matchedProfile?.designation || matchedProfile?.Designation || '-',
+                store_name: item.store_name || matchedProfile?.joining_place || matchedProfile?.shop_name || '-'
+              }
+            ];
+          }).filter(([k]) => Boolean(k))
         ).values()
       ];
 
@@ -1909,8 +2012,9 @@ const AttendanceDaily = () => {
   // Update attendance status
   const updateAttendanceStatus = async (employeeId, date, newStatus, inTime, outTime, manualPunches) => {
     try {
+      const cleanEmpId = String(employeeId).trim();
       const existingRecord = attendanceData.find(
-        a => a.employee_id === employeeId && a.attendance_date === date
+        a => String(a.employee_id).trim().toLowerCase() === cleanEmpId.toLowerCase() && a.attendance_date === date
       );
 
       const updateData = {
@@ -1918,12 +2022,23 @@ const AttendanceDaily = () => {
         updated_at: new Date()
       };
 
-      if (manualPunches) {
+      const isOffOrLeave = newStatus === 'Absent' || newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off';
+
+      if (isOffOrLeave || manualPunches?.absent) {
+        updateData.status = (newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off') ? newStatus : 'Absent';
+        updateData.in_time = null;
+        updateData.out_time = null;
+        updateData.working_hour = "00:00:00";
+        updateData.late_minute = 0;
+        updateData.is_late = false;
+        updateData.punch_miss = false;
+        updateData.punch_miss_msg = null;
+        updateData.punch_log = "-";
+        updateData.manual_punches = { manual: {}, is_manual: true, manual_override: true, absent: true };
+      } else if (manualPunches) {
         let existingApi = {};
-        if (existingRecord?.manual_punches) {
-          if (existingRecord.manual_punches.api && typeof existingRecord.manual_punches.api === 'object') {
-            existingApi = existingRecord.manual_punches.api;
-          }
+        if (existingRecord?.manual_punches?.api && typeof existingRecord.manual_punches.api === 'object') {
+          existingApi = existingRecord.manual_punches.api;
         }
 
         const finalManualPunches = {
@@ -1944,19 +2059,14 @@ const AttendanceDaily = () => {
           k !== 'manual'
         );
 
-        if (manualPunches.absent) {
-          finalManualPunches.manual.absent = true;
-        } else {
-          manualKeys.forEach(key => {
-            const val = manualPunches[key];
-            if (val !== undefined && val !== null && val !== '') {
-              finalManualPunches.manual[key] = val;
-            }
-          });
-        }
+        manualKeys.forEach(key => {
+          const val = manualPunches[key];
+          if (val !== undefined && val !== null && val !== '') {
+            finalManualPunches.manual[key] = val;
+          }
+        });
 
         // ── Fetch shift roster for this employee on this date ─────────────
-        // Used to calculate late minutes correctly against the assigned shift.
         let shiftEntry = null;
         try {
           const { data: shiftRows } = await supabase
@@ -1973,31 +2083,23 @@ const AttendanceDaily = () => {
 
         let metrics = calculateMetricsFromManualPunches(finalManualPunches.manual, date, shiftEntry);
 
-        if (newStatus === 'Absent' || newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off' || manualPunches.absent) {
-          updateData.status = (newStatus === 'On Leave' || newStatus === 'Weekly Off' || newStatus === 'Day Off') ? newStatus : 'Absent';
-          updateData.in_time = null;
-          updateData.out_time = null;
-          updateData.working_hour = "00:00:00";
-          updateData.late_minute = 0;
-          updateData.is_late = false;
-          updateData.punch_miss = false;
-          updateData.punch_miss_msg = null;
-          updateData.punch_log = "-";
-          updateData.manual_punches = { manual: {}, is_manual: true, absent: true };
-        } else {
-          updateData.manual_punches = finalManualPunches;
-          updateData.in_time = metrics.in_time;
-          updateData.out_time = metrics.out_time;
-          updateData.punch_miss = metrics.punch_miss;
-          updateData.punch_miss_msg = metrics.punch_miss_msg;
-          updateData.working_hour = metrics.working_hour;
-          updateData.late_minute = metrics.late_minute;
-          updateData.standard_lunch = metrics.standard_lunch;
-          updateData.waste_time = metrics.waste_time;
-          updateData.is_late = metrics.late_minute > 0;
-          if (metrics.status) {
-            updateData.status = metrics.status; // 'Present' or 'Late'
-          }
+        updateData.manual_punches = finalManualPunches;
+        updateData.in_time = metrics.in_time;
+        updateData.out_time = metrics.out_time;
+        updateData.punch_miss = metrics.punch_miss;
+        updateData.punch_miss_msg = metrics.punch_miss_msg;
+        updateData.working_hour = metrics.working_hour;
+        updateData.late_minute = metrics.late_minute;
+        updateData.standard_lunch = metrics.standard_lunch;
+        updateData.waste_time = metrics.waste_time;
+        updateData.is_late = metrics.late_minute > 0;
+        
+        // Respect the selected status from the modal
+        updateData.status = newStatus;
+        if (newStatus === 'Present' && metrics.late_minute > 0) {
+          updateData.status = 'Present';
+        } else if (newStatus === 'Late' || (!newStatus && metrics.late_minute > 0)) {
+          updateData.status = 'Late';
         }
 
         if (!existingRecord) {
@@ -2017,9 +2119,10 @@ const AttendanceDaily = () => {
         if (clampedIn || clampedOut) {
           if (clampedIn && clampedOut && clampedIn !== '-' && clampedOut !== '-') {
             updateData.working_hour = calculateWorkHours(clampedIn, clampedOut, date);
-            updateData.late_minute = calculateLateMinutes(clampedIn, date, shiftEntry);
+            updateData.late_minute = calculateLateMinutes(clampedIn, date);
           }
         }
+        updateData.status = newStatus;
       }
 
       let result;
@@ -2035,7 +2138,7 @@ const AttendanceDaily = () => {
         result = data;
       } else {
         const employee = allEmployees.find(
-          e => e.employee_id === employeeId
+          e => String(e.employee_id).trim().toLowerCase() === cleanEmpId.toLowerCase()
         );
         const matchedDevice = DEVICES.find(
           d => d.name.toUpperCase() === (employee?.store_name || '').toUpperCase()
@@ -2062,7 +2165,7 @@ const AttendanceDaily = () => {
         result = data;
       }
 
-      // 1. Await external Google Machine Data Sheet sync directly to ensure 100% data persistence before returning
+      // 1. Fire Google Sheet sync in background without blocking UI
       const changedRow = result?.map(r => ({
         employee_id: r.employee_id,
         employee_name: r.employee_name,
@@ -2074,19 +2177,17 @@ const AttendanceDaily = () => {
       }));
 
       if (changedRow && changedRow.length > 0) {
-        try {
-          await syncToMachineDataSheet(changedRow);
-        } catch (sheetErr) {
-          console.warn('Google Sheet sync notice:', sheetErr);
-        }
+        syncToMachineDataSheet(changedRow).catch(sheetErr => {
+          console.warn('Google Sheet background sync notice:', sheetErr);
+        });
       }
 
-      // 2. Update local attendance state directly (no need to refetch 4500+ month rows from Supabase)
+      // 2. Update local attendance state directly
       if (result && result.length > 0) {
         const updatedRec = normalizeAttendanceRecord(result[0]);
         setAttendanceData(prev => {
-          const cleanEmpId = String(updatedRec.employee_id).trim().toLowerCase();
-          const idx = prev.findIndex(a => a.employee_id && String(a.employee_id).trim().toLowerCase() === cleanEmpId && a.attendance_date === updatedRec.attendance_date);
+          const cleanId = String(updatedRec.employee_id).trim().toLowerCase();
+          const idx = prev.findIndex(a => a.employee_id && String(a.employee_id).trim().toLowerCase() === cleanId && a.attendance_date === updatedRec.attendance_date);
           if (idx !== -1) {
             const copy = [...prev];
             copy[idx] = { ...copy[idx], ...updatedRec };
@@ -2435,15 +2536,43 @@ const AttendanceDaily = () => {
       a => a.employee_id && String(a.employee_id).trim().toLowerCase() === empIdClean && a.attendance_date === date
     );
 
-    const hasPunches = record && Boolean(
-      (record.in_time && record.in_time !== '-') || 
-      (record.out_time && record.out_time !== '-') || 
-      (record.punch_log && record.punch_log !== '-')
-    );
+    if (record) {
+      const isManualAbsent = record.manual_punches?.absent === true ||
+        record.manual_punches?.manual?.absent === true ||
+        (record.manual_punches?.is_manual === true && record.status === 'Absent') ||
+        record.status === 'Absent';
 
-    // If actual biometric/manual punches exist, prioritize the worked attendance (e.g. Present, Late, Half Day)
-    if (record && hasPunches) {
-      return record;
+      if (isManualAbsent) {
+        return {
+          ...record,
+          status: 'Absent',
+          in_time: '-',
+          out_time: '-'
+        };
+      }
+
+      // If it is Half Day, Weekly Off, Day Off, On Leave, Holiday - return as is
+      if (['Half Day', 'Weekly Off', 'Day Off', 'On Leave', 'Holiday', 'HOLIDAY'].includes(record.status)) {
+        return record;
+      }
+
+      const hasPunches = Boolean(
+        (record.in_time && record.in_time !== '-') || 
+        (record.out_time && record.out_time !== '-') || 
+        (record.punch_log && record.punch_log !== '-')
+      );
+
+      if (hasPunches) {
+        // Recalculate late minutes against shift if available
+        const empRoster = getEmployeeRoster(employeeId, date);
+        const liveLate = record.in_time ? calculateLateMinutes(record.in_time, date, empRoster) : (record.late_minute || 0);
+        const derivedStatus = record.status === 'Present' && liveLate > 0 ? 'Late' : (record.status || (liveLate > 0 ? 'Late' : 'Present'));
+        return {
+          ...record,
+          late_minute: liveLate,
+          status: derivedStatus
+        };
+      }
     }
 
     if (empDojStr && date < empDojStr) {
@@ -2464,11 +2593,6 @@ const AttendanceDaily = () => {
         holiday_name: holidayEntry.holiday_name || 'Company Holiday',
         is_holiday: true
       };
-    }
-
-    // If explicit non-absent record exists (e.g. Day Off, Weekly Off)
-    if (record && record.status && record.status !== 'Absent') {
-      return record;
     }
 
     // 3. Check approved leave applications from hr_management_leaves
@@ -2571,14 +2695,19 @@ const AttendanceDaily = () => {
     // 1. Get employees with logs (matched or unmatched)
     const baseList = employees
       .map(emp => {
+        const cleanEmpId = String(emp.id || '').trim().toLowerCase();
         const empProfile = employeesData.find(e =>
-          (e.employee_id && String(e.employee_id) === String(emp.id)) ||
-          (e.id && String(e.id) === String(emp.id))
+          (e.employee_id && String(e.employee_id).trim().toLowerCase() === cleanEmpId) ||
+          (e.id && String(e.id).trim().toLowerCase() === cleanEmpId)
         );
+        const resolvedName = empProfile ? (empProfile.name_as_per_aadhar || empProfile.user_name || empProfile.name || emp.name) : emp.name;
         return {
           ...emp,
-          name: empProfile ? (empProfile.user_name || empProfile.name_as_per_aadhar || emp.name) : emp.name,
-          date_of_joining: empProfile ? (empProfile.date_of_joining || empProfile.doj) : emp.date_of_joining
+          id: String(emp.id || '').trim(),
+          name: (resolvedName && resolvedName !== 'Unknown') ? resolvedName : (emp.name || 'Employee'),
+          date_of_joining: empProfile ? (empProfile.date_of_joining || empProfile.doj) : emp.date_of_joining,
+          designation: empProfile ? (empProfile.designation || empProfile.Designation || emp.designation) : emp.designation,
+          store_name: empProfile ? (empProfile.joining_place || empProfile.shop_name || emp.store_name) : emp.store_name
         };
       })
       .filter(emp => {
@@ -2622,18 +2751,21 @@ const AttendanceDaily = () => {
       });
 
     // 2. If showing verified or all (matchFilter is not UNMATCHED), append remaining employees from users table
+    let combined = baseList;
     if (matchFilter !== 'UNMATCHED') {
       const hasAttendance = (empId) => {
-        return employees.some(e => String(e.id) === String(empId));
+        const cleanEmpId = String(empId || '').trim().toLowerCase();
+        return employees.some(e => String(e.id || '').trim().toLowerCase() === cleanEmpId);
       };
 
       const remaining = employeesData
         .filter(emp => {
           const empId = emp.employee_id || emp.id;
-          const name = emp.user_name || emp.name_as_per_aadhar || '';
+          const cleanEmpId = String(empId || '').trim().toLowerCase();
+          const name = emp.name_as_per_aadhar || emp.user_name || '';
 
           // Exclude inactive employees
-          if (isEmpInactive(empId, name)) return false;
+          if (isEmpInactive(cleanEmpId, name)) return false;
 
           // Exclude if date of joining is in future relative to selectedDate in daily view
           if (viewMode === 'daily' && selectedDate) {
@@ -2645,13 +2777,13 @@ const AttendanceDaily = () => {
           }
 
           // Exclude if already in employees list (meaning they have logs)
-          if (hasAttendance(empId)) return false;
+          if (hasAttendance(cleanEmpId)) return false;
 
           // Remaining employees (no log) are always 'Absent'
           if (statusFilter !== 'ALL' && statusFilter !== 'Absent') return false;
 
           // Apply search term and store filters
-          const id = empId ? String(empId) : '';
+          const id = cleanEmpId;
           const store = emp.shop_name || emp.joining_place || '';
 
           const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -2661,18 +2793,29 @@ const AttendanceDaily = () => {
           return matchesSearch && matchesStore;
         })
         .map(emp => ({
-          id: emp.employee_id || emp.id,
-          name: emp.user_name || emp.name_as_per_aadhar || 'No Name',
+          id: String(emp.employee_id || emp.id || '').trim(),
+          name: emp.name_as_per_aadhar || emp.user_name || 'No Name',
           designation: emp.Designation || emp.designation || '-',
           store_name: emp.shop_name || emp.joining_place || '-',
           date_of_joining: emp.date_of_joining || emp.doj,
           isRemaining: true
         }));
 
-      return [...baseList, ...remaining];
+      combined = [...baseList, ...remaining];
     }
 
-    return baseList;
+    // Deduplicate strictly by normalized ID so an employee ID can never appear twice
+    const seenIds = new Set();
+    const uniqueFiltered = [];
+    for (const emp of combined) {
+      const cleanId = String(emp.id || '').trim().toLowerCase();
+      if (cleanId && !seenIds.has(cleanId)) {
+        seenIds.add(cleanId);
+        uniqueFiltered.push(emp);
+      }
+    }
+
+    return uniqueFiltered;
   })();
 
   const pageSize = 15;
@@ -3088,8 +3231,8 @@ const AttendanceDaily = () => {
                   paginatedEmployees.map((employee, empIdx) => {
                     let presentCount = 0, lateCount = 0, absentCount = 0, halfDayCount = 0;
                     const isInEmployeesTable = isEmployeeInTable(employee.id);
-                    const employeeProfile = employeesData.find(e => e.employee_id === employee.id || e.id === employee.id);
-                    const candidatePhoto = employeeProfile?.candidate_photo || employee.candidate_photo;
+                    const employeeProfile = resolveEmployeeProfile(employee, employeesData);
+                    const candidatePhoto = getEmployeePhoto(employee, employeesData);
                     const employeeRoster = getEmployeeRoster(employee.id, selectedDate);
                     const empDojStr = parseDojToYYYYMMDD(employeeProfile?.date_of_joining || employeeProfile?.doj || employeeProfile?.joining_date || employee.date_of_joining || employee.doj);
 
@@ -3760,8 +3903,8 @@ const AttendanceDaily = () => {
                         );
                       };
 
-                      const employeeProfile = employeesData.find(e => e.employee_id === employee.id);
-                      const candidatePhoto = employeeProfile?.candidate_photo || employee.candidate_photo;
+                      const employeeProfile = resolveEmployeeProfile(employee, employeesData);
+                      const candidatePhoto = getEmployeePhoto(employee, employeesData);
                       const employeeRoster = getEmployeeRoster(employee.id, selectedDate);
 
                       // Calculate valid punch count (filtering out pre-9 AM punches)
@@ -3986,9 +4129,17 @@ const AttendanceDaily = () => {
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b bg-gray-50 text-gray-900">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
-                    {selectedEmployee.name?.charAt(0).toUpperCase() || '?'}
-                  </div>
+                  {getEmployeePhoto(selectedEmployee, employeesData) ? (
+                    <img
+                      src={getEmployeePhoto(selectedEmployee, employeesData)}
+                      alt={selectedEmployee.name}
+                      className="w-10 h-10 rounded-full object-cover border border-gray-200 shadow-sm flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      {selectedEmployee.name?.charAt(0).toUpperCase() || '?'}
+                    </div>
+                  )}
                   <div>
                     <h3 className="font-semibold text-base text-gray-900">{selectedEmployee.name}</h3>
                     <p className="text-xs text-gray-500">ID: {selectedEmployee.id}</p>

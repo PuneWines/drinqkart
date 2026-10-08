@@ -171,6 +171,8 @@ export default function EmployeeOverviewModal({
   }, [isOpen, initialMonth, initialTab]);
 
   useEffect(() => {
+    const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(str || '').trim());
+
     const fetchEmployeeDetails = async () => {
       if (!employee) return;
       const empIdStr = String(employee.employee_id || employee.id || employee.code || '').trim();
@@ -182,11 +184,18 @@ export default function EmployeeOverviewModal({
         const orConditions = [];
         if (empIdStr) {
           orConditions.push(`employee_id.eq.${empIdStr}`);
-          orConditions.push(`employee_id.eq.${empIdStr.replace(/^0+/, '')}`);
-          orConditions.push(`id.eq.${empIdStr}`);
+          const stripped = empIdStr.replace(/^0+/, '');
+          if (stripped && stripped !== empIdStr) {
+            orConditions.push(`employee_id.eq.${stripped}`);
+          }
+          if (isUUID(empIdStr)) {
+            orConditions.push(`id.eq.${empIdStr}`);
+          }
         }
         if (rawDbId) {
-          orConditions.push(`id.eq.${rawDbId}`);
+          if (isUUID(rawDbId)) {
+            orConditions.push(`id.eq.${rawDbId}`);
+          }
           orConditions.push(`employee_id.eq.${rawDbId}`);
         }
         if (empNameStr) {
@@ -197,9 +206,21 @@ export default function EmployeeOverviewModal({
         if (orConditions.length > 0) {
           query = query.or(orConditions.join(','));
         }
-        const { data } = await query.limit(1);
+        const { data, error } = await query.limit(1);
+        if (error) {
+          console.warn('Error fetching employee details:', error);
+        }
         if (data && data.length > 0) {
-          setEmployeeProfile({ ...employee, ...data[0] });
+          const empRec = data[0];
+          const details = empRec.HR_SYSTEM_employee_data || empRec.details || {};
+          const photo = empRec.candidate_photo || empRec.candidatePhoto || empRec.photo_url || empRec.photo || empRec.avatar_url || empRec.avatar || empRec.profile_photo || empRec.image_url || empRec.image || details.candidate_photo || details.candidatePhoto || details.photo_url || details.photo || employee.candidate_photo || employee.candidatePhoto || employee.photo_url;
+          setEmployeeProfile({
+            ...employee,
+            ...empRec,
+            ...details,
+            candidate_photo: photo,
+            photo_url: photo
+          });
         } else {
           setEmployeeProfile(employee);
         }
@@ -475,7 +496,7 @@ export default function EmployeeOverviewModal({
   const activeEmp = employeeProfile || employee;
   const empName = activeEmp?.user_name || activeEmp?.name_as_per_aadhar || activeEmp?.name || activeEmp?.candidate_name || 'Employee';
   const empId = activeEmp?.employee_id || activeEmp?.id || activeEmp?.code || 'N/A';
-  const avatar = activeEmp?.candidate_photo || activeEmp?.photo_url;
+  const avatar = activeEmp?.candidate_photo || activeEmp?.candidatePhoto || activeEmp?.photo_url || activeEmp?.photo || activeEmp?.avatar_url || activeEmp?.avatar || activeEmp?.profile_photo || activeEmp?.image_url || activeEmp?.image || activeEmp?.HR_SYSTEM_employee_data?.candidate_photo || activeEmp?.HR_SYSTEM_employee_data?.candidatePhoto || activeEmp?.details?.candidate_photo || activeEmp?.details?.photo_url;
   const empDesignation = activeEmp?.designation || activeEmp?.Designation || 'Staff';
   const empStore = activeEmp?.joining_place || activeEmp?.shop_name || activeEmp?.store_name || 'MUMBAI';
   const rawDoj = activeEmp?.date_of_joining || activeEmp?.doj || activeEmp?.joining_date;
@@ -493,6 +514,7 @@ export default function EmployeeOverviewModal({
   const dayRows = [];
   let totalPresent = 0;
   let totalAbsent = 0;
+  let totalHalfDay = 0;
   let totalLate = 0;
   let totalWeeklyOff = 0;
   let totalDayOff = 0;
@@ -565,8 +587,7 @@ export default function EmployeeOverviewModal({
       rShiftLower === 'dayoff'
     );
     const isRosterHoliday = hasRoster && (
-      rShiftLower.includes('holiday') ||
-      rShiftLower === 'hd'
+      rShiftLower.includes('holiday')
     );
 
     // Compute lunch break duration dynamically from raw punch_log or manual_punches if not stored
@@ -627,7 +648,7 @@ export default function EmployeeOverviewModal({
     const isExplicitDayOff = statusLower === 'day off' || statusLower === 'do' || statusLower === 'dayoff' || isRosterDayOff;
     const isExplicitOnLeave = statusLower === 'on leave' || statusLower === 'leave';
     const isExplicitHalfDay = statusLower === 'half day' || statusLower === 'hd';
-    const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday' || statusLower === 'hd';
+    const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday';
 
     if (isBeforeJoining) {
       status = '—'; // Employee not joined yet
@@ -657,7 +678,9 @@ export default function EmployeeOverviewModal({
 
       const lateMins = att.late_minutes || 0;
 
-      if (status === 'Present' || status === 'Late' || status === 'Half Day') {
+      if (status === 'Half Day' || status === 'HD') {
+        totalHalfDay++;
+      } else if (status === 'Present' || status === 'Late') {
         totalPresent++;
         if (lateMins > 0 || status === 'Late') {
           totalLate++;
@@ -740,11 +763,13 @@ export default function EmployeeOverviewModal({
     });
   }
 
+  const totalWorkedDaysCount = totalPresent + totalHalfDay;
   const totalWorkHrsDec = totalWorkMs / (3600 * 1000);
-  const avgWorkHrsDec = totalPresent > 0 ? (totalWorkHrsDec / totalPresent).toFixed(1) : '0.0';
+  const avgWorkHrsDec = totalWorkedDaysCount > 0 ? (totalWorkHrsDec / totalWorkedDaysCount).toFixed(1) : '0.0';
   const totalWorkHrsInt = Math.floor(totalWorkHrsDec);
   const totalWorkMinsInt = Math.round((totalWorkHrsDec - totalWorkHrsInt) * 60);
   const totalWorkFormatted = `${totalWorkHrsInt}h ${totalWorkMinsInt}m`;
+  const totalPayableDays = totalPresent + (totalHalfDay * 0.5) + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff;
 
   return (
     <div
@@ -864,18 +889,22 @@ export default function EmployeeOverviewModal({
           </div>
 
           {/* Stat Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-4 pt-4 border-t border-white/10">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mt-4 pt-4 border-t border-white/10">
             <div className="bg-white/5 rounded-xl p-2 border border-white/5 text-center">
               <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Working Days</p>
               <p className="text-base font-bold text-white mt-0.5">{workingDaysCount}</p>
             </div>
             <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
               <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
-              <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPresent + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff}</p>
+              <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPayableDays}</p>
             </div>
             <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
               <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
               <p className="text-base font-bold text-emerald-400 mt-0.5">{totalPresent}</p>
+            </div>
+            <div className="bg-yellow-500/10 rounded-xl p-2 border border-yellow-500/20 text-center">
+              <p className="text-[10px] font-medium text-yellow-300 uppercase tracking-wider">Half Day</p>
+              <p className="text-base font-bold text-yellow-400 mt-0.5">{totalHalfDay}</p>
             </div>
             <div className="bg-red-500/10 rounded-xl p-2 border border-red-500/20 text-center">
               <p className="text-[10px] font-medium text-red-300 uppercase tracking-wider">Absent</p>
