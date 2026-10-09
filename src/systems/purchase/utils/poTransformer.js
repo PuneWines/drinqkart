@@ -7,8 +7,18 @@ export const roundPoBox = (val) => {
 
 export const transformActivePartyItems = (filteredApprovedItems, activeParty) => {
   if (!activeParty) return [];
+  const isKey = typeof activeParty === "string" && activeParty.includes("::");
+  const [targetParty, targetCompany] = isKey ? activeParty.split("::") : [activeParty, ""];
+
   return filteredApprovedItems
-    .filter(item => item.party_name === activeParty)
+    .filter(item => {
+      const pMatch = (item.party_name || "").trim() === (targetParty || "").trim();
+      if (!pMatch) return false;
+      if (!isKey) return true;
+      const itemCompany = (item.company_name || "").trim();
+      const tgtComp = (targetCompany || "").trim();
+      return itemCompany === tgtComp;
+    })
     .map(row => {
       const hasApprovedInDb = row.approved_box !== null && row.approved_box !== undefined;
       const orderBox = row.order_box !== null && row.order_box !== undefined ? parseFloat(row.order_box) : 0;
