@@ -2,23 +2,40 @@ import { supabase } from "../lib/supabase";
 
 export const fetchNextPoNumber = async () => {
   const yr = new Date().getFullYear();
-  const { data, error } = await supabase
-    .from("purchase_purchase_orders")
-    .select("po_number");
-
   let maxSeq = 0;
-  if (!error && data && data.length > 0) {
-    data.forEach((row) => {
-      if (row.po_number) {
-        const parts = row.po_number.split("-");
-        if (parts.length > 1) {
-          const num = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(num) && num > maxSeq) {
-            maxSeq = num;
+  let page = 0;
+  const PAGE_SIZE = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from("purchase_purchase_orders")
+      .select("po_number")
+      .order("created_at", { ascending: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Error fetching purchase orders for sequence:", error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      data.forEach((row) => {
+        if (row.po_number) {
+          const parts = row.po_number.split("-");
+          if (parts.length > 1) {
+            const num = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(num) && num > maxSeq) {
+              maxSeq = num;
+            }
           }
         }
-      }
-    });
+      });
+      page++;
+      if (data.length < PAGE_SIZE) hasMore = false;
+    } else {
+      hasMore = false;
+    }
   }
 
   const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;

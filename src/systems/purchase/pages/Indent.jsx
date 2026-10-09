@@ -7,7 +7,6 @@ import Toast, { useToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
 import useShopStore from "../store/useShopStore";
 import { getInLifecycleItemNames } from "../services/purchaseOrderService";
-import { useAuthStore } from "../store/useAuthStore";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
 const AccordionItem = ({ item, calcs, handleInlineChange }) => {
@@ -123,6 +122,7 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
             <thead className="sticky top-0 bg-white">
               <tr className="border-b border-[#e2e8f0]">
                 <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">Item Name</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">Company Name</th>
                 <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">Party Name</th>
                 <th className="text-right py-2 px-3 text-xs font-semibold text-[#64748b]">Order Box</th>
                 <th className="text-right py-2 px-3 text-xs font-semibold text-[#64748b]">Order Qty</th>
@@ -133,6 +133,7 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
               {filteredItems.map((item) => (
                 <tr key={item.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
                   <td className="py-2 px-3 text-[#0f172a] font-medium">{item.item_name}</td>
+                  <td className="py-2 px-3 text-[#64748b] text-sm">{item.company_name || "-"}</td>
                   <td className="py-2 px-3 text-[#64748b] text-sm">{item.party_name || "-"}</td>
                   <td className="py-2 px-3 text-right font-bold text-[#4338ca]">{item.order_box}</td>
                   <td className="py-2 px-3 text-right font-bold text-[#4338ca]">{item.order_qty}</td>
@@ -149,7 +150,7 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
               ))}
               {filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-[#94a3b8]">No items found</td>
+                  <td colSpan="6" className="py-8 text-center text-[#94a3b8]">No items found</td>
                 </tr>
               )}
             </tbody>
@@ -205,10 +206,21 @@ const Indent = () => {
     message: "",
     onConfirm: null,
   });
-  const [duplicateIndentModal, setDuplicateIndentModal] = useState({
+  const [alertDialog, setAlertDialog] = useState({
     isOpen: false,
-    shopName: "",
+    title: "",
+    message: ""
   });
+
+  const showAlert = (title, message) => {
+    setShowModal(false);
+    setUploadStep(1);
+    setAlertDialog({
+      isOpen: true,
+      title: title || "Clear Previous Shop Indent",
+      message: message || "An indent submission already exists for this shop. Please delete it from Recent Indent Submissions before importing Excel/CSV again."
+    });
+  };
   const [mobileView, setMobileView] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
@@ -337,6 +349,12 @@ const Indent = () => {
     fetchSubmittedHistory();
   }, []);
 
+  const hasExistingSubmissionForShop = (shopName) => {
+    if (!shopName) return false;
+    const cleanShop = shopName.toString().trim().toLowerCase();
+    return submittedHistory.some(h => (h.shop_name || '').toString().trim().toLowerCase() === cleanShop);
+  };
+
   React.useEffect(() => {
     sessionStorage.setItem('indent_tableData', JSON.stringify(tableData));
   }, [tableData]);
@@ -364,36 +382,14 @@ const Indent = () => {
     localStorage.setItem('indent_thresholdDays', JSON.stringify(thresholdDays));
   }, [thresholdDays]);
 
-  const [periodType, setPeriodType] = useState(() => {
-    try {
-      const savedType = localStorage.getItem('indent_periodType');
-      if (savedType && ['weekly', 'monthly', 'custom'].includes(savedType)) return savedType;
-      const savedDivisor = localStorage.getItem('indent_daysDivisor');
-      if (savedDivisor) {
-        const parsed = JSON.parse(savedDivisor);
-        if (parsed === 7) return 'weekly';
-        if (parsed === 30) return 'monthly';
-        return 'custom';
-      }
-      return 'monthly';
-    } catch (e) {
-      return 'monthly';
-    }
-  });
-
   const [daysDivisor, setDaysDivisor] = useState(() => {
     try {
       const saved = localStorage.getItem('indent_daysDivisor');
-      const parsed = saved ? JSON.parse(saved) : 30;
-      return parsed && parsed > 0 ? parsed : 30;
+      return saved ? JSON.parse(saved) : 30;
     } catch (e) {
       return 30;
     }
   });
-
-  React.useEffect(() => {
-    localStorage.setItem('indent_periodType', periodType);
-  }, [periodType]);
 
   React.useEffect(() => {
     localStorage.setItem('indent_daysDivisor', JSON.stringify(daysDivisor));
@@ -470,6 +466,7 @@ const Indent = () => {
       return headers.findIndex(h => partial.some(p => h.includes(p)));
     };
 
+    const companyNameIdx = getIndex(['company name'], ['company name', 'company', 'distributor', 'mfg']);
     const partyNameIdx = getIndex(['party name'], ['party name', 'party', 'shop', 'store']);
     const itemNameIdx = getIndex(['item name'], ['item name', 'item', 'product', 'particulars', 'description']);
     const brandNameIdx = getIndex(['brand name'], ['brand name', 'brand']);
@@ -481,6 +478,7 @@ const Indent = () => {
     const bcsIdx = getIndex(['bpc', 'b/cs', 'bcs', 'bottles per case', 'pack size'], ['bpc', 'b/cs', 'bcs', 'b cs', 'bottles per case', 'per case', 'pack size']);
 
     const fPartyName = partyNameIdx !== -1 ? partyNameIdx : (headers.length > 4 ? 4 : -1);
+    const fCompanyName = companyNameIdx !== -1 ? companyNameIdx : -1;
     const fItemName = itemNameIdx !== -1 ? itemNameIdx : (brandNameIdx !== -1 ? brandNameIdx : (headers.length > 6 ? 6 : 0));
     const fBrandName = brandNameIdx !== -1 ? brandNameIdx : fItemName;
     const fMls = mlsIdx !== -1 ? mlsIdx : (headers.length > 9 ? 9 : -1);
@@ -498,6 +496,7 @@ const Indent = () => {
       const newRecord = {
         itemName: itemVal || brandVal,
         brandName: brandVal || itemVal,
+        companyName: fCompanyName !== -1 ? (row[fCompanyName] || '') : '',
         partyName: fPartyName !== -1 ? (row[fPartyName] || '') : '',
         mls: fMls !== -1 ? (row[fMls] || '') : '',
         liquorType: fLiquorType !== -1 ? (row[fLiquorType] || '') : '',
@@ -514,6 +513,7 @@ const Indent = () => {
       const isDuplicate = records.some(r => 
         r.itemName.toLowerCase() === newRecord.itemName.toLowerCase() &&
         r.brandName.toLowerCase() === newRecord.brandName.toLowerCase() &&
+        r.companyName.toLowerCase() === newRecord.companyName.toLowerCase() &&
         r.partyName.toLowerCase() === newRecord.partyName.toLowerCase() &&
         r.mls.toLowerCase() === newRecord.mls.toLowerCase() &&
         r.liquorType.toLowerCase() === newRecord.liquorType.toLowerCase() &&
@@ -529,6 +529,17 @@ const Indent = () => {
       }
     }
 
+    const targetShop = selectedShop || (records.length > 0 ? records[0].partyName : '');
+    if (targetShop && hasExistingSubmissionForShop(targetShop)) {
+      setIsProcessing(false);
+      setShowModal(false);
+      setUploadStep(1);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      addToast("Clear Previous Shop Indent", "error");
+      showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${targetShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
+      return;
+    }
+
     setTableData(() => {
       const matchedRecords = [];
       records.forEach((record, idx) => {
@@ -539,6 +550,7 @@ const Indent = () => {
           qtyOut: record.qtyOut,
           closingQty: record.closingQty,
           brandName: record.brandName,
+          companyName: record.companyName,
           bcs: record.bcs,
           mls: record.mls,
           liquorType: record.liquorType,
@@ -558,8 +570,15 @@ const Indent = () => {
   };
 
   const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
+
+    if (selectedShop && hasExistingSubmissionForShop(selectedShop)) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      addToast("Clear Previous Shop Indent", "error");
+      showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
+      return;
+    }
 
     setIsProcessing(true);
     setShowModal(false);
@@ -634,8 +653,7 @@ const Indent = () => {
       };
 
       lastMonthSale = getActive(row.lastMonthSale, row.qtyOut / row.bcs);
-      const effectiveDivisor = (parseFloat(daysDivisor) > 0) ? parseFloat(daysDivisor) : 1;
-      perDaySaleLastMonth = getActive(row.perDaySaleLastMonth, (row.qtyOut / effectiveDivisor) / row.bcs);
+      perDaySaleLastMonth = getActive(row.perDaySaleLastMonth, (row.qtyOut / daysDivisor) / row.bcs);
       const typeKey = (row.liquorType || "").trim().toUpperCase();
       const matchedKey = typeKey ? Object.keys(thresholdDays).find(
         key => typeKey.includes(key) || key.includes(typeKey)
@@ -792,25 +810,6 @@ const Indent = () => {
         .eq('id', indentId);
       if (delIndentError) throw delIndentError;
 
-      // 7. Strictly sync indent deletion to purchase_dashboard ONLY for items that were NOT yet generated into a PO
-      const currentUser = useAuthStore.getState().currentUser;
-      const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Admin";
-
-      const { error: dashDelErr } = await supabase
-        .from('purchase_dashboard')
-        .update({
-          is_deleted: true,
-          deleted_by_emp_code: empCode,
-          deleted_at: new Date().toISOString(),
-          deletion_stage: 'INDENT',
-          deletion_reason: 'Indent deleted before PO generation (Resubmission/Cancelled)',
-          updated_at: new Date().toISOString()
-        })
-        .eq('indent_id', indentId)
-        .is('po_id', null);
-
-      if (dashDelErr) throw new Error(`Dashboard deletion audit error: ${dashDelErr.message}`);
-
       addToast("Successfully deleted indent and associated pipeline records.", "success");
       fetchSubmittedHistory();
       if (selectedSubmission?.id === indentId) setSelectedSubmission(null);
@@ -866,11 +865,12 @@ const Indent = () => {
       const vendorName = itemData.party_name;
 
       if (uniqueIndentId && vendorName) {
+        const cleanVendorName = vendorName.split("::")[0].trim();
         const { data: poData, error: poError } = await supabase
           .from('purchase_purchase_orders')
           .select('*')
           .eq('indent_id', uniqueIndentId)
-          .eq('vendor_name', vendorName);
+          .or(`vendor_name.eq."${vendorName}",vendor_name.ilike."${cleanVendorName}%"`);
 
         if (!poError && poData && poData.length > 0) {
           const po = poData[0];
@@ -924,28 +924,6 @@ const Indent = () => {
           .delete()
           .eq('id', itemId);
         if (delItemError) throw delItemError;
-      }
-
-      // Strictly sync single item deletion to purchase_dashboard
-      if (itemData && itemData.item_name) {
-        const currentUser = useAuthStore.getState().currentUser;
-        const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Admin";
-
-        const { error: dashItemDelErr } = await supabase
-          .from('purchase_dashboard')
-          .update({
-            is_deleted: true,
-            deleted_by_emp_code: empCode,
-            deleted_at: new Date().toISOString(),
-            deletion_stage: isApprovedItem ? 'APPROVAL' : 'INDENT',
-            deletion_reason: `Item ${itemData.item_name} deleted from Indent Submission`,
-            updated_at: new Date().toISOString()
-          })
-          .eq('indent_id', indentId)
-          .eq('item_name', itemData.item_name)
-          .is('po_id', null);
-
-        if (dashItemDelErr) throw new Error(`Dashboard item deletion error: ${dashItemDelErr.message}`);
       }
 
       addToast("Successfully deleted item from indent.", "success");
@@ -1026,12 +1004,6 @@ const Indent = () => {
       addToast("Shop name is required. Please select a shop before submitting.", "error");
       return;
     }
-    if (periodType === 'custom' && (!daysDivisor || parseFloat(daysDivisor) < 1 || isNaN(parseFloat(daysDivisor)))) {
-      addToast("Calculation Period is mandatory. Please enter a valid number of days (minimum 1).", "error");
-      setShowSettings(true);
-      return;
-    }
-
     setIsProcessing(true);
     try {
       const activeItems = [];
@@ -1116,6 +1088,7 @@ const Indent = () => {
           qty_out: item.qtyOut,
           closing_qty: item.closingQty,
           brand_name: item.brandName,
+          company_name: item.companyName || '',
           bcs: item.bcs,
           mls: item.mls,
           liquor_type: item.liquorType,
@@ -1150,6 +1123,7 @@ const Indent = () => {
           qty_out: item.qtyOut,
           closing_qty: item.closingQty,
           brand_name: item.brandName,
+          company_name: item.companyName || '',
           bcs: item.bcs,
           mls: item.mls,
           liquor_type: item.liquorType,
@@ -1171,34 +1145,6 @@ const Indent = () => {
         .insert(itemsPayload);
 
       if (itemsError) throw itemsError;
-
-      // Strictly sync initial items to purchase_dashboard
-      const currentUser = useAuthStore.getState().currentUser;
-      const indentEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Indent Team";
-
-      const dashboardPayload = itemsPayload.map(itm => ({
-        indent_id: indentId,
-        shop_name: selectedShop || 'UNKNOWN',
-        party_name: itm.party_name || 'UNKNOWN',
-        company_name: null,
-        item_name: itm.item_name,
-        order_box: itm.order_box,
-        order_qty: itm.order_qty,
-        indent_emp_code: indentEmpCode,
-        indent_created_at: new Date().toISOString(),
-        is_deleted: false
-      }));
-
-      if (dashboardPayload.length > 0) {
-        const chunkSize = 100;
-        for (let i = 0; i < dashboardPayload.length; i += chunkSize) {
-          const chunk = dashboardPayload.slice(i, i + chunkSize);
-          const { error: dashInsertErr } = await supabase
-            .from('purchase_dashboard')
-            .insert(chunk);
-          if (dashInsertErr) throw new Error(`Dashboard audit insert error: ${dashInsertErr.message}`);
-        }
-      }
 
       addToast(`Successfully submitted ${itemsPayload.length} records to Supabase!`, "success");
       setTableData([]);
@@ -1322,60 +1268,19 @@ const Indent = () => {
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-xs font-semibold text-[#475569] flex items-center gap-1">
-                  Calculation Period <span className="text-red-500 font-bold">*</span>:
-                </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-[#475569]">Calculation Period:</span>
                 <select
-                  value={periodType}
-                  onChange={(e) => {
-                    const newType = e.target.value;
-                    setPeriodType(newType);
-                    if (newType === 'weekly') {
-                      setDaysDivisor(7);
-                    } else if (newType === 'monthly') {
-                      setDaysDivisor(30);
-                    }
-                  }}
-                  className="px-3 py-1.5 border border-[#cbd5e1] rounded-md outline-none font-semibold text-[#0f172a] text-xs cursor-pointer bg-white hover:border-[#4f46e5] focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5]"
+                  value={daysDivisor}
+                  onChange={(e) => setDaysDivisor(Number(e.target.value))}
+                  className="px-3 py-1.5 border border-[#cbd5e1] rounded-md outline-none font-medium text-[#0f172a] text-xs cursor-pointer bg-white hover:border-[#4f46e5]"
                 >
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="custom">Custom</option>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>
+                      {day} {day === 1 ? 'Day' : 'Days'} {day === 7 ? '(Weekly)' : day === 30 ? '(Monthly - 30)' : day === 31 ? '(Monthly - 31)' : ''}
+                    </option>
+                  ))}
                 </select>
-
-                {periodType === 'custom' && (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={daysDivisor}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "") {
-                          setDaysDivisor("");
-                        } else {
-                          const num = parseFloat(val);
-                          setDaysDivisor(isNaN(num) ? "" : Math.max(1, num));
-                        }
-                      }}
-                      onBlur={() => {
-                        if (!daysDivisor || parseFloat(daysDivisor) < 1 || isNaN(parseFloat(daysDivisor))) {
-                          setDaysDivisor(1);
-                          addToast("Calculation Period is mandatory (minimum 1 day). Reset to 1.", "warning");
-                        }
-                      }}
-                      placeholder="Min 1"
-                      className={`w-24 px-2.5 py-1.5 border rounded-md outline-none font-semibold text-xs bg-white transition-all ${
-                        (!daysDivisor || parseFloat(daysDivisor) < 1)
-                          ? 'border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-red-600'
-                          : 'border-[#cbd5e1] text-[#0f172a] focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5]'
-                      }`}
-                    />
-                    <span className="text-xs text-[#64748b] font-medium">Days <span className="text-red-500 font-bold">*</span></span>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -1408,7 +1313,7 @@ const Indent = () => {
                       <th colSpan={tableData[0]?.partyIndentId ? "2" : "1"} className="bg-slate-600 border border-slate-700 px-3 py-1.5 text-center rounded-tl-lg">
                         Item Master File
                       </th>
-                      <th colSpan="7" className="bg-emerald-600 border border-emerald-700 px-3 py-1.5 text-center">
+                      <th colSpan="8" className="bg-emerald-600 border border-emerald-700 px-3 py-1.5 text-center">
                         Excel File Data
                       </th>
                       <th colSpan="6" className="bg-indigo-600 border border-indigo-700 px-3 py-1.5 text-center rounded-tr-lg">
@@ -1424,6 +1329,7 @@ const Indent = () => {
                       <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[100px]">Qty Out</th>
                       <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[100px]">Closing Qty</th>
                       <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">Brand Name</th>
+                      <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">Company Name</th>
                       <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[95px]">B/Cs</th>
                       <th className="bg-[#f8fafc] border border-white px-3 py-2 text-center font-semibold min-w-[80px]">Mls</th>
                       <th className="bg-[#f8fafc] border border-white px-3 py-2 text-center font-semibold min-w-[110px]">Liquor Type</th>
@@ -1458,6 +1364,7 @@ const Indent = () => {
                             {item.closingQty !== null ? item.closingQty : "—"}
                           </td>
                           <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">{item.brandName || "—"}</td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">{item.companyName || "—"}</td>
                           <td className="border-r border-[#e2e8f0] px-3 py-2 text-right text-[#475569] font-medium">
                             {item.bcs !== null ? item.bcs : "—"}
                           </td>
@@ -1651,17 +1558,19 @@ const Indent = () => {
                     ))}
                   </select>
 
+                  {selectedShop && hasExistingSubmissionForShop(selectedShop) && (
+                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium flex items-start gap-2">
+                      <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                      <span>An indent submission already exists for <strong>{selectedShop}</strong>. Please delete it from Recent Indent Submissions before importing Excel/CSV again.</span>
+                    </div>
+                  )}
+
                   <button
                     onClick={() => {
                       if (!selectedShop) return;
-                      const hasActiveIndent = submittedHistory.some(
-                        (h) => (h.shop_name || "").trim().toLowerCase() === selectedShop.trim().toLowerCase()
-                      );
-                      if (hasActiveIndent) {
-                        setDuplicateIndentModal({
-                          isOpen: true,
-                          shopName: selectedShop,
-                        });
+                      if (hasExistingSubmissionForShop(selectedShop)) {
+                        addToast("Clear Previous Shop Indent", "error");
+                        showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
                         return;
                       }
                       setUploadStep(2);
@@ -1690,6 +1599,11 @@ const Indent = () => {
                     onDrop={(e) => {
                       e.preventDefault();
                       setIsDragging(false);
+                      if (selectedShop && hasExistingSubmissionForShop(selectedShop)) {
+                        addToast("Clear Previous Shop Indent", "error");
+                        showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
+                        return;
+                      }
                       const file = e.dataTransfer.files[0];
                       if (file) {
                         handleFileUpload({ target: { files: [file] } });
@@ -1772,39 +1686,27 @@ const Indent = () => {
           </div>
         </div>
       )}
-
-      {/* Duplicate Indent Restricted Warning Modal */}
-      {duplicateIndentModal.isOpen && (
-        <div className="fixed inset-0 bg-[#0f172a]/60 backdrop-blur-md flex justify-center items-center z-[10001] p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-amber-200/80">
-            <div className="p-6 text-center">
-              <div className="w-14 h-14 bg-amber-100/80 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200">
-                <AlertTriangle size={28} className="text-amber-600" />
-              </div>
-
-              <span className="inline-block px-3 py-1 bg-amber-50 text-amber-800 text-xs font-extrabold rounded-full border border-amber-200/60 mb-2 tracking-wide uppercase">
-                Sheet Import Restricted
-              </span>
-
-              <h3 className="text-xl font-bold text-slate-900 mb-2">
-                Indent Already Exists
-              </h3>
-
-              <p className="text-slate-600 text-sm leading-relaxed mb-5">
-                An active indent for <strong className="text-indigo-600 font-bold">{duplicateIndentModal.shopName}</strong> is already in progress and submitted in the system.
-                <br /><br />
-                <span className="text-slate-500 text-xs block bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-                  ⚠️ Further sheet imports for <strong>{duplicateIndentModal.shopName}</strong> are restricted until the existing indent is completed or removed.
-                </span>
-              </p>
-
-              <button
-                onClick={() => setDuplicateIndentModal({ isOpen: false, shopName: "" })}
-                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold text-sm shadow-md shadow-indigo-200 transition-all cursor-pointer"
-              >
-                Got It, Thanks
-              </button>
+      
+      {/* Alert Pop-up Modal */}
+      {alertDialog.isOpen && (
+        <div className="fixed inset-0 bg-[#0f172a]/60 backdrop-blur-md flex justify-center items-center z-[9999] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-100 p-6 text-center animate-in fade-in duration-150">
+            <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200">
+              <AlertTriangle size={28} className="text-amber-600" />
             </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{alertDialog.title}</h3>
+            <p className="text-slate-600 text-sm leading-relaxed mb-6 font-medium">
+              {alertDialog.message}
+            </p>
+            <button
+              onClick={() => {
+                setAlertDialog(prev => ({ ...prev, isOpen: false }));
+                setShowModal(false);
+              }}
+              className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md transition-all active:scale-[0.98]"
+            >
+              OK, Got it
+            </button>
           </div>
         </div>
       )}

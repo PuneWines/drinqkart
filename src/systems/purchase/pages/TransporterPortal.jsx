@@ -8,7 +8,10 @@ import {
   MessageSquare, Truck, ArrowRight, UserCheck,
   Hash
 } from "lucide-react";
-import { COMPANY } from "../utils/constants";
+
+const COMPANY = {
+  name: "DRINQKART",
+};
 
 const TransporterPortal = () => {
   const { transporterId } = useParams();
