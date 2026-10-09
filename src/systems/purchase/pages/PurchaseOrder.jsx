@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle, PauseCircle, RotateCcw, Clock } from "lucide-react";
 import useCompanyStore from "../store/useCompanyStore";
 import useShopStore from "../store/useShopStore";
+import { useAuthStore } from "../store/useAuthStore";
+import { supabase } from "../lib/supabase";
 import "../styles/PurchaseOrder.css";
 
 // Components
@@ -911,6 +913,110 @@ const PurchaseOrder = () => {
 
       const insertedPoId = insertedData[0]?.id;
 
+      // --- Strictly Sync PO Stage to purchase_dashboard (Required for Critical System) ---
+      const currentUser = useAuthStore.getState().currentUser;
+      const poEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "PO Team";
+
+      const validItemNames = itemsForActiveParty.map(i => i.itemName || i.item_name).filter(Boolean);
+
+      // Fetch existing dashboard rows for this indent
+      const { data: existingDashboardRows, error: fetchDashErr } = await supabase
+        .from('purchase_dashboard')
+        .select('id, item_name')
+        .eq('indent_id', currentIndentId)
+        .in('item_name', validItemNames);
+
+      if (fetchDashErr) throw new Error(`Dashboard fetch error: ${fetchDashErr.message}`);
+
+      const existingMap = {};
+      (existingDashboardRows || []).forEach(row => {
+        existingMap[row.item_name] = row.id;
+      });
+
+      const poUpdates = [];
+      const poInserts = [];
+
+      itemsForActiveParty.forEach((item) => {
+        const itmName = item.itemName || item.item_name;
+        if (!itmName) return;
+
+        const itemOrderBox = parseFloat(item.orderBox) || 0;
+        const itemOrderQty = parseFloat(item.orderQty) || 0;
+        const itemApprovedBox = item.hasApprovedInDb && item.approvedBox !== undefined && item.approvedBox !== null ? parseFloat(item.approvedBox) : 0;
+        const itemApprovedQty = item.hasApprovedInDb && item.approvedQty !== undefined && item.approvedQty !== null ? parseFloat(item.approvedQty) : 0;
+        const itemPoBox = item.poBox !== undefined && item.poBox !== null ? parseFloat(item.poBox) : (item.hasApprovedInDb ? itemApprovedBox : itemOrderBox);
+        const itemPoQty = item.poQty !== undefined && item.poQty !== null ? parseFloat(item.poQty) : (item.hasApprovedInDb ? itemApprovedQty : itemOrderQty);
+
+        let poAction = "";
+        if (poMode === "manual" || !item.hasApprovedInDb) {
+          poAction = `Direct Added in PO by (${poEmpCode})`;
+        } else if (itemPoBox !== itemApprovedBox || Math.round(itemPoQty) !== Math.round(itemApprovedQty)) {
+          poAction = `Modified by (${poEmpCode})`;
+        } else {
+          poAction = `PO Generated (${poEmpCode})`;
+        }
+
+        const existingId = existingMap[itmName];
+        if (existingId) {
+          poUpdates.push(
+            supabase
+              .from('purchase_dashboard')
+              .update({
+                po_id: insertedPoId,
+                po_number: freshPoNumber,
+                po_box: itemPoBox,
+                po_qty: itemPoQty,
+                po_action: poAction,
+                po_emp_code: poEmpCode,
+                po_generated_at: new Date().toISOString(),
+                trader_status: 'Pending',
+                transporter_status: 'Pending',
+                receiver_status: 'Pending',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingId)
+          );
+        } else {
+          poInserts.push({
+            indent_id: currentIndentId,
+            shop_name: currentShopName || 'Unknown',
+            party_name: activeParty || 'Unknown',
+            company_name: activeCompany?.name || null,
+            item_name: itmName,
+            order_box: itemOrderBox,
+            order_qty: itemOrderQty,
+            indent_emp_code: null,
+            approved_box: itemApprovedBox,
+            approved_qty: itemApprovedQty,
+            approver_action: "—",
+            approver_emp_code: null,
+            po_id: insertedPoId,
+            po_number: freshPoNumber,
+            po_box: itemPoBox,
+            po_qty: itemPoQty,
+            po_action: poAction,
+            po_emp_code: poEmpCode,
+            po_generated_at: new Date().toISOString(),
+            trader_status: 'Pending',
+            transporter_status: 'Pending',
+            receiver_status: 'Pending',
+            is_deleted: false
+          });
+        }
+      });
+
+      if (poInserts.length > 0) {
+        const { error: insErr } = await supabase.from('purchase_dashboard').insert(poInserts);
+        if (insErr) throw new Error(`Dashboard audit insert error: ${insErr.message}`);
+      }
+
+      if (poUpdates.length > 0) {
+        const updateResults = await Promise.all(poUpdates);
+        for (const res of updateResults) {
+          if (res.error) throw new Error(`Dashboard audit update error: ${res.error.message}`);
+        }
+      }
+
       // --- Mark approved items as ordered in approved_indent_items now that PO is created ---
       if (poMode !== "manual" && currentIndentId && insertedPoId) {
         try {
@@ -925,7 +1031,7 @@ const PurchaseOrder = () => {
         }
       }
 
-      // Update deleted/removed items in database to be is_excluded: true
+      // Update deleted/removed items in database to be is_excluded: true and log deletion in purchase_dashboard
       if (poMode !== "manual" && removedItemIds.size > 0) {
         try {
           await excludeIndentItems(Array.from(removedItemIds), "removed_from_po");

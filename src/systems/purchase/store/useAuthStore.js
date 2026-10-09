@@ -56,7 +56,7 @@ export const buildMasterAccessFromPurchasePerms = (existingAccess, selectedPurch
   return [...nonPurchasePerms, ...newPurchasePerms];
 };
 
-const useAuthStore = create((set, get) => ({
+export const useAuthStore = create((set, get) => ({
   currentUser: getInitialUser(),
   users: [],
   loading: false,
