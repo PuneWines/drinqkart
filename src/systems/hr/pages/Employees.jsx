@@ -14,6 +14,17 @@ const DEVICES = [
     { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
+const LOCATION_TO_SHOP_MAP = {
+  'BAWDHAN': 'MADHURA',
+  'HINJEWADI': 'TLS',
+  'WAGHOLI': 'FRIENDS',
+  'AKOLE': 'BALAJI',
+  'MUMBAI': 'KUNAL ULWE',
+  'KHARGHAR': 'KUNAL KHARGHAR'
+};
+
+const JOINING_PLACES = Object.keys(LOCATION_TO_SHOP_MAP);
+
 const resolveDeviceStore = (log) => {
   if (!log) return '';
   const serial = (log.serial_number || log.serialNo || '').toString().trim();
@@ -441,7 +452,13 @@ export default function EmployeeManagement() {
     if (['mobile_no', 'family_mobile_no'].includes(name)) {
       value = value.replace(/\D/g, '').slice(0, 10)
     }
-    setFormData(prev => ({ ...prev, [name]: value }))
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value }
+      if (name === 'joining_place') {
+        updated.joining_company_name = LOCATION_TO_SHOP_MAP[value] || ''
+      }
+      return updated
+    })
   }
 
   const handleEditInputChange = (e) => {
@@ -458,7 +475,13 @@ export default function EmployeeManagement() {
     if (['mobile_no', 'family_mobile_no'].includes(name)) {
       value = value.replace(/\D/g, '').slice(0, 10)
     }
-    setEditFormData(prev => ({ ...prev, [name]: value }))
+    setEditFormData(prev => {
+      const updated = { ...prev, [name]: value }
+      if (name === 'joining_place') {
+        updated.joining_company_name = LOCATION_TO_SHOP_MAP[value] || ''
+      }
+      return updated
+    })
   }
 
   // Handle file change in add form
@@ -864,13 +887,17 @@ export default function EmployeeManagement() {
 
   const openEditPanel = (employee) => {
     setEditingEmployee(employee)
+    const rawPlace = (employee.joining_place || '').toString().trim().toUpperCase();
+    const matchedPlace = JOINING_PLACES.find(p => p === rawPlace || p.replace(/[^A-Z0-9]/g, '') === rawPlace.replace(/[^A-Z0-9]/g, '') || (rawPlace === 'BAVDHAN' && p === 'BAWDHAN') || (rawPlace === 'WAGOLI' && p === 'WAGHOLI')) || rawPlace;
+    const matchedShop = employee.joining_company_name || LOCATION_TO_SHOP_MAP[matchedPlace] || '';
+
     setEditFormData({
       employee_id: employee.employee_id,  // <-- ADD THIS LINE
       name_as_per_aadhar: employee.name_as_per_aadhar,
       date_of_joining: employee.date_of_joining,
       mobile_no: employee.mobile_no,
       father_name: employee.father_name || '',
-      joining_place: employee.joining_place,
+      joining_place: matchedPlace,
       designation: employee.designation,
       salary: employee.salary || '',
       candidate_email: employee.candidate_email || '',
@@ -884,7 +911,7 @@ export default function EmployeeManagement() {
       mode_of_attendance: employee.mode_of_attendance || 'Biometric',
       aadhar_no: employee.aadhar_no || '',
       family_mobile_no: employee.family_mobile_no || '',
-      joining_company_name: employee.joining_company_name || '',
+      joining_company_name: matchedShop,
       status: employee.status || 'Active',
       aadharFront: null,
       aadharBack: null,
@@ -1821,7 +1848,20 @@ export default function EmployeeManagement() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Joining Place <span className="text-red-500">*</span></label>
-                    <input type="text" name="joining_place" value={formData.joining_place} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 uppercase" required />
+                    <select
+                      name="joining_place"
+                      value={formData.joining_place}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                      required
+                    >
+                      <option value="">Select Joining Place</option>
+                      {JOINING_PLACES.map((place) => (
+                        <option key={place} value={place}>
+                          {place}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -1845,9 +1885,10 @@ export default function EmployeeManagement() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Joining Shop Name</label>
                     <select
                       name="joining_company_name"
+                      disabled
                       value={formData.joining_company_name}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
                     >
                       <option value="">Select Shop</option>
                       {joiningCompanies.map((company) => (
@@ -2184,14 +2225,25 @@ export default function EmployeeManagement() {
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Place <span className="text-red-500">*</span></label>
-                        <input
-                          type="text"
+                        <select
                           name="joining_place"
                           value={editFormData.joining_place || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800 uppercase"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
                           required
-                        />
+                        >
+                          <option value="">Select Joining Place</option>
+                          {JOINING_PLACES.map((place) => (
+                            <option key={place} value={place}>
+                              {place}
+                            </option>
+                          ))}
+                          {editFormData.joining_place && !JOINING_PLACES.includes(editFormData.joining_place) && (
+                            <option value={editFormData.joining_place}>
+                              {editFormData.joining_place}
+                            </option>
+                          )}
+                        </select>
                       </div>
 
                       <div>
@@ -2226,9 +2278,10 @@ export default function EmployeeManagement() {
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Shop Name</label>
                         <select
                           name="joining_company_name"
+                          disabled
                           value={editFormData.joining_company_name || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
                         >
                           <option value="">Select Shop</option>
                           {joiningCompanies.map((company) => (
