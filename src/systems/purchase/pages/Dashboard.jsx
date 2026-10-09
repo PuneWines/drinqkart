@@ -1,925 +1,773 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import useShopStore from "../store/useShopStore";
+import useCompanyStore from "../store/useCompanyStore";
 import { supabase } from "../lib/supabase";
 import {
-  TrendingUp,
-  FileText,
-  CheckCircle2,
-  Clock,
-  ShoppingBag,
-  Truck,
   Search,
   Building2,
-  Filter,
   Calendar,
-  ChevronRight,
-  AlertTriangle,
   RefreshCw,
-  Eye,
-  X,
-  FileSpreadsheet,
-  Check,
+  Download,
   XCircle,
-  MapPin,
-  CalendarDays,
+  Check,
+  User,
   Layers,
-  ArrowRight
+  ChevronLeft,
+  ChevronRight,
+  Briefcase,
+  PackageCheck,
+  FileEdit,
+  AlertCircle
 } from "lucide-react";
 import "../styles/Dashboard.css";
 
 const Dashboard = () => {
-  // Database States
-  const [rawIndents, setRawIndents] = useState([]);
-  const [rawIndentItems, setRawIndentItems] = useState([]);
-  const [rawPurchaseOrders, setRawPurchaseOrders] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { selectedShop: globalShop, setSelectedShop, shops: storeShops, fetchShops } = useShopStore();
+  const { companies, fetchCompanies } = useCompanyStore();
 
-  // Filters State — shop filter comes from the global store (sidebar)
-  const { selectedShop: filterShop } = useShopStore();
-  const [filterTimeframe, setFilterTimeframe] = useState("all"); // "all", "30days", "7days"
-  const [searchQuery, setSearchQuery] = useState("");
+  // Load store data on mount
+  useEffect(() => {
+    if (fetchShops) fetchShops();
+    if (fetchCompanies) fetchCompanies();
+  }, [fetchShops, fetchCompanies]);
 
-  // UI Interactive States
-  const [selectedPO, setSelectedPO] = useState(null);
-  const [selectedDashboardIndent, setSelectedDashboardIndent] = useState(null);
-
-  // Fetch all dashboard data from Supabase
-  const queryClient = useQueryClient();
-
-  const { data: dashboardDataResponse, isLoading: isDashboardQueryLoading, isRefetching: isDashboardQueryRefetching } = useQuery({
-    queryKey: ["dashboardData"],
-    queryFn: async () => {
-      const [
-        { data: indentsData, error: indentsError },
-        { data: itemsData, error: itemsError },
-        { data: approvedItemsData, error: approvedItemsError },
-        { data: posData, error: posError }
-      ] = await Promise.all([
-        supabase
-          .from("purchase_indents")
-          .select("id, shop_name, created_at, status, indent_number")
-          .order("created_at", { ascending: false })
-          .limit(1000),
-        supabase
-          .from("purchase_indent_items")
-          .select("id, indent_id, created_at, approval_status, is_excluded, order_box, order_qty, item_name, brand_name, liquor_type, qty_out, closing_qty, fix_per_day_avg_sale, party_indent_id")
-          .order("created_at", { ascending: false })
-          .limit(2000),
-        supabase
-          .from("purchase_approved_indent_items")
-          .select("id, indent_id, created_at, po_status, order_box, order_qty, item_name, brand_name, liquor_type, qty_out, closing_qty, threshold_sale")
-          .order("created_at", { ascending: false })
-          .limit(2000),
-        supabase
-          .from("purchase_purchase_orders")
-          .select("id, indent_id, created_at, po_number, vendor_name, total_order_qty, total_order_box, trader_status, transporter_status, receiver_status")
-          .order("created_at", { ascending: false })
-          .limit(1000)
-      ]);
-
-      if (indentsError) throw indentsError;
-      if (itemsError) throw itemsError;
-      if (approvedItemsError) throw approvedItemsError;
-      if (posError) throw posError;
-
-      // Map approved items to look like indent_items with 'approved' status and non-excluded
-      const mappedApprovedItems = (approvedItemsData || []).map(item => ({
-        ...item,
-        approval_status: "approved",
-        is_excluded: false
-      }));
-
-      // Combine both lists
-      const combinedIndentItems = [
-        ...(itemsData || []),
-        ...mappedApprovedItems
-      ];
-
-      return {
-        indentsData: indentsData || [],
-        combinedIndentItems,
-        posData: posData || []
-      };
-    }
+  // Filter States with persistent localStorage memory
+  const [filterShop, setFilterShop] = useState(() => {
+    return localStorage.getItem("purchase_dashboard_filter_shop") || globalShop || "All";
+  });
+  const [filterCompany, setFilterCompany] = useState(() => {
+    return localStorage.getItem("purchase_dashboard_filter_company") || "All";
+  });
+  const [filterParty, setFilterParty] = useState(() => {
+    return localStorage.getItem("purchase_dashboard_filter_party") || "All";
+  });
+  const [filterStatus, setFilterStatus] = useState(() => {
+    return localStorage.getItem("purchase_dashboard_filter_status") || "All";
+  });
+  const [filterTimeframe, setFilterTimeframe] = useState(() => {
+    return localStorage.getItem("purchase_dashboard_filter_timeframe") || "all";
+  });
+  const [searchQuery, setSearchQuery] = useState(() => {
+    return localStorage.getItem("purchase_dashboard_search_query") || "";
   });
 
-  // Sync React Query data to local state for seamless backwards compatibility
-  useEffect(() => {
-    if (dashboardDataResponse) {
-      setRawIndents(dashboardDataResponse.indentsData);
-      setRawIndentItems(dashboardDataResponse.combinedIndentItems);
-      setRawPurchaseOrders(dashboardDataResponse.posData);
-    }
-  }, [dashboardDataResponse]);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
 
-  useEffect(() => {
-    setIsLoading(isDashboardQueryLoading);
-  }, [isDashboardQueryLoading]);
-
-  useEffect(() => {
-    setIsRefreshing(isDashboardQueryRefetching);
-  }, [isDashboardQueryRefetching]);
-
-  // Keep fetchDashboardData as a wrapper that triggers React Query cache invalidation
-  const fetchDashboardData = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["dashboardData"] });
+  // Filter Handlers with automatic persistence
+  const handleShopChange = (shop) => {
+    setFilterShop(shop);
+    localStorage.setItem("purchase_dashboard_filter_shop", shop);
+    if (setSelectedShop) setSelectedShop(shop);
+    setCurrentPage(1);
   };
 
-  // Helper: map a Purchase Order to its corresponding Shop Name via its approved indent_items
-  const getShopForPO = useMemo(() => {
-    const poShopCache = {};
-    return (po) => {
-      if (!po.indent_id) return "Unknown";
-      if (poShopCache[po.id]) return poShopCache[po.id];
+  const handleCompanyChange = (company) => {
+    setFilterCompany(company);
+    localStorage.setItem("purchase_dashboard_filter_company", company);
+    setCurrentPage(1);
+  };
 
-      // Find an indent item that belongs to this PO's indent id
-      const matchItem = rawIndentItems.find(
-        (item) => item.unique_indent_id === po.indent_id
+  const handlePartyChange = (party) => {
+    setFilterParty(party);
+    localStorage.setItem("purchase_dashboard_filter_party", party);
+    setCurrentPage(1);
+  };
+
+  const handleStatusChange = (status) => {
+    setFilterStatus(status);
+    localStorage.setItem("purchase_dashboard_filter_status", status);
+    setCurrentPage(1);
+  };
+
+  const handleTimeframeChange = (timeframe) => {
+    setFilterTimeframe(timeframe);
+    localStorage.setItem("purchase_dashboard_filter_timeframe", timeframe);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (query) => {
+    setSearchQuery(query);
+    localStorage.setItem("purchase_dashboard_search_query", query);
+    setCurrentPage(1);
+  };
+
+  // Sync with global sidebar shop if user explicitly changes shop in sidebar
+  useEffect(() => {
+    if (globalShop && globalShop !== filterShop) {
+      setFilterShop(globalShop);
+      localStorage.setItem("purchase_dashboard_filter_shop", globalShop);
+      setCurrentPage(1);
+    }
+  }, [globalShop]);
+
+  // Fetch audit records from purchase_dashboard
+  const {
+    data: dashboardLogs = [],
+    isLoading,
+    isRefetching,
+    refetch
+  } = useQuery({
+    queryKey: ["purchaseDashboardLogs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("purchase_dashboard")
+        .select("*")
+        .order("indent_created_at", { ascending: false })
+        .limit(5000);
+
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 10000
+  });
+
+  // Extract Unique Shops for dropdown
+  const availableShops = useMemo(() => {
+    const set = new Set(["All"]);
+    (storeShops || []).forEach(s => set.add(s));
+    dashboardLogs.forEach(row => {
+      if (row.shop_name) set.add(row.shop_name);
+    });
+    return Array.from(set);
+  }, [dashboardLogs, storeShops]);
+
+  // Extract Unique Companies for dropdown
+  const availableCompanies = useMemo(() => {
+    const set = new Set(["All"]);
+    (companies || []).forEach(c => {
+      if (c.name) set.add(c.name);
+    });
+    dashboardLogs.forEach(row => {
+      if (row.company_name) set.add(row.company_name);
+    });
+    return Array.from(set);
+  }, [dashboardLogs, companies]);
+
+  // Extract Unique Parties for dropdown
+  const availableParties = useMemo(() => {
+    const set = new Set(["All"]);
+    dashboardLogs.forEach(row => {
+      if (row.party_name) set.add(row.party_name);
+    });
+    return Array.from(set);
+  }, [dashboardLogs]);
+
+  // Filtered dataset
+  const filteredData = useMemo(() => {
+    let result = [...dashboardLogs];
+
+    // 1. Shop Filter
+    if (filterShop && filterShop !== "All") {
+      result = result.filter(
+        row => (row.shop_name || "").toLowerCase() === filterShop.toLowerCase()
       );
-      if (!matchItem) return "Unknown";
+    }
 
-      // Match parent indent to find the shop name
-      const parentIndent = rawIndents.find((ind) => ind.id === matchItem.indent_id);
-      const shopName = parentIndent ? parentIndent.shop_name : "Unknown";
-      poShopCache[po.id] = shopName;
-      return shopName;
-    };
-  }, [rawIndents, rawIndentItems]);
+    // 2. Company Filter
+    if (filterCompany && filterCompany !== "All") {
+      if (filterCompany === "__NONE__") {
+        result = result.filter(row => !(row.company_name || "").trim());
+      } else {
+        result = result.filter(
+          row => (row.company_name || "").trim().toLowerCase() === filterCompany.trim().toLowerCase()
+        );
+      }
+    }
 
-  // Dynamic Date Filter logic
-  const checkTimeframe = (dateString) => {
-    if (filterTimeframe === "all") return true;
-    const itemDate = new Date(dateString);
-    const today = new Date();
-    const diffTime = Math.abs(today - itemDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // 3. Party Filter
+    if (filterParty && filterParty !== "All") {
+      result = result.filter(
+        row => (row.party_name || "").toLowerCase() === filterParty.toLowerCase()
+      );
+    }
 
-    if (filterTimeframe === "7days" && diffDays <= 7) return true;
-    if (filterTimeframe === "30days" && diffDays <= 30) return true;
-    return false;
+    // 4. Status Filter
+    if (filterStatus !== "All") {
+      if (filterStatus === "Completed") {
+        result = result.filter(r => !r.is_deleted && r.po_qty > 0 && r.po_number);
+      } else if (filterStatus === "Modified") {
+        result = result.filter(
+          r =>
+            (r.approver_action && r.approver_action.includes("Modified")) ||
+            (r.po_action && r.po_action.includes("Modified"))
+        );
+      } else if (filterStatus === "DroppedPO") {
+        result = result.filter(
+          r =>
+            r.po_action &&
+            (r.po_action.includes("Deleted") || r.po_action.includes("Removed"))
+        );
+      } else if (filterStatus === "RejectedApproval") {
+        result = result.filter(
+          r =>
+            r.approver_action &&
+            (r.approver_action.includes("Reject") || r.approver_action.includes("Deleted"))
+        );
+      } else if (filterStatus === "DeletedIndent") {
+        result = result.filter(r => r.is_deleted);
+      }
+    }
+
+    // 5. Timeframe Filter
+    if (filterTimeframe !== "all") {
+      const now = new Date();
+      result = result.filter(row => {
+        if (!row.indent_created_at) return true;
+        const rowDate = new Date(row.indent_created_at);
+        const diffDays = (now - rowDate) / (1000 * 60 * 60 * 24);
+        if (filterTimeframe === "today") return diffDays <= 1;
+        if (filterTimeframe === "7days") return diffDays <= 7;
+        if (filterTimeframe === "30days") return diffDays <= 30;
+        return true;
+      });
+    }
+
+    // 6. Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        row =>
+          (row.item_name && row.item_name.toLowerCase().includes(q)) ||
+          (row.indent_id && row.indent_id.toLowerCase().includes(q)) ||
+          (row.po_number && row.po_number.toLowerCase().includes(q)) ||
+          (row.party_name && row.party_name.toLowerCase().includes(q)) ||
+          (row.company_name && row.company_name.toLowerCase().includes(q)) ||
+          (row.shop_name && row.shop_name.toLowerCase().includes(q)) ||
+          (row.indent_emp_code && row.indent_emp_code.toLowerCase().includes(q)) ||
+          (row.approver_emp_code && row.approver_emp_code.toLowerCase().includes(q)) ||
+          (row.po_emp_code && row.po_emp_code.toLowerCase().includes(q)) ||
+          (row.deleted_by_emp_code && row.deleted_by_emp_code.toLowerCase().includes(q))
+      );
+    }
+
+    return result;
+  }, [dashboardLogs, filterShop, filterCompany, filterParty, filterStatus, filterTimeframe, searchQuery]);
+
+  // High-level KPI metrics computed on the active shop/company/party filtered view
+  const metrics = useMemo(() => {
+    let total = filteredData.length;
+    let completed = 0;
+    let modified = 0;
+    let rejected = 0;
+
+    filteredData.forEach(r => {
+      if (!r.is_deleted && r.po_qty > 0 && r.po_number) {
+        completed++;
+      }
+      if (
+        (r.approver_action && r.approver_action.includes("Modified")) ||
+        (r.po_action && r.po_action.includes("Modified"))
+      ) {
+        modified++;
+      }
+      if (
+        r.is_deleted ||
+        (r.po_action && (r.po_action.includes("Deleted") || r.po_action.includes("Removed"))) ||
+        (r.approver_action && (r.approver_action.includes("Reject") || r.approver_action.includes("Deleted")))
+      ) {
+        rejected++;
+      }
+    });
+
+    return { total, completed, modified, rejected };
+  }, [filteredData]);
+
+  // Paginated records
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+
+  // Export to CSV
+  const exportToCSV = () => {
+    if (filteredData.length === 0) {
+      alert("No data to export!");
+      return;
+    }
+
+    const headers = [
+      "Indent ID",
+      "Shop Name",
+      "Company Name",
+      "Party Name",
+      "Item Name",
+      "Order Box",
+      "Order Qty",
+      "Indent By",
+      "Approved Box",
+      "Approved Qty",
+      "Approver Action",
+      "Approver By",
+      "PO Number",
+      "PO Box",
+      "PO Qty",
+      "PO Action",
+      "PO By",
+      "Trader Status",
+      "Transporter Status",
+      "Receiver Status",
+      "Is Deleted",
+      "Deleted By",
+      "Deletion Reason"
+    ];
+
+    const rows = filteredData.map(r => [
+      `"${r.indent_id || ""}"`,
+      `"${r.shop_name || ""}"`,
+      `"${r.company_name || ""}"`,
+      `"${r.party_name || ""}"`,
+      `"${r.item_name || ""}"`,
+      r.order_box != null ? r.order_box : "",
+      r.order_qty != null ? r.order_qty : "",
+      `"${r.indent_emp_code || ""}"`,
+      r.approved_box != null ? r.approved_box : "",
+      r.approved_qty != null ? r.approved_qty : "",
+      `"${r.approver_action || ""}"`,
+      `"${r.approver_emp_code || ""}"`,
+      `"${r.po_number || ""}"`,
+      r.po_box != null ? r.po_box : "",
+      r.po_qty != null ? r.po_qty : "",
+      `"${r.po_action || ""}"`,
+      `"${r.po_emp_code || ""}"`,
+      `"${r.trader_status || "Pending"}"`,
+      `"${r.transporter_status || "Pending"}"`,
+      `"${r.receiver_status || "Pending"}"`,
+      r.is_deleted ? "YES" : "NO",
+      `"${r.deleted_by_emp_code || ""}"`,
+      `"${r.deletion_reason || ""}"`
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Purchase_Dashboard_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  // Filtered datasets based on selected controls
-  const filteredIndents = useMemo(() => {
-    return rawIndents.filter((ind) => {
-      const matchShop = filterShop === "All" || ind.shop_name === filterShop;
-      const matchTime = checkTimeframe(ind.created_at);
-      return matchShop && matchTime;
-    });
-  }, [rawIndents, filterShop, filterTimeframe]);
-
-  // Set default selected indent on mount or filter changes
-  useEffect(() => {
-    if (filteredIndents.length > 0) {
-      // Find currently selected in the filtered list or select first
-      const exists = filteredIndents.some(ind => ind.id === selectedDashboardIndent?.id);
-      if (!exists) {
-        setSelectedDashboardIndent(filteredIndents[0]);
-      }
-    } else {
-      setSelectedDashboardIndent(null);
+  // Modern Action Badge Styler
+  const renderActionBadge = (actionText) => {
+    if (!actionText || actionText === "—") {
+      return <span className="text-slate-300 font-medium select-none">—</span>;
     }
-  }, [filteredIndents, selectedDashboardIndent]);
+    const lower = actionText.toLowerCase();
 
-  const filteredIndentItems = useMemo(() => {
-    // Cache indents for quick lookup
-    const indentMap = new Map(rawIndents.map((i) => [i.id, i]));
-    return rawIndentItems.filter((item) => {
-      const parentIndent = indentMap.get(item.indent_id);
-      if (!parentIndent) return false;
-
-      const matchShop = filterShop === "All" || parentIndent.shop_name === filterShop;
-      const matchTime = checkTimeframe(item.created_at);
-      return matchShop && matchTime;
-    });
-  }, [rawIndentItems, rawIndents, filterShop, filterTimeframe]);
-
-  const filteredPurchaseOrders = useMemo(() => {
-    return rawPurchaseOrders.filter((po) => {
-      const shop = getShopForPO(po);
-      const matchShop = filterShop === "All" || shop === filterShop;
-      const matchTime = checkTimeframe(po.created_at);
-      return matchShop && matchTime;
-    });
-  }, [rawPurchaseOrders, filterShop, filterTimeframe, getShopForPO]);
-
-  // Items specifically belonging to the selected indent
-  const selectedIndentProducts = useMemo(() => {
-    if (!selectedDashboardIndent) return [];
-    return rawIndentItems.filter(item => item.indent_id === selectedDashboardIndent.id);
-  }, [selectedDashboardIndent, rawIndentItems]);
-
-  // Advanced Stats Calculations
-  const stats = useMemo(() => {
-    const totalIndents = filteredIndents.length;
-    const totalItems = filteredIndentItems.length;
-
-    // Approvals stats
-    const approved = filteredIndentItems.filter(
-      (i) => i.approval_status === "approved"
-    ).length;
-    const rejected = filteredIndentItems.filter(
-      (i) => i.approval_status === "rejected"
-    ).length;
-    const pending = totalItems - approved - rejected;
-
-    // PO stats
-    const totalPOs = filteredPurchaseOrders.length;
-    const totalOrderQty = filteredPurchaseOrders.reduce(
-      (sum, po) => sum + (parseFloat(po.total_order_qty) || 0),
-      0
+    if (lower.includes("reject") || lower.includes("deleted")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+          {actionText}
+        </span>
+      );
+    }
+    if (lower.includes("modified") || lower.includes("added")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80 shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+          {actionText}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        {actionText}
+      </span>
     );
-    const totalOrderBox = filteredPurchaseOrders.reduce(
-      (sum, po) => sum + (parseFloat(po.total_order_box) || 0),
-      0
-    );
+  };
 
-    // Logistics confirmation states
-    const vendorConfirmed = filteredPurchaseOrders.filter(
-      (po) => po.trader_status === "yes"
-    ).length;
-    const transporterDispatched = filteredPurchaseOrders.filter(
-      (po) => po.trader_status === "yes" && po.transporter_status === "yes"
-    ).length;
-    const receiverReceived = filteredPurchaseOrders.filter(
-      (po) =>
-        po.trader_status === "yes" &&
-        po.transporter_status === "yes" &&
-        po.receiver_status === "yes"
-    ).length;
-
-    // Active issues/rejections
-    const logisticsIssues = filteredPurchaseOrders.filter(
-      (po) =>
-        po.trader_status === "no" ||
-        po.transporter_status === "no" ||
-        po.receiver_status === "no"
-    ).length;
-
-    return {
-      totalIndents,
-      totalItems,
-      approved,
-      rejected,
-      pending,
-      totalPOs,
-      totalOrderQty,
-      totalOrderBox,
-      vendorConfirmed,
-      transporterDispatched,
-      receiverReceived,
-      logisticsIssues
-    };
-  }, [filteredIndents, filteredIndentItems, filteredPurchaseOrders]);
-
-  // Search Results for the PO Hub Table
-  const searchedPOs = useMemo(() => {
-    // Filter out rejected POs from the active list
-    const activePOs = filteredPurchaseOrders.filter(po => po.trader_status !== "no");
-    if (!searchQuery) return activePOs;
-    const q = searchQuery.toLowerCase();
-    return activePOs.filter(
-      (po) =>
-        po.po_number.toLowerCase().includes(q) ||
-        po.vendor_name.toLowerCase().includes(q) ||
-        (po.indent_id && po.indent_id.toLowerCase().includes(q))
-    );
-  }, [filteredPurchaseOrders, searchQuery]);
-
-  // Loading Screen
   if (isLoading) {
     return (
-      <div className="dashboard-loading-container">
-        <div className="spinner-wrapper">
-          <RefreshCw className="animate-spin-slow" size={42} />
-          <h3>Compiling Operations Control Center...</h3>
-          <p>Fetching real-time records from Supabase server</p>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-slate-500">
+        <RefreshCw className="animate-spin text-indigo-600" size={36} />
+        <p className="font-semibold text-sm">Loading Purchase Dashboard...</p>
       </div>
     );
   }
 
   return (
-    <div className="page-container dashboard-page">
-      {/* ── Top Header and Live Controls ──────────────────────── */}
-      <header className="dashboard-header">
-        <div className="header-text">
-          <div className="live-pill">
-            <span className="ping-dot"></span>
-            <span>Live System Analytics</span>
+    <div className="w-full max-w-[1750px] mx-auto px-3 sm:px-4 md:px-6 py-4 font-sans space-y-4">
+      
+      {/* ── Metric Summary Cards ──────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div 
+          onClick={() => handleStatusChange("All")}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-indigo-300 ${
+            filterStatus === "All" ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-slate-200"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+            <span>Total Items</span>
+            <Layers size={15} className="text-indigo-500" />
           </div>
-          <h1>System Overview Control</h1>
-          <p className="page-description">
-            Aggregate operations and logistics performance metrics
-          </p>
+          <div className="text-2xl font-bold text-slate-800 mt-1">{metrics.total}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Matching active filters</div>
         </div>
 
-        <div className="header-actions">
+        <div 
+          onClick={() => handleStatusChange(filterStatus === "Completed" ? "All" : "Completed")}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-emerald-300 ${
+            filterStatus === "Completed" ? "border-emerald-500 ring-2 ring-emerald-500/10" : "border-slate-200"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+            <span>PO Completed</span>
+            <PackageCheck size={15} className="text-emerald-500" />
+          </div>
+          <div className="text-2xl font-bold text-emerald-700 mt-1">{metrics.completed}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Active & ordered in PO</div>
+        </div>
 
-          {/* Timeframe Buttons */}
-          <div className="timeframe-tabs">
-            <button
-              onClick={() => setFilterTimeframe("all")}
-              className={`time-tab ${filterTimeframe === "all" ? "active" : ""}`}
+        <div 
+          onClick={() => handleStatusChange(filterStatus === "Modified" ? "All" : "Modified")}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-amber-300 ${
+            filterStatus === "Modified" ? "border-amber-500 ring-2 ring-amber-500/10" : "border-slate-200"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+            <span>Modified Qty</span>
+            <FileEdit size={15} className="text-amber-500" />
+          </div>
+          <div className="text-2xl font-bold text-amber-700 mt-1">{metrics.modified}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Quantities updated</div>
+        </div>
+
+        <div 
+          onClick={() => handleStatusChange(filterStatus === "RejectedApproval" ? "All" : "RejectedApproval")}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-rose-300 ${
+            filterStatus === "RejectedApproval" ? "border-rose-500 ring-2 ring-rose-500/10" : "border-slate-200"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+            <span>Rejected / Dropped</span>
+            <AlertCircle size={15} className="text-rose-500" />
+          </div>
+          <div className="text-2xl font-bold text-rose-700 mt-1">{metrics.rejected}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Rejected, dropped or deleted</div>
+        </div>
+      </div>
+
+      {/* ── Sleek Compact Control Bar ─────────────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-3.5 flex flex-wrap items-center justify-between gap-3">
+        
+        {/* Left: Quick Search */}
+        <div className="flex-1 min-w-64 max-w-md relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search items, indent, PO#, party, company, employee..."
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all font-medium"
+          />
+        </div>
+
+        {/* Middle: Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Shop */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+            <Building2 size={13} className="text-slate-400" />
+            <select
+              value={filterShop}
+              onChange={(e) => handleShopChange(e.target.value)}
+              className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer"
             >
-              All Time
-            </button>
-            <button
-              onClick={() => setFilterTimeframe("30days")}
-              className={`time-tab ${filterTimeframe === "30days" ? "active" : ""}`}
-            >
-              30 Days
-            </button>
-            <button
-              onClick={() => setFilterTimeframe("7days")}
-              className={`time-tab ${filterTimeframe === "7days" ? "active" : ""}`}
-            >
-              7 Days
-            </button>
+              {availableShops.map(s => (
+                <option key={s} value={s}>{s === "All" ? "All Shops" : s}</option>
+              ))}
+            </select>
           </div>
 
-          {/* Manual Refresh Action */}
+          {/* Company */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-44">
+            <Briefcase size={13} className="text-slate-400" />
+            <select
+              value={filterCompany}
+              onChange={(e) => handleCompanyChange(e.target.value)}
+              className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer truncate w-full"
+            >
+              <option value="All">All Companies</option>
+              {availableCompanies.filter(c => c !== "All").map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              <option value="__NONE__">Unassigned Company</option>
+            </select>
+          </div>
+
+          {/* Party */}
+          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-44">
+            <select
+              value={filterParty}
+              onChange={(e) => handlePartyChange(e.target.value)}
+              className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer truncate w-full"
+            >
+              {availableParties.map(p => (
+                <option key={p} value={p}>{p === "All" ? "All Parties" : p}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+            <select
+              value={filterStatus}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="All">All Stages</option>
+              <option value="Completed">PO Completed</option>
+              <option value="Modified">Quantity Modified</option>
+              <option value="DroppedPO">Dropped in PO</option>
+              <option value="RejectedApproval">Rejected</option>
+              <option value="DeletedIndent">Deleted</option>
+            </select>
+          </div>
+
+          {/* Timeframe */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+            <Calendar size={13} className="text-slate-400" />
+            <select
+              value={filterTimeframe}
+              onChange={(e) => handleTimeframeChange(e.target.value)}
+              className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="7days">7 Days</option>
+              <option value="30days">30 Days</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-md">
+            {filteredData.length} records
+          </span>
+
           <button
-            onClick={fetchDashboardData}
-            disabled={isRefreshing}
-            className={`refresh-btn ${isRefreshing ? "refreshing" : ""}`}
-            title="Refresh Server Data"
+            onClick={exportToCSV}
+            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+            title="Download CSV"
           >
-            <RefreshCw size={18} />
+            <Download size={13} />
+            <span>CSV</span>
+          </button>
+
+          <button
+            onClick={() => refetch()}
+            disabled={isRefetching}
+            className={`p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all cursor-pointer ${
+              isRefetching ? "animate-spin" : ""
+            }`}
+            title="Refresh"
+          >
+            <RefreshCw size={14} />
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* ── KPI Highlight Cards Grid ────────────────────────── */}
-      <section className="metrics-grid">
-        {/* Metric: Total Indents */}
-        <div className="metric-card glass-card">
-          <div className="card-top">
-            <div className="icon-wrapper blue">
-              <FileSpreadsheet size={24} />
-            </div>
-            <div className="card-lbl">Indents Processed</div>
-          </div>
-          <div className="card-mid">
-            <div className="metric-val">{stats.totalIndents}</div>
-            <div className="metric-sub">
-              {stats.totalItems} unique items uploaded
-            </div>
-          </div>
-          <div className="card-bottom">
-            <div className="progress-bar-bg">
-              <div
-                className="progress-bar-fill blue"
-                style={{ width: "100%" }}
-              ></div>
-            </div>
-            <span className="trend-text positive">Active Uploads Stream</span>
-          </div>
-        </div>
-
-        {/* Metric: Item Approval Rate */}
-        <div className="metric-card glass-card">
-          <div className="card-top">
-            <div className="icon-wrapper emerald">
-              <CheckCircle2 size={24} />
-            </div>
-            <div className="card-lbl">Item Approval Rate</div>
-          </div>
-          <div className="card-mid">
-            <div className="metric-val">
-              {stats.totalItems > 0
-                ? Math.round((stats.approved / stats.totalItems) * 100)
-                : 0}
-              <span className="percent-sign">%</span>
-            </div>
-            <div className="metric-sub">
-              {stats.approved} approved / {stats.pending} pending
-            </div>
-          </div>
-          <div className="card-bottom">
-            <div className="progress-bar-bg">
-              <div
-                className="progress-bar-fill emerald"
-                style={{
-                  width: `${
-                    stats.totalItems > 0
-                      ? (stats.approved / stats.totalItems) * 100
-                      : 0
-                  }%`
-                }}
-              ></div>
-            </div>
-            <span className="trend-text positive">
-              {stats.rejected} rejections filtered
-            </span>
-          </div>
-        </div>
-
-        {/* Metric: Generated Purchase Orders */}
-        <div className="metric-card glass-card">
-          <div className="card-top">
-            <div className="icon-wrapper indigo">
-              <ShoppingBag size={24} />
-            </div>
-            <div className="card-lbl">Purchase Orders</div>
-          </div>
-          <div className="card-mid">
-            <div className="metric-val">{stats.totalPOs}</div>
-            <div className="metric-sub">Generated from Approved Indents</div>
-          </div>
-          <div className="card-bottom">
-            <div className="progress-bar-bg">
-              <div
-                className="progress-bar-fill indigo"
-                style={{
-                  width: `${
-                    stats.totalPOs > 0
-                      ? (stats.vendorConfirmed / stats.totalPOs) * 100
-                      : 0
-                  }%`
-                }}
-              ></div>
-            </div>
-            <span className="trend-text positive">
-              {stats.vendorConfirmed} confirmed by vendors
-            </span>
-          </div>
-        </div>
-
-        {/* Metric: Ordering volume */}
-        <div className="metric-card glass-card">
-          <div className="card-top">
-            <div className="icon-wrapper purple">
-              <TrendingUp size={24} />
-            </div>
-            <div className="card-lbl">Total Ordering Volume</div>
-          </div>
-          <div className="card-mid font-scaled">
-            <div className="metric-val">
-              {Math.ceil(stats.totalOrderBox).toLocaleString("en-IN")}
-              <span className="volume-label">Boxes</span>
-            </div>
-            <div className="metric-sub">
-              Equivalent to {Math.ceil(stats.totalOrderQty).toLocaleString()}{" "}
-              bottles
-            </div>
-          </div>
-          <div className="card-bottom">
-            <div className="progress-bar-bg">
-              <div
-                className="progress-bar-fill purple"
-                style={{ width: "100%" }}
-              ></div>
-            </div>
-            <span className="trend-text purple-text">Dispatched logistics</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Supply Chain Pipeline Funnel ──────────────────────── */}
-      <section className="pipeline-section glass-card">
-        <div className="pipeline-header">
-          <h3>Fulfillment & Operations Pipeline</h3>
-          <p>Real-time lifecycle tracking of items from indent drafts to final receipts</p>
-        </div>
-
-        <div className="pipeline-steps-wrapper">
-          {/* Step 1: Draft / Uploaded */}
-          <div className="pipeline-step active">
-            <div className="step-circle blue">
-              <FileSpreadsheet size={18} />
-              <span className="step-number">1</span>
-            </div>
-            <div className="step-content">
-              <h4>Indent Drafted</h4>
-              <p className="step-value">{stats.totalIndents} Indents</p>
-              <p className="step-desc">Awaiting admin review</p>
-            </div>
-          </div>
-
-          <div className="pipeline-connector filled-blue"></div>
-
-          {/* Step 2: Approved */}
-          <div className={`pipeline-step ${stats.approved > 0 ? "active" : ""}`}>
-            <div className={`step-circle ${stats.approved > 0 ? "emerald" : ""}`}>
-              <CheckCircle2 size={18} />
-              <span className="step-number">2</span>
-            </div>
-            <div className="step-content">
-              <h4>Approved</h4>
-              <p className="step-value">{stats.approved} Items</p>
-              <p className="step-desc">Approved by manager</p>
-            </div>
-          </div>
-
-          <div
-            className={`pipeline-connector ${
-              stats.totalPOs > 0 ? "filled-indigo" : ""
-            }`}
-          ></div>
-
-          {/* Step 3: PO Generated */}
-          <div className={`pipeline-step ${stats.totalPOs > 0 ? "active" : ""}`}>
-            <div className={`step-circle ${stats.totalPOs > 0 ? "indigo" : ""}`}>
-              <ShoppingBag size={18} />
-              <span className="step-number">3</span>
-            </div>
-            <div className="step-content">
-              <h4>PO Released</h4>
-              <p className="step-value">{stats.totalPOs} Orders</p>
-              <p className="step-desc">Submitted to supplier</p>
-            </div>
-          </div>
-
-          <div
-            className={`pipeline-connector ${
-              stats.vendorConfirmed > 0 ? "filled-purple" : ""
-            }`}
-          ></div>
-
-          {/* Step 4: Vendor Confirmed */}
-          <div
-            className={`pipeline-step ${
-              stats.vendorConfirmed > 0 ? "active" : ""
-            }`}
-          >
-            <div
-              className={`step-circle ${
-                stats.vendorConfirmed > 0 ? "purple" : ""
-              }`}
-            >
-              <Check size={18} />
-              <span className="step-number">4</span>
-            </div>
-            <div className="step-content">
-              <h4>Vendor Confirmed</h4>
-              <p className="step-value">{stats.vendorConfirmed} POs</p>
-              <p className="step-desc">Vendor packed goods</p>
-            </div>
-          </div>
-
-          <div
-            className={`pipeline-connector ${
-              stats.transporterDispatched > 0 ? "filled-amber" : ""
-            }`}
-          ></div>
-
-          {/* Step 5: Transporter Dispatched */}
-          <div
-            className={`pipeline-step ${
-              stats.transporterDispatched > 0 ? "active" : ""
-            }`}
-          >
-            <div
-              className={`step-circle ${
-                stats.transporterDispatched > 0 ? "amber" : ""
-              }`}
-            >
-              <Truck size={18} />
-              <span className="step-number">5</span>
-            </div>
-            <div className="step-content">
-              <h4>In Transit</h4>
-              <p className="step-value">{stats.transporterDispatched} Dispatches</p>
-              <p className="step-desc">Transporter picked up</p>
-            </div>
-          </div>
-
-          <div
-            className={`pipeline-connector ${
-              stats.receiverReceived > 0 ? "filled-success" : ""
-            }`}
-          ></div>
-
-          {/* Step 6: Received */}
-          <div
-            className={`pipeline-step ${
-              stats.receiverReceived > 0 ? "success" : ""
-            }`}
-          >
-            <div
-              className={`step-circle ${
-                stats.receiverReceived > 0 ? "success-circle" : ""
-              }`}
-            >
-              <MapPin size={18} />
-              <span className="step-number">6</span>
-            </div>
-            <div className="step-content">
-              <h4>Received</h4>
-              <p className="step-value">{stats.receiverReceived} Receipts</p>
-              <p className="step-desc">Delivered to destination</p>
-            </div>
-          </div>
-        </div>
-
-        {stats.logisticsIssues > 0 && (
-          <div className="pipeline-alert">
-            <AlertTriangle size={16} />
-            <span>
-              Attention: {stats.logisticsIssues} Purchase Order(s) have been
-              flagged with rejection responses in the logistics stages.
-            </span>
-          </div>
-        )}
-      </section>
-
-      {/* ── Indents & Products Master-Detail Explorer ─────────── */}
-      <section className="explorer-section">
-        <div className="pipeline-header" style={{ marginBottom: "1.25rem" }}>
-          <h3>Indent & Product Master-Detail Explorer</h3>
-          <p>Select any uploaded indent from the registry to view its complete product and inventory breakdown</p>
-        </div>
-
-        <div className="explorer-grid">
-          {/* Left Column: Indents Master Registry */}
-          <div className="explorer-master-card glass-card">
-            <div className="explorer-card-header">
-              <Layers size={18} className="card-header-icon" />
-              <h4>Indents Registry</h4>
-              <span className="badge-count">{filteredIndents.length} Runs</span>
-            </div>
-
-            <div className="explorer-list-wrapper">
-              {filteredIndents.length === 0 ? (
-                <div className="explorer-empty-placeholder">
-                  <FileSpreadsheet size={32} />
-                  <p>No indents found matching active filters</p>
-                </div>
-              ) : (
-                filteredIndents.map((ind) => {
-                  const isSelected = selectedDashboardIndent?.id === ind.id;
-                  const itemRunCount = rawIndentItems.filter(item => item.indent_id === ind.id).length;
-                  return (
-                    <div
-                      key={ind.id}
-                      onClick={() => setSelectedDashboardIndent(ind)}
-                      className={`explorer-master-row ${isSelected ? "selected" : ""}`}
-                    >
-                      <div className="row-main-info">
-                        <Building2 size={16} className="shop-icon" />
-                        <div className="row-text">
-                          <span className="shop-title">
-                            {ind.indent_number ? `${ind.indent_number} - ` : ""}{ind.shop_name} Shop
-                          </span>
-                          <span className="date-sub">
-                            {new Date(ind.created_at).toLocaleDateString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric"
-                            })}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="row-side-info">
-                        <span className="badge-pill">{itemRunCount} Items</span>
-                        <span className={`status-dot-badge ${ind.status.toLowerCase()}`}>
-                          {ind.status}
-                        </span>
-                        <ChevronRight size={14} className="chevron" />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {/* Right Column: Indent Products Breakdown Detail */}
-          <div className="explorer-detail-card glass-card">
-            {selectedDashboardIndent ? (
-              <>
-                <div className="explorer-card-header highlight">
-                  <div className="header-details">
-                    <span className="pre-title">Selected Indent Breakdown</span>
-                    <h4>
-                      {selectedDashboardIndent.indent_number ? `${selectedDashboardIndent.indent_number} - ` : ""}{selectedDashboardIndent.shop_name} Shop Products
-                    </h4>
-                    <span className="timestamp-details">
-                      Uploaded: {new Date(selectedDashboardIndent.created_at).toLocaleString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit"
-                      })}
-                    </span>
-                  </div>
-                  <span className="badge-count emerald">
-                    {selectedIndentProducts.length} Items Listed
-                  </span>
-                </div>
-
-                <div className="explorer-table-wrapper">
-                  <table className="explorer-table">
-                    <thead>
-                      <tr>
-                        <th>Product / Brand</th>
-                        <th>Type</th>
-                        <th className="text-right">Avg Sale</th>
-                        <th className="text-right">Closing Qty</th>
-                        <th className="text-right">Order Box</th>
-                        <th className="text-right">Order Qty</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedIndentProducts.length === 0 ? (
-                        <tr>
-                          <td colSpan="7" className="empty-table-cell">
-                            No products are recorded for this indent.
-                          </td>
-                        </tr>
-                      ) : (
-                        selectedIndentProducts.map((item, index) => (
-                          <tr key={item.id || index} className="product-row">
-                            <td className="product-brand-cell">
-                              <strong>{item.item_name}</strong>
-                              {item.brand_name && item.brand_name !== item.item_name && (
-                                <span className="brand-sub">{item.brand_name}</span>
-                              )}
-                            </td>
-                            <td>
-                              <span className="liquor-type-tag">
-                                {item.liquor_type || "—"}
-                              </span>
-                            </td>
-                            <td className="text-right font-medium">
-                              {item.fix_per_day_avg_sale != null ? item.fix_per_day_avg_sale : "—"}
-                            </td>
-                            <td className="text-right font-medium">
-                              {item.closing_qty != null ? item.closing_qty : "—"}
-                            </td>
-                            <td className="text-right font-bold text-indigo">
-                              {item.order_box != null ? parseFloat(item.order_box).toFixed(2) : "—"}
-                            </td>
-                            <td className="text-right font-bold text-dark">
-                              {item.order_qty != null ? Math.ceil(item.order_qty) : "—"}
-                            </td>
-                            <td>
-                              <span
-                                className={`status-badge-mini ${
-                                  item.approval_status
-                                    ? item.approval_status.toLowerCase()
-                                    : "pending"
-                                }`}
-                              >
-                                {item.approval_status || "Pending"}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            ) : (
-              <div className="explorer-empty-placeholder full-height">
-                <FileText size={48} className="placeholder-icon" />
-                <h4>No Indent Selected</h4>
-                <p>Choose an indent run from the left registry panel to inspect its product details.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Full Width PO Logistics Hub Table ─────────────────── */}
-      <section className="po-hub-section glass-card">
-        <div className="po-hub-header">
-          <div className="po-hub-title-info">
-            <h3>Active Purchase Order Logistics Tracker</h3>
-            <p>Real-time delivery status, remarks, and inspection logs for generated Purchase Orders</p>
-          </div>
-          
-          <div className="stream-search">
-            <Search size={14} className="search-icon" />
-            <input
-              type="text"
-              placeholder="Search by vendor or PO#..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="mini-search-input active-po-search"
-            />
-          </div>
-        </div>
-
-        <div className="stream-table-wrapper">
-          <table className="stream-table">
-            <thead>
+      {/* ── Master Reconciliation Data Table ──────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-700 border-collapse">
+            <thead className="bg-slate-50/90 backdrop-blur-xs text-slate-600 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 sticky top-0 z-10">
               <tr>
-                <th>PO Number</th>
-                <th>Destination</th>
-                <th>Vendor</th>
-                <th className="text-right">Ordered Boxes</th>
-                <th className="text-right">Ordered Bottles</th>
-                <th style={{ textAlign: "center" }}>Logistics Confirmation Nodes</th>
-                <th style={{ textAlign: "center" }}>Inspect</th>
+                <th className="py-2.5 px-3">Indent ID</th>
+                <th className="py-2.5 px-3">Shop</th>
+                <th className="py-2.5 px-3">Company</th>
+                <th className="py-2.5 px-3">Party Name</th>
+                <th className="py-2.5 px-3">Item Name</th>
+                <th className="py-2.5 px-3 text-right bg-blue-50/40">Indent (Box / Qty)</th>
+                <th className="py-2.5 px-3 bg-blue-50/40">Indent By</th>
+                <th className="py-2.5 px-3 text-right bg-emerald-50/40">Approved (Box / Qty)</th>
+                <th className="py-2.5 px-3 bg-emerald-50/40">Approver Action</th>
+                <th className="py-2.5 px-3 text-right bg-indigo-50/40">PO (Box / Qty)</th>
+                <th className="py-2.5 px-3 bg-indigo-50/40">PO Action</th>
+                <th className="py-2.5 px-2.5 text-center">Trader</th>
+                <th className="py-2.5 px-2.5 text-center">Transporter</th>
+                <th className="py-2.5 px-2.5 text-center">Receiver</th>
+                <th className="py-2.5 px-3">Status</th>
               </tr>
             </thead>
-            <tbody>
-              {searchedPOs.length === 0 ? (
+            <tbody className="divide-y divide-slate-100 text-[11px]">
+              {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="empty-table-cell">
-                    No active Purchase Orders found matching the search criteria.
+                  <td colSpan="15" className="py-12 text-center text-slate-400 font-medium">
+                    No matching records found.
                   </td>
                 </tr>
               ) : (
-                searchedPOs.map((po) => {
-                  const shop = getShopForPO(po);
+                paginatedData.map((row) => {
+                  const isDeleted = row.is_deleted;
                   return (
-                    <tr key={po.id} className="stream-row">
-                      <td className="po-number-cell">
-                        <strong>{po.po_number}</strong>
-                        <span className="po-vendor-sub">Released Indent: {po.indent_id || "N/A"}</span>
+                    <tr
+                      key={row.id}
+                      className={`hover:bg-slate-50/80 transition-colors ${
+                        isDeleted ? "bg-rose-50/30" : ""
+                      }`}
+                    >
+                      {/* Indent ID */}
+                      <td className="py-2.5 px-3 font-bold text-indigo-900 whitespace-nowrap">
+                        {row.indent_id}
                       </td>
-                      <td className="shop-name-cell">
-                        <Building2 size={14} className="cell-icon" />
-                        <span>{shop} Shop</span>
+
+                      {/* Shop */}
+                      <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-700">
+                        {row.shop_name || "—"}
                       </td>
-                      <td className="date-cell font-semibold">{po.vendor_name}</td>
-                      <td className="text-right font-bold text-indigo">
-                        {parseFloat(po.total_order_box).toFixed(2)}
-                      </td>
-                      <td className="text-right font-bold text-dark">
-                        {Math.ceil(po.total_order_qty).toLocaleString()}
-                      </td>
-                      <td className="logistics-pipeline-cell" style={{ display: "flex", justifyContent: "center" }}>
-                        <div className="micro-logistics-bar" title="Vendor -> Transporter -> Receiver">
-                          {/* Vendor Status */}
-                          <span
-                            className={`node ${
-                              po.trader_status === "yes"
-                                ? "success"
-                                : po.trader_status === "no"
-                                ? "danger"
-                                : "pending"
-                            }`}
-                            title={`Vendor: ${
-                              po.trader_status === "yes"
-                                ? "Confirmed"
-                                : po.trader_status === "no"
-                                ? "Rejected"
-                                : "Pending"
-                            }`}
-                          >
-                            V
+
+                      {/* Company */}
+                      <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-600">
+                        {row.company_name ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                            {row.company_name}
                           </span>
-                          <span className="micro-line"></span>
-                          {/* Transporter Status */}
-                          <span
-                            className={`node ${
-                              po.transporter_status === "yes"
-                                ? "success"
-                                : po.transporter_status === "no"
-                                ? "danger"
-                                : "pending"
-                            }`}
-                            title={`Transporter: ${
-                              po.transporter_status === "yes"
-                                ? "Confirmed"
-                                : po.transporter_status === "no"
-                                ? "Rejected"
-                                : "Pending"
-                            }`}
-                          >
-                            T
-                          </span>
-                          <span className="micro-line"></span>
-                          {/* Receiver Status */}
-                          <span
-                            className={`node ${
-                              po.receiver_status === "yes"
-                                ? "success"
-                                : po.receiver_status === "no"
-                                ? "danger"
-                                : "pending"
-                            }`}
-                            title={`Receiver: ${
-                              po.receiver_status === "yes"
-                                ? "Received"
-                                : po.receiver_status === "no"
-                                ? "Rejected"
-                                : "Pending"
-                            }`}
-                          >
-                            R
-                          </span>
-                        </div>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">—</span>
+                        )}
                       </td>
-                      <td style={{ textAlign: "center" }}>
-                        <button
-                          onClick={() => setSelectedPO(po)}
-                          className="view-po-details-btn"
-                          style={{ margin: "0 auto" }}
-                          title="Inspect Logistics details"
+
+                      {/* Party */}
+                      <td className="py-2.5 px-3 whitespace-nowrap font-semibold text-slate-800">
+                        {row.party_name || "—"}
+                      </td>
+
+                      {/* Item Name */}
+                      <td className="py-2.5 px-3 font-bold text-slate-900 min-w-50">
+                        {row.item_name}
+                      </td>
+
+                      {/* 1. Indent Box / Qty */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap bg-blue-50/20 font-medium">
+                        <span className="font-bold text-slate-800">
+                          {row.order_box != null ? parseFloat(row.order_box).toFixed(2) : "—"} Bx
+                        </span>
+                        <span className="text-slate-400 text-[10px] block">
+                          {row.order_qty != null ? Math.round(row.order_qty) : "—"} units
+                        </span>
+                      </td>
+
+                      {/* Indent By */}
+                      <td className="py-2.5 px-3 whitespace-nowrap bg-blue-50/20">
+                        <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
+                          <User size={11} className="text-slate-400" />
+                          {row.indent_emp_code || "—"}
+                        </span>
+                      </td>
+
+                      {/* 2. Approved Box / Qty */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap bg-emerald-50/20 font-medium">
+                        {row.approved_box != null ? (
+                          <>
+                            <span className="font-bold text-emerald-800">
+                              {parseFloat(row.approved_box).toFixed(2)} Bx
+                            </span>
+                            <span className="text-slate-400 text-[10px] block">
+                              {Math.round(row.approved_qty)} units
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-slate-300 font-medium">—</span>
+                        )}
+                      </td>
+
+                      {/* Approver Action */}
+                      <td className="py-2.5 px-3 whitespace-nowrap bg-emerald-50/20">
+                        {renderActionBadge(row.approver_action)}
+                      </td>
+
+                      {/* 3. PO Box / Qty */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap bg-indigo-50/20 font-medium">
+                        {row.po_box != null ? (
+                          <>
+                            <span className="font-bold text-indigo-900">
+                              {parseFloat(row.po_box).toFixed(2)} Bx
+                            </span>
+                            <span className="text-slate-400 text-[10px] block">
+                              {Math.round(row.po_qty)} units
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-slate-300 font-medium">—</span>
+                        )}
+                      </td>
+
+                      {/* PO Action */}
+                      <td className="py-2.5 px-3 whitespace-nowrap bg-indigo-50/20">
+                        {row.po_number && (
+                          <span className="text-[10px] font-bold text-slate-500 block">
+                            {row.po_number}
+                          </span>
+                        )}
+                        {renderActionBadge(row.po_action)}
+                      </td>
+
+                      {/* Trader */}
+                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            row.trader_status === "yes" || row.trader_status === "Verified"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : row.trader_status === "no"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
                         >
-                          <Eye size={14} />
-                        </button>
+                          {row.trader_status || "Pending"}
+                        </span>
+                      </td>
+
+                      {/* Transporter */}
+                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            row.transporter_status === "yes" || row.transporter_status === "Dispatched"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : row.transporter_status === "no"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {row.transporter_status || "Pending"}
+                        </span>
+                      </td>
+
+                      {/* Receiver */}
+                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            row.receiver_status === "yes" || row.receiver_status === "Received"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : row.receiver_status === "no"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {row.receiver_status || "Pending"}
+                        </span>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        {isDeleted ? (
+                          <span className="inline-flex items-center gap-1 text-rose-700 font-semibold bg-rose-100 px-2 py-0.5 rounded text-[10px]">
+                            <XCircle size={11} />
+                            Deleted ({row.deleted_by_emp_code || "Admin"}) in {row.deletion_stage || "Stage"}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 font-semibold text-[10px] flex items-center gap-1">
+                            <Check size={11} />
+                            Active
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -928,220 +776,40 @@ const Dashboard = () => {
             </tbody>
           </table>
         </div>
-      </section>
 
-      {/* ── Interactive PO Logistics Inspector Modal ───────────── */}
-      {selectedPO && (
-        <div className="dashboard-modal-backdrop">
-          <div className="inspector-modal-card glass-modal-card">
-            <div className="modal-header">
-              <div>
-                <div className="modal-top-tag">PO Logistics Log</div>
-                <h2>Inspection for {selectedPO.po_number}</h2>
-              </div>
+        {/* ── Compact Pagination Bar ────────────────────────────── */}
+        {totalPages > 1 && (
+          <div className="p-3 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+            <div>
+              Showing <span className="font-semibold">{(currentPage - 1) * pageSize + 1}</span> to{" "}
+              <span className="font-semibold">{Math.min(currentPage * pageSize, filteredData.length)}</span> of{" "}
+              <span className="font-semibold">{filteredData.length}</span> entries
+            </div>
+
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setSelectedPO(null)}
-                className="close-modal-btn"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 border border-slate-200 bg-white rounded-md disabled:opacity-40 hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed"
               >
-                <X size={20} />
+                <ChevronLeft size={14} />
+              </button>
+
+              <span className="font-semibold px-2">
+                {currentPage} / {totalPages}
+              </span>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 border border-slate-200 bg-white rounded-md disabled:opacity-40 hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <ChevronRight size={14} />
               </button>
             </div>
-
-            <div className="modal-body-scroll">
-              <div className="inspector-summary-strip">
-                <div className="strip-item">
-                  <span className="lbl">Vendor</span>
-                  <span className="val">{selectedPO.vendor_name}</span>
-                </div>
-                <div className="strip-item">
-                  <span className="lbl">Shop Destination</span>
-                  <span className="val">{getShopForPO(selectedPO)} Shop</span>
-                </div>
-                <div className="strip-item">
-                  <span className="lbl">Indent Batch</span>
-                  <span className="val">{selectedPO.indent_id || "N/A"}</span>
-                </div>
-                <div className="strip-item">
-                  <span className="lbl">Volume Ordered</span>
-                  <span className="val">
-                    {parseFloat(selectedPO.total_order_box).toFixed(2)} Boxes (
-                    {selectedPO.total_order_qty} Bottles)
-                  </span>
-                </div>
-              </div>
-
-              {/* Status Nodes timeline details */}
-              <div className="inspector-timeline">
-                <h3>Pipeline Verification Checklist</h3>
-
-                {/* Step 1: Vendor */}
-                <div
-                  className={`timeline-node-row ${
-                    selectedPO.trader_status === "yes"
-                      ? "completed"
-                      : selectedPO.trader_status === "no"
-                      ? "rejected"
-                      : "pending"
-                  }`}
-                >
-                  <div className="timeline-badge-circle">
-                    {selectedPO.trader_status === "yes" ? (
-                      <Check size={16} />
-                    ) : selectedPO.trader_status === "no" ? (
-                      <XCircle size={16} />
-                    ) : (
-                      <Clock size={16} />
-                    )}
-                  </div>
-                  <div className="timeline-text-content">
-                    <div className="timeline-node-title">
-                      <h4>Vendor Confirmation</h4>
-                      <span className="badge">
-                        {selectedPO.trader_status === "yes"
-                          ? "Confirmed"
-                          : selectedPO.trader_status === "no"
-                          ? "Rejected"
-                          : "Awaiting Confirmation"}
-                      </span>
-                    </div>
-                    {selectedPO.dispatch_date && (
-                      <p className="timeline-detail-text">
-                        <CalendarDays size={12} className="inline-icon" />
-                        Expected Dispatch Date:{" "}
-                        <strong>
-                          {new Date(selectedPO.dispatch_date).toLocaleDateString(
-                            "en-IN",
-                            { day: "2-digit", month: "short", year: "numeric" }
-                          )}
-                        </strong>
-                      </p>
-                    )}
-                    {(selectedPO.trader_remarks || selectedPO.remarks) && (
-                      <p className="timeline-remarks-block">
-                        Remarks: <em>"{selectedPO.trader_remarks || selectedPO.remarks}"</em>
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Step 2: Transporter */}
-                <div
-                  className={`timeline-node-row ${
-                    selectedPO.transporter_status === "yes"
-                      ? "completed"
-                      : selectedPO.transporter_status === "no"
-                      ? "rejected"
-                      : "pending"
-                  }`}
-                >
-                  <div className="timeline-badge-circle">
-                    {selectedPO.transporter_status === "yes" ? (
-                      <Check size={16} />
-                    ) : selectedPO.transporter_status === "no" ? (
-                      <XCircle size={16} />
-                    ) : (
-                      <Clock size={16} />
-                    )}
-                  </div>
-                  <div className="timeline-text-content">
-                    <div className="timeline-node-title">
-                      <h4>Transporter Dispatch Confirmation</h4>
-                      <span className="badge">
-                        {selectedPO.transporter_status === "yes"
-                          ? "Dispatched"
-                          : selectedPO.transporter_status === "no"
-                          ? "Rejected Pick-up"
-                          : "Awaiting Dispatch"}
-                      </span>
-                    </div>
-                    {selectedPO.transporter_number && (
-                      <p className="timeline-detail-text">
-                        <Truck size={12} className="inline-icon" />
-                        Assigned Transporter Phone:{" "}
-                        <strong>{selectedPO.transporter_number}</strong>
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Step 3: Receiver */}
-                <div
-                  className={`timeline-node-row ${
-                    selectedPO.receiver_status === "yes"
-                      ? "completed"
-                      : selectedPO.receiver_status === "no"
-                      ? "rejected"
-                      : "pending"
-                  }`}
-                >
-                  <div className="timeline-badge-circle">
-                    {selectedPO.receiver_status === "yes" ? (
-                      <Check size={16} />
-                    ) : selectedPO.receiver_status === "no" ? (
-                      <XCircle size={16} />
-                    ) : (
-                      <Clock size={16} />
-                    )}
-                  </div>
-                  <div className="timeline-text-content">
-                    <div className="timeline-node-title">
-                      <h4>Shop Delivery Confirmation</h4>
-                      <span className="badge">
-                        {selectedPO.receiver_status === "yes"
-                          ? "Received Successfully"
-                          : selectedPO.receiver_status === "no"
-                          ? "Rejected Delivery"
-                          : "Awaiting Delivery Receipt"}
-                      </span>
-                    </div>
-                    {selectedPO.receiver_number && (
-                      <p className="timeline-detail-text">
-                        <MapPin size={12} className="inline-icon" />
-                        Assigned Receiver Phone:{" "}
-                        <strong>{selectedPO.receiver_number}</strong>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Document Downloads */}
-              <div className="inspector-docs-links">
-                <h3>Logistics Documents</h3>
-                <div className="docs-buttons">
-                  {selectedPO.trader_pdf_url ? (
-                    <a
-                      href={selectedPO.trader_pdf_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="glass-doc-btn"
-                    >
-                      <FileText size={16} />
-                      <span>View Supplier PDF Copy</span>
-                    </a>
-                  ) : (
-                    <span className="doc-btn-disabled">No Supplier PDF available</span>
-                  )}
-
-                  {selectedPO.receiver_pdf_url ? (
-                    <a
-                      href={selectedPO.receiver_pdf_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="glass-doc-btn"
-                    >
-                      <FileText size={16} />
-                      <span>View Receiver PDF Copy</span>
-                    </a>
-                  ) : (
-                    <span className="doc-btn-disabled">No Receiver PDF available</span>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
