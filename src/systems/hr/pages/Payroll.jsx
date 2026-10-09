@@ -505,6 +505,8 @@ const Payroll = () => {
             // Track logged dates per employee key to prevent duplicate roster addition
             const loggedDatesMap = {};
 
+            const empDailyLogs = {};
+
             (dbLogs || []).forEach(log => {
                 const empId = log.employee_id?.toString().trim();
                 const empName = log.employee_name?.toString().trim();
@@ -517,19 +519,6 @@ const Payroll = () => {
                 const empDoj = empDojMap[matchedKey] || empDojMap[empIdLower] || empDojMap[empNameLower];
                 const isBeforeJoining = Boolean(empDoj && log.attendance_date < empDoj);
 
-                if (!loggedDatesMap[matchedKey]) loggedDatesMap[matchedKey] = new Set();
-                loggedDatesMap[matchedKey].add(log.attendance_date);
-
-                const rawStatus = log.status?.toString().trim().toLowerCase() || '';
-                const isHolidayDate = holidayDates.has(log.attendance_date);
-                const isHoliday = rawStatus === 'holiday' || isHolidayDate;
-                const isPresent = rawStatus === 'present' || rawStatus === 'late' || rawStatus === 'half day' || rawStatus === 'weekly off' || rawStatus === 'day off' || rawStatus === 'wo' || rawStatus === 'do' || isHoliday;
-
-                const dayOfWeek = getLocalDayOfWeek(log.attendance_date);
-                const isFriday = dayOfWeek === 5;
-                const isSaturday = dayOfWeek === 6;
-                const isSunday = dayOfWeek === 0;
-
                 const allMatchedKey = allEmpIdToKeyMap[empIdLower] || allEmpIdToKeyMap[empNameLower] || empIdLower || empNameLower;
                 const isInactiveLog =
                     isInactiveRecord(empId, empName) ||
@@ -541,27 +530,40 @@ const Payroll = () => {
                     return;
                 }
 
-                if (verifiedIds.has(empIdLower) || verifiedIds.has(empNameLower)) {
-                    if (!attendanceMap[matchedKey]) {
-                        attendanceMap[matchedKey] = { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
-                    }
-                    if (isPresent) {
-                        attendanceMap[matchedKey].present += (rawStatus === 'half day' ? 0.5 : 1);
-                        if (isFriday && !isHoliday) attendanceMap[matchedKey].hasFriday = true;
-                        if (isSaturday && !isHoliday) attendanceMap[matchedKey].hasSaturday = true;
-                        if (isSunday && !isHoliday) attendanceMap[matchedKey].hasSunday = true;
-                    } else if (rawStatus === 'absent' && !isHolidayDate) {
-                        attendanceMap[matchedKey].absent++;
+                const dateStr = (log.attendance_date || '').trim();
+                if (!dateStr) return;
+
+                const isVerified = verifiedIds.has(empIdLower) || verifiedIds.has(empNameLower);
+                const finalKey = isVerified ? matchedKey : (empId || empName);
+
+                if (!empDailyLogs[finalKey]) {
+                    empDailyLogs[finalKey] = {
+                        isVerified,
+                        empId: empId || finalKey,
+                        empName: log.employee_name || empName || 'Unmatched Employee',
+                        dates: {}
+                    };
+                }
+
+                if (!empDailyLogs[finalKey].dates[dateStr]) {
+                    empDailyLogs[finalKey].dates[dateStr] = [];
+                }
+                empDailyLogs[finalKey].dates[dateStr].push(log.status?.toString().trim().toLowerCase() || '');
+            });
+
+            Object.keys(empDailyLogs).forEach(empKey => {
+                const empInfo = empDailyLogs[empKey];
+                const isVerified = empInfo.isVerified;
+
+                if (isVerified) {
+                    if (!attendanceMap[empKey]) {
+                        attendanceMap[empKey] = { present: 0, absent: 0, hasFriday: false, hasSaturday: false, hasSunday: false };
                     }
                 } else {
-                    const unKey = empId || empName;
-                    if (isInactiveRecord(empId, empName) || isInactiveRecord(unKey, log.employee_name) || isInactiveRecord(log.employee_id, log.employee_name)) {
-                        return;
-                    }
-                    if (!unmatchedMap[unKey]) {
-                        unmatchedMap[unKey] = {
-                            id: unKey,
-                            name: log.employee_name || 'Unmatched Employee',
+                    if (!unmatchedMap[empKey]) {
+                        unmatchedMap[empKey] = {
+                            id: empInfo.empId,
+                            name: empInfo.empName,
                             present: 0,
                             absent: 0,
                             hasFriday: false,
@@ -569,15 +571,56 @@ const Payroll = () => {
                             hasSunday: false
                         };
                     }
-                    if (isPresent) {
-                        unmatchedMap[unKey].present += (rawStatus === 'half day' ? 0.5 : 1);
-                        if (isFriday && !isHoliday) unmatchedMap[unKey].hasFriday = true;
-                        if (isSaturday && !isHoliday) unmatchedMap[unKey].hasSaturday = true;
-                        if (isSunday && !isHoliday) unmatchedMap[unKey].hasSunday = true;
-                    } else if (rawStatus === 'absent' && !isHolidayDate) {
-                        unmatchedMap[unKey].absent++;
-                    }
                 }
+
+                loggedDatesMap[empKey] = loggedDatesMap[empKey] || new Set();
+
+                Object.keys(empInfo.dates).forEach(dateStr => {
+                    loggedDatesMap[empKey].add(dateStr);
+                    const statuses = empInfo.dates[dateStr];
+                    const isHolidayDate = holidayDates.has(dateStr);
+
+                    const isFullPresent = isHolidayDate || statuses.some(s =>
+                        s === 'present' || s === 'late' || s === 'weekly off' || s === 'day off' || s === 'wo' || s === 'do' || s === 'holiday'
+                    );
+                    const isHalfDay = !isFullPresent && statuses.some(s => s === 'half day');
+                    const isAbsent = !isFullPresent && !isHalfDay && statuses.some(s => s === 'absent');
+
+                    const dayOfWeek = getLocalDayOfWeek(dateStr);
+                    const isFriday = dayOfWeek === 5;
+                    const isSaturday = dayOfWeek === 6;
+                    const isSunday = dayOfWeek === 0;
+
+                    if (isVerified) {
+                        if (isFullPresent) {
+                            attendanceMap[empKey].present += 1;
+                            if (isFriday && !isHolidayDate) attendanceMap[empKey].hasFriday = true;
+                            if (isSaturday && !isHolidayDate) attendanceMap[empKey].hasSaturday = true;
+                            if (isSunday && !isHolidayDate) attendanceMap[empKey].hasSunday = true;
+                        } else if (isHalfDay) {
+                            attendanceMap[empKey].present += 0.5;
+                            if (isFriday && !isHolidayDate) attendanceMap[empKey].hasFriday = true;
+                            if (isSaturday && !isHolidayDate) attendanceMap[empKey].hasSaturday = true;
+                            if (isSunday && !isHolidayDate) attendanceMap[empKey].hasSunday = true;
+                        } else if (isAbsent && !isHolidayDate) {
+                            attendanceMap[empKey].absent++;
+                        }
+                    } else {
+                        if (isFullPresent) {
+                            unmatchedMap[empKey].present += 1;
+                            if (isFriday && !isHolidayDate) unmatchedMap[empKey].hasFriday = true;
+                            if (isSaturday && !isHolidayDate) unmatchedMap[empKey].hasSaturday = true;
+                            if (isSunday && !isHolidayDate) unmatchedMap[empKey].hasSunday = true;
+                        } else if (isHalfDay) {
+                            unmatchedMap[empKey].present += 0.5;
+                            if (isFriday && !isHolidayDate) unmatchedMap[empKey].hasFriday = true;
+                            if (isSaturday && !isHolidayDate) unmatchedMap[empKey].hasSaturday = true;
+                            if (isSunday && !isHolidayDate) unmatchedMap[empKey].hasSunday = true;
+                        } else if (isAbsent && !isHolidayDate) {
+                            unmatchedMap[empKey].absent++;
+                        }
+                    }
+                });
             });
 
             // Process Roster Weekly Off / Day Off for dates where no punch log overrides it
@@ -596,7 +639,9 @@ const Payroll = () => {
 
                 if (sType === 'weekly off' || sType === 'wo' || sType === 'day off' || sType === 'do' || sType === 'off') {
                     // Check if date was already logged in attendance_logs
-                    if (!loggedDatesMap[matchedKey] || !loggedDatesMap[matchedKey].has(r.date)) {
+                    if (!loggedDatesMap[matchedKey]) loggedDatesMap[matchedKey] = new Set();
+                    if (!loggedDatesMap[matchedKey].has(r.date)) {
+                        loggedDatesMap[matchedKey].add(r.date);
                         const dayOfWeek = getLocalDayOfWeek(r.date);
                         const isFriday = dayOfWeek === 5;
                         const isSaturday = dayOfWeek === 6;
@@ -674,6 +719,14 @@ const Payroll = () => {
                         unmatchedMap[unKey].present += 1;
                     }
                 });
+            });
+
+            // Clamp attendance to total calendar days in the month
+            Object.keys(attendanceMap).forEach(k => {
+                attendanceMap[k].present = Math.min(daysInMonth, attendanceMap[k].present);
+            });
+            Object.keys(unmatchedMap).forEach(k => {
+                unmatchedMap[k].present = Math.min(daysInMonth, unmatchedMap[k].present);
             });
 
             // 3. Fetch advances from Supabase advance_requests table
@@ -1242,9 +1295,22 @@ const Payroll = () => {
                     is_verified: false
                 };
 
-                const { error: draftErr } = await supabase
+                let { error: draftErr } = await supabase
                     .from('hr_management_payroll')
                     .upsert(draftRecord, { onConflict: 'employee_id,year,month' });
+
+                if (draftErr && draftErr.message && draftErr.message.toLowerCase().includes('integer')) {
+                    const intSafeRecord = {
+                        ...draftRecord,
+                        total_month_days: Math.round(draftRecord.total_month_days),
+                        total_present: Math.round(draftRecord.total_present),
+                        extra_days: Math.round(draftRecord.extra_days)
+                    };
+                    const retryRes = await supabase
+                        .from('hr_management_payroll')
+                        .upsert(intSafeRecord, { onConflict: 'employee_id,year,month' });
+                    draftErr = retryRes.error;
+                }
 
                 if (draftErr) {
                     console.error(`Failed to save draft for employee ${empId}:`, draftErr);
@@ -1317,9 +1383,22 @@ const Payroll = () => {
                 status: 'paid'
             }));
 
-            const { error } = await supabase
+            let { error } = await supabase
                 .from('hr_management_payroll')
                 .upsert(payrollRecords, { onConflict: 'employee_id,year,month' });
+
+            if (error && error.message && error.message.toLowerCase().includes('integer')) {
+                const intSafeRecords = payrollRecords.map(r => ({
+                    ...r,
+                    total_month_days: Math.round(r.total_month_days),
+                    total_present: Math.round(r.total_present),
+                    extra_days: Math.round(r.extra_days)
+                }));
+                const retryRes = await supabase
+                    .from('hr_management_payroll')
+                    .upsert(intSafeRecords, { onConflict: 'employee_id,year,month' });
+                error = retryRes.error;
+            }
 
             if (error) {
                 if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
@@ -1414,9 +1493,22 @@ const Payroll = () => {
                 status: 'hold'
             }));
 
-            const { error } = await supabase
+            let { error } = await supabase
                 .from('hr_management_payroll')
                 .upsert(payrollRecords, { onConflict: 'employee_id,year,month' });
+
+            if (error && error.message && error.message.toLowerCase().includes('integer')) {
+                const intSafeRecords = payrollRecords.map(r => ({
+                    ...r,
+                    total_month_days: Math.round(r.total_month_days),
+                    total_present: Math.round(r.total_present),
+                    extra_days: Math.round(r.extra_days)
+                }));
+                const retryRes = await supabase
+                    .from('hr_management_payroll')
+                    .upsert(intSafeRecords, { onConflict: 'employee_id,year,month' });
+                error = retryRes.error;
+            }
 
             if (error) {
                 console.error("Supabase upsert error in hold:", error);
