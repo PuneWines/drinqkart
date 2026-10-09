@@ -1269,7 +1269,7 @@ export default function Dashboard() {
                                 'BALAJI': 'AKOLE',
                                 'KUNAL': 'MUMBAI',
                                 'KUNAL ULWE': 'ULWE',
-                            'KUNAL KHARGHAR': 'KHARGHAR'
+                                'KUNAL KHARGHAR': 'KHARGHAR'
                             };
 
                             // Standard location options to display in the dropdown
