@@ -28,6 +28,10 @@ const AddExcludedModal = ({
   const subTitleColor = isRejectedMode ? "#b91c1c" : "#b45309";
   const btnBgColor = isRejectedMode ? "#dc2626" : "#d97706";
 
+  const isCompoundKey = typeof vendorName === "string" && vendorName.includes("::");
+  const rawVendor = isCompoundKey ? vendorName.split("::")[0].trim() : (vendorName || "").trim();
+  const targetCompany = isCompoundKey ? vendorName.split("::")[1].trim() : "";
+
   useEffect(() => {
     if (isOpen && vendorName) {
       fetchItems();
@@ -56,9 +60,8 @@ const AddExcludedModal = ({
         query = query.eq("is_excluded", true);
       }
 
-      if (vendorName) {
-        const trimmedVendor = vendorName.trim();
-        query = query.ilike("party_name", `%${trimmedVendor}%`);
+      if (rawVendor) {
+        query = query.ilike("party_name", `%${rawVendor}%`);
       }
 
       const { data, error: fetchErr } = await query;
@@ -109,6 +112,7 @@ const AddExcludedModal = ({
           bcs,
           itemName: row.item_name,
           brandName: row.brand_name,
+          company_name: row.company_name || targetCompany || null,
           liquorType: row.liquor_type,
           closingQty: row.closing_qty
         };
@@ -120,6 +124,15 @@ const AddExcludedModal = ({
         fetchedItems = fetchedItems.filter(
           item => !item.shopName || item.shopName === "Unknown" || item.shopName.trim().toUpperCase() === cleanShop
         );
+      }
+
+      // Filter by targetCompany if activeParty specified a company
+      if (targetCompany) {
+        const cleanTargetCompany = targetCompany.toLowerCase();
+        fetchedItems = fetchedItems.filter(item => {
+          const c = (item.company_name || "").trim().toLowerCase();
+          return !c || c === cleanTargetCompany;
+        });
       }
 
       // Filter out items already in the active table
@@ -154,7 +167,10 @@ const AddExcludedModal = ({
   };
 
   const handleConfirmAdd = () => {
-    const selectedItems = items.filter(i => selectedIds.has(i.id));
+    const selectedItems = items.filter(i => selectedIds.has(i.id)).map(i => ({
+      ...i,
+      company_name: i.company_name || targetCompany || null
+    }));
     onAddItems(selectedItems);
     onClose();
   };
@@ -224,7 +240,7 @@ const AddExcludedModal = ({
                 {titleText}
               </h2>
               <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: subTitleColor }}>
-                Vendor: <strong>{vendorName}</strong> {shopName && shopName !== 'All' ? `• Shop: ${shopName}` : ''}
+                Vendor: <strong>{rawVendor}</strong> {targetCompany ? `• Company: ${targetCompany}` : ''} {shopName && shopName !== 'All' ? `• Shop: ${shopName}` : ''}
               </p>
             </div>
           </div>

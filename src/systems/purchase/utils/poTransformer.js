@@ -12,11 +12,14 @@ export const transformActivePartyItems = (filteredApprovedItems, activeParty) =>
 
   return filteredApprovedItems
     .filter(item => {
-      const pMatch = (item.party_name || "").trim() === (targetParty || "").trim();
+      const pMatch = (item.party_name || "").trim().toLowerCase() === (targetParty || "").trim().toLowerCase();
       if (!pMatch) return false;
-      if (!isKey) return true;
-      const itemCompany = (item.company_name || "").trim();
-      const tgtComp = (targetCompany || "").trim();
+      if (!isKey) {
+        // If activeParty has no company key, only match items that also have no company
+        return !(item.company_name || "").trim();
+      }
+      const itemCompany = (item.company_name || "").trim().toLowerCase();
+      const tgtComp = (targetCompany || "").trim().toLowerCase();
       return itemCompany === tgtComp;
     })
     .map(row => {
