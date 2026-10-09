@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useShopStore from "../store/useShopStore";
+import useCompanyStore from "../store/useCompanyStore";
 import "../styles/Pages.css";
 import { supabase } from "../lib/supabase";
 import { Loader2, Archive, X, Eye, Search, Trash2 } from "lucide-react";
@@ -27,6 +28,12 @@ const Approval = () => {
   const [isLoading, setIsLoading] = useState(false); // start as false to avoid layout flicker on cache hit
   const [activeTab, setActiveTab] = useState("pending");
   const { selectedShop } = useShopStore();
+  const { companies, fetchCompanies } = useCompanyStore();
+
+  useEffect(() => {
+    if (fetchCompanies) fetchCompanies();
+  }, [fetchCompanies]);
+
   const [showExcludedModal, setShowExcludedModal] = useState(false);
   const [showInProcessModal, setShowInProcessModal] = useState(false);
   const [inProcessSearchQuery, setInProcessSearchQuery] = useState("");
@@ -37,6 +44,21 @@ const Approval = () => {
   const [endDate, setEndDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("All");
+
+  const resolveItemCompany = (item) => {
+    if (item?.company_name && item.company_name.trim()) {
+      return item.company_name.trim();
+    }
+    const rawShop = (item?.shop_name || selectedShop || "").trim().toLowerCase();
+    if (rawShop && rawShop !== "all") {
+      const matched = companies.find(c => {
+        const cName = (c.name || "").toLowerCase();
+        return cName.includes(rawShop) || rawShop.includes(cName);
+      });
+      if (matched?.name) return matched.name;
+    }
+    return "";
+  };
 
   const groupedApprovals = activeTab === "pending" ? pendingGroupedApprovals : historyGroupedApprovals;
   const setGroupedApprovals = activeTab === "pending" ? setPendingGroupedApprovals : setHistoryGroupedApprovals;
@@ -49,10 +71,11 @@ const Approval = () => {
   const isItemInSelectedCompany = (item) => {
     if (!item) return false;
     if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+      const comp = resolveItemCompany(item);
       if (selectedCompanyFilter === '__NONE__') {
-        return !(item.company_name || '').trim();
+        return !comp;
       }
-      return (item.company_name || '').trim() === selectedCompanyFilter;
+      return comp.toLowerCase() === selectedCompanyFilter.trim().toLowerCase();
     }
     return true;
   };
@@ -508,7 +531,7 @@ const Approval = () => {
             party_indent_id: item.party_indent_id,
             item_name: item.item_name,
             brand_name: item.brand_name,
-            company_name: isCompanyFiltered ? ((item.company_name || selectedCompanyFilter) || '') : null,
+            company_name: (isCompanyFiltered && selectedCompanyFilter !== '__NONE__' ? selectedCompanyFilter.trim() : "") || resolveItemCompany(item) || null,
             bcs: item.bcs,
             mls: item.mls,
             liquor_type: item.liquor_type,
@@ -1073,12 +1096,12 @@ const Approval = () => {
                     const uniqueCompanies = Array.from(
                       new Set(
                         currentBatchItems
-                          .map(i => (i.company_name || '').trim())
+                          .map(i => resolveItemCompany(i))
                           .filter(Boolean)
                       )
                     ).sort((a, b) => a.localeCompare(b));
 
-                    const noCompanyCount = currentBatchItems.filter(i => !i.is_excluded && !(i.company_name || '').trim()).length;
+                    const noCompanyCount = currentBatchItems.filter(i => !i.is_excluded && !resolveItemCompany(i)).length;
 
                     return (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -1107,7 +1130,7 @@ const Approval = () => {
                         >
                           <option value="All">All Companies ({currentBatchItems.filter(i => !i.is_excluded).length})</option>
                           {uniqueCompanies.map((comp) => {
-                            const count = currentBatchItems.filter(i => !i.is_excluded && (i.company_name || '').trim() === comp).length;
+                            const count = currentBatchItems.filter(i => !i.is_excluded && resolveItemCompany(i).toLowerCase() === comp.toLowerCase()).length;
                             return (
                               <option key={comp} value={comp}>
                                 {comp} ({count})

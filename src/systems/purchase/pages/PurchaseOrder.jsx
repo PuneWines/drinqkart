@@ -185,16 +185,45 @@ const PurchaseOrder = () => {
       if (pageDataResponse.transpData) setTransporters(pageDataResponse.transpData);
       if (pageDataResponse.recvData) setReceivers(pageDataResponse.recvData);
 
+      const enrichedIndentData = (pageDataResponse.indentData || []).map(item => {
+        let comp = (item.company_name || "").trim();
+        if (!comp) {
+          const rawShop = (item.shop_name || "").trim().toLowerCase();
+          if (rawShop && rawShop !== "all") {
+            const matched = companies.find(c => {
+              const cName = (c.name || "").toLowerCase();
+              return cName.includes(rawShop) || rawShop.includes(cName);
+            });
+            if (matched?.name) comp = matched.name;
+          }
+        }
+        return {
+          ...item,
+          company_name: comp || null
+        };
+      });
+
       const existingPos = pageDataResponse.poData || [];
-      const filteredIndentData = (pageDataResponse.indentData || []).filter(item => {
+      const filteredIndentData = enrichedIndentData.filter(item => {
+        if (item.po_status === "ordered") return false;
         if (!item.unique_indent_id || !item.party_name) return true;
-        const hasPo = existingPos.some(
-          po => po.indent_id === item.unique_indent_id && (
-            po.vendor_name?.trim().toLowerCase() === item.party_name?.trim().toLowerCase() ||
-            po.vendor_name?.split("::")[0].trim().toLowerCase() === item.party_name?.trim().toLowerCase() ||
-            item.party_name?.split("::")[0].trim().toLowerCase() === po.vendor_name?.trim().toLowerCase()
-          )
-        );
+
+        const itemParty = (item.party_name || "").trim().toLowerCase();
+        const itemComp = (item.company_name || "").trim().toLowerCase();
+        const itemKey = itemComp ? `${itemParty}::${itemComp}` : itemParty;
+
+        // A PO blocks this item only if the PO was specifically for the same party AND same company
+        const hasPo = existingPos.some(po => {
+          if (po.indent_id !== item.unique_indent_id) return false;
+          const poVendor = (po.vendor_name || "").trim().toLowerCase();
+          
+          if (poVendor.includes("::")) {
+            return itemComp ? poVendor === itemKey : poVendor.split("::")[0].trim() === itemParty;
+          }
+          if (itemComp) return false;
+          return poVendor === itemParty;
+        });
+
         return !hasPo;
       });
 
@@ -874,7 +903,8 @@ const PurchaseOrder = () => {
       const receiverUrl = await uploadPdfBlob('purchase_PO', receiverStoragePath, receiverBlob);
 
       // --- Generate / Fetch Unique Vendor ID ---
-      const currentVendorId = await generateVendorId(activeParty);
+      const rawParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
+      const currentVendorId = await generateVendorId(rawParty);
 
       // --- Insert Database Record ---
       const validIndentItem = itemsForActiveParty.find(item => item.unique_indent_id || item.indent_id);
@@ -976,7 +1006,7 @@ const PurchaseOrder = () => {
       // 1. Get/Create Vendor Portal Link
       let vendorPortalLink = "";
       if (activeVendorDetails?.contact) {
-        vendorPortalLink = await getOrCreateVendorPortalLink(activeParty, currentVendorId, baseUrl);
+        vendorPortalLink = await getOrCreateVendorPortalLink(rawParty, currentVendorId, baseUrl);
       }
 
       // 2. Get/Create Transporter Portal Link
@@ -1009,7 +1039,7 @@ const PurchaseOrder = () => {
         whatsappPromises.push(
           sendPOConfirmationMessage(
             formattedPhone,
-            activeParty,
+            rawParty,
             freshPoNumber,
             vendorPortalLink,
             activeCompany?.name || "",
@@ -1030,7 +1060,7 @@ const PurchaseOrder = () => {
             freshPoNumber,
             transporterPortalLink,
             activeCompany?.name || "",
-            activeParty,
+            rawParty,
             traderUrl
           ).then(res => ({ role: "Transporter", success: res.success, error: res.error }))
         );
@@ -1047,7 +1077,7 @@ const PurchaseOrder = () => {
             freshPoNumber,
             receiverPortalLink,
             activeCompany?.name || "",
-            activeParty,
+            rawParty,
             traderUrl
           ).then(res => ({ role: "Receiver", success: res.success, error: res.error }))
         );
