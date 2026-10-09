@@ -6,6 +6,8 @@ import { supabase } from "../lib/supabase";
 import { Loader2, Archive, X, Eye, Search, Trash2 } from "lucide-react";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
+import { useAuthStore } from "../store/useAuthStore";
+import useCompanyStore from "../store/useCompanyStore";
 
 const formatDateTime = (isoString) => {
   if (!isoString) return "—";
@@ -26,6 +28,9 @@ const Approval = () => {
   const [isLoading, setIsLoading] = useState(false); // start as false to avoid layout flicker on cache hit
   const [activeTab, setActiveTab] = useState("pending");
   const { selectedShop } = useShopStore();
+  const { companies, fetchCompanySettings } = useCompanyStore();
+  const [selectedCompany, setSelectedCompany] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("All");
   const [showExcludedModal, setShowExcludedModal] = useState(false);
   const [showInProcessModal, setShowInProcessModal] = useState(false);
   const [inProcessSearchQuery, setInProcessSearchQuery] = useState("");
@@ -35,6 +40,10 @@ const Approval = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    fetchCompanySettings();
+  }, [fetchCompanySettings]);
 
   const modalItems = selectedIndentId ? (groupedApprovals[selectedIndentId] || []) : [];
   const activeBatchItems = modalItems.filter(item => !item.is_excluded);
@@ -114,6 +123,29 @@ const Approval = () => {
         if (error) throw error;
       }
 
+      // Strictly sync batch deletion to purchase_dashboard
+      const currentUser = useAuthStore.getState().currentUser;
+      const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
+      const itemNames = items.map(itm => itm.item_name).filter(Boolean);
+      const targetIndentId = items[0]?.indent_id || items[0]?.party_indent_id || selectedIndentId;
+
+      if (itemNames.length > 0) {
+        const { error: dashDelErr } = await supabase
+          .from('purchase_dashboard')
+          .update({
+            is_deleted: true,
+            deleted_by_emp_code: empCode,
+            deleted_at: new Date().toISOString(),
+            deletion_stage: 'APPROVAL',
+            deletion_reason: `Batch ${displayLabel} deleted in Approval`,
+            updated_at: new Date().toISOString()
+          })
+          .eq('indent_id', targetIndentId)
+          .in('item_name', itemNames);
+
+        if (dashDelErr) throw new Error(`Dashboard deletion audit error: ${dashDelErr.message}`);
+      }
+
       alert(`Batch ${displayLabel} successfully deleted!`);
       
       // Update local state by removing the deleted group
@@ -124,7 +156,7 @@ const Approval = () => {
       });
     } catch (error) {
       console.error("Error deleting batch:", error);
-      alert("Failed to delete batch.");
+      alert("Failed to delete batch: " + error.message);
     } finally {
       setIsLoading(false);
     }
@@ -142,6 +174,28 @@ const Approval = () => {
         .eq("id", itemId);
 
       if (error) throw error;
+
+      // Strictly sync item deletion to purchase_dashboard
+      const currentUser = useAuthStore.getState().currentUser;
+      const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
+      const currentItemsList = groupedApprovals[selectedIndentId] || [];
+      const targetItem = currentItemsList.find(item => item.id === itemId);
+      if (targetItem && targetItem.item_name) {
+        const { error: dashItemDelErr } = await supabase
+          .from('purchase_dashboard')
+          .update({
+            is_deleted: true,
+            deleted_by_emp_code: empCode,
+            deleted_at: new Date().toISOString(),
+            deletion_stage: 'APPROVAL',
+            deletion_reason: `Item ${itemName} deleted in Approval`,
+            updated_at: new Date().toISOString()
+          })
+          .eq('indent_id', targetItem.indent_id || targetItem.party_indent_id || selectedIndentId)
+          .eq('item_name', targetItem.item_name);
+
+        if (dashItemDelErr) throw new Error(`Dashboard item deletion audit error: ${dashItemDelErr.message}`);
+      }
 
       alert(`Item "${itemName}" successfully deleted!`);
 
@@ -185,6 +239,19 @@ const Approval = () => {
       statusSnapshot[item.id] = indentStatuses[item.id] || null;
     });
     setOriginalStatuses(statusSnapshot);
+
+    // Auto-resolve company for this batch
+    const existingComp = items[0]?.company_name || "";
+    if (existingComp) {
+      setSelectedCompany(existingComp);
+    } else {
+      const shopName = (items[0]?.shop_name || "").trim().toLowerCase();
+      const matched = companies.find(c => {
+        const cName = (c.name || "").toLowerCase();
+        return cName.includes(shopName) || shopName.includes(cName);
+      });
+      setSelectedCompany(matched ? matched.name : (companies[0]?.name || ""));
+    }
   };
 
   const handleCloseIndent = () => {
@@ -203,10 +270,11 @@ const Approval = () => {
       }));
     }
     
-    // Reset snapshots
+    // Reset snapshots and selected company
     setOriginalIndentItems([]);
     setOriginalStatuses(null);
     setSelectedIndentId(null);
+    setSelectedCompany("");
   };
 
   const handleInlineChange = (itemId, field, value) => {
@@ -441,6 +509,7 @@ const Approval = () => {
             approved_box: processedBox,
             approved_qty: processedQty,
             unique_indent_id: selectedIndentId,
+            company_name: selectedCompany || item.company_name || null,
             po_status: 'pending'
           });
         } else if (!item.is_excluded && !item.already_in_lifecycle) {
@@ -491,7 +560,10 @@ const Approval = () => {
           const chunk = rejectedIdsToUpdate.slice(i, i + chunkSize);
           const { error: updateErr } = await supabase
             .from("purchase_indent_items")
-            .update({ approval_status: "rejected" })
+            .update({ 
+              approval_status: "rejected",
+              company_name: selectedCompany || null
+            })
             .in("id", chunk);
           if (updateErr) throw updateErr;
         }
@@ -500,6 +572,120 @@ const Approval = () => {
         const shopName = currentItems[0]?.shop_name;
         if (shopName) {
           await deleteSupersededLifecycleItems(shopName, rejectedItemNames);
+        }
+      }
+
+      // 5. Strictly sync audit data to purchase_dashboard (Required for Critical System)
+      const currentUser = useAuthStore.getState().currentUser;
+      const approverEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
+      
+      const targetIndentId = currentItems[0]?.indent_id || currentItems[0]?.party_indent_id || selectedIndentId;
+      const validItemNames = currentItems.map(i => i.item_name).filter(Boolean);
+
+      // Fetch all existing dashboard rows for this indent in a single batch query
+      const { data: existingDashboardRows, error: fetchDashErr } = await supabase
+        .from('purchase_dashboard')
+        .select('id, item_name')
+        .eq('indent_id', targetIndentId)
+        .in('item_name', validItemNames);
+
+      if (fetchDashErr) throw new Error(`Dashboard audit fetch error: ${fetchDashErr.message}`);
+
+      const existingMap = {};
+      (existingDashboardRows || []).forEach(row => {
+        existingMap[row.item_name] = row.id;
+      });
+
+      const updatesToRun = [];
+      const insertsToRun = [];
+
+      currentItems.forEach(item => {
+        if (!item.item_name) return;
+        const status = indentStatuses[item.id] || 'pending';
+        const autoBox = parseFloat(item.order_box) || 0;
+        const autoQty = parseFloat(item.order_qty) || 0;
+        let processedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : autoBox;
+        let processedQty = item.approved_qty !== undefined && item.approved_qty !== null ? parseFloat(item.approved_qty) : autoQty;
+
+        let approverAction = "";
+        let finalApprovedBox = null;
+        let finalApprovedQty = null;
+
+        if (status === 'approved' && !item.is_excluded && !item.already_in_lifecycle) {
+          if (processedBox >= 0.90) {
+            if (processedBox < 1.0) {
+              processedBox = 1;
+            } else {
+              processedBox = Math.floor(processedBox);
+            }
+            const bcs = parseFloat(item.bcs) || 0;
+            processedQty = bcs > 0 ? processedBox * bcs : processedQty;
+          }
+
+          finalApprovedBox = processedBox;
+          finalApprovedQty = processedQty;
+
+          if (item.is_excluded || autoQty <= 0) {
+            approverAction = `Added & Approved by (${approverEmpCode})`;
+          } else if (processedBox !== autoBox || Math.round(processedQty) !== Math.round(autoQty)) {
+            approverAction = `Modified by (${approverEmpCode})`;
+          } else {
+            approverAction = `Approved by (${approverEmpCode})`;
+          }
+        } else {
+          approverAction = `Rejected by (${approverEmpCode})`;
+          finalApprovedBox = null;
+          finalApprovedQty = null;
+        }
+
+        const existingId = existingMap[item.item_name];
+        if (existingId) {
+          updatesToRun.push(
+            supabase
+              .from('purchase_dashboard')
+              .update({
+                approved_box: finalApprovedBox,
+                approved_qty: finalApprovedQty,
+                approver_action: approverAction,
+                approver_emp_code: approverEmpCode,
+                company_name: selectedCompany || item.company_name || null,
+                approved_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingId)
+          );
+        } else {
+          insertsToRun.push({
+            indent_id: targetIndentId,
+            shop_name: item.shop_name || 'Unknown',
+            party_name: item.party_name || 'Unknown',
+            company_name: selectedCompany || item.company_name || null,
+            item_name: item.item_name,
+            order_box: autoBox,
+            order_qty: autoQty,
+            indent_emp_code: item.created_by_emp_code || null,
+            approved_box: finalApprovedBox,
+            approved_qty: finalApprovedQty,
+            approver_action: approverAction,
+            approver_emp_code: approverEmpCode,
+            approved_at: new Date().toISOString(),
+            is_deleted: false
+          });
+        }
+      });
+
+      // Run bulk inserts and updates in parallel
+      if (insertsToRun.length > 0) {
+        const { error: insertDashErr } = await supabase
+          .from('purchase_dashboard')
+          .insert(insertsToRun);
+        if (insertDashErr) throw new Error(`Dashboard audit insert error: ${insertDashErr.message}`);
+      }
+
+      if (updatesToRun.length > 0) {
+        const updateResults = await Promise.all(updatesToRun);
+        for (const res of updateResults) {
+          if (res.error) throw new Error(`Dashboard audit update error: ${res.error.message}`);
         }
       }
 
@@ -585,21 +771,32 @@ const Approval = () => {
     return false;
   };
 
+  const checkCompanyFilter = (items) => {
+    if (companyFilter === "All") return true;
+    const batchCompany = items[0]?.company_name;
+    if (batchCompany && batchCompany === companyFilter) return true;
+    const sName = (items[0]?.shop_name || "").trim().toLowerCase();
+    const cName = companyFilter.trim().toLowerCase();
+    return sName && (cName.includes(sName) || sName.includes(cName));
+  };
+
   const pendingBatches = Object.entries(groupedApprovals).filter(([baseId, items]) => {
     const shopOk = selectedShop === "All" || (items[0]?.shop_name === selectedShop);
     const dateOk = checkDateRange(items[0]?.created_at);
     const searchOk = checkSearchQuery(baseId, items);
+    const companyOk = checkCompanyFilter(items);
     // Ignore excluded items when determining pending status
-    return shopOk && dateOk && searchOk && items.some(item => !item.is_excluded && (!item.approval_status || item.approval_status === 'pending'));
+    return shopOk && dateOk && searchOk && companyOk && items.some(item => !item.is_excluded && (!item.approval_status || item.approval_status === 'pending'));
   });
 
   const historyBatches = Object.entries(groupedApprovals).filter(([baseId, items]) => {
     const shopOk = selectedShop === "All" || (items[0]?.shop_name === selectedShop);
     const dateOk = checkDateRange(items[0]?.created_at);
     const searchOk = checkSearchQuery(baseId, items);
+    const companyOk = checkCompanyFilter(items);
     // Determine history based on all active (non-excluded) items
     const activeItems = items.filter(item => !item.is_excluded);
-    return shopOk && dateOk && searchOk && activeItems.length > 0 && activeItems.every(item => item.approval_status && item.approval_status !== 'pending');
+    return shopOk && dateOk && searchOk && companyOk && activeItems.length > 0 && activeItems.every(item => item.approval_status && item.approval_status !== 'pending');
   });
 
   const displayedBatches = activeTab === "pending" ? pendingBatches : historyBatches;
@@ -745,9 +942,33 @@ const Approval = () => {
               }}
             />
           </div>
-          {(startDate || endDate) && (
+          {/* Company Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Company:</span>
+            <select
+              value={companyFilter}
+              onChange={(e) => setCompanyFilter(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                fontSize: '14px',
+                color: '#1e293b',
+                outline: 'none',
+                fontWeight: '500',
+                backgroundColor: '#ffffff'
+              }}
+            >
+              <option value="All">All Companies</option>
+              {companies.map(c => (
+                <option key={c.id || c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {(startDate || endDate || companyFilter !== "All") && (
             <button
-              onClick={() => { setStartDate(""); setEndDate(""); }}
+              onClick={() => { setStartDate(""); setEndDate(""); setCompanyFilter("All"); }}
               style={{
                 padding: '8px 16px',
                 backgroundColor: '#f1f5f9',
@@ -762,7 +983,7 @@ const Approval = () => {
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e2e8f0'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
             >
-              Clear Dates
+              Reset Filters
             </button>
           )}
         </div>
@@ -956,6 +1177,55 @@ const Approval = () => {
                       </>
                     )}
                   </p>
+
+                  {/* Company Name Selector / Tag */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Company Name:
+                    </span>
+                    {activeTab === 'history' ? (
+                      <span style={{
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        color: '#1e293b',
+                        background: '#f1f5f9',
+                        border: '1px solid #cbd5e1',
+                        padding: '4px 12px',
+                        borderRadius: '6px'
+                      }}>
+                        {selectedCompany || groupedApprovals[selectedIndentId]?.[0]?.company_name || "Not Assigned"}
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <select
+                          value={selectedCompany}
+                          onChange={(e) => setSelectedCompany(e.target.value)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            border: '1.5px solid #4f46e5',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            color: '#1e293b',
+                            background: '#ffffff',
+                            outline: 'none',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 3px rgba(79, 70, 229, 0.1)'
+                          }}
+                        >
+                          <option value="">-- Select Company Billing Entity --</option>
+                          {companies.map(c => (
+                            <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                          ))}
+                        </select>
+                        {selectedCompany && (
+                          <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '700', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '3px 8px', borderRadius: '5px' }}>
+                            ✓ Ready for Submission
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {activeTab !== 'history' && (

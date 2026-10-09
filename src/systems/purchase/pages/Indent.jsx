@@ -7,6 +7,7 @@ import Toast, { useToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
 import useShopStore from "../store/useShopStore";
 import { getInLifecycleItemNames } from "../services/purchaseOrderService";
+import { useAuthStore } from "../store/useAuthStore";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
 const AccordionItem = ({ item, calcs, handleInlineChange }) => {
@@ -204,6 +205,10 @@ const Indent = () => {
     message: "",
     onConfirm: null,
   });
+  const [duplicateIndentModal, setDuplicateIndentModal] = useState({
+    isOpen: false,
+    shopName: "",
+  });
   const [mobileView, setMobileView] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
@@ -359,14 +364,36 @@ const Indent = () => {
     localStorage.setItem('indent_thresholdDays', JSON.stringify(thresholdDays));
   }, [thresholdDays]);
 
+  const [periodType, setPeriodType] = useState(() => {
+    try {
+      const savedType = localStorage.getItem('indent_periodType');
+      if (savedType && ['weekly', 'monthly', 'custom'].includes(savedType)) return savedType;
+      const savedDivisor = localStorage.getItem('indent_daysDivisor');
+      if (savedDivisor) {
+        const parsed = JSON.parse(savedDivisor);
+        if (parsed === 7) return 'weekly';
+        if (parsed === 30) return 'monthly';
+        return 'custom';
+      }
+      return 'monthly';
+    } catch (e) {
+      return 'monthly';
+    }
+  });
+
   const [daysDivisor, setDaysDivisor] = useState(() => {
     try {
       const saved = localStorage.getItem('indent_daysDivisor');
-      return saved ? JSON.parse(saved) : 30;
+      const parsed = saved ? JSON.parse(saved) : 30;
+      return parsed && parsed > 0 ? parsed : 30;
     } catch (e) {
       return 30;
     }
   });
+
+  React.useEffect(() => {
+    localStorage.setItem('indent_periodType', periodType);
+  }, [periodType]);
 
   React.useEffect(() => {
     localStorage.setItem('indent_daysDivisor', JSON.stringify(daysDivisor));
@@ -607,7 +634,8 @@ const Indent = () => {
       };
 
       lastMonthSale = getActive(row.lastMonthSale, row.qtyOut / row.bcs);
-      perDaySaleLastMonth = getActive(row.perDaySaleLastMonth, (row.qtyOut / daysDivisor) / row.bcs);
+      const effectiveDivisor = (parseFloat(daysDivisor) > 0) ? parseFloat(daysDivisor) : 1;
+      perDaySaleLastMonth = getActive(row.perDaySaleLastMonth, (row.qtyOut / effectiveDivisor) / row.bcs);
       const typeKey = (row.liquorType || "").trim().toUpperCase();
       const matchedKey = typeKey ? Object.keys(thresholdDays).find(
         key => typeKey.includes(key) || key.includes(typeKey)
@@ -764,6 +792,25 @@ const Indent = () => {
         .eq('id', indentId);
       if (delIndentError) throw delIndentError;
 
+      // 7. Strictly sync indent deletion to purchase_dashboard ONLY for items that were NOT yet generated into a PO
+      const currentUser = useAuthStore.getState().currentUser;
+      const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Admin";
+
+      const { error: dashDelErr } = await supabase
+        .from('purchase_dashboard')
+        .update({
+          is_deleted: true,
+          deleted_by_emp_code: empCode,
+          deleted_at: new Date().toISOString(),
+          deletion_stage: 'INDENT',
+          deletion_reason: 'Indent deleted before PO generation (Resubmission/Cancelled)',
+          updated_at: new Date().toISOString()
+        })
+        .eq('indent_id', indentId)
+        .is('po_id', null);
+
+      if (dashDelErr) throw new Error(`Dashboard deletion audit error: ${dashDelErr.message}`);
+
       addToast("Successfully deleted indent and associated pipeline records.", "success");
       fetchSubmittedHistory();
       if (selectedSubmission?.id === indentId) setSelectedSubmission(null);
@@ -879,6 +926,28 @@ const Indent = () => {
         if (delItemError) throw delItemError;
       }
 
+      // Strictly sync single item deletion to purchase_dashboard
+      if (itemData && itemData.item_name) {
+        const currentUser = useAuthStore.getState().currentUser;
+        const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Admin";
+
+        const { error: dashItemDelErr } = await supabase
+          .from('purchase_dashboard')
+          .update({
+            is_deleted: true,
+            deleted_by_emp_code: empCode,
+            deleted_at: new Date().toISOString(),
+            deletion_stage: isApprovedItem ? 'APPROVAL' : 'INDENT',
+            deletion_reason: `Item ${itemData.item_name} deleted from Indent Submission`,
+            updated_at: new Date().toISOString()
+          })
+          .eq('indent_id', indentId)
+          .eq('item_name', itemData.item_name)
+          .is('po_id', null);
+
+        if (dashItemDelErr) throw new Error(`Dashboard item deletion error: ${dashItemDelErr.message}`);
+      }
+
       addToast("Successfully deleted item from indent.", "success");
 
       if (selectedSubmission?.id === indentId) {
@@ -957,6 +1026,12 @@ const Indent = () => {
       addToast("Shop name is required. Please select a shop before submitting.", "error");
       return;
     }
+    if (periodType === 'custom' && (!daysDivisor || parseFloat(daysDivisor) < 1 || isNaN(parseFloat(daysDivisor)))) {
+      addToast("Calculation Period is mandatory. Please enter a valid number of days (minimum 1).", "error");
+      setShowSettings(true);
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const activeItems = [];
@@ -1097,6 +1172,34 @@ const Indent = () => {
 
       if (itemsError) throw itemsError;
 
+      // Strictly sync initial items to purchase_dashboard
+      const currentUser = useAuthStore.getState().currentUser;
+      const indentEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Indent Team";
+
+      const dashboardPayload = itemsPayload.map(itm => ({
+        indent_id: indentId,
+        shop_name: selectedShop || 'UNKNOWN',
+        party_name: itm.party_name || 'UNKNOWN',
+        company_name: null,
+        item_name: itm.item_name,
+        order_box: itm.order_box,
+        order_qty: itm.order_qty,
+        indent_emp_code: indentEmpCode,
+        indent_created_at: new Date().toISOString(),
+        is_deleted: false
+      }));
+
+      if (dashboardPayload.length > 0) {
+        const chunkSize = 100;
+        for (let i = 0; i < dashboardPayload.length; i += chunkSize) {
+          const chunk = dashboardPayload.slice(i, i + chunkSize);
+          const { error: dashInsertErr } = await supabase
+            .from('purchase_dashboard')
+            .insert(chunk);
+          if (dashInsertErr) throw new Error(`Dashboard audit insert error: ${dashInsertErr.message}`);
+        }
+      }
+
       addToast(`Successfully submitted ${itemsPayload.length} records to Supabase!`, "success");
       setTableData([]);
       setDuplicateCount(0);
@@ -1219,19 +1322,60 @@ const Indent = () => {
                 ))}
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-[#475569]">Calculation Period:</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold text-[#475569] flex items-center gap-1">
+                  Calculation Period <span className="text-red-500 font-bold">*</span>:
+                </span>
                 <select
-                  value={daysDivisor}
-                  onChange={(e) => setDaysDivisor(Number(e.target.value))}
-                  className="px-3 py-1.5 border border-[#cbd5e1] rounded-md outline-none font-medium text-[#0f172a] text-xs cursor-pointer bg-white hover:border-[#4f46e5]"
+                  value={periodType}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    setPeriodType(newType);
+                    if (newType === 'weekly') {
+                      setDaysDivisor(7);
+                    } else if (newType === 'monthly') {
+                      setDaysDivisor(30);
+                    }
+                  }}
+                  className="px-3 py-1.5 border border-[#cbd5e1] rounded-md outline-none font-semibold text-[#0f172a] text-xs cursor-pointer bg-white hover:border-[#4f46e5] focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5]"
                 >
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                    <option key={day} value={day}>
-                      {day} {day === 1 ? 'Day' : 'Days'} {day === 7 ? '(Weekly)' : day === 30 ? '(Monthly - 30)' : day === 31 ? '(Monthly - 31)' : ''}
-                    </option>
-                  ))}
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="custom">Custom</option>
                 </select>
+
+                {periodType === 'custom' && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={daysDivisor}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "") {
+                          setDaysDivisor("");
+                        } else {
+                          const num = parseFloat(val);
+                          setDaysDivisor(isNaN(num) ? "" : Math.max(1, num));
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!daysDivisor || parseFloat(daysDivisor) < 1 || isNaN(parseFloat(daysDivisor))) {
+                          setDaysDivisor(1);
+                          addToast("Calculation Period is mandatory (minimum 1 day). Reset to 1.", "warning");
+                        }
+                      }}
+                      placeholder="Min 1"
+                      className={`w-24 px-2.5 py-1.5 border rounded-md outline-none font-semibold text-xs bg-white transition-all ${
+                        (!daysDivisor || parseFloat(daysDivisor) < 1)
+                          ? 'border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-red-600'
+                          : 'border-[#cbd5e1] text-[#0f172a] focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5]'
+                      }`}
+                    />
+                    <span className="text-xs text-[#64748b] font-medium">Days <span className="text-red-500 font-bold">*</span></span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1508,7 +1652,20 @@ const Indent = () => {
                   </select>
 
                   <button
-                    onClick={() => selectedShop && setUploadStep(2)}
+                    onClick={() => {
+                      if (!selectedShop) return;
+                      const hasActiveIndent = submittedHistory.some(
+                        (h) => (h.shop_name || "").trim().toLowerCase() === selectedShop.trim().toLowerCase()
+                      );
+                      if (hasActiveIndent) {
+                        setDuplicateIndentModal({
+                          isOpen: true,
+                          shopName: selectedShop,
+                        });
+                        return;
+                      }
+                      setUploadStep(2);
+                    }}
                     disabled={!selectedShop}
                     className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all ${selectedShop
                         ? 'bg-[#4f46e5] text-white hover:bg-[#4338ca]'
@@ -1611,6 +1768,42 @@ const Indent = () => {
                   Yes, Delete
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Indent Restricted Warning Modal */}
+      {duplicateIndentModal.isOpen && (
+        <div className="fixed inset-0 bg-[#0f172a]/60 backdrop-blur-md flex justify-center items-center z-[10001] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-amber-200/80">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 bg-amber-100/80 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200">
+                <AlertTriangle size={28} className="text-amber-600" />
+              </div>
+
+              <span className="inline-block px-3 py-1 bg-amber-50 text-amber-800 text-xs font-extrabold rounded-full border border-amber-200/60 mb-2 tracking-wide uppercase">
+                Sheet Import Restricted
+              </span>
+
+              <h3 className="text-xl font-bold text-slate-900 mb-2">
+                Indent Already Exists
+              </h3>
+
+              <p className="text-slate-600 text-sm leading-relaxed mb-5">
+                An active indent for <strong className="text-indigo-600 font-bold">{duplicateIndentModal.shopName}</strong> is already in progress and submitted in the system.
+                <br /><br />
+                <span className="text-slate-500 text-xs block bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                  ⚠️ Further sheet imports for <strong>{duplicateIndentModal.shopName}</strong> are restricted until the existing indent is completed or removed.
+                </span>
+              </p>
+
+              <button
+                onClick={() => setDuplicateIndentModal({ isOpen: false, shopName: "" })}
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold text-sm shadow-md shadow-indigo-200 transition-all cursor-pointer"
+              >
+                Got It, Thanks
+              </button>
             </div>
           </div>
         </div>
