@@ -35,7 +35,7 @@ const mapVendorFields = (vendor) => {
   };
 };
 
-export const useVendorStore = create((set, get) => ({
+const useVendorStore = create((set, get) => ({
   vendors: [],
   loading: false,
 

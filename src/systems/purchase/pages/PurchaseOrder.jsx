@@ -3,8 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle, PauseCircle, RotateCcw, Clock } from "lucide-react";
 import useCompanyStore from "../store/useCompanyStore";
 import useShopStore from "../store/useShopStore";
-import { useAuthStore } from "../store/useAuthStore";
-import { supabase } from "../lib/supabase";
 import "../styles/PurchaseOrder.css";
 
 // Components
@@ -39,7 +37,6 @@ import { useRealtimeSync } from "../hooks/useRealtimeSync";
 // Utilities
 import { transformActivePartyItems, roundPoBox } from "../utils/poTransformer";
 import { today } from "../utils/poHelpers";
-import { COMPANY } from "../utils/constants";
 
 const PurchaseOrder = () => {
   const { companies, companySettings, fetchCompanySettings } = useCompanyStore();
@@ -192,8 +189,11 @@ const PurchaseOrder = () => {
       const filteredIndentData = (pageDataResponse.indentData || []).filter(item => {
         if (!item.unique_indent_id || !item.party_name) return true;
         const hasPo = existingPos.some(
-          po => po.indent_id === item.unique_indent_id &&
-            po.vendor_name?.trim().toLowerCase() === item.party_name?.trim().toLowerCase()
+          po => po.indent_id === item.unique_indent_id && (
+            po.vendor_name?.trim().toLowerCase() === item.party_name?.trim().toLowerCase() ||
+            po.vendor_name?.split("::")[0].trim().toLowerCase() === item.party_name?.trim().toLowerCase() ||
+            item.party_name?.split("::")[0].trim().toLowerCase() === po.vendor_name?.trim().toLowerCase()
+          )
         );
         return !hasPo;
       });
@@ -286,15 +286,41 @@ const PurchaseOrder = () => {
     if (poMode === "manual") {
       return [...new Set(vendorsList.map(v => v.party_name).filter(Boolean))];
     }
-    return [...new Set(filteredApprovedItems.map(d => d.party_name).filter(Boolean))];
+    
+    // Group approved items by party_name and company_name combination
+    const partyCompanyMap = new Map();
+    filteredApprovedItems.forEach(item => {
+      const party = (item.party_name || "").trim();
+      if (!party) return;
+      const company = (item.company_name || "").trim();
+      const key = company ? `${party}::${company}` : party;
+      if (!partyCompanyMap.has(key)) {
+        partyCompanyMap.set(key, {
+          key,
+          partyName: party,
+          companyName: company,
+          label: party // base string representation for matching
+        });
+      }
+    });
+
+    return Array.from(partyCompanyMap.values());
   }, [filteredApprovedItems, vendorsList, poMode]);
 
-  // If the activeParty is no longer valid for the selected shop/mode filter, clear it
+  // Handle options list format differences between standard mode (objects or strings) and manual mode
+  const dbPartyOptions = useMemo(() => {
+    if (poMode === "manual") {
+      return dbParties;
+    }
+    return dbParties.map(p => typeof p === 'string' ? p : p.key);
+  }, [dbParties, poMode]);
+
+  // If activeParty is no longer valid for the selected shop/mode filter, clear it
   useEffect(() => {
-    if (activeParty && !dbParties.includes(activeParty)) {
+    if (activeParty && !dbPartyOptions.includes(activeParty)) {
       setActiveParty("");
     }
-  }, [selectedShop, dbParties, activeParty]);
+  }, [selectedShop, dbPartyOptions, activeParty]);
 
   const handleAddExcludedItems = (newItems) => {
     setAddedExcludedItems(prev => {
@@ -730,8 +756,9 @@ const PurchaseOrder = () => {
 
   const activeVendorDetails = useMemo(() => {
     if (!activeParty || !vendorsList.length) return null;
+    const rawPartyName = activeParty.includes("::") ? activeParty.split("::")[0] : activeParty;
     const vendor = vendorsList.find(
-      v => v.party_name?.trim().toLowerCase() === activeParty?.trim().toLowerCase()
+      v => v.party_name?.trim().toLowerCase() === rawPartyName?.trim().toLowerCase()
     );
     if (!vendor) return null;
     return {
@@ -761,6 +788,12 @@ const PurchaseOrder = () => {
     if (!activeVendorDetails?.contact) {
       addToast("Error: The selected vendor does not have a contact number. Vendor contact number is mandatory to generate a PO.", "error");
       setShippingError("The selected vendor does not have a contact number. Vendor contact number is mandatory to generate a PO.");
+      return;
+    }
+
+    if (!activeCompany || !activeCompany.name || activeCompany.name.trim() === "") {
+      addToast("Error: Company / Shop information is missing. Cannot generate PO without valid company/shop details.", "error");
+      setShippingError("Company / Shop details missing. Please select a valid company/shop before generating the PO.");
       return;
     }
 
@@ -913,110 +946,6 @@ const PurchaseOrder = () => {
 
       const insertedPoId = insertedData[0]?.id;
 
-      // --- Strictly Sync PO Stage to purchase_dashboard (Required for Critical System) ---
-      const currentUser = useAuthStore.getState().currentUser;
-      const poEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "PO Team";
-
-      const validItemNames = itemsForActiveParty.map(i => i.itemName || i.item_name).filter(Boolean);
-
-      // Fetch existing dashboard rows for this indent
-      const { data: existingDashboardRows, error: fetchDashErr } = await supabase
-        .from('purchase_dashboard')
-        .select('id, item_name')
-        .eq('indent_id', currentIndentId)
-        .in('item_name', validItemNames);
-
-      if (fetchDashErr) throw new Error(`Dashboard fetch error: ${fetchDashErr.message}`);
-
-      const existingMap = {};
-      (existingDashboardRows || []).forEach(row => {
-        existingMap[row.item_name] = row.id;
-      });
-
-      const poUpdates = [];
-      const poInserts = [];
-
-      itemsForActiveParty.forEach((item) => {
-        const itmName = item.itemName || item.item_name;
-        if (!itmName) return;
-
-        const itemOrderBox = parseFloat(item.orderBox) || 0;
-        const itemOrderQty = parseFloat(item.orderQty) || 0;
-        const itemApprovedBox = item.hasApprovedInDb && item.approvedBox !== undefined && item.approvedBox !== null ? parseFloat(item.approvedBox) : 0;
-        const itemApprovedQty = item.hasApprovedInDb && item.approvedQty !== undefined && item.approvedQty !== null ? parseFloat(item.approvedQty) : 0;
-        const itemPoBox = item.poBox !== undefined && item.poBox !== null ? parseFloat(item.poBox) : (item.hasApprovedInDb ? itemApprovedBox : itemOrderBox);
-        const itemPoQty = item.poQty !== undefined && item.poQty !== null ? parseFloat(item.poQty) : (item.hasApprovedInDb ? itemApprovedQty : itemOrderQty);
-
-        let poAction = "";
-        if (poMode === "manual" || !item.hasApprovedInDb) {
-          poAction = `Direct Added in PO by (${poEmpCode})`;
-        } else if (itemPoBox !== itemApprovedBox || Math.round(itemPoQty) !== Math.round(itemApprovedQty)) {
-          poAction = `Modified by (${poEmpCode})`;
-        } else {
-          poAction = `PO Generated (${poEmpCode})`;
-        }
-
-        const existingId = existingMap[itmName];
-        if (existingId) {
-          poUpdates.push(
-            supabase
-              .from('purchase_dashboard')
-              .update({
-                po_id: insertedPoId,
-                po_number: freshPoNumber,
-                po_box: itemPoBox,
-                po_qty: itemPoQty,
-                po_action: poAction,
-                po_emp_code: poEmpCode,
-                po_generated_at: new Date().toISOString(),
-                trader_status: 'Pending',
-                transporter_status: 'Pending',
-                receiver_status: 'Pending',
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', existingId)
-          );
-        } else {
-          poInserts.push({
-            indent_id: currentIndentId,
-            shop_name: currentShopName || 'Unknown',
-            party_name: activeParty || 'Unknown',
-            company_name: activeCompany?.name || null,
-            item_name: itmName,
-            order_box: itemOrderBox,
-            order_qty: itemOrderQty,
-            indent_emp_code: null,
-            approved_box: itemApprovedBox,
-            approved_qty: itemApprovedQty,
-            approver_action: "—",
-            approver_emp_code: null,
-            po_id: insertedPoId,
-            po_number: freshPoNumber,
-            po_box: itemPoBox,
-            po_qty: itemPoQty,
-            po_action: poAction,
-            po_emp_code: poEmpCode,
-            po_generated_at: new Date().toISOString(),
-            trader_status: 'Pending',
-            transporter_status: 'Pending',
-            receiver_status: 'Pending',
-            is_deleted: false
-          });
-        }
-      });
-
-      if (poInserts.length > 0) {
-        const { error: insErr } = await supabase.from('purchase_dashboard').insert(poInserts);
-        if (insErr) throw new Error(`Dashboard audit insert error: ${insErr.message}`);
-      }
-
-      if (poUpdates.length > 0) {
-        const updateResults = await Promise.all(poUpdates);
-        for (const res of updateResults) {
-          if (res.error) throw new Error(`Dashboard audit update error: ${res.error.message}`);
-        }
-      }
-
       // --- Mark approved items as ordered in approved_indent_items now that PO is created ---
       if (poMode !== "manual" && currentIndentId && insertedPoId) {
         try {
@@ -1031,7 +960,7 @@ const PurchaseOrder = () => {
         }
       }
 
-      // Update deleted/removed items in database to be is_excluded: true and log deletion in purchase_dashboard
+      // Update deleted/removed items in database to be is_excluded: true
       if (poMode !== "manual" && removedItemIds.size > 0) {
         try {
           await excludeIndentItems(Array.from(removedItemIds), "removed_from_po");
@@ -1083,7 +1012,7 @@ const PurchaseOrder = () => {
             activeParty,
             freshPoNumber,
             vendorPortalLink,
-            activeCompany?.name || COMPANY.name,
+            activeCompany?.name || "",
             formattedPoTotal,
             traderUrl
           ).then(res => ({ role: "Trader", success: res.success, error: res.error }))
@@ -1100,7 +1029,7 @@ const PurchaseOrder = () => {
             formattedPhone,
             freshPoNumber,
             transporterPortalLink,
-            activeCompany?.name || COMPANY.name,
+            activeCompany?.name || "",
             activeParty,
             traderUrl
           ).then(res => ({ role: "Transporter", success: res.success, error: res.error }))
@@ -1117,7 +1046,7 @@ const PurchaseOrder = () => {
             formattedPhone,
             freshPoNumber,
             receiverPortalLink,
-            activeCompany?.name || COMPANY.name,
+            activeCompany?.name || "",
             activeParty,
             traderUrl
           ).then(res => ({ role: "Receiver", success: res.success, error: res.error }))

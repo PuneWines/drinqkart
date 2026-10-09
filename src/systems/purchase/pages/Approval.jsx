@@ -6,8 +6,6 @@ import { supabase } from "../lib/supabase";
 import { Loader2, Archive, X, Eye, Search, Trash2 } from "lucide-react";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
-import { useAuthStore } from "../store/useAuthStore";
-import useCompanyStore from "../store/useCompanyStore";
 
 const formatDateTime = (isoString) => {
   if (!isoString) return "—";
@@ -22,15 +20,13 @@ const formatDateTime = (isoString) => {
 };
 
 const Approval = () => {
-  const [groupedApprovals, setGroupedApprovals] = useState({});
+  const [pendingGroupedApprovals, setPendingGroupedApprovals] = useState({});
+  const [historyGroupedApprovals, setHistoryGroupedApprovals] = useState({});
   const [selectedIndentId, setSelectedIndentId] = useState(null);
   const [indentStatuses, setIndentStatuses] = useState({});
   const [isLoading, setIsLoading] = useState(false); // start as false to avoid layout flicker on cache hit
   const [activeTab, setActiveTab] = useState("pending");
   const { selectedShop } = useShopStore();
-  const { companies, fetchCompanySettings } = useCompanyStore();
-  const [selectedCompany, setSelectedCompany] = useState("");
-  const [companyFilter, setCompanyFilter] = useState("All");
   const [showExcludedModal, setShowExcludedModal] = useState(false);
   const [showInProcessModal, setShowInProcessModal] = useState(false);
   const [inProcessSearchQuery, setInProcessSearchQuery] = useState("");
@@ -40,13 +36,28 @@ const Approval = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("All");
+
+  const groupedApprovals = activeTab === "pending" ? pendingGroupedApprovals : historyGroupedApprovals;
+  const setGroupedApprovals = activeTab === "pending" ? setPendingGroupedApprovals : setHistoryGroupedApprovals;
 
   useEffect(() => {
-    fetchCompanySettings();
-  }, [fetchCompanySettings]);
+    setSelectedIndentId(null);
+  }, [activeTab]);
 
   const modalItems = selectedIndentId ? (groupedApprovals[selectedIndentId] || []) : [];
-  const activeBatchItems = modalItems.filter(item => !item.is_excluded);
+  const isItemInSelectedCompany = (item) => {
+    if (!item) return false;
+    if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+      if (selectedCompanyFilter === '__NONE__') {
+        return !(item.company_name || '').trim();
+      }
+      return (item.company_name || '').trim() === selectedCompanyFilter;
+    }
+    return true;
+  };
+
+  const activeBatchItems = modalItems.filter(item => !item.is_excluded && !item.already_in_lifecycle && isItemInSelectedCompany(item));
   const approvedCount = activeBatchItems.filter(item => indentStatuses[item.id] === 'approved').length;
   const rejectedCount = activeBatchItems.filter(item => indentStatuses[item.id] === 'rejected').length;
   const pendingCount = activeBatchItems.filter(item => !indentStatuses[item.id] || indentStatuses[item.id] === 'pending').length;
@@ -57,30 +68,65 @@ const Approval = () => {
       setShowInProcessModal(false);
       setInProcessSearchQuery("");
       setExcludedSearchQuery("");
+      setSelectedCompanyFilter("All");
     }
   }, [selectedIndentId]);
 
   const handleStatusChange = (itemId, status) => {
-    if (status === 'approved' && indentStatuses[itemId] !== 'approved') {
-      // Automatically apply 'approved' to all non-excluded items in the current modal
-      setIndentStatuses(prev => {
-        const currentItems = groupedApprovals[selectedIndentId] || [];
-        const newStatuses = { ...prev };
-        currentItems.forEach((item, idx) => {
-          const id = item.id || idx;
-          if (!item.is_excluded) {
-            newStatuses[id] = 'approved';
-          }
-        });
-        return newStatuses;
-      });
+    if (status === 'approved') {
+      const isCurrentlyApproved = indentStatuses[itemId] === 'approved';
+      if (isCurrentlyApproved) {
+        // User unchecks Approve: uncheck only this single item
+        setIndentStatuses(prev => ({
+          ...prev,
+          [itemId]: null
+        }));
+      } else {
+        const hasApprovedItems = activeBatchItems.some(i => indentStatuses[i.id] === 'approved');
+        if (!hasApprovedItems) {
+          // If no items were approved yet, bulk-check Approve for all visible/filtered items,
+          // preserving any items already explicitly marked as rejected
+          setIndentStatuses(prev => {
+            const next = { ...prev };
+            activeBatchItems.forEach(item => {
+              if (prev[item.id] !== 'rejected') {
+                next[item.id] = 'approved';
+              }
+            });
+            next[itemId] = 'approved';
+            return next;
+          });
+        } else {
+          // If some items are already approved, just check this single clicked item
+          setIndentStatuses(prev => ({
+            ...prev,
+            [itemId]: 'approved'
+          }));
+        }
+      }
     } else {
-      // Manual toggle for unchecking approve, or any reject action
+      // Reject is ALWAYS strictly single-item: toggle only the clicked item
       setIndentStatuses(prev => ({
         ...prev,
-        [itemId]: prev[itemId] === status ? null : status
+        [itemId]: prev[itemId] === 'rejected' ? null : 'rejected'
       }));
     }
+  };
+
+  const handleSelectAllFiltered = (status) => {
+    if (activeBatchItems.length === 0) return;
+
+    // If all target items already have this status, toggle them off (null); otherwise set all to status
+    const allAlreadySet = activeBatchItems.every(item => indentStatuses[item.id] === status);
+    const nextStatus = allAlreadySet ? null : status;
+
+    setIndentStatuses(prev => {
+      const next = { ...prev };
+      activeBatchItems.forEach(item => {
+        next[item.id] = nextStatus;
+      });
+      return next;
+    });
   };
 
   const handleIncludeExcludedItem = (itemId) => {
@@ -110,40 +156,18 @@ const Approval = () => {
     try {
       setIsLoading(true);
       const ids = items.map(item => item.id);
+      const targetTable = activeTab === 'history' ? "purchase_approved_indent_items" : "purchase_indent_items";
       
       // Delete in chunks of 50 to avoid URL length limit errors in REST API
       const chunkSize = 50;
       for (let i = 0; i < ids.length; i += chunkSize) {
         const chunk = ids.slice(i, i + chunkSize);
         const { error } = await supabase
-          .from("purchase_indent_items")
+          .from(targetTable)
           .delete()
           .in("id", chunk);
 
         if (error) throw error;
-      }
-
-      // Strictly sync batch deletion to purchase_dashboard
-      const currentUser = useAuthStore.getState().currentUser;
-      const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
-      const itemNames = items.map(itm => itm.item_name).filter(Boolean);
-      const targetIndentId = items[0]?.indent_id || items[0]?.party_indent_id || selectedIndentId;
-
-      if (itemNames.length > 0) {
-        const { error: dashDelErr } = await supabase
-          .from('purchase_dashboard')
-          .update({
-            is_deleted: true,
-            deleted_by_emp_code: empCode,
-            deleted_at: new Date().toISOString(),
-            deletion_stage: 'APPROVAL',
-            deletion_reason: `Batch ${displayLabel} deleted in Approval`,
-            updated_at: new Date().toISOString()
-          })
-          .eq('indent_id', targetIndentId)
-          .in('item_name', itemNames);
-
-        if (dashDelErr) throw new Error(`Dashboard deletion audit error: ${dashDelErr.message}`);
       }
 
       alert(`Batch ${displayLabel} successfully deleted!`);
@@ -156,7 +180,7 @@ const Approval = () => {
       });
     } catch (error) {
       console.error("Error deleting batch:", error);
-      alert("Failed to delete batch: " + error.message);
+      alert("Failed to delete batch.");
     } finally {
       setIsLoading(false);
     }
@@ -168,34 +192,13 @@ const Approval = () => {
 
     try {
       setIsLoading(true);
+      const targetTable = activeTab === 'history' ? "purchase_approved_indent_items" : "purchase_indent_items";
       const { error } = await supabase
-        .from("purchase_indent_items")
+        .from(targetTable)
         .delete()
         .eq("id", itemId);
 
       if (error) throw error;
-
-      // Strictly sync item deletion to purchase_dashboard
-      const currentUser = useAuthStore.getState().currentUser;
-      const empCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
-      const currentItemsList = groupedApprovals[selectedIndentId] || [];
-      const targetItem = currentItemsList.find(item => item.id === itemId);
-      if (targetItem && targetItem.item_name) {
-        const { error: dashItemDelErr } = await supabase
-          .from('purchase_dashboard')
-          .update({
-            is_deleted: true,
-            deleted_by_emp_code: empCode,
-            deleted_at: new Date().toISOString(),
-            deletion_stage: 'APPROVAL',
-            deletion_reason: `Item ${itemName} deleted in Approval`,
-            updated_at: new Date().toISOString()
-          })
-          .eq('indent_id', targetItem.indent_id || targetItem.party_indent_id || selectedIndentId)
-          .eq('item_name', targetItem.item_name);
-
-        if (dashItemDelErr) throw new Error(`Dashboard item deletion audit error: ${dashItemDelErr.message}`);
-      }
 
       alert(`Item "${itemName}" successfully deleted!`);
 
@@ -239,19 +242,6 @@ const Approval = () => {
       statusSnapshot[item.id] = indentStatuses[item.id] || null;
     });
     setOriginalStatuses(statusSnapshot);
-
-    // Auto-resolve company for this batch
-    const existingComp = items[0]?.company_name || "";
-    if (existingComp) {
-      setSelectedCompany(existingComp);
-    } else {
-      const shopName = (items[0]?.shop_name || "").trim().toLowerCase();
-      const matched = companies.find(c => {
-        const cName = (c.name || "").toLowerCase();
-        return cName.includes(shopName) || shopName.includes(cName);
-      });
-      setSelectedCompany(matched ? matched.name : (companies[0]?.name || ""));
-    }
   };
 
   const handleCloseIndent = () => {
@@ -270,11 +260,10 @@ const Approval = () => {
       }));
     }
     
-    // Reset snapshots and selected company
+    // Reset snapshots
     setOriginalIndentItems([]);
     setOriginalStatuses(null);
     setSelectedIndentId(null);
-    setSelectedCompany("");
   };
 
   const handleInlineChange = (itemId, field, value) => {
@@ -392,43 +381,56 @@ const Approval = () => {
   // Sync React Query data to local state for seamless backwards compatibility
   useEffect(() => {
     if (approvalsDataResponse) {
-      const enrichedIndentItems = (approvalsDataResponse.rawIndentItems || []).map(item => ({
-        ...item,
-        shop_name: item.purchase_indents?.shop_name || "Unknown"
-      }));
+      const rawApproved = approvalsDataResponse.rawApprovedIndentItems || [];
+      const approvedKeys = new Set(
+        rawApproved.map(i => `${i.indent_id}::${i.party_indent_id}::${(i.item_name || '').trim().toLowerCase()}`)
+      );
+      const approvedOriginalIds = new Set(
+        rawApproved.map(i => i.original_item_id).filter(Boolean)
+      );
 
-      const enrichedApprovedItems = (approvalsDataResponse.rawApprovedIndentItems || []).map(item => ({
+      // Filter out any items from rawIndentItems that are already in rawApproved
+      const enrichedIndentItems = (approvalsDataResponse.rawIndentItems || [])
+        .filter(item => {
+          if (approvedOriginalIds.has(item.id)) return false;
+          const key = `${item.indent_id}::${item.party_indent_id}::${(item.item_name || '').trim().toLowerCase()}`;
+          if (approvedKeys.has(key)) return false;
+          return true;
+        })
+        .map(item => ({
+          ...item,
+          shop_name: item.purchase_indents?.shop_name || "Unknown"
+        }));
+
+      const enrichedApprovedItems = rawApproved.map(item => ({
         ...item,
         approval_status: "approved",
         is_excluded: false,
         shop_name: item.purchase_indents?.shop_name || "Unknown"
       }));
 
-      // Combine both lists
-      const combinedItems = [...enrichedIndentItems, ...enrichedApprovedItems];
+      const groupItemsByKey = (items) => {
+        return items.reduce((acc, item) => {
+          const fullId = item.party_indent_id || "Unknown";
+          const parts = fullId.split('-');
+          let basePartyId = fullId;
+          if (parts.length >= 2 && fullId !== "Unknown") {
+            basePartyId = `${parts[0]}-${parts[1]}`;
+          }
+          const groupKey = `${item.indent_id ?? 'no-indent'}::${basePartyId}`;
+          if (!acc[groupKey]) acc[groupKey] = [];
+          acc[groupKey].push(item);
+          return acc;
+        }, {});
+      };
 
-      // Group by base party_indent_id scoped to the parent indent UUID.
-      const grouped = combinedItems.reduce((acc, item) => {
-        const fullId = item.party_indent_id || "Unknown";
-        const parts = fullId.split('-');
-        let basePartyId = fullId;
-        if (parts.length >= 2 && fullId !== "Unknown") {
-          basePartyId = `${parts[0]}-${parts[1]}`;
-        }
-        const groupKey = `${item.indent_id ?? 'no-indent'}::${basePartyId}`;
-        if (!acc[groupKey]) acc[groupKey] = [];
-        acc[groupKey].push(item);
-        return acc;
-      }, {});
-
-      setGroupedApprovals(grouped);
+      setPendingGroupedApprovals(groupItemsByKey(enrichedIndentItems));
+      setHistoryGroupedApprovals(groupItemsByKey(enrichedApprovedItems));
       
-      // Pre-fill existing statuses if they exist in DB
+      // Pre-fill existing statuses for history items
       const initialStatuses = {};
-      combinedItems.forEach(item => {
-        if (item.approval_status && item.approval_status !== 'pending') {
-          initialStatuses[item.id] = item.approval_status;
-        }
+      enrichedApprovedItems.forEach(item => {
+        initialStatuses[item.id] = 'approved';
       });
       setIndentStatuses(prev => ({ ...prev, ...initialStatuses }));
     }
@@ -464,12 +466,24 @@ const Approval = () => {
 
       const rejectedItemNames = [];
 
+      const isCompanyFiltered = Boolean(selectedCompanyFilter && selectedCompanyFilter !== 'All');
+
+      // Validate valid parent indent IDs to avoid foreign key constraints
+      const { data: validIndents } = await supabase
+        .from("purchase_indents")
+        .select("id");
+      const validIndentIds = new Set((validIndents || []).map(i => i.id));
+
       currentItems.forEach(item => {
-        if (!parentIndentId && item.indent_id) {
-          parentIndentId = item.indent_id;
+        const validParentId = (item.indent_id && validIndentIds.has(item.indent_id)) 
+          ? item.indent_id 
+          : null;
+
+        if (!parentIndentId && validParentId) {
+          parentIndentId = validParentId;
         }
 
-        const status = indentStatuses[item.id] || 'pending';
+        const status = indentStatuses[item.id];
         let autoBox = parseFloat(item.order_box) || 0;
         let autoQty = parseFloat(item.order_qty) || 0;
         let processedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : autoBox;
@@ -490,10 +504,11 @@ const Approval = () => {
 
           approvedItemsPayload.push({
             original_item_id: item.id,
-            indent_id: item.indent_id,
+            indent_id: validParentId,
             party_indent_id: item.party_indent_id,
             item_name: item.item_name,
             brand_name: item.brand_name,
+            company_name: isCompanyFiltered ? ((item.company_name || selectedCompanyFilter) || '') : null,
             bcs: item.bcs,
             mls: item.mls,
             liquor_type: item.liquor_type,
@@ -509,15 +524,20 @@ const Approval = () => {
             approved_box: processedBox,
             approved_qty: processedQty,
             unique_indent_id: selectedIndentId,
-            company_name: selectedCompany || item.company_name || null,
             po_status: 'pending'
           });
-        } else if (!item.is_excluded && !item.already_in_lifecycle) {
-          // Any non-approved non-excluded non-held item in submitted batch is marked as rejected
+        } else if (status === 'rejected' && !item.is_excluded && !item.already_in_lifecycle) {
+          // Only items explicitly marked as rejected are updated to rejected
           rejectedIdsToUpdate.push(item.id);
           if (item.item_name) rejectedItemNames.push(item.item_name);
         }
       });
+
+      if (approvedItemsPayload.length === 0 && rejectedIdsToUpdate.length === 0) {
+        alert("No items have been selected for approval or rejection in this submission.");
+        setIsLoading(false);
+        return;
+      }
 
       // 1. Insert approved items into approved_indent_items in chunks of 100
       if (approvedItemsPayload.length > 0) {
@@ -560,10 +580,7 @@ const Approval = () => {
           const chunk = rejectedIdsToUpdate.slice(i, i + chunkSize);
           const { error: updateErr } = await supabase
             .from("purchase_indent_items")
-            .update({ 
-              approval_status: "rejected",
-              company_name: selectedCompany || null
-            })
+            .update({ approval_status: "rejected" })
             .in("id", chunk);
           if (updateErr) throw updateErr;
         }
@@ -575,124 +592,40 @@ const Approval = () => {
         }
       }
 
-      // 5. Strictly sync audit data to purchase_dashboard (Required for Critical System)
-      const currentUser = useAuthStore.getState().currentUser;
-      const approverEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
-      
-      const targetIndentId = currentItems[0]?.indent_id || currentItems[0]?.party_indent_id || selectedIndentId;
-      const validItemNames = currentItems.map(i => i.item_name).filter(Boolean);
+      alert("Successfully submitted approvals!");
 
-      // Fetch all existing dashboard rows for this indent in a single batch query
-      const { data: existingDashboardRows, error: fetchDashErr } = await supabase
-        .from('purchase_dashboard')
-        .select('id, item_name')
-        .eq('indent_id', targetIndentId)
-        .in('item_name', validItemNames);
-
-      if (fetchDashErr) throw new Error(`Dashboard audit fetch error: ${fetchDashErr.message}`);
-
-      const existingMap = {};
-      (existingDashboardRows || []).forEach(row => {
-        existingMap[row.item_name] = row.id;
-      });
-
-      const updatesToRun = [];
-      const insertsToRun = [];
-
-      currentItems.forEach(item => {
-        if (!item.item_name) return;
-        const status = indentStatuses[item.id] || 'pending';
-        const autoBox = parseFloat(item.order_box) || 0;
-        const autoQty = parseFloat(item.order_qty) || 0;
-        let processedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : autoBox;
-        let processedQty = item.approved_qty !== undefined && item.approved_qty !== null ? parseFloat(item.approved_qty) : autoQty;
-
-        let approverAction = "";
-        let finalApprovedBox = null;
-        let finalApprovedQty = null;
-
-        if (status === 'approved' && !item.is_excluded && !item.already_in_lifecycle) {
-          if (processedBox >= 0.90) {
-            if (processedBox < 1.0) {
-              processedBox = 1;
-            } else {
-              processedBox = Math.floor(processedBox);
-            }
-            const bcs = parseFloat(item.bcs) || 0;
-            processedQty = bcs > 0 ? processedBox * bcs : processedQty;
-          }
-
-          finalApprovedBox = processedBox;
-          finalApprovedQty = processedQty;
-
-          if (item.is_excluded || autoQty <= 0) {
-            approverAction = `Added & Approved by (${approverEmpCode})`;
-          } else if (processedBox !== autoBox || Math.round(processedQty) !== Math.round(autoQty)) {
-            approverAction = `Modified by (${approverEmpCode})`;
-          } else {
-            approverAction = `Approved by (${approverEmpCode})`;
-          }
-        } else {
-          approverAction = `Rejected by (${approverEmpCode})`;
-          finalApprovedBox = null;
-          finalApprovedQty = null;
-        }
-
-        const existingId = existingMap[item.item_name];
-        if (existingId) {
-          updatesToRun.push(
-            supabase
-              .from('purchase_dashboard')
-              .update({
-                approved_box: finalApprovedBox,
-                approved_qty: finalApprovedQty,
-                approver_action: approverAction,
-                approver_emp_code: approverEmpCode,
-                company_name: selectedCompany || item.company_name || null,
-                approved_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', existingId)
-          );
-        } else {
-          insertsToRun.push({
-            indent_id: targetIndentId,
-            shop_name: item.shop_name || 'Unknown',
-            party_name: item.party_name || 'Unknown',
-            company_name: selectedCompany || item.company_name || null,
-            item_name: item.item_name,
-            order_box: autoBox,
-            order_qty: autoQty,
-            indent_emp_code: item.created_by_emp_code || null,
-            approved_box: finalApprovedBox,
-            approved_qty: finalApprovedQty,
-            approver_action: approverAction,
-            approver_emp_code: approverEmpCode,
-            approved_at: new Date().toISOString(),
-            is_deleted: false
-          });
-        }
-      });
-
-      // Run bulk inserts and updates in parallel
-      if (insertsToRun.length > 0) {
-        const { error: insertDashErr } = await supabase
-          .from('purchase_dashboard')
-          .insert(insertsToRun);
-        if (insertDashErr) throw new Error(`Dashboard audit insert error: ${insertDashErr.message}`);
-      }
-
-      if (updatesToRun.length > 0) {
-        const updateResults = await Promise.all(updatesToRun);
-        for (const res of updateResults) {
-          if (res.error) throw new Error(`Dashboard audit update error: ${res.error.message}`);
-        }
-      }
-
-      alert("Successfully submitted approvals and deleted batch from pending storage!");
+      // Auto-close modal immediately upon submission
+      setSelectedIndentId(null);
+      setShowExcludedModal(false);
+      setShowInProcessModal(false);
+      setSelectedCompanyFilter("All");
       setOriginalIndentItems([]);
       setOriginalStatuses(null);
-      setSelectedIndentId(null);
+
+      // Optimistically update local state immediately so submitted items/batches are hidden right away
+      const submittedIdsSet = new Set([...approvedIdsToDelete, ...rejectedIdsToUpdate]);
+      
+      setPendingGroupedApprovals(prev => {
+        const updated = { ...prev };
+        const items = updated[selectedIndentId] || [];
+        const remainingItems = items.filter(item => !submittedIdsSet.has(item.id));
+
+        if (remainingItems.length === 0) {
+          delete updated[selectedIndentId];
+        } else {
+          updated[selectedIndentId] = remainingItems;
+        }
+        return updated;
+      });
+
+      setIndentStatuses(prev => {
+        const next = { ...prev };
+        submittedIdsSet.forEach(id => {
+          delete next[id];
+        });
+        return next;
+      });
+
       fetchApprovals();
     } catch (error) {
       console.error("Error submitting approvals:", error);
@@ -771,32 +704,20 @@ const Approval = () => {
     return false;
   };
 
-  const checkCompanyFilter = (items) => {
-    if (companyFilter === "All") return true;
-    const batchCompany = items[0]?.company_name;
-    if (batchCompany && batchCompany === companyFilter) return true;
-    const sName = (items[0]?.shop_name || "").trim().toLowerCase();
-    const cName = companyFilter.trim().toLowerCase();
-    return sName && (cName.includes(sName) || sName.includes(cName));
-  };
-
-  const pendingBatches = Object.entries(groupedApprovals).filter(([baseId, items]) => {
+  const pendingBatches = Object.entries(pendingGroupedApprovals).filter(([baseId, items]) => {
     const shopOk = selectedShop === "All" || (items[0]?.shop_name === selectedShop);
     const dateOk = checkDateRange(items[0]?.created_at);
     const searchOk = checkSearchQuery(baseId, items);
-    const companyOk = checkCompanyFilter(items);
-    // Ignore excluded items when determining pending status
-    return shopOk && dateOk && searchOk && companyOk && items.some(item => !item.is_excluded && (!item.approval_status || item.approval_status === 'pending'));
+    // Batches in pendingGroupedApprovals that have active pending items
+    return shopOk && dateOk && searchOk && items.some(item => !item.is_excluded && (!item.approval_status || item.approval_status === 'pending'));
   });
 
-  const historyBatches = Object.entries(groupedApprovals).filter(([baseId, items]) => {
+  const historyBatches = Object.entries(historyGroupedApprovals).filter(([baseId, items]) => {
     const shopOk = selectedShop === "All" || (items[0]?.shop_name === selectedShop);
     const dateOk = checkDateRange(items[0]?.created_at);
     const searchOk = checkSearchQuery(baseId, items);
-    const companyOk = checkCompanyFilter(items);
-    // Determine history based on all active (non-excluded) items
     const activeItems = items.filter(item => !item.is_excluded);
-    return shopOk && dateOk && searchOk && companyOk && activeItems.length > 0 && activeItems.every(item => item.approval_status && item.approval_status !== 'pending');
+    return shopOk && dateOk && searchOk && activeItems.length > 0;
   });
 
   const displayedBatches = activeTab === "pending" ? pendingBatches : historyBatches;
@@ -942,33 +863,9 @@ const Approval = () => {
               }}
             />
           </div>
-          {/* Company Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Company:</span>
-            <select
-              value={companyFilter}
-              onChange={(e) => setCompanyFilter(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                fontSize: '14px',
-                color: '#1e293b',
-                outline: 'none',
-                fontWeight: '500',
-                backgroundColor: '#ffffff'
-              }}
-            >
-              <option value="All">All Companies</option>
-              {companies.map(c => (
-                <option key={c.id || c.name} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {(startDate || endDate || companyFilter !== "All") && (
+          {(startDate || endDate) && (
             <button
-              onClick={() => { setStartDate(""); setEndDate(""); setCompanyFilter("All"); }}
+              onClick={() => { setStartDate(""); setEndDate(""); }}
               style={{
                 padding: '8px 16px',
                 backgroundColor: '#f1f5f9',
@@ -983,7 +880,7 @@ const Approval = () => {
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e2e8f0'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
             >
-              Reset Filters
+              Clear Dates
             </button>
           )}
         </div>
@@ -1164,68 +1061,80 @@ const Approval = () => {
                 <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#0f172a' }}>
                   Details for {selectedIndentId?.includes('::') ? selectedIndentId.split('::')[1] : selectedIndentId}
                 </h2>
-                  <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#64748b', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span>Party: {groupedApprovals[selectedIndentId]?.[0]?.party_name || "Unknown"}</span>
-                    <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#cbd5e1' }}></span>
-                    <span style={{ color: '#16a34a', fontWeight: '600' }}>Approved: {approvedCount}</span>
-                    <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#cbd5e1' }}></span>
-                    <span style={{ color: '#dc2626', fontWeight: '600' }}>Rejected: {rejectedCount}</span>
-                    {activeTab !== 'history' && (
-                      <>
-                        <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#cbd5e1' }}></span>
-                        <span style={{ color: '#eab308', fontWeight: '600' }}>Unchecked: {pendingCount}</span>
-                      </>
-                    )}
-                  </p>
+                <div style={{ margin: '8px 0 0', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '13px', color: '#64748b' }}>
+                    Party: <strong style={{ color: '#0f172a' }}>{groupedApprovals[selectedIndentId]?.[0]?.party_name || "Unknown"}</strong>
+                  </span>
+                  <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#cbd5e1' }}></span>
 
-                  {/* Company Name Selector / Tag */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                      Company Name:
-                    </span>
-                    {activeTab === 'history' ? (
-                      <span style={{
-                        fontSize: '13px',
-                        fontWeight: '700',
-                        color: '#1e293b',
-                        background: '#f1f5f9',
-                        border: '1px solid #cbd5e1',
-                        padding: '4px 12px',
-                        borderRadius: '6px'
-                      }}>
-                        {selectedCompany || groupedApprovals[selectedIndentId]?.[0]?.company_name || "Not Assigned"}
-                      </span>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {/* Company Name Single Selection Dropdown Filter */}
+                  {(() => {
+                    const currentBatchItems = groupedApprovals[selectedIndentId] || [];
+                    const uniqueCompanies = Array.from(
+                      new Set(
+                        currentBatchItems
+                          .map(i => (i.company_name || '').trim())
+                          .filter(Boolean)
+                      )
+                    ).sort((a, b) => a.localeCompare(b));
+
+                    const noCompanyCount = currentBatchItems.filter(i => !i.is_excluded && !(i.company_name || '').trim()).length;
+
+                    return (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <label htmlFor="modalCompanyFilter" style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>
+                          Company:
+                        </label>
                         <select
-                          value={selectedCompany}
-                          onChange={(e) => setSelectedCompany(e.target.value)}
+                          id="modalCompanyFilter"
+                          value={selectedCompanyFilter}
+                          onChange={(e) => setSelectedCompanyFilter(e.target.value)}
                           style={{
-                            padding: '6px 12px',
-                            borderRadius: '8px',
-                            border: '1.5px solid #4f46e5',
-                            fontSize: '13px',
+                            padding: '4px 10px',
+                            fontSize: '12px',
                             fontWeight: '600',
+                            borderRadius: '8px',
+                            border: '1.5px solid #cbd5e1',
+                            backgroundColor: '#f8fafc',
                             color: '#1e293b',
-                            background: '#ffffff',
                             outline: 'none',
                             cursor: 'pointer',
-                            boxShadow: '0 1px 3px rgba(79, 70, 229, 0.1)'
+                            transition: 'all 0.2s',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                           }}
+                          onFocus={(e) => e.currentTarget.style.borderColor = '#4338ca'}
+                          onBlur={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
                         >
-                          <option value="">-- Select Company Billing Entity --</option>
-                          {companies.map(c => (
-                            <option key={c.id || c.name} value={c.name}>{c.name}</option>
-                          ))}
+                          <option value="All">All Companies ({currentBatchItems.filter(i => !i.is_excluded).length})</option>
+                          {uniqueCompanies.map((comp) => {
+                            const count = currentBatchItems.filter(i => !i.is_excluded && (i.company_name || '').trim() === comp).length;
+                            return (
+                              <option key={comp} value={comp}>
+                                {comp} ({count})
+                              </option>
+                            );
+                          })}
+                          {noCompanyCount > 0 && (
+                            <option value="__NONE__">
+                              Unassigned / None ({noCompanyCount})
+                            </option>
+                          )}
                         </select>
-                        {selectedCompany && (
-                          <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '700', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '3px 8px', borderRadius: '5px' }}>
-                            ✓ Ready for Submission
-                          </span>
-                        )}
+                        <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#cbd5e1' }}></span>
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
+
+                  <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: '600' }}>Approved: {approvedCount}</span>
+                  <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#cbd5e1' }}></span>
+                  <span style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600' }}>Rejected: {rejectedCount}</span>
+                  {activeTab !== 'history' && (
+                    <>
+                      <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#cbd5e1' }}></span>
+                      <span style={{ fontSize: '13px', color: '#eab308', fontWeight: '600' }}>Unchecked: {pendingCount}</span>
+                    </>
+                  )}
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {activeTab !== 'history' && (
@@ -1254,7 +1163,16 @@ const Approval = () => {
                     {isLoading ? 'Submitting...' : 'Submit'}
                   </button>
                 )}
-                {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => item.already_in_lifecycle) && (
+                {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => {
+                  if (!item.already_in_lifecycle) return false;
+                  if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+                    if (selectedCompanyFilter === '__NONE__') {
+                      return !(item.company_name || '').trim();
+                    }
+                    return (item.company_name || '').trim() === selectedCompanyFilter;
+                  }
+                  return true;
+                }) && (
                   <button
                     onClick={() => setShowInProcessModal(true)}
                     style={{
@@ -1275,10 +1193,30 @@ const Approval = () => {
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
                   >
-                    View In-Process ({groupedApprovals[selectedIndentId]?.filter(item => item.already_in_lifecycle).length})
+                    View In-Process ({
+                      groupedApprovals[selectedIndentId]?.filter(item => {
+                        if (!item.already_in_lifecycle) return false;
+                        if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+                          if (selectedCompanyFilter === '__NONE__') {
+                            return !(item.company_name || '').trim();
+                          }
+                          return (item.company_name || '').trim() === selectedCompanyFilter;
+                        }
+                        return true;
+                      }).length
+                    })
                   </button>
                 )}
-                {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => item.is_excluded) && (
+                {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => {
+                  if (!item.is_excluded) return false;
+                  if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+                    if (selectedCompanyFilter === '__NONE__') {
+                      return !(item.company_name || '').trim();
+                    }
+                    return (item.company_name || '').trim() === selectedCompanyFilter;
+                  }
+                  return true;
+                }) && (
                   <button
                     onClick={() => setShowExcludedModal(true)}
                     style={{
@@ -1299,7 +1237,18 @@ const Approval = () => {
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
                   >
-                    View Excluded ({groupedApprovals[selectedIndentId]?.filter(item => item.is_excluded).length})
+                    View Excluded ({
+                      groupedApprovals[selectedIndentId]?.filter(item => {
+                        if (!item.is_excluded) return false;
+                        if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+                          if (selectedCompanyFilter === '__NONE__') {
+                            return !(item.company_name || '').trim();
+                          }
+                          return (item.company_name || '').trim() === selectedCompanyFilter;
+                        }
+                        return true;
+                      }).length
+                    })
                   </button>
                 )}
                 <button 
@@ -1327,10 +1276,53 @@ const Approval = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr>
-                      <th style={{ ...thStyle, textAlign: 'center', minWidth: '135px' }}>Approve /{"\n"}Reject</th>
+                      <th style={{ ...thStyle, textAlign: 'center', minWidth: '150px' }}>
+                        <div>Approve / Reject</div>
+                        {activeTab !== 'history' && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '4px', textTransform: 'none', fontWeight: 'normal', fontSize: '11px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectAllFiltered('approved')}
+                              style={{
+                                background: activeBatchItems.length > 0 && activeBatchItems.every(i => indentStatuses[i.id] === 'approved') ? '#16a34a' : '#dcfce7',
+                                color: activeBatchItems.length > 0 && activeBatchItems.every(i => indentStatuses[i.id] === 'approved') ? '#ffffff' : '#166534',
+                                border: '1px solid #86efac',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s'
+                              }}
+                              title="Approve all visible items in this filter"
+                            >
+                              ✓ All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectAllFiltered('rejected')}
+                              style={{
+                                background: activeBatchItems.length > 0 && activeBatchItems.every(i => indentStatuses[i.id] === 'rejected') ? '#dc2626' : '#fee2e2',
+                                color: activeBatchItems.length > 0 && activeBatchItems.every(i => indentStatuses[i.id] === 'rejected') ? '#ffffff' : '#991b1b',
+                                border: '1px solid #fca5a5',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s'
+                              }}
+                              title="Reject all visible items in this filter"
+                            >
+                              ✗ All
+                            </button>
+                          </div>
+                        )}
+                      </th>
                       <th style={{ ...thStyle, textAlign: 'center' }}>Indent{"\n"}ID</th>
                       <th style={{ ...thStyle, textAlign: 'left' }}>Shop{"\n"}Name</th>
                       <th style={{ ...thStyle, textAlign: 'left', minWidth: '160px' }}>Item Name</th>
+                      <th style={{ ...thStyle, textAlign: 'left', minWidth: '130px' }}>Company{"\n"}Name</th>
                       <th style={{ ...thStyle, textAlign: 'center' }}>Per Day{"\n"}Sale</th>
                       <th style={{ ...thStyle, textAlign: 'center' }}>Order{"\n"}Box</th>
                       <th style={{ ...thStyle, textAlign: 'center' }}>Order{"\n"}Qty</th>
@@ -1343,7 +1335,18 @@ const Approval = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {groupedApprovals[selectedIndentId]?.filter(item => !item.is_excluded && !item.already_in_lifecycle).map((item, index) => {
+                    {groupedApprovals[selectedIndentId]
+                      ?.filter(item => {
+                        if (item.is_excluded || item.already_in_lifecycle) return false;
+                        if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+                          if (selectedCompanyFilter === '__NONE__') {
+                            return !(item.company_name || '').trim();
+                          }
+                          return (item.company_name || '').trim() === selectedCompanyFilter;
+                        }
+                        return true;
+                      })
+                      .map((item, index) => {
                       // Use nullish coalescing so a falsy but valid id (e.g. 0) is never
                       // replaced by the loop index, which would cause status key collisions.
                       const itemId = item.id ?? `fallback-${selectedIndentId}-${index}`;
@@ -1388,6 +1391,7 @@ const Approval = () => {
                         <td style={{ ...tdStyle, textAlign: 'center', color: '#64748b' }}>{item.party_indent_id || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: 'left' }}>{item.shop_name || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: 'left' }}>{item.item_name}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left', color: '#475569' }}>{item.company_name || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: '700', color: '#0f172a' }}>
                           {item.per_day_sale_last_month !== null && item.per_day_sale_last_month !== undefined ? item.per_day_sale_last_month : "—"}
                         </td>
@@ -1523,7 +1527,7 @@ const Approval = () => {
                         <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input
                           type="text"
-                          placeholder="Search excluded items by item name or brand..."
+                          placeholder="Search excluded items by item name, company, or brand..."
                           value={excludedSearchQuery}
                           onChange={(e) => setExcludedSearchQuery(e.target.value)}
                           style={{
@@ -1549,6 +1553,7 @@ const Approval = () => {
                               <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Indent{"\n"}ID</th>
                               <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Shop{"\n"}Name</th>
                               <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Item Name</th>
+                              <th style={{ ...thStyle, backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Company{"\n"}Name</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Per Day{"\n"}Sale</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Order{"\n"}Box</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '2px solid #fca5a5' }}>Order{"\n"}Qty</th>
@@ -1562,16 +1567,24 @@ const Approval = () => {
                               const query = (excludedSearchQuery || "").trim().toLowerCase();
                               const filteredItems = (groupedApprovals[selectedIndentId] || []).filter(item => {
                                 if (!item.is_excluded) return false;
+                                if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+                                  if (selectedCompanyFilter === '__NONE__') {
+                                    if ((item.company_name || '').trim()) return false;
+                                  } else if ((item.company_name || '').trim() !== selectedCompanyFilter) {
+                                    return false;
+                                  }
+                                }
                                 const itemName = (item.item_name || "").toLowerCase();
                                 const brandName = (item.brand_name || "").toLowerCase();
-                                return itemName.includes(query) || brandName.includes(query);
+                                const compName = (item.company_name || "").toLowerCase();
+                                return itemName.includes(query) || brandName.includes(query) || compName.includes(query);
                               });
 
                               if (filteredItems.length === 0) {
                                 return (
                                   <tr>
-                                    <td colSpan={10} style={{ ...tdStyle, textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
-                                      No excluded items found matching your search.
+                                    <td colSpan={11} style={{ ...tdStyle, textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                                      No excluded items found matching your filter.
                                     </td>
                                   </tr>
                                 );
@@ -1605,6 +1618,7 @@ const Approval = () => {
                                     <td style={{ ...tdStyle, color: '#991b1b' }}>{item.party_indent_id || "-"}</td>
                                     <td style={tdStyle}>{item.shop_name || "-"}</td>
                                     <td style={tdStyle}>{item.item_name}</td>
+                                    <td style={{ ...tdStyle, color: '#7f1d1d' }}>{item.company_name || "-"}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#dc2626' }}>
                                       {item.per_day_sale_last_month !== null && item.per_day_sale_last_month !== undefined ? item.per_day_sale_last_month : "—"}
                                     </td>
@@ -1688,7 +1702,7 @@ const Approval = () => {
                         <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input
                           type="text"
-                          placeholder="Search in-process items by item name or brand..."
+                          placeholder="Search in-process items by item name, company, or brand..."
                           value={inProcessSearchQuery}
                           onChange={(e) => setInProcessSearchQuery(e.target.value)}
                           style={{
@@ -1714,6 +1728,7 @@ const Approval = () => {
                               <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Indent{"\n"}ID</th>
                               <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Shop{"\n"}Name</th>
                               <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Item Name</th>
+                              <th style={{ ...thStyle, backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Company{"\n"}Name</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order{"\n"}Box</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Order{"\n"}Qty</th>
                               <th style={{ ...thStyle, textAlign: 'right', backgroundColor: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #93c5fd' }}>Closing{"\n"}Qty</th>
@@ -1725,15 +1740,25 @@ const Approval = () => {
                             {(() => {
                               const query = (inProcessSearchQuery || "").trim().toLowerCase();
                               const currentItems = groupedApprovals[selectedIndentId] || [];
-                              const filteredInProcess = currentItems.filter(item => 
-                                item.already_in_lifecycle &&
-                                (!query || (item.item_name || "").toLowerCase().includes(query) || (item.brand_name || "").toLowerCase().includes(query))
-                              );
+                              const filteredInProcess = currentItems.filter(item => {
+                                if (!item.already_in_lifecycle) return false;
+                                if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
+                                  if (selectedCompanyFilter === '__NONE__') {
+                                    if ((item.company_name || '').trim()) return false;
+                                  } else if ((item.company_name || '').trim() !== selectedCompanyFilter) {
+                                    return false;
+                                  }
+                                }
+                                const itemName = (item.item_name || "").toLowerCase();
+                                const brandName = (item.brand_name || "").toLowerCase();
+                                const compName = (item.company_name || "").toLowerCase();
+                                return itemName.includes(query) || brandName.includes(query) || compName.includes(query);
+                              });
 
                               if (filteredInProcess.length === 0) {
                                 return (
                                   <tr>
-                                    <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
+                                    <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
                                       No in-process items found.
                                     </td>
                                   </tr>
@@ -1776,6 +1801,7 @@ const Approval = () => {
                                   <td style={{ ...tdStyle, color: '#1e40af', fontWeight: '600' }}>{item.party_indent_id || "-"}</td>
                                   <td style={tdStyle}>{item.shop_name || "-"}</td>
                                   <td style={{ ...tdStyle, fontWeight: '700' }}>{item.item_name}</td>
+                                  <td style={{ ...tdStyle, color: '#1e3a8a' }}>{item.company_name || "-"}</td>
                                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#2563eb' }}>{item.order_box || "-"}</td>
                                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: '#2563eb' }}>{item.order_qty || "-"}</td>
                                   <td style={{ ...tdStyle, textAlign: 'right' }}>{item.closing_qty || "-"}</td>

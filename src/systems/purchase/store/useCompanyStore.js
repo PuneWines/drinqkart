@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 
-export const useCompanyStore = create((set, get) => ({
+const useCompanyStore = create((set, get) => ({
   companySettings: null,
   companies: [],
   loading: false,

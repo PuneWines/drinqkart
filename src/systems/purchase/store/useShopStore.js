@@ -13,11 +13,11 @@ const getInitialShop = (shops = []) => {
   return "All";
 };
 
-export const useShopStore = create((set, get) => ({
+const useShopStore = create((set, get) => ({
   shops: [],
   shopsDetails: [],
   loading: false,
-  selectedShop: getInitialShop(),
+  selectedShop: "All",
   fetchShops: async () => {
     set({ loading: true });
     try {

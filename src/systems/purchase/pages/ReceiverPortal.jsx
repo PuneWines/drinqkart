@@ -8,7 +8,10 @@ import {
   MessageSquare, Package, ArrowRight, UserCheck, 
   Hash, Truck, ShieldAlert 
 } from "lucide-react";
-import { COMPANY } from "../utils/constants";
+
+const COMPANY = {
+  name: "DRINQKART",
+};
 
 const ReceiverPortal = () => {
   const { receiverId } = useParams();
