@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
+import { dashboardSyncService } from "../services/dashboardSyncService";
 import { 
   FileText, CheckCircle2, Loader2, AlertCircle, 
   ChevronDown, ChevronUp, Check, X, Calendar, 
@@ -11,13 +12,7 @@ import {
 import html2pdf from "html2pdf.js";
 import "../styles/PurchaseOrder.css"; // Kept solely for off-screen PDF styling
 
-const COMPANY = {
-  name: "DRINQKART",
-  address: "10/212 Anna Nagar , Tirupattur - 635601",
-  gstin: "33AAPSDF1ZV",
-  contact: "+91-9047077124",
-  email: "[EMAIL_ADDRESS]",
-};
+// Company info is loaded dynamically from purchase_company_settings
 
 const TERMS = [
   "We reserve the right to cancel the purchase order anytime before product shipment.",
@@ -362,6 +357,21 @@ const VendorPortal = () => {
 
       if (dbError) throw dbError;
 
+      // Sync to purchase_dashboard with atomicity
+      await dashboardSyncService.syncPortalStatus({
+        poId,
+        statusType: "trader",
+        statusValue: allRejected ? "no" : "yes",
+      });
+
+      if (isKunalShop && !allRejected) {
+        await dashboardSyncService.syncPortalStatus({
+          poId,
+          statusType: "transporter",
+          statusValue: "yes",
+        });
+      }
+
       if (allRejected) {
         const itemNames = items.map(i => i.itemName).filter(Boolean);
         if (po.shop_name && itemNames.length > 0) {
@@ -379,13 +389,39 @@ const VendorPortal = () => {
           .eq("party_name", po.vendor_name)
           .single();
 
-        // Fetch company details for shop mapping
-        const { data: companiesList } = await supabase.from("purchase_companies").select("*");
-        const shopName = items[0]?.shopName?.trim().toLowerCase() || "";
-        const matchedCompany = (companiesList || []).find(c => {
-          const compName = (c.name || "").toLowerCase();
-          return compName.includes(shopName) || shopName.includes(compName);
-        });
+        // Fetch company details from the `shop` table — same source as PurchaseOrder.jsx
+        // The PO's shop_name field identifies which shop this belongs to
+        const poShopName = (po.shop_name || items[0]?.shopName || "").trim();
+        let matchedCompany = null;
+
+        if (poShopName) {
+          const { data: shopRow } = await supabase
+            .from("shop")
+            .select("id, shop_name, full_name, gstin, contact, email, address")
+            .or(`shop_name.ilike.${poShopName},full_name.ilike.${poShopName}`)
+            .limit(1)
+            .maybeSingle();
+
+          if (shopRow) {
+            matchedCompany = {
+              name: shopRow.full_name || shopRow.shop_name,
+              address: shopRow.address || "",
+              gstin: shopRow.gstin || "",
+              contact: shopRow.contact || "",
+              email: shopRow.email || "",
+            };
+          }
+        }
+
+        // Fallback: try purchase_company_settings if shop table had no match
+        if (!matchedCompany) {
+          const { data: companiesList } = await supabase.from("purchase_company_settings").select("*");
+          const shopNameLower = poShopName.toLowerCase();
+          matchedCompany = (companiesList || []).find(c => {
+            const compName = (c.name || "").toLowerCase();
+            return compName.includes(shopNameLower) || shopNameLower.includes(compName);
+          }) || (companiesList && companiesList.length > 0 ? companiesList[0] : null);
+        }
 
         // Set state for PDF generation DOM
         setPdfData({
@@ -396,7 +432,7 @@ const VendorPortal = () => {
           remarks: rem,
           decisions,
           vendorDetails: vDetails,
-          companyInfo: matchedCompany || COMPANY,
+          companyInfo: matchedCompany || null,
           isKunalShop
         });
 
@@ -982,8 +1018,8 @@ const VendorPortal = () => {
                   <ShoppingBag size={24} color="#fff" />
                 </div>
                 <div className="po-company-info">
-                  <h1 style={{ fontSize: "1.5rem", fontWeight: "700", margin: 0 }}>{pdfData.companyInfo?.name || "DRINQKART"}</h1>
-                  <p style={{ margin: 0, fontSize: "0.85rem", color: "#5e6c84" }}>{pdfData.companyInfo?.address || COMPANY.address}</p>
+                  <h1 style={{ fontSize: "1.5rem", fontWeight: "700", margin: 0 }}>{pdfData.companyInfo?.name || "—"}</h1>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "#5e6c84" }}>{pdfData.companyInfo?.address || ""}</p>
                 </div>
               </div>
 
@@ -1021,10 +1057,10 @@ const VendorPortal = () => {
               <div className="po-box">
                 <div className="po-box-header">Ship To</div>
                 <div className="po-box-body">
-                  <strong>{pdfData.companyInfo?.name || "DRINQKART"}</strong><br />
-                  {pdfData.companyInfo?.address || COMPANY.address}<br />
-                  GSTIN: {pdfData.companyInfo?.gstin || COMPANY.gstin}<br />
-                  Contact: {pdfData.companyInfo?.contact || COMPANY.contact}
+                  <strong>{pdfData.companyInfo?.name || "—"}</strong><br />
+                  {pdfData.companyInfo?.address || ""}<br />
+                  GSTIN: {pdfData.companyInfo?.gstin || "—"}<br />
+                  Contact: {pdfData.companyInfo?.contact || "—"}
                 </div>
               </div>
             </div>
@@ -1117,7 +1153,7 @@ const VendorPortal = () => {
 
               <div className="po-signature-block">
                 <div className="po-signature-body" style={{ height: "60px", borderBottom: "1px solid #172b4d" }}></div>
-                <div className="po-signature-header" style={{ fontSize: "0.85rem" }}>For {pdfData.companyInfo?.name || "DRINQKART"}</div>
+                <div className="po-signature-header" style={{ fontSize: "0.85rem" }}>For {pdfData.companyInfo?.name || ""}</div>
                 <div className="po-signature-sub" style={{ fontSize: "0.7rem", color: "#5e6c84" }}>Authorized signatory</div>
               </div>
             </div>
@@ -1403,7 +1439,7 @@ const SubmissionPreview = ({ po, items, vendorName, submittedAt, onClose }) => {
         {/* Footer info */}
         <div className="text-center pt-4 border-t border-slate-100">
           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-            DRINQKART SUPPLIER VERIFICATION PORTAL • SHOT FOR RECORD
+            SUPPLIER VERIFICATION PORTAL • SHOT FOR RECORD
           </p>
         </div>
       </div>

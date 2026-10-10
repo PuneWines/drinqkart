@@ -2,16 +2,15 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
+import { dashboardSyncService } from "../services/dashboardSyncService";
 import { 
   FileText, CheckCircle2, Loader2, AlertCircle, 
   ChevronDown, ChevronUp, Check, X, Calendar, 
   MessageSquare, Truck, ArrowRight, UserCheck,
-  Hash
+  Hash, Clock
 } from "lucide-react";
 
-const COMPANY = {
-  name: "DRINQKART",
-};
+// Company info is loaded dynamically from purchase_company_settings
 
 const TransporterPortal = () => {
   const { transporterId } = useParams();
@@ -305,6 +304,13 @@ const TransporterPortal = () => {
         .eq("id", poId);
 
       if (dbError) throw dbError;
+
+      // Sync to purchase_dashboard with atomicity
+      await dashboardSyncService.syncPortalStatus({
+        poId,
+        statusType: "transporter",
+        statusValue: status,
+      });
 
       if (status === "no") {
         const itemNames = items.map(i => i.itemName).filter(Boolean);

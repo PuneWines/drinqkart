@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabase";
 import { Loader2, Archive, X, Eye, Search, Trash2 } from "lucide-react";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
+import { dashboardSyncService } from "../services/dashboardSyncService";
 
 const formatDateTime = (isoString) => {
   if (!isoString) return "—";
@@ -210,13 +211,25 @@ const Approval = () => {
 
       alert(`Batch ${displayLabel} successfully deleted!`);
       
-      // Delete ungenerated items from purchase_dashboard if deleted before PO
+      // Soft-delete in purchase_dashboard so audit trail and dashboard retain deleted items
       const targetIndentId = items[0]?.indent_id || items[0]?.party_indent_id;
       if (targetIndentId) {
+        const currentUser = useAuthStore.getState().currentUser;
+        const approverEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || "Approver";
+        const now = new Date().toISOString();
         await supabase
           .from('purchase_dashboard')
-          .delete()
-          .eq('indent_id', targetIndentId)
+          .update({
+            is_deleted: true,
+            deletion_stage: 'approval',
+            deletion_reason: 'Batch Deleted at Approval',
+            deleted_by_emp_code: approverEmpCode,
+            approver_emp_code: approverEmpCode,
+            approver_action: 'delete',
+            deleted_at: now,
+            updated_at: now
+          })
+          .eq('indent_id', String(targetIndentId))
           .is('po_id', null);
       }
       
@@ -250,16 +263,28 @@ const Approval = () => {
 
       alert(`Item "${itemName}" successfully deleted!`);
 
-      // Delete ungenerated item from purchase_dashboard if deleted before PO
+      // Soft-delete in purchase_dashboard so audit trail and dashboard retain deleted items
       const currentItemsList = groupedApprovals[selectedIndentId] || [];
       const targetItem = currentItemsList.find(item => item.id === itemId);
       if (targetItem && targetItem.item_name) {
         const targetIndentId = targetItem.indent_id || targetItem.party_indent_id;
         if (targetIndentId) {
+          const currentUser = useAuthStore.getState().currentUser;
+          const approverEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || "Approver";
+          const now = new Date().toISOString();
           await supabase
             .from('purchase_dashboard')
-            .delete()
-            .eq('indent_id', targetIndentId)
+            .update({
+              is_deleted: true,
+              deletion_stage: 'approval',
+              deletion_reason: 'Item Deleted at Approval',
+              deleted_by_emp_code: approverEmpCode,
+              approver_emp_code: approverEmpCode,
+              approver_action: 'delete',
+              deleted_at: now,
+              updated_at: now
+            })
+            .eq('indent_id', String(targetIndentId))
             .eq('item_name', targetItem.item_name)
             .is('po_id', null);
         }
@@ -410,21 +435,42 @@ const Approval = () => {
           .select("*, purchase_indents!inner(shop_name)")
           .eq("purchase_indents.shop_name", selectedShop)
           .order("created_at", { ascending: false })
-          .limit(300);
+          .limit(500);
       } else {
         approvedQuery = supabase
           .from("purchase_approved_indent_items")
           .select("*, purchase_indents(shop_name)")
           .order("created_at", { ascending: false })
-          .limit(300);
+          .limit(500);
       }
 
-      const [approvedResult, ...indentResults] = await Promise.all([
+      // 3. Fetch rejected indent items (history)
+      let rejectedQuery;
+      if (selectedShop !== "All") {
+        rejectedQuery = supabase
+          .from("purchase_indent_items")
+          .select("*, purchase_indents!inner(shop_name)")
+          .eq("purchase_indents.shop_name", selectedShop)
+          .eq("approval_status", "rejected")
+          .order("updated_at", { ascending: false })
+          .limit(500);
+      } else {
+        rejectedQuery = supabase
+          .from("purchase_indent_items")
+          .select("*, purchase_indents(shop_name)")
+          .eq("approval_status", "rejected")
+          .order("updated_at", { ascending: false })
+          .limit(500);
+      }
+
+      const [approvedResult, rejectedResult, ...indentResults] = await Promise.all([
         approvedQuery,
+        rejectedQuery,
         ...indentPageQueries
       ]);
 
       if (approvedResult.error) throw approvedResult.error;
+      if (rejectedResult.error) throw rejectedResult.error;
 
       let rawIndentItems = [];
       indentResults.forEach(({ data, error }) => {
@@ -436,7 +482,8 @@ const Approval = () => {
 
       return {
         rawIndentItems,
-        rawApprovedIndentItems: approvedResult.data || []
+        rawApprovedIndentItems: approvedResult.data || [],
+        rawRejectedIndentItems: rejectedResult.data || []
       };
     }
   });
@@ -465,12 +512,23 @@ const Approval = () => {
           shop_name: item.purchase_indents?.shop_name || "Unknown"
         }));
 
+      const rawRejected = approvalsDataResponse.rawRejectedIndentItems || [];
+
       const enrichedApprovedItems = rawApproved.map(item => ({
         ...item,
         approval_status: "approved",
         is_excluded: false,
         shop_name: item.purchase_indents?.shop_name || "Unknown"
       }));
+
+      const enrichedRejectedItems = rawRejected.map(item => ({
+        ...item,
+        approval_status: "rejected",
+        is_excluded: false,
+        shop_name: item.purchase_indents?.shop_name || "Unknown"
+      }));
+
+      const enrichedHistoryItems = [...enrichedApprovedItems, ...enrichedRejectedItems];
 
       const groupItemsByKey = (items) => {
         return items.reduce((acc, item) => {
@@ -488,12 +546,12 @@ const Approval = () => {
       };
 
       setPendingGroupedApprovals(groupItemsByKey(enrichedIndentItems));
-      setHistoryGroupedApprovals(groupItemsByKey(enrichedApprovedItems));
+      setHistoryGroupedApprovals(groupItemsByKey(enrichedHistoryItems));
       
       // Pre-fill existing statuses for history items
       const initialStatuses = {};
-      enrichedApprovedItems.forEach(item => {
-        initialStatuses[item.id] = 'approved';
+      enrichedHistoryItems.forEach(item => {
+        initialStatuses[item.id] = item.approval_status || 'approved';
       });
       setIndentStatuses(prev => ({ ...prev, ...initialStatuses }));
     }
@@ -677,109 +735,23 @@ const Approval = () => {
         }
       }
 
-      // 5. Strictly sync audit data to purchase_dashboard
-      try {
-        const currentUser = useAuthStore.getState().currentUser;
-        const approverEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
-        
-        const targetIndentId = currentItems[0]?.indent_id || currentItems[0]?.party_indent_id || selectedIndentId;
-        const validItemNames = itemsToProcess.map(i => i.item_name).filter(Boolean);
+      // 5. Strictly sync audit data to purchase_dashboard with atomicity
+      const currentUser = useAuthStore.getState().currentUser;
+      const approverEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
+      
+      const targetIndentId = currentItems[0]?.indent_id || currentItems[0]?.party_indent_id || selectedIndentId;
+      const effectiveCompany = (isCompanyFiltered && selectedCompanyFilter !== '__NONE__')
+        ? selectedCompanyFilter.trim()
+        : null;
 
-        // Fetch existing dashboard rows for this indent
-        const { data: existingDashboardRows } = await supabase
-          .from('purchase_dashboard')
-          .select('id, item_name')
-          .eq('indent_id', targetIndentId)
-          .in('item_name', validItemNames);
-
-        const existingMap = {};
-        (existingDashboardRows || []).forEach(row => {
-          existingMap[row.item_name] = row.id;
-        });
-
-        const updatesToRun = [];
-        const insertsToRun = [];
-
-        itemsToProcess.forEach(item => {
-          const status = indentStatuses[item.id];
-          const isApproved = status === 'approved';
-          const isRejected = status === 'rejected';
-
-          if (!isApproved && !isRejected) return; // Untouched items
-
-          let finalApprovedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : parseFloat(item.order_box || 0);
-          let finalApprovedQty = item.approved_qty !== undefined && item.approved_qty !== null ? parseFloat(item.approved_qty) : parseFloat(item.order_qty || 0);
-          
-          const existingId = existingMap[item.item_name];
-
-          let approverAction = "";
-          if (isApproved) {
-            if (!existingId || parseFloat(item.order_box || 0) === 0) {
-              approverAction = "Extra add by approver";
-            } else if (finalApprovedBox !== parseFloat(item.order_box || 0) || Math.round(finalApprovedQty) !== Math.round(parseFloat(item.order_qty || 0))) {
-              approverAction = `Modified by (${approverEmpCode})`;
-            } else {
-              approverAction = `Approved by (${approverEmpCode})`;
-            }
-          } else {
-            approverAction = "delete";
-          }
-
-          const effectiveCompany = (isCompanyFiltered && selectedCompanyFilter !== '__NONE__')
-            ? selectedCompanyFilter.trim()
-            : null;
-
-          if (existingId) {
-            updatesToRun.push(
-              supabase
-                .from('purchase_dashboard')
-                .update({
-                  approved_box: isApproved ? finalApprovedBox : null,
-                  approved_qty: isApproved ? finalApprovedQty : null,
-                  approver_action: approverAction,
-                  approver_emp_code: approverEmpCode,
-                  company_name: effectiveCompany,
-                  approved_at: new Date().toISOString(),
-                  is_deleted: isRejected,
-                  deletion_stage: isRejected ? 'approval' : null,
-                  deletion_reason: isRejected ? 'Rejected by Approver' : null,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', existingId)
-            );
-          } else {
-            // Extra add by approver that wasn't in original indent!
-            insertsToRun.push({
-              indent_id: targetIndentId,
-              shop_name: item.shop_name || 'UNKNOWN',
-              party_name: item.party_name || 'UNKNOWN',
-              company_name: effectiveCompany,
-              item_name: item.item_name,
-              order_box: 0,
-              order_qty: 0,
-              indent_emp_code: null,
-              approved_box: isApproved ? finalApprovedBox : null,
-              approved_qty: isApproved ? finalApprovedQty : null,
-              approver_action: approverAction,
-              approver_emp_code: approverEmpCode,
-              approved_at: new Date().toISOString(),
-              trader_status: 'Pending',
-              transporter_status: 'Pending',
-              receiver_status: 'Pending',
-              is_deleted: isRejected
-            });
-          }
-        });
-
-        if (insertsToRun.length > 0) {
-          await supabase.from('purchase_dashboard').insert(insertsToRun);
-        }
-        if (updatesToRun.length > 0) {
-          await Promise.all(updatesToRun);
-        }
-      } catch (dashSyncErr) {
-        console.warn("Dashboard sync non-blocking warning:", dashSyncErr);
-      }
+      await dashboardSyncService.syncApprovalSubmitted({
+        targetIndentId,
+        itemsToProcess,
+        indentStatuses,
+        approverEmpCode,
+        effectiveCompany,
+        currentShopName: itemsToProcess[0]?.shop_name,
+      });
 
       alert("Successfully submitted approvals!");
 
@@ -818,7 +790,24 @@ const Approval = () => {
       fetchApprovals();
     } catch (error) {
       console.error("Error submitting approvals:", error);
-      alert("Failed to submit approvals: " + error.message);
+      // Compensating rollback if error occurs
+      try {
+        if (selectedIndentId) {
+          await supabase
+            .from("purchase_approved_indent_items")
+            .delete()
+            .eq("unique_indent_id", selectedIndentId);
+        }
+        if (rejectedIdsToUpdate && rejectedIdsToUpdate.length > 0) {
+          await supabase
+            .from("purchase_indent_items")
+            .update({ approval_status: "pending" })
+            .in("id", rejectedIdsToUpdate);
+        }
+      } catch (rbErr) {
+        console.error("Failed to cleanly rollback approval error:", rbErr);
+      }
+      alert("Approval Submission Restricted: " + (error.message || "Could not sync audit records to purchase_dashboard. All changes have been rolled back. Please try again."));
     } finally {
       setIsLoading(false);
     }

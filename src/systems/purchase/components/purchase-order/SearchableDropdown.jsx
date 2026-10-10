@@ -132,8 +132,7 @@ const SearchableDropdown = ({ options = [], value, onChange, placeholder = "Sele
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          const toDelete = typeof option === "object" ? (option.partyName || option.label || optVal) : option;
-                          onDeleteOption(toDelete);
+                          onDeleteOption(option);
                         }}
                         style={{
                           background: 'none',

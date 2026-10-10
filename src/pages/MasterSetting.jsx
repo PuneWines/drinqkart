@@ -314,6 +314,7 @@ export default function MasterSetting() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [shopFilter, setShopFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [showPassword, setShowPassword] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
   const [availableShops, setAvailableShops] = useState([]);
@@ -1347,10 +1348,27 @@ export default function MasterSetting() {
       const uShop = (u.shop_name || "").toLowerCase();
       const uAccess = (u.user_access || "").toLowerCase();
       const filterLower = shopFilter.toLowerCase();
-      return uShop.includes(filterLower) || uAccess.includes(filterLower);
+      if (!uShop.includes(filterLower) && !uAccess.includes(filterLower)) {
+        return false;
+      }
     }
+
+    if (statusFilter !== "all") {
+      const userStatus = (u.status || "active").toLowerCase().trim();
+      if (statusFilter === "active" && userStatus !== "active") return false;
+      if (statusFilter === "inactive" && userStatus !== "inactive") return false;
+    }
+
     return true;
   });
+
+  const activeUsersCount = useMemo(() => {
+    return users.filter((u) => (u.status || "active").toLowerCase().trim() === "active").length;
+  }, [users]);
+
+  const inactiveUsersCount = useMemo(() => {
+    return users.filter((u) => (u.status || "active").toLowerCase().trim() === "inactive").length;
+  }, [users]);
 
   // Helper to check permission level for a given Master Setting module: returns 'modify' | 'view' | 'none'
   const getMasterSettingPagePermission = (pageLabel) => {
@@ -1557,6 +1575,23 @@ export default function MasterSetting() {
             />
           </div>
 
+          {/* Active / Inactive Status Filter Dropdown */}
+          <div className="relative shrink-0 min-w-[150px]">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full appearance-none pl-3.5 pr-8 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider text-[#1A1A1A] focus:outline-none focus:border-[#C9A84C] cursor-pointer shadow-xs"
+            >
+              <option value="all">All Status ({users.length})</option>
+              <option value="active">Active ({activeUsersCount})</option>
+              <option value="inactive">Inactive ({inactiveUsersCount})</option>
+            </select>
+            <ChevronDown
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/50 pointer-events-none"
+            />
+          </div>
+
           {/* Select Columns Dropdown */}
           <div ref={columnDropdownRef} className="relative shrink-0">
             <button
@@ -1752,7 +1787,29 @@ export default function MasterSetting() {
                       {/* Emp Name Column (from HR FMS) */}
                       {visibleColumns.includes("emp_name") && (
                         <td className="py-2 px-3 font-semibold text-[#1A1A1A] whitespace-nowrap">
-                          <span className="font-serif text-xs">{empName}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-serif text-xs">{empName}</span>
+                            {(() => {
+                              const isActive = (u.status || "active").toLowerCase().trim() === "active";
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    isActive
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                      : "bg-rose-50 text-rose-700 border border-rose-200"
+                                  }`}
+                                  title={`Status: ${isActive ? "Active" : "Inactive"}`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isActive ? "bg-emerald-500" : "bg-rose-500"
+                                    }`}
+                                  />
+                                  {isActive ? "Active" : "Inactive"}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </td>
                       )}
 

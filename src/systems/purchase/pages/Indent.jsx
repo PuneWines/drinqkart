@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabase";
 import useShopStore from "../store/useShopStore";
 import useAuthStore from "../store/useAuthStore";
 import { getInLifecycleItemNames } from "../services/purchaseOrderService";
+import { dashboardSyncService } from "../services/dashboardSyncService";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
 const AccordionItem = ({ item, calcs, handleInlineChange }) => {
@@ -844,33 +845,29 @@ const Indent = () => {
 
       const uniquePoIndentIds = [...new Set(poIndentIds.filter(Boolean))];
 
-      // 4. Delete approved indent items
+      // 4. Delete ungenerated records from purchase_dashboard (before PO generated)
+      await dashboardSyncService.syncIndentDeleted(indentId);
+
+      // 5. Delete approved indent items
       const { error: delApprovedError } = await supabase
         .from('purchase_approved_indent_items')
         .delete()
         .eq('indent_id', indentId);
       if (delApprovedError) throw delApprovedError;
 
-      // 5. Delete pending indent items
+      // 6. Delete pending indent items
       const { error: delItemsError } = await supabase
         .from('purchase_indent_items')
         .delete()
         .eq('indent_id', indentId);
       if (delItemsError) throw delItemsError;
 
-      // 6. Delete parent indent record
+      // 7. Delete parent indent record
       const { error: delIndentError } = await supabase
         .from('purchase_indents')
         .delete()
         .eq('id', indentId);
       if (delIndentError) throw delIndentError;
-
-      // 7. Delete ungenerated records from purchase_dashboard (before PO generated)
-      await supabase
-        .from('purchase_dashboard')
-        .delete()
-        .eq('indent_id', indentId)
-        .is('po_id', null);
 
       addToast("Successfully deleted indent and associated pipeline records.", "success");
       fetchSubmittedHistory();
@@ -1077,6 +1074,7 @@ const Indent = () => {
       return;
     }
     setIsProcessing(true);
+    let createdIndentId = null;
     try {
       const activeItems = [];
       const excludedItems = [];
@@ -1133,133 +1131,121 @@ const Indent = () => {
         .select()
         .single();
 
-      if (headerError) throw headerError;
-      const indentId = headerData.id;
+        if (headerError) throw headerError;
+        createdIndentId = headerData.id;
+        const indentId = headerData.id;
 
-      // Fetch active item names in lifecycle for this shop (Shop Name + Item Name matching)
-      const activeLifecycleItemNames = await getInLifecycleItemNames(selectedShop || 'UNKNOWN');
+        // Fetch active item names in lifecycle for this shop (Shop Name + Item Name matching)
+        const activeLifecycleItemNames = await getInLifecycleItemNames(selectedShop || 'UNKNOWN');
 
-      const partyMap = new Map();
-      const itemsPayload = [];
+        const partyMap = new Map();
+        const itemsPayload = [];
 
-      activeItems.forEach(({ item, calcs }) => {
-        const partyName = item.partyName || 'UNKNOWN';
-        if (!partyMap.has(partyName)) {
-          partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
-        }
-        const partyInfo = partyMap.get(partyName);
-        const currentCount = partyInfo.count++;
-        const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
-        const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
+        activeItems.forEach(({ item, calcs }) => {
+          const partyName = item.partyName || 'UNKNOWN';
+          if (!partyMap.has(partyName)) {
+            partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
+          }
+          const partyInfo = partyMap.get(partyName);
+          const currentCount = partyInfo.count++;
+          const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
+          const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
 
-        itemsPayload.push({
-          indent_id: indentId,
-          party_indent_id: partyIndentId,
-          item_name: item.itemName,
-          fix_per_day_avg_sale: item.avgSale,
-          qty_out: item.qtyOut,
-          closing_qty: item.closingQty,
-          brand_name: item.brandName,
-          company_name: item.companyName || '',
-          bcs: item.bcs,
-          mls: item.mls,
-          liquor_type: item.liquorType,
-          party_name: item.partyName,
-          last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
-          per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
-          threshold_sale: parseFloat(calcs.thresholdSale) || 0,
-          closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
-          order_box: parseFloat(calcs.orderBox) || 0,
-          order_qty: parseFloat(calcs.orderQty) || 0,
-          is_excluded: false,
-          exclusion_reason: null,
-          already_in_lifecycle: isAlreadyInLifecycle
+          itemsPayload.push({
+            indent_id: indentId,
+            party_indent_id: partyIndentId,
+            item_name: item.itemName,
+            fix_per_day_avg_sale: item.avgSale,
+            qty_out: item.qtyOut,
+            closing_qty: item.closingQty,
+            brand_name: item.brandName,
+            company_name: item.companyName || '',
+            bcs: item.bcs,
+            mls: item.mls,
+            liquor_type: item.liquorType,
+            party_name: item.partyName,
+            last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
+            per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
+            threshold_sale: parseFloat(calcs.thresholdSale) || 0,
+            closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
+            order_box: parseFloat(calcs.orderBox) || 0,
+            order_qty: parseFloat(calcs.orderQty) || 0,
+            is_excluded: false,
+            exclusion_reason: null,
+            already_in_lifecycle: isAlreadyInLifecycle
+          });
         });
-      });
 
-      excludedItems.forEach(({ item, calcs }) => {
-        const partyName = item.partyName || 'UNKNOWN';
-        if (!partyMap.has(partyName)) {
-          partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
-        }
-        const partyInfo = partyMap.get(partyName);
-        const currentCount = partyInfo.count++;
-        const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
-        const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
+        excludedItems.forEach(({ item, calcs }) => {
+          const partyName = item.partyName || 'UNKNOWN';
+          if (!partyMap.has(partyName)) {
+            partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
+          }
+          const partyInfo = partyMap.get(partyName);
+          const currentCount = partyInfo.count++;
+          const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
+          const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
 
-        itemsPayload.push({
-          indent_id: indentId,
-          party_indent_id: partyIndentId,
-          item_name: item.itemName,
-          fix_per_day_avg_sale: item.avgSale,
-          qty_out: item.qtyOut,
-          closing_qty: item.closingQty,
-          brand_name: item.brandName,
-          company_name: item.companyName || '',
-          bcs: item.bcs,
-          mls: item.mls,
-          liquor_type: item.liquorType,
-          party_name: item.partyName,
-          last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
-          per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
-          threshold_sale: parseFloat(calcs.thresholdSale) || 0,
-          closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
-          order_box: parseFloat(calcs.orderBox) || 0,
-          order_qty: parseFloat(calcs.orderQty) || 0,
-          is_excluded: true,
-          exclusion_reason: parseFloat(calcs.orderQty) < 0 ? "negative_order_qty" : "low_order_qty",
-          already_in_lifecycle: isAlreadyInLifecycle
+          itemsPayload.push({
+            indent_id: indentId,
+            party_indent_id: partyIndentId,
+            item_name: item.itemName,
+            fix_per_day_avg_sale: item.avgSale,
+            qty_out: item.qtyOut,
+            closing_qty: item.closingQty,
+            brand_name: item.brandName,
+            company_name: item.companyName || '',
+            bcs: item.bcs,
+            mls: item.mls,
+            liquor_type: item.liquorType,
+            party_name: item.partyName,
+            last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
+            per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
+            threshold_sale: parseFloat(calcs.thresholdSale) || 0,
+            closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
+            order_box: parseFloat(calcs.orderBox) || 0,
+            order_qty: parseFloat(calcs.orderQty) || 0,
+            is_excluded: true,
+            exclusion_reason: parseFloat(calcs.orderQty) < 0 ? "negative_order_qty" : "low_order_qty",
+            already_in_lifecycle: isAlreadyInLifecycle
+          });
         });
-      });
 
-      const { error: itemsError } = await supabase
-        .from("purchase_indent_items")
-        .insert(itemsPayload);
+        const { error: itemsError } = await supabase
+          .from("purchase_indent_items")
+          .insert(itemsPayload);
 
-      if (itemsError) throw itemsError;
+        if (itemsError) throw itemsError;
 
-      // Sync initial items to purchase_dashboard
-      const currentUser = useAuthStore.getState().currentUser;
-      const indentEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Indent Team";
+        // Sync initial items to purchase_dashboard with strict atomicity
+        const currentUser = useAuthStore.getState().currentUser;
+        const indentEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Indent Team";
 
-      const dashboardPayload = itemsPayload.map(itm => ({
-        indent_id: indentId,
-        shop_name: selectedShop || 'UNKNOWN',
-        party_name: itm.party_name || 'UNKNOWN',
-        company_name: itm.company_name || null,
-        item_name: itm.item_name,
-        order_box: itm.order_box,
-        order_qty: itm.order_qty,
-        indent_emp_code: indentEmpCode,
-        indent_created_at: new Date().toISOString(),
-        trader_status: 'Pending',
-        transporter_status: 'Pending',
-        receiver_status: 'Pending',
-        is_deleted: false
-      }));
+        await dashboardSyncService.syncIndentCreated({
+          indentId,
+          shopName: selectedShop || 'UNKNOWN',
+          itemsPayload,
+          empCode: indentEmpCode,
+        });
 
-      if (dashboardPayload.length > 0) {
-        const chunkSize = 100;
-        for (let i = 0; i < dashboardPayload.length; i += chunkSize) {
-          const chunk = dashboardPayload.slice(i, i + chunkSize);
-          await supabase.from('purchase_dashboard').insert(chunk);
+        addToast(`Successfully submitted ${itemsPayload.length} records to Supabase!`, "success");
+        setTableData([]);
+        setDuplicateCount(0);
+        setSelectedShop("");
+        sessionStorage.removeItem('indent_tableData');
+        sessionStorage.removeItem('indent_duplicateCount');
+        sessionStorage.removeItem('indent_selectedShop');
+        fetchSubmittedHistory();
+      } catch (error) {
+        if (createdIndentId) {
+          console.warn("[Rollback] Cleaning up partial indent creation:", createdIndentId);
+          await dashboardSyncService.rollbackIndentCreated(createdIndentId);
         }
+        console.error("Error submitting indent data:", error);
+        addToast("Submission Restricted: " + (error.message || "Failed to sync audit data. No indent was created. Your data has been preserved. Please try again."), "error");
+      } finally {
+        setIsProcessing(false);
       }
-
-      addToast(`Successfully submitted ${itemsPayload.length} records to Supabase!`, "success");
-      setTableData([]);
-      setDuplicateCount(0);
-      setSelectedShop("");
-      sessionStorage.removeItem('indent_tableData');
-      sessionStorage.removeItem('indent_duplicateCount');
-      sessionStorage.removeItem('indent_selectedShop');
-      fetchSubmittedHistory();
-    } catch (error) {
-      console.error("Error submitting indent data:", error);
-      addToast("Failed to submit data. Please check the console for details.", "error");
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const stats = getStatistics();

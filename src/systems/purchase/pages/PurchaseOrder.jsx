@@ -35,6 +35,7 @@ import {
 import { generatePdfBlob, uploadPdfBlob, previewPdfInNewTab } from "../services/pdfService";
 import { sendPOConfirmationMessage, sendTransporterConfirmationMessage, sendReceiverConfirmationMessage } from "../services/whatsappService";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
+import { dashboardSyncService } from "../services/dashboardSyncService";
 
 // Utilities
 import { transformActivePartyItems, roundPoBox } from "../utils/poTransformer";
@@ -707,30 +708,105 @@ const PurchaseOrder = () => {
     addToast(`Added item "${trimmedName}" to manual PO.`, "success");
   };
 
-  const handleDeleteVendor = async (vendorName) => {
-    const itemsToExclude = filteredApprovedItems.filter(item => item.party_name === vendorName);
-    if (itemsToExclude.length === 0) {
-      addToast(`No items found to exclude for vendor "${vendorName}".`, "warning");
+  const handleDeleteVendor = async (vendorOption) => {
+    let targetParty = "";
+    let targetCompany = "";
+
+    if (typeof vendorOption === "object" && vendorOption !== null) {
+      targetParty = (vendorOption.partyName || vendorOption.label || "").trim();
+      targetCompany = (vendorOption.companyName || "").trim();
+      if (!targetParty && vendorOption.key) {
+        if (vendorOption.key.includes("::")) {
+          const parts = vendorOption.key.split("::");
+          targetParty = parts[0].trim();
+          targetCompany = parts[1].trim();
+        } else {
+          targetParty = vendorOption.key.trim();
+        }
+      }
+    } else if (typeof vendorOption === "string") {
+      if (vendorOption.includes("::")) {
+        const parts = vendorOption.split("::");
+        targetParty = parts[0].trim();
+        targetCompany = parts[1].trim();
+      } else {
+        targetParty = vendorOption.trim();
+      }
+    }
+
+    if (!targetParty) {
+      addToast("Invalid vendor option selected for deletion.", "warning");
       return;
     }
 
-    const confirmMsg = `Are you sure you want to delete vendor "${vendorName}" from available PO selection?\n\nThis will exclude all ${itemsToExclude.length} approved item(s) for this vendor under the selected shop "${selectedShop}".`;
+    // Strictly match both party_name AND company_name (if company is specified)
+    const itemsToExclude = filteredApprovedItems.filter(item => {
+      const pMatch = (item.party_name || "").trim().toLowerCase() === targetParty.toLowerCase();
+      if (!pMatch) return false;
+      if (targetCompany) {
+        return (item.company_name || "").trim().toLowerCase() === targetCompany.toLowerCase();
+      }
+      return !(item.company_name || "").trim();
+    });
+
+    const displayLabel = targetCompany ? `${targetParty} (${targetCompany})` : targetParty;
+
+    if (itemsToExclude.length === 0) {
+      addToast(`No items found to exclude for "${displayLabel}".`, "warning");
+      return;
+    }
+
+    const confirmMsg = `Are you sure you want to delete "${displayLabel}" from available PO selection?\n\nThis will exclude only the ${itemsToExclude.length} approved item(s) belonging to "${displayLabel}" under shop "${selectedShop}".`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
       const idsToExclude = itemsToExclude.map(item => item.id);
       await excludeIndentItems(idsToExclude, "vendor_removed_from_po");
 
-      addToast(`Vendor "${vendorName}" removed from PO selection.`, "success");
+      // Sync with purchase_dashboard so audit metrics stay accurate
+      const itemNames = itemsToExclude.map(i => (i.item_name || i.itemName || "").trim()).filter(Boolean);
+      if (itemNames.length > 0) {
+        try {
+          let q = supabase
+            .from("purchase_dashboard")
+            .update({
+              is_deleted: true,
+              deletion_stage: "po",
+              deletion_reason: "vendor_removed_from_po",
+              updated_at: new Date().toISOString()
+            })
+            .in("item_name", itemNames)
+            .eq("party_name", targetParty)
+            .is("po_id", null);
 
-      if (activeParty === vendorName) {
+          if (targetCompany) {
+            q = q.eq("company_name", targetCompany);
+          }
+          if (selectedShop && selectedShop !== "All") {
+            q = q.eq("shop_name", selectedShop);
+          }
+          await q;
+        } catch (dashErr) {
+          console.warn("Failed to update dashboard audit for excluded vendor items:", dashErr);
+        }
+      }
+
+      addToast(`"${displayLabel}" removed from PO selection.`, "success");
+
+      // Check if current activeParty matches this specific (party, company) pair
+      const currentActivePartyName = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
+      const currentActiveCompany = activeParty.includes("::") ? activeParty.split("::")[1].trim() : "";
+      const isCurrentOptionDeleted = (currentActivePartyName.toLowerCase() === targetParty.toLowerCase()) &&
+        (targetCompany ? currentActiveCompany.toLowerCase() === targetCompany.toLowerCase() : !currentActiveCompany);
+
+      if (isCurrentOptionDeleted) {
         setActiveParty("");
       }
 
       await loadPageData(false);
     } catch (err) {
-      console.error("Error deleting vendor:", err);
-      addToast("Failed to delete vendor: " + err.message, "error");
+      console.error("Error deleting vendor option:", err);
+      addToast("Failed to delete vendor option: " + err.message, "error");
     }
   };
 
@@ -874,6 +950,7 @@ const PurchaseOrder = () => {
 
     setIsUploading(true);
     isSubmittingRef.current = true;
+    let createdPoId = null;
 
     try {
       // Atomically fetch fresh highest PO number from DB to guarantee unique sequence
@@ -991,6 +1068,7 @@ const PurchaseOrder = () => {
       });
 
       const insertedPoId = insertedData[0]?.id;
+      createdPoId = insertedPoId;
 
       // --- Mark approved items as ordered in approved_indent_items now that PO is created ---
       if (poMode !== "manual" && currentIndentId && insertedPoId) {
@@ -1016,98 +1094,22 @@ const PurchaseOrder = () => {
         }
       }
 
-      // --- Synchronize with purchase_dashboard lifecycle audit table ---
-      try {
-        const currentUser = useAuthStore.getState().currentUser;
-        const currentEmpCode = currentUser?.emp_code || currentUser?.name || "SYSTEM";
-        const cleanIndentId = currentIndentId ? currentIndentId.split("::")[0].trim() : null;
+      // --- Synchronize with purchase_dashboard lifecycle audit table with strict atomicity ---
+      const currentUser = useAuthStore.getState().currentUser;
+      const currentEmpCode = currentUser?.emp_code || currentUser?.name || "SYSTEM";
 
-        for (const item of itemsForActiveParty) {
-          const itemTitle = (item.itemName || item.item_name || "").trim();
-          if (!itemTitle) continue;
-
-          let existingRow = null;
-          if (cleanIndentId) {
-            const { data: matchedRows } = await supabase
-              .from("purchase_dashboard")
-              .select("id")
-              .eq("indent_id", cleanIndentId)
-              .eq("item_name", itemTitle)
-              .limit(1);
-            if (matchedRows && matchedRows.length > 0) {
-              existingRow = matchedRows[0];
-            }
-          }
-
-          if (existingRow) {
-            await supabase
-              .from("purchase_dashboard")
-              .update({
-                po_id: insertedPoId,
-                po_number: freshPoNumber,
-                po_box: item.poBox != null ? parseFloat(item.poBox) : null,
-                po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
-                po_action: item.isDirectAdded ? "Direct Added in PO" : "PO Generated",
-                po_emp_code: currentEmpCode,
-                po_generated_at: new Date().toISOString(),
-                trader_status: "Pending",
-                transporter_status: "Pending",
-                receiver_status: "Pending",
-                is_deleted: false,
-                updated_at: new Date().toISOString()
-              })
-              .eq("id", existingRow.id);
-          } else {
-            await supabase
-              .from("purchase_dashboard")
-              .insert({
-                indent_id: cleanIndentId || `PO-${freshPoNumber}`,
-                shop_name: currentShopName || selectedShop || "Default",
-                company_name: item.companyName || item.company_name || null,
-                party_name: activeParty,
-                item_name: itemTitle,
-                order_box: 0,
-                order_qty: 0,
-                approved_box: item.approvedBox != null ? parseFloat(item.approvedBox) : 0,
-                approved_qty: item.approvedQty != null ? parseFloat(item.approvedQty) : 0,
-                po_id: insertedPoId,
-                po_number: freshPoNumber,
-                po_box: item.poBox != null ? parseFloat(item.poBox) : null,
-                po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
-                po_action: "Direct Added in PO",
-                po_emp_code: currentEmpCode,
-                po_generated_at: new Date().toISOString(),
-                trader_status: "Pending",
-                transporter_status: "Pending",
-                receiver_status: "Pending",
-                is_deleted: false,
-                indent_created_at: new Date().toISOString()
-              });
-          }
-        }
-
-        // Mark items removed at PO stage as po_action = 'delete'
-        if (removedItemIds.size > 0 && cleanIndentId) {
-          const removedItemsList = filteredApprovedItems.filter(i => removedItemIds.has(i.id));
-          for (const remItem of removedItemsList) {
-            const remTitle = (remItem.item_name || remItem.itemName || "").trim();
-            if (remTitle) {
-              await supabase
-                .from("purchase_dashboard")
-                .update({
-                  po_action: "delete",
-                  po_emp_code: currentEmpCode,
-                  updated_at: new Date().toISOString()
-                })
-                .eq("indent_id", cleanIndentId)
-                .eq("item_name", remTitle);
-            }
-          }
-        }
-        console.log("✅ purchase_dashboard successfully synchronized for PO:", freshPoNumber);
-      } catch (dashSyncErr) {
-        console.error("⚠️ Failed to sync purchase_dashboard during PO creation:", dashSyncErr);
-      }
+      await dashboardSyncService.syncPurchaseOrderCreated({
+        insertedPoId,
+        freshPoNumber,
+        currentIndentId,
+        itemsForActiveParty,
+        activeParty,
+        currentShopName: currentShopName || selectedShop || "Default",
+        removedItemIds,
+        filteredApprovedItems,
+        currentEmpCode,
+      });
+      console.log("✅ purchase_dashboard successfully synchronized for PO:", freshPoNumber);
 
       // --- Fetch / Generate Portal Links ---
       const baseUrl = import.meta.env.VITE_APP_BASE_URL || window.location.origin;
@@ -1215,8 +1217,15 @@ const PurchaseOrder = () => {
       await loadPageData();
 
     } catch (error) {
-      console.error("Error generating/uploading PDF:", error);
-      addToast("An error occurred during PDF export: " + error.message, "error");
+      if (createdPoId) {
+        console.warn("[Rollback] Cleaning up partial PO creation:", createdPoId);
+        await dashboardSyncService.rollbackPurchaseOrderCreated(createdPoId);
+      }
+      console.error("Error creating PO:", error);
+      addToast(
+        "PO Creation Restricted: " + (error.message || "Failed to sync audit data. No PO was issued. Your form data has been preserved. Please try again."),
+        "error"
+      );
     } finally {
       isSubmittingRef.current = false;
       setIsUploading(false);

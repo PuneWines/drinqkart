@@ -95,7 +95,7 @@ const TransporterConfirmation = () => {
             formattedPhone,
             poData.po_number,
             confirmLink,
-            "DRINQKART",
+            poData.shop_name || '',
             poData.vendor_name,
             poData.receiver_pdf_url || poData.trader_pdf_url
           ).then(res => {

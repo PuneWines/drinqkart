@@ -81,11 +81,29 @@ export function useRealtimeSync() {
       )
       .subscribe();
 
+    // ── Channel 4: purchase_dashboard ──────────────────────────
+    // Covers: Dashboard page lifecycle audit table
+    const dashboardChannel = supabase
+      .channel("realtime:purchase_dashboard")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "purchase_dashboard",
+        },
+        (_payload) => {
+          queryClient.invalidateQueries({ queryKey: ["purchaseDashboardLogs"] });
+        }
+      )
+      .subscribe();
+
     // ── Cleanup ────────────────────────────────────────────────
     return () => {
       supabase.removeChannel(indentItemsChannel);
       supabase.removeChannel(approvedItemsChannel);
       supabase.removeChannel(purchaseOrdersChannel);
+      supabase.removeChannel(dashboardChannel);
     };
   }, [queryClient]);
 }

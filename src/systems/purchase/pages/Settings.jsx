@@ -22,6 +22,9 @@ const Settings = ({ readOnly = false }) => {
   
   const [activeTab, setActiveTab] = useState("vendors");
   const [searchQuery, setSearchQuery] = useState("");
+  const [vendorSearchQuery, setVendorSearchQuery] = useState("");
+  const [transporterSearchQuery, setTransporterSearchQuery] = useState("");
+  const [receiverSearchQuery, setReceiverSearchQuery] = useState("");
   const [availableParties, setAvailableParties] = useState([]);
   
   // User Form State
@@ -429,20 +432,67 @@ const Settings = ({ readOnly = false }) => {
     }
   };
 
-  const filteredVendors = vendors.filter(v => 
-    v.party_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    ((v.contact_number || v.contact) && (v.contact_number || v.contact).includes(searchQuery))
-  );
+  // Vendors Tab Filter
+  const filteredVendors = vendors.filter(v => {
+    if (!vendorSearchQuery.trim()) return true;
+    const q = vendorSearchQuery.toLowerCase().trim();
+    return (
+      (v.party_name && v.party_name.toLowerCase().includes(q)) ||
+      ((v.contact_number || v.contact) && String(v.contact_number || v.contact).toLowerCase().includes(q)) ||
+      (v.email && v.email.toLowerCase().includes(q)) ||
+      (v.gstin && v.gstin.toLowerCase().includes(q)) ||
+      (v.contact_name && v.contact_name.toLowerCase().includes(q))
+    );
+  });
 
-  const filteredTransporters = transporters.filter(t => 
-    t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t.contact_number && t.contact_number.includes(searchQuery))
-  );
+  // Transporters Tab Filter
+  const filteredTransporters = transporters.filter(t => {
+    if (!transporterSearchQuery.trim()) return true;
+    const q = transporterSearchQuery.toLowerCase().trim();
+    return (
+      (t.name && t.name.toLowerCase().includes(q)) ||
+      (t.contact_number && String(t.contact_number).toLowerCase().includes(q))
+    );
+  });
 
-  const filteredReceivers = receivers.filter(r => 
-    r.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (r.contact_number && r.contact_number.includes(searchQuery))
-  );
+  // Receivers Tab Filter
+  const filteredReceivers = receivers.filter(r => {
+    if (!receiverSearchQuery.trim()) return true;
+    const q = receiverSearchQuery.toLowerCase().trim();
+    return (
+      (r.name && r.name.toLowerCase().includes(q)) ||
+      (r.contact_number && String(r.contact_number).toLowerCase().includes(q))
+    );
+  });
+
+  // Secure Portal Links Tab Filter (searches across all 3 portal types)
+  const portalFilteredVendors = vendors.filter(v => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      (v.party_name && v.party_name.toLowerCase().includes(q)) ||
+      ((v.contact_number || v.contact) && String(v.contact_number || v.contact).toLowerCase().includes(q)) ||
+      (v.email && v.email.toLowerCase().includes(q))
+    );
+  });
+
+  const portalFilteredTransporters = transporters.filter(t => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      (t.name && t.name.toLowerCase().includes(q)) ||
+      (t.contact_number && String(t.contact_number).toLowerCase().includes(q))
+    );
+  });
+
+  const portalFilteredReceivers = receivers.filter(r => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      (r.name && r.name.toLowerCase().includes(q)) ||
+      (r.contact_number && String(r.contact_number).toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="min-h-screen bg-slate-50/50 py-8 px-4 sm:px-6 lg:px-8">
@@ -496,17 +546,58 @@ const Settings = ({ readOnly = false }) => {
           {/* VENDORS TAB */}
           {activeTab === 'vendors' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Supplier Ledger</h2>
                   <p className="text-slate-500 text-xs mt-0.5">Register manufacturing plants, contact info, and tax credentials.</p>
                 </div>
-                <button 
-                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-                  onClick={handleAddNewVendor}
-                >
-                  <Plus size={15} /> Add New Vendor
-                </button>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  {/* Search Filter for Vendors */}
+                  <div className="relative flex-1 sm:w-72 shadow-2xs rounded-lg">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search size={16} className="text-slate-400" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Search vendors by name, GSTIN, phone..."
+                      value={vendorSearchQuery}
+                      onChange={(e) => setVendorSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                    {vendorSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setVendorSearchQuery("")}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <button 
+                    className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    onClick={handleAddNewVendor}
+                  >
+                    <Plus size={15} /> Add New Vendor
+                  </button>
+                </div>
+              </div>
+
+              {/* Vendors Count & Active Filter Indicator */}
+              <div className="flex justify-between items-center px-1 text-xs text-slate-500 font-medium">
+                <span>
+                  Showing <strong className="text-slate-900 font-bold">{filteredVendors.length}</strong> of <strong className="text-slate-900 font-bold">{vendors.length}</strong> vendors
+                </span>
+                {vendorSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setVendorSearchQuery("")}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                  >
+                    Clear search
+                  </button>
+                )}
               </div>
 
               {showVendorForm && (
@@ -673,7 +764,7 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {vendors.map((vendor) => (
+                      {filteredVendors.map((vendor) => (
                         <tr key={vendor.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-900 font-bold">{vendor.party_name}</strong></td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{vendor.contact_number || vendor.contact || '—'}</td>
@@ -695,9 +786,24 @@ const Settings = ({ readOnly = false }) => {
                           </td>
                         </tr>
                       ))}
-                      {vendors.length === 0 && (
+                      {portalFilteredVendors.length === 0 && (
                         <tr>
-                          <td colSpan="5" className="px-6 py-8 text-center text-slate-500 font-medium">No vendors found. Select "+ Add New Vendor".</td>
+                          <td colSpan="5" className="px-6 py-8 text-center text-slate-500 font-medium">
+                            {vendorSearchQuery ? (
+                              <div className="space-y-1.5">
+                                <p>No vendors found matching "<strong className="text-slate-800">{vendorSearchQuery}</strong>".</p>
+                                <button
+                                  type="button"
+                                  onClick={() => setVendorSearchQuery("")}
+                                  className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
+                                >
+                                  Clear Search
+                                </button>
+                              </div>
+                            ) : (
+                              'No vendors found. Select "+ Add New Vendor".'
+                            )}
+                          </td>
                         </tr>
                       )}
                     </tbody>
@@ -915,21 +1021,62 @@ const Settings = ({ readOnly = false }) => {
           {/* TRANSPORTERS TAB */}
           {activeTab === 'transporters' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Transporter Directory</h2>
                   <p className="text-slate-500 text-xs mt-0.5">Manage logistics partners and mobile contact details.</p>
                 </div>
-                <button 
-                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-                  onClick={() => {
-                    setEditingTransporter(null);
-                    setTransporterFormData({ name: "", contact_number: "" });
-                    setShowTransporterForm(true);
-                  }}
-                >
-                  <Plus size={15} /> Add Transporter
-                </button>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  {/* Search Filter for Transporters */}
+                  <div className="relative flex-1 sm:w-72 shadow-2xs rounded-lg">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search size={16} className="text-slate-400" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Search transporters by name or phone..."
+                      value={transporterSearchQuery}
+                      onChange={(e) => setTransporterSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                    {transporterSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setTransporterSearchQuery("")}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <button 
+                    className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    onClick={() => {
+                      setEditingTransporter(null);
+                      setTransporterFormData({ name: "", contact_number: "" });
+                      setShowTransporterForm(true);
+                    }}
+                  >
+                    <Plus size={15} /> Add Transporter
+                  </button>
+                </div>
+              </div>
+
+              {/* Transporters Count & Active Filter Indicator */}
+              <div className="flex justify-between items-center px-1 text-xs text-slate-500 font-medium">
+                <span>
+                  Showing <strong className="text-slate-900 font-bold">{filteredTransporters.length}</strong> of <strong className="text-slate-900 font-bold">{transporters.length}</strong> transporters
+                </span>
+                {transporterSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setTransporterSearchQuery("")}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                  >
+                    Clear search
+                  </button>
+                )}
               </div>
 
               {showTransporterForm && (
@@ -1004,7 +1151,7 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {transporters.map((t) => (
+                      {filteredTransporters.map((t) => (
                         <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-900 font-bold">{t.name}</strong></td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{t.contact_number}</td>
@@ -1024,9 +1171,24 @@ const Settings = ({ readOnly = false }) => {
                           </td>
                         </tr>
                       ))}
-                      {transporters.length === 0 && (
+                      {portalFilteredTransporters.length === 0 && (
                         <tr>
-                          <td colSpan="3" className="px-6 py-8 text-center text-slate-500 font-medium">No transporters defined.</td>
+                          <td colSpan="3" className="px-6 py-8 text-center text-slate-500 font-medium">
+                            {transporterSearchQuery ? (
+                              <div className="space-y-1.5">
+                                <p>No transporters found matching "<strong className="text-slate-800">{transporterSearchQuery}</strong>".</p>
+                                <button
+                                  type="button"
+                                  onClick={() => setTransporterSearchQuery("")}
+                                  className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
+                                >
+                                  Clear Search
+                                </button>
+                              </div>
+                            ) : (
+                              'No transporters defined. Select "+ Add Transporter".'
+                            )}
+                          </td>
                         </tr>
                       )}
                     </tbody>
@@ -1039,21 +1201,62 @@ const Settings = ({ readOnly = false }) => {
           {/* RECEIVERS TAB */}
           {activeTab === 'receivers' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Receivers Directory</h2>
                   <p className="text-slate-500 text-xs mt-0.5">Manage delivery partner sites and contact credentials.</p>
                 </div>
-                <button 
-                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-                  onClick={() => {
-                    setEditingReceiver(null);
-                    setReceiverFormData({ name: "", contact_number: "" });
-                    setShowReceiverForm(true);
-                  }}
-                >
-                  <Plus size={15} /> Add Receiver
-                </button>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  {/* Search Filter for Receivers */}
+                  <div className="relative flex-1 sm:w-72 shadow-2xs rounded-lg">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search size={16} className="text-slate-400" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Search receivers by name or phone..."
+                      value={receiverSearchQuery}
+                      onChange={(e) => setReceiverSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                    {receiverSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setReceiverSearchQuery("")}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <button 
+                    className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    onClick={() => {
+                      setEditingReceiver(null);
+                      setReceiverFormData({ name: "", contact_number: "" });
+                      setShowReceiverForm(true);
+                    }}
+                  >
+                    <Plus size={15} /> Add Receiver
+                  </button>
+                </div>
+              </div>
+
+              {/* Receivers Count & Active Filter Indicator */}
+              <div className="flex justify-between items-center px-1 text-xs text-slate-500 font-medium">
+                <span>
+                  Showing <strong className="text-slate-900 font-bold">{filteredReceivers.length}</strong> of <strong className="text-slate-900 font-bold">{receivers.length}</strong> receivers
+                </span>
+                {receiverSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setReceiverSearchQuery("")}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                  >
+                    Clear search
+                  </button>
+                )}
               </div>
 
               {showReceiverForm && (
@@ -1128,7 +1331,7 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {receivers.map((r) => (
+                      {filteredReceivers.map((r) => (
                         <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-900 font-bold">{r.name}</strong></td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{r.contact_number}</td>
@@ -1148,9 +1351,24 @@ const Settings = ({ readOnly = false }) => {
                           </td>
                         </tr>
                       ))}
-                      {receivers.length === 0 && (
+                      {portalFilteredReceivers.length === 0 && (
                         <tr>
-                          <td colSpan="3" className="px-6 py-8 text-center text-slate-500 font-medium">No receivers defined.</td>
+                          <td colSpan="3" className="px-6 py-8 text-center text-slate-500 font-medium">
+                            {receiverSearchQuery ? (
+                              <div className="space-y-1.5">
+                                <p>No receivers found matching "<strong className="text-slate-800">{receiverSearchQuery}</strong>".</p>
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiverSearchQuery("")}
+                                  className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
+                                >
+                                  Clear Search
+                                </button>
+                              </div>
+                            ) : (
+                              'No receivers defined. Select "+ Add Receiver".'
+                            )}
+                          </td>
                         </tr>
                       )}
                     </tbody>
@@ -1183,11 +1401,21 @@ const Settings = ({ readOnly = false }) => {
                     </span>
                     <input
                       type="text"
-                      placeholder="Search by name or number..."
+                      placeholder="Search portals by name or number..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-semibold"
+                      className="w-full pl-10 pr-9 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-semibold"
                     />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1214,7 +1442,7 @@ const Settings = ({ readOnly = false }) => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
-                        {filteredVendors.map((v) => {
+                        {portalFilteredVendors.map((v) => {
                           const baseUrl = window.location.origin;
                           
                           let link = v.portal_link || `/vendor-portal/${v.id}`;
@@ -1276,7 +1504,7 @@ const Settings = ({ readOnly = false }) => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
-                        {filteredTransporters.map((t) => {
+                        {portalFilteredTransporters.map((t) => {
                           const baseUrl = window.location.origin;
                           let link = t.portal_link || `/transporter-portal/${t.id}`;
                           if (!link.startsWith("http")) {
@@ -1337,7 +1565,7 @@ const Settings = ({ readOnly = false }) => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
-                        {filteredReceivers.map((r) => {
+                        {portalFilteredReceivers.map((r) => {
                           const baseUrl = window.location.origin;
                           let link = r.portal_link || `/receiver-portal/${r.id}`;
                           if (!link.startsWith("http")) {
