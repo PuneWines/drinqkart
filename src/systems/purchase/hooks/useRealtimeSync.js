@@ -33,7 +33,7 @@ export function useRealtimeSync() {
         {
           event: "*", // INSERT | UPDATE | DELETE
           schema: "public",
-          table: "indent_items",
+          table: "purchase_indent_items",
         },
         (_payload) => {
           queryClient.invalidateQueries({ queryKey: ["approvalsData"] });
@@ -50,7 +50,7 @@ export function useRealtimeSync() {
         {
           event: "*",
           schema: "public",
-          table: "approved_indent_items",
+          table: "purchase_approved_indent_items",
         },
         (_payload) => {
           // Invalidate both caches that depend on this table
@@ -69,7 +69,7 @@ export function useRealtimeSync() {
         {
           event: "*",
           schema: "public",
-          table: "purchase_orders",
+          table: "purchase_purchase_orders",
         },
         (_payload) => {
           queryClient.invalidateQueries({ queryKey: ["pipelineOrders"] });

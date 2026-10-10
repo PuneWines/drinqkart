@@ -36,10 +36,20 @@ const ReceiverPortal = () => {
   const [formErrors, setFormErrors] = useState({});
   const [successPoIds, setSuccessPoIds] = useState({});
 
+  // Active tab: pending | history
+  const [activeTab, setActiveTab] = useState("pending");
+
   // Memoized filter for pending receiver confirmations
   const pendingPoList = useMemo(() => {
     return poList.filter(po => po.trader_status !== "no" && po.receiver_status !== "yes" && po.receiver_status !== "no" && !successPoIds[po.id]);
   }, [poList, successPoIds]);
+
+  // Memoized filter for history receiver confirmations
+  const historyPoList = useMemo(() => {
+    return poList.filter(po => po.receiver_status === "yes" || po.receiver_status === "no" || successPoIds[po.id]);
+  }, [poList, successPoIds]);
+
+  const displayedPoList = activeTab === "pending" ? pendingPoList : historyPoList;
 
   // Fetch Receiver details and purchase orders
   const fetchPortalData = async () => {
@@ -60,19 +70,15 @@ const ReceiverPortal = () => {
       }
       setReceiver(recv);
 
-      // 2. Fetch pending POs matching the receiver's contact number
-      // where receiver has not submitted action yet.
+      // 2. Fetch all POs matching the receiver's contact number
       const { data: pos, error: posError } = await supabase
         .from("purchase_purchase_orders")
         .select("*")
         .eq("receiver_number", recv.contact_number)
-        .or("receiver_status.is.null,receiver_status.eq.")
         .order("created_at", { ascending: false });
 
       if (posError) throw posError;
-      // Filter out POs where trader_status is "no" (rejected by supplier)
-      const activePos = (pos || []).filter(po => po.trader_status !== "no");
-      setPoList(activePos);
+      setPoList(pos || []);
 
       // Initialize form fields for POs
       const newRemarks = {};
@@ -395,12 +401,79 @@ const ReceiverPortal = () => {
           </span>
         </div>
 
+        {/* Tab Controls */}
+        <div className="flex bg-white border border-slate-200 rounded-xl p-1.5 w-fit shadow-xs mb-6">
+          <button
+            type="button"
+            onClick={() => { setActiveTab("pending"); setExpandedPoId(null); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              activeTab === "pending"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <Clock size={16} />
+            <span>Pending</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                activeTab === "pending"
+                  ? "bg-slate-800 text-amber-400"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {pendingPoList.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab("history"); setExpandedPoId(null); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              activeTab === "history"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <CheckCircle2 size={16} />
+            <span>History</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                activeTab === "history"
+                  ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {historyPoList.length}
+            </span>
+          </button>
+        </div>
+
         {/* PO List */}
-        {pendingPoList.length === 0 ? (
+        {displayedPoList.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm flex flex-col items-center justify-center">
-            <Package size={48} className="text-slate-400 mb-4" />
-            <h3 className="text-lg font-bold text-slate-800 mb-1">No Pending Deliveries</h3>
-            <p className="text-slate-500 text-sm">There are no incoming purchase order deliveries awaiting your confirmation.</p>
+            {activeTab === "pending" ? (
+              <>
+                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 border border-emerald-100">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">No Pending Deliveries</h3>
+                <p className="text-slate-500 text-sm max-w-md">
+                  There are no incoming purchase order deliveries awaiting your confirmation. {historyPoList.length > 0 && (
+                    <>You can check your {historyPoList.length} verified deliver{historyPoList.length > 1 ? "ies" : "y"} in the <button type="button" onClick={() => setActiveTab("history")} className="font-bold text-indigo-600 hover:underline inline cursor-pointer">History</button> tab.</>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-4 border border-slate-200">
+                  <Package size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">No Delivery History</h3>
+                <p className="text-slate-500 text-sm max-w-md">
+                  There are no previously verified or archived deliveries recorded for this receiver profile yet.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -425,9 +498,9 @@ const ReceiverPortal = () => {
               </div>
             )}
 
-            {pendingPoList.map((po) => {
+            {displayedPoList.map((po) => {
               const isExpanded = expandedPoId === po.id;
-              const isSubmitted = po.receiver_status === "yes";
+              const isSubmitted = po.receiver_status === "yes" || successPoIds[po.id];
               const isRejected = po.receiver_status === "no";
               const items = poItems[po.id] || [];
               const isLoadingPoItems = loadingItems[po.id];
@@ -778,63 +851,85 @@ const ReceiverPortal = () => {
                           </div>
 
                           {/* Receiver actions form */}
-                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm space-y-5">
-                            <h4 className="text-sm font-bold text-slate-950 border-b border-slate-200 pb-2 flex items-center justify-between">
-                              <span>Confirm stock Delivery Receipt</span>
-                              {isLocked && (
-                                <span className="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-100 uppercase">
-                                  Locked
-                                </span>
-                              )}
-                            </h4>
-
-                            {formErrors[po.id] && (
-                              <div className="bg-red-50 border border-red-200 text-red-800 text-sm font-medium p-3.5 rounded-lg flex items-center gap-2">
-                                <AlertCircle size={16} />
-                                <span>{formErrors[po.id]}</span>
-                              </div>
-                            )}
-
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                                <MessageSquare size={15} className="text-slate-400" /> Delivery Remarks (Optional for Accept, Required for Reject)
-                              </label>
-                              <textarea
-                                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
-                                rows={3}
-                                placeholder={isLocked ? "Awaiting transporter confirmation..." : "Any delivery notes, package shortages, structural comments or reasons..."}
-                                value={remarks[po.id] || ""}
-                                onChange={(e) => setRemarks(prev => ({ ...prev, [po.id]: e.target.value }))}
-                                disabled={isLocked}
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <button 
-                                type="button" 
-                                onClick={() => handleSubmitResponse(po, "no")}
-                                className="py-3 px-6 bg-red-100 hover:bg-red-200 border border-red-200 hover:border-red-300 text-red-800 text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={isLocked || submittingPoId === po.id}
-                              >
-                                <X size={18} /> Reject Delivery
-                              </button>
-
-                              <button 
-                                type="button" 
-                                onClick={() => handleSubmitResponse(po, "yes")}
-                                className="py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={isLocked || submittingPoId === po.id}
-                              >
-                                {submittingPoId === po.id ? (
-                                  <Loader2 className="animate-spin" size={18} />
-                                ) : (
-                                  <>
-                                    <Check size={18} /> Confirm Delivery Receipt
-                                  </>
+                          {isSubmitted || isRejected ? (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 pb-2">
+                                Submitted Delivery Receipt Details
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Receipt Status</span>
+                                  <strong className={`text-base font-semibold ${isSubmitted ? "text-emerald-600" : "text-red-600"}`}>
+                                    {isSubmitted ? "✅ Delivery Received & Confirmed" : "❌ Delivery Rejected"}
+                                  </strong>
+                                </div>
+                                {(remarks[po.id] || po.receiver_remarks) && (
+                                  <div className="col-span-1 sm:col-span-2 space-y-0.5 pt-2 border-t border-slate-200">
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Remarks</span>
+                                    <p className="text-slate-800 text-sm mt-1">{remarks[po.id] || po.receiver_remarks}</p>
+                                  </div>
                                 )}
-                              </button>
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm space-y-5">
+                              <h4 className="text-sm font-bold text-slate-950 border-b border-slate-200 pb-2 flex items-center justify-between">
+                                <span>Confirm stock Delivery Receipt</span>
+                                {isLocked && (
+                                  <span className="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-100 uppercase">
+                                    Locked
+                                  </span>
+                                )}
+                              </h4>
+
+                              {formErrors[po.id] && (
+                                <div className="bg-red-50 border border-red-200 text-red-800 text-sm font-medium p-3.5 rounded-lg flex items-center gap-2">
+                                  <AlertCircle size={16} />
+                                  <span>{formErrors[po.id]}</span>
+                                </div>
+                              )}
+
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                  <MessageSquare size={15} className="text-slate-400" /> Delivery Remarks (Optional for Accept, Required for Reject)
+                                </label>
+                                <textarea
+                                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                                  rows={3}
+                                  placeholder={isLocked ? "Awaiting transporter confirmation..." : "Any delivery notes, package shortages, structural comments or reasons..."}
+                                  value={remarks[po.id] || ""}
+                                  onChange={(e) => setRemarks(prev => ({ ...prev, [po.id]: e.target.value }))}
+                                  disabled={isLocked}
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleSubmitResponse(po, "no")}
+                                  className="py-3 px-6 bg-red-100 hover:bg-red-200 border border-red-200 hover:border-red-300 text-red-800 text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={isLocked || submittingPoId === po.id}
+                                >
+                                  <X size={18} /> Reject Delivery
+                                </button>
+
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleSubmitResponse(po, "yes")}
+                                  className="py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={isLocked || submittingPoId === po.id}
+                                >
+                                  {submittingPoId === po.id ? (
+                                    <Loader2 className="animate-spin" size={18} />
+                                  ) : (
+                                    <>
+                                      <Check size={18} /> Confirm Delivery Receipt
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
 
                         </div>
                       )}

@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import { supabase } from "../../../lib/supabase";
 
-const getInitialShop = (shops = []) => {
+const getSavedShop = () => {
   try {
     const saved = localStorage.getItem("globalSelectedShop");
-    if (saved && (saved === "All" || shops.includes(saved))) {
-      return saved;
+    if (saved && saved.trim()) {
+      return saved.trim();
     }
   } catch (e) {
     // ignore
@@ -13,11 +13,38 @@ const getInitialShop = (shops = []) => {
   return "All";
 };
 
+const getSavedShopsList = () => {
+  try {
+    const raw = localStorage.getItem("globalShopsList");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return [];
+};
+
+const getSavedShopsDetails = () => {
+  try {
+    const raw = localStorage.getItem("globalShopsDetails");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return [];
+};
+
 const useShopStore = create((set, get) => ({
-  shops: [],
-  shopsDetails: [],
+  shops: getSavedShopsList(),
+  shopsDetails: getSavedShopsDetails(),
   loading: false,
-  selectedShop: "All",
+  selectedShop: getSavedShop(),
+
   fetchShops: async () => {
     set({ loading: true });
     try {
@@ -28,13 +55,29 @@ const useShopStore = create((set, get) => ({
 
       if (!error && data) {
         const shopNames = data.map(s => s.shop_name).filter(Boolean);
-        const currentSelected = get().selectedShop;
-        const initial = getInitialShop(shopNames);
+        const saved = getSavedShop();
+        const current = get().selectedShop;
+
+        let activeShop = "All";
+        if (saved && (saved === "All" || shopNames.includes(saved))) {
+          activeShop = saved;
+        } else if (current && (current === "All" || shopNames.includes(current))) {
+          activeShop = current;
+        }
+
+        try {
+          localStorage.setItem("globalShopsList", JSON.stringify(shopNames));
+          localStorage.setItem("globalShopsDetails", JSON.stringify(data || []));
+          localStorage.setItem("globalSelectedShop", activeShop);
+        } catch (e) {
+          // ignore
+        }
+
         set({
           shops: shopNames,
           shopsDetails: data || [],
           loading: false,
-          selectedShop: shopNames.includes(currentSelected) || currentSelected === "All" ? currentSelected : initial
+          selectedShop: activeShop
         });
       } else {
         set({ loading: false });
@@ -44,6 +87,7 @@ const useShopStore = create((set, get) => ({
       set({ loading: false });
     }
   },
+
   getShopRecord: (shopName) => {
     if (!shopName || shopName === "All") return null;
     const details = get().shopsDetails || [];
@@ -55,10 +99,12 @@ const useShopStore = create((set, get) => ({
              (fn && (fn === target || target.includes(fn) || fn.includes(target)));
     }) || null;
   },
+
   getShopFullName: (shopName) => {
     const rec = get().getShopRecord(shopName);
     return rec?.full_name || shopName;
   },
+
   setSelectedShop: (shop) => {
     try {
       localStorage.setItem("globalSelectedShop", shop);

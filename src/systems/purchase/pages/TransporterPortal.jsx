@@ -40,10 +40,20 @@ const TransporterPortal = () => {
   const [formErrors, setFormErrors] = useState({});
   const [successPoIds, setSuccessPoIds] = useState({});
 
+  // Active tab: pending | history
+  const [activeTab, setActiveTab] = useState("pending");
+
   // Memoized filter for pending shipments
   const pendingPoList = useMemo(() => {
     return poList.filter(po => po.trader_status !== "no" && po.transporter_status !== "yes" && po.transporter_status !== "no" && !successPoIds[po.id]);
   }, [poList, successPoIds]);
+
+  // Memoized filter for history shipments
+  const historyPoList = useMemo(() => {
+    return poList.filter(po => po.transporter_status === "yes" || po.transporter_status === "no" || successPoIds[po.id]);
+  }, [poList, successPoIds]);
+
+  const displayedPoList = activeTab === "pending" ? pendingPoList : historyPoList;
 
   // Fetch Transporter details and purchase orders
   const fetchPortalData = async () => {
@@ -64,18 +74,15 @@ const TransporterPortal = () => {
       }
       setTransporter(transp);
 
-      // 2. Fetch pending POs for this transporter (transporter_status is pending)
+      // 2. Fetch all POs for this transporter
       const { data: pos, error: posError } = await supabase
         .from("purchase_purchase_orders")
         .select("*")
         .eq("transporter_number", transp.contact_number)
-        .or("transporter_status.is.null,transporter_status.eq.")
         .order("created_at", { ascending: false });
 
       if (posError) throw posError;
-      // Filter out POs where trader_status is "no" (rejected by supplier)
-      const activePos = (pos || []).filter(po => po.trader_status !== "no");
-      setPoList(activePos);
+      setPoList(pos || []);
 
       // Initialize form fields for POs
       const newPickupDates = {};
@@ -374,18 +381,85 @@ const TransporterPortal = () => {
           </div>
         )}
 
+        {/* Tab Controls */}
+        <div className="flex bg-white border border-slate-200 rounded-xl p-1.5 w-fit shadow-xs mb-6">
+          <button
+            type="button"
+            onClick={() => { setActiveTab("pending"); setExpandedPoId(null); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              activeTab === "pending"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <Clock size={16} />
+            <span>Pending</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                activeTab === "pending"
+                  ? "bg-slate-800 text-amber-400"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {pendingPoList.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab("history"); setExpandedPoId(null); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              activeTab === "history"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <CheckCircle2 size={16} />
+            <span>History</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                activeTab === "history"
+                  ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {historyPoList.length}
+            </span>
+          </button>
+        </div>
+
         {/* PO List */}
-        {pendingPoList.length === 0 ? (
+        {displayedPoList.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm flex flex-col items-center justify-center">
-            <Truck size={48} className="text-slate-400 mb-4" />
-            <h3 className="text-lg font-bold text-slate-800 mb-1">No Shipments Assigned</h3>
-            <p className="text-slate-500 text-sm">There are no purchase order shipments currently assigned to your contact number.</p>
+            {activeTab === "pending" ? (
+              <>
+                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 border border-emerald-100">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">No Pending Shipments</h3>
+                <p className="text-slate-500 text-sm max-w-md">
+                  There are no purchase order shipments currently awaiting pick-up confirmation. {historyPoList.length > 0 && (
+                    <>You can check your {historyPoList.length} completed shipment{historyPoList.length > 1 ? "s" : ""} in the <button type="button" onClick={() => setActiveTab("history")} className="font-bold text-indigo-600 hover:underline inline cursor-pointer">History</button> tab.</>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-4 border border-slate-200">
+                  <Truck size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">No Shipment History</h3>
+                <p className="text-slate-500 text-sm max-w-md">
+                  There are no previously verified or archived shipments for this logistics profile yet.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
-            {pendingPoList.map((po) => {
+            {displayedPoList.map((po) => {
               const isExpanded = expandedPoId === po.id;
-              const isSubmitted = po.transporter_status === "yes";
+              const isSubmitted = po.transporter_status === "yes" || successPoIds[po.id];
               const isRejected = po.transporter_status === "no";
               
               // Trader verification states

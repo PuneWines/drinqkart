@@ -6,6 +6,7 @@ import "../styles/Pages.css";
 import Toast, { useToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
 import useShopStore from "../store/useShopStore";
+import useAuthStore from "../store/useAuthStore";
 import { getInLifecycleItemNames } from "../services/purchaseOrderService";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
@@ -391,9 +392,63 @@ const Indent = () => {
     }
   });
 
+  const [periodType, setPeriodType] = useState(() => {
+    try {
+      const saved = localStorage.getItem('indent_daysDivisor');
+      const val = saved ? JSON.parse(saved) : 30;
+      if (val === 7) return 'weekly';
+      if (val === 30) return 'monthly';
+      return 'custom';
+    } catch (e) {
+      return 'monthly';
+    }
+  });
+
+  const [customDays, setCustomDays] = useState(() => {
+    try {
+      const saved = localStorage.getItem('indent_daysDivisor');
+      const val = saved ? JSON.parse(saved) : 30;
+      return (val !== 7 && val !== 30) ? val : 30;
+    } catch (e) {
+      return 30;
+    }
+  });
+
   React.useEffect(() => {
     localStorage.setItem('indent_daysDivisor', JSON.stringify(daysDivisor));
   }, [daysDivisor]);
+
+  const handlePeriodTypeChange = (newType) => {
+    setPeriodType(newType);
+    if (newType === 'weekly') {
+      setDaysDivisor(7);
+    } else if (newType === 'monthly') {
+      setDaysDivisor(30);
+    } else if (newType === 'custom') {
+      const validCustom = Math.max(1, Math.min(1000, Number(customDays) || 1));
+      setDaysDivisor(validCustom);
+    }
+  };
+
+  const handleCustomDaysChange = (rawVal) => {
+    if (rawVal === '') {
+      setCustomDays('');
+      return;
+    }
+    let num = parseInt(rawVal, 10);
+    if (isNaN(num)) num = 1;
+    if (num > 1000) num = 1000;
+    if (num < 1) num = 1;
+    setCustomDays(num);
+    setDaysDivisor(num);
+  };
+
+  const handleCustomDaysBlur = () => {
+    if (!customDays || Number(customDays) < 1) {
+      setCustomDays(1);
+      setDaysDivisor(1);
+    }
+  };
 
   const [showModal, setShowModal] = useState(false);
   const [selectedShop, setSelectedShop] = useState(() => {
@@ -810,6 +865,13 @@ const Indent = () => {
         .eq('id', indentId);
       if (delIndentError) throw delIndentError;
 
+      // 7. Delete ungenerated records from purchase_dashboard (before PO generated)
+      await supabase
+        .from('purchase_dashboard')
+        .delete()
+        .eq('indent_id', indentId)
+        .is('po_id', null);
+
       addToast("Successfully deleted indent and associated pipeline records.", "success");
       fetchSubmittedHistory();
       if (selectedSubmission?.id === indentId) setSelectedSubmission(null);
@@ -924,6 +986,16 @@ const Indent = () => {
           .delete()
           .eq('id', itemId);
         if (delItemError) throw delItemError;
+      }
+
+      // Strictly delete from purchase_dashboard if deleted before PO generated
+      if (itemData && itemData.item_name) {
+        await supabase
+          .from('purchase_dashboard')
+          .delete()
+          .eq('indent_id', indentId)
+          .eq('item_name', itemData.item_name)
+          .is('po_id', null);
       }
 
       addToast("Successfully deleted item from indent.", "success");
@@ -1146,6 +1218,34 @@ const Indent = () => {
 
       if (itemsError) throw itemsError;
 
+      // Sync initial items to purchase_dashboard
+      const currentUser = useAuthStore.getState().currentUser;
+      const indentEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Indent Team";
+
+      const dashboardPayload = itemsPayload.map(itm => ({
+        indent_id: indentId,
+        shop_name: selectedShop || 'UNKNOWN',
+        party_name: itm.party_name || 'UNKNOWN',
+        company_name: itm.company_name || null,
+        item_name: itm.item_name,
+        order_box: itm.order_box,
+        order_qty: itm.order_qty,
+        indent_emp_code: indentEmpCode,
+        indent_created_at: new Date().toISOString(),
+        trader_status: 'Pending',
+        transporter_status: 'Pending',
+        receiver_status: 'Pending',
+        is_deleted: false
+      }));
+
+      if (dashboardPayload.length > 0) {
+        const chunkSize = 100;
+        for (let i = 0; i < dashboardPayload.length; i += chunkSize) {
+          const chunk = dashboardPayload.slice(i, i + chunkSize);
+          await supabase.from('purchase_dashboard').insert(chunk);
+        }
+      }
+
       addToast(`Successfully submitted ${itemsPayload.length} records to Supabase!`, "success");
       setTableData([]);
       setDuplicateCount(0);
@@ -1268,19 +1368,33 @@ const Indent = () => {
                 ))}
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-xs font-medium text-[#475569]">Calculation Period:</span>
                 <select
-                  value={daysDivisor}
-                  onChange={(e) => setDaysDivisor(Number(e.target.value))}
+                  value={periodType}
+                  onChange={(e) => handlePeriodTypeChange(e.target.value)}
                   className="px-3 py-1.5 border border-[#cbd5e1] rounded-md outline-none font-medium text-[#0f172a] text-xs cursor-pointer bg-white hover:border-[#4f46e5]"
                 >
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                    <option key={day} value={day}>
-                      {day} {day === 1 ? 'Day' : 'Days'} {day === 7 ? '(Weekly)' : day === 30 ? '(Monthly - 30)' : day === 31 ? '(Monthly - 31)' : ''}
-                    </option>
-                  ))}
+                  <option value="weekly">Weekly (7 Days)</option>
+                  <option value="monthly">Monthly (30 Days)</option>
+                  <option value="custom">Custom</option>
                 </select>
+
+                {periodType === 'custom' && (
+                  <div className="flex items-center gap-1.5 bg-white border border-[#cbd5e1] rounded-md px-2 py-1 focus-within:border-[#4f46e5]">
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={customDays}
+                      onChange={(e) => handleCustomDaysChange(e.target.value)}
+                      onBlur={handleCustomDaysBlur}
+                      placeholder="1 - 1000"
+                      className="w-20 text-xs font-bold text-[#0f172a] outline-none"
+                    />
+                    <span className="text-[11px] font-semibold text-[#64748b]">Days</span>
+                  </div>
+                )}
               </div>
             </div>
           )}

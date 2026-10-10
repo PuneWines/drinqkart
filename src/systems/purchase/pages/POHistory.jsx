@@ -207,19 +207,37 @@ const POHistory = () => {
 
   /* ── Stats ────────────────────────────────────────────────── */
   const stats = useMemo(() => {
-    const totalOrderQty = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_order_qty) || 0), 0);
-    const totalOrderBox = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_order_box) || 0), 0);
-    
-    const totalApprovedQty = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_approved_qty ?? o.total_order_qty) || 0), 0);
-    const totalApprovedBox = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_approved_box ?? o.total_order_box) || 0), 0);
+    let totalOrderQty = 0;
+    let totalOrderBox = 0;
+    let totalApprovedQty = 0;
+    let totalApprovedBox = 0;
+    let totalPoQty = 0;
+    let totalPoBox = 0;
+    const vendorSet = new Set();
 
-    const totalPoQty = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_po_qty ?? o.total_approved_qty ?? o.total_order_qty) || 0), 0);
-    const totalPoBox = shopFilteredOrders.reduce((s, o) => s + (Number(o.total_po_box ?? o.total_approved_box ?? o.total_order_box) || 0), 0);
+    for (let i = 0; i < shopFilteredOrders.length; i++) {
+      const o = shopFilteredOrders[i];
+      if (o.vendor_name) vendorSet.add(o.vendor_name);
 
-    const vendors = new Set(shopFilteredOrders.map((o) => o.vendor_name).filter(Boolean)).size;
+      const ordQty = Number(o.total_order_qty) || 0;
+      const ordBox = Number(o.total_order_box) || 0;
+      totalOrderQty += ordQty;
+      totalOrderBox += ordBox;
+
+      const appQty = Number(o.total_approved_qty ?? o.total_order_qty) || 0;
+      const appBox = Number(o.total_approved_box ?? o.total_order_box) || 0;
+      totalApprovedQty += appQty;
+      totalApprovedBox += appBox;
+
+      const poQty = Number(o.total_po_qty ?? o.total_approved_qty ?? o.total_order_qty) || 0;
+      const poBox = Number(o.total_po_box ?? o.total_approved_box ?? o.total_order_box) || 0;
+      totalPoQty += poQty;
+      totalPoBox += poBox;
+    }
+
     return { 
       totalPos: shopFilteredOrders.length, 
-      vendors,
+      vendors: vendorSet.size,
       totalOrderQty, totalOrderBox,
       totalApprovedQty, totalApprovedBox,
       totalPoQty, totalPoBox

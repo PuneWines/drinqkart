@@ -89,10 +89,20 @@ const VendorPortal = () => {
   const [previewPoId, setPreviewPoId] = useState(null);
   const [submittedAt, setSubmittedAt] = useState(null);
 
+  // Active Tab: pending | history
+  const [activeTab, setActiveTab] = useState("pending");
+
   // Memoized filter for pending purchase orders
   const pendingPoList = useMemo(() => {
     return poList.filter(po => po.trader_status !== "yes" && po.trader_status !== "no" && !successPoIds[po.id]);
   }, [poList, successPoIds]);
+
+  // Memoized filter for history purchase orders
+  const historyPoList = useMemo(() => {
+    return poList.filter(po => po.trader_status === "yes" || po.trader_status === "no" || successPoIds[po.id]);
+  }, [poList, successPoIds]);
+
+  const displayedPoList = activeTab === "pending" ? pendingPoList : historyPoList;
 
   // Refs for PDF off-screen rendering
   const offscreenRef = useRef(null);
@@ -124,11 +134,11 @@ const VendorPortal = () => {
 
       setVendorName(vendorRow.party_name);
 
-      // 3. Fetch POs matching this vendor name
+      // 3. Fetch POs matching this vendor name (case-insensitive for resilience)
       const { data: pos, error: posError } = await supabase
         .from("purchase_purchase_orders")
         .select("*")
-        .eq("vendor_name", vendorRow.party_name)
+        .ilike("vendor_name", vendorRow.party_name.trim())
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -573,18 +583,85 @@ const VendorPortal = () => {
           </div>
         )}
 
+        {/* Tab Controls */}
+        <div className="flex bg-white border border-slate-200 rounded-xl p-1.5 w-fit shadow-xs mb-6">
+          <button
+            type="button"
+            onClick={() => { setActiveTab("pending"); setExpandedPoId(null); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              activeTab === "pending"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <Clock size={16} />
+            <span>Pending</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                activeTab === "pending"
+                  ? "bg-slate-800 text-amber-400"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {pendingPoList.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab("history"); setExpandedPoId(null); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              activeTab === "history"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <CheckCircle2 size={16} />
+            <span>History</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                activeTab === "history"
+                  ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {historyPoList.length}
+            </span>
+          </button>
+        </div>
+
         {/* PO List */}
-        {pendingPoList.length === 0 ? (
+        {displayedPoList.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm flex flex-col items-center justify-center">
-            <ShoppingBag size={48} className="text-slate-400 mb-4" />
-            <h3 className="text-lg font-bold text-slate-800 mb-1">No Purchase Orders Found</h3>
-            <p className="text-slate-500 text-sm">There are no active purchase orders registered to your supplier profile.</p>
+            {activeTab === "pending" ? (
+              <>
+                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 border border-emerald-100">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">No Pending Purchase Orders</h3>
+                <p className="text-slate-500 text-sm max-w-md">
+                  There are no active purchase orders requiring verification. {historyPoList.length > 0 && (
+                    <>You can check your {historyPoList.length} verified order{historyPoList.length > 1 ? "s" : ""} in the <button type="button" onClick={() => setActiveTab("history")} className="font-bold text-indigo-600 hover:underline inline cursor-pointer">History</button> tab.</>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-4 border border-slate-200">
+                  <ShoppingBag size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">No Verification History</h3>
+                <p className="text-slate-500 text-sm max-w-md">
+                  There are no previously verified or archived purchase orders registered to your supplier profile yet.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
-            {pendingPoList.map((po) => {
+            {displayedPoList.map((po) => {
               const isExpanded = expandedPoId === po.id;
-              const isSubmitted = po.trader_status === "yes";
+              const isSubmitted = po.trader_status === "yes" || successPoIds[po.id];
               const isRejected = po.trader_status === "no";
               const items = poItems[po.id] || [];
               const isLoadingPoItems = loadingItems[po.id];
@@ -797,6 +874,21 @@ const VendorPortal = () => {
                                   </div>
                                 )}
                               </div>
+                            </div>
+                          ) : isRejected ? (
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-5 shadow-sm space-y-3">
+                              <h4 className="text-xs font-bold text-red-800 uppercase tracking-wider border-b border-red-200 pb-2">
+                                Order Rejection Summary
+                              </h4>
+                              <p className="text-sm text-red-700">
+                                This purchase order was marked as rejected by the supplier.
+                              </p>
+                              {(remarks[po.id] || po.remarks) && (
+                                <div className="space-y-0.5 pt-2 border-t border-red-200">
+                                  <span className="text-[10px] text-red-500 uppercase font-bold tracking-wider block">Remarks</span>
+                                  <p className="text-red-900 text-sm mt-1">{remarks[po.id] || po.remarks}</p>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <form 

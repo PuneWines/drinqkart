@@ -119,7 +119,38 @@ const Dashboard = () => {
         .limit(5000);
 
       if (error) throw error;
-      return data || [];
+      const logs = data || [];
+
+      // Fetch live statuses from purchase_purchase_orders for any active POs
+      const poIds = Array.from(new Set(logs.map(r => r.po_id).filter(Boolean)));
+      if (poIds.length > 0) {
+        try {
+          const { data: pos } = await supabase
+            .from("purchase_purchase_orders")
+            .select("id, trader_status, transporter_status, receiver_status")
+            .in("id", poIds);
+
+          if (pos && pos.length > 0) {
+            const poMap = new Map();
+            pos.forEach(p => poMap.set(p.id, p));
+            return logs.map(r => {
+              if (r.po_id && poMap.has(r.po_id)) {
+                const live = poMap.get(r.po_id);
+                return {
+                  ...r,
+                  trader_status: live.trader_status || r.trader_status || "Pending",
+                  transporter_status: live.transporter_status || r.transporter_status || "Pending",
+                  receiver_status: live.receiver_status || r.receiver_status || "Pending"
+                };
+              }
+              return r;
+            });
+          }
+        } catch (poErr) {
+          console.error("Failed to merge live PO statuses:", poErr);
+        }
+      }
+      return logs;
     },
     staleTime: 10000
   });
@@ -158,6 +189,9 @@ const Dashboard = () => {
   // Filtered dataset
   const filteredData = useMemo(() => {
     let result = [...dashboardLogs];
+
+    // Rule: Indents or items deleted before PO generation must be completely removed from dashboard
+    result = result.filter(row => !(row.is_deleted && !row.po_id));
 
     // 1. Shop Filter
     if (filterShop && filterShop !== "All") {
@@ -295,24 +329,24 @@ const Dashboard = () => {
       "Company Name",
       "Party Name",
       "Item Name",
+      "Order Generated",
       "Order Box",
       "Order Qty",
       "Indent By",
+      "Approval",
       "Approved Box",
       "Approved Qty",
       "Approver Action",
       "Approver By",
+      "PO",
       "PO Number",
       "PO Box",
       "PO Qty",
       "PO Action",
       "PO By",
-      "Trader Status",
+      "Vendor Status",
       "Transporter Status",
-      "Receiver Status",
-      "Is Deleted",
-      "Deleted By",
-      "Deletion Reason"
+      "Receiver Status"
     ];
 
     const rows = filteredData.map(r => [
@@ -321,13 +355,16 @@ const Dashboard = () => {
       `"${r.company_name || ""}"`,
       `"${r.party_name || ""}"`,
       `"${r.item_name || ""}"`,
+      (r.order_box != null || r.order_qty != null) ? `"${r.item_name || ""}"` : '""',
       r.order_box != null ? r.order_box : "",
       r.order_qty != null ? r.order_qty : "",
       `"${r.indent_emp_code || ""}"`,
+      r.approver_action === "delete" ? '"delete"' : (r.approved_box != null ? `"${r.item_name || ""}"` : '""'),
       r.approved_box != null ? r.approved_box : "",
       r.approved_qty != null ? r.approved_qty : "",
       `"${r.approver_action || ""}"`,
       `"${r.approver_emp_code || ""}"`,
+      r.po_action === "delete" ? '"delete"' : (r.po_number ? `"${r.item_name || ""}"` : '""'),
       `"${r.po_number || ""}"`,
       r.po_box != null ? r.po_box : "",
       r.po_qty != null ? r.po_qty : "",
@@ -335,10 +372,7 @@ const Dashboard = () => {
       `"${r.po_emp_code || ""}"`,
       `"${r.trader_status || "Pending"}"`,
       `"${r.transporter_status || "Pending"}"`,
-      `"${r.receiver_status || "Pending"}"`,
-      r.is_deleted ? "YES" : "NO",
-      `"${r.deleted_by_emp_code || ""}"`,
-      `"${r.deletion_reason || ""}"`
+      `"${r.receiver_status || "Pending"}"`
     ]);
 
     const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
@@ -352,6 +386,127 @@ const Dashboard = () => {
     document.body.removeChild(link);
   };
 
+  // Helper renderers for 3 core lifecycle stages (Order Generated, Approval, PO)
+  const renderOrderGeneratedCell = (row) => {
+    const isExtraAdded = (row.approver_action || "").toLowerCase().includes("extra add");
+    const isDirectPo = (row.po_action || "").toLowerCase().includes("direct add");
+    const isIndentDeleted = row.is_deleted && row.deletion_stage === "indent";
+
+    if (isIndentDeleted) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-xs">
+          <XCircle size={11} /> delete
+        </span>
+      );
+    }
+
+    if (isExtraAdded || isDirectPo || (row.order_box == null && row.order_qty == null)) {
+      return <span className="text-slate-300 font-medium select-none">—</span>;
+    }
+
+    return (
+      <div>
+        <div className="font-semibold text-slate-800">{row.item_name}</div>
+        <div className="text-[10px] text-slate-400">
+          {row.order_box != null ? `${parseFloat(row.order_box).toFixed(2)} Bx` : ""}
+          {row.order_box != null && row.order_qty != null ? " • " : ""}
+          {row.order_qty != null ? `${Math.round(row.order_qty)} units` : ""}
+          {row.indent_emp_code ? ` (${row.indent_emp_code})` : ""}
+        </div>
+      </div>
+    );
+  };
+
+  const renderApprovalCell = (row) => {
+    const appAction = (row.approver_action || "").trim();
+    const lower = appAction.toLowerCase();
+
+    if (lower === "delete" || lower.includes("reject") || (row.is_deleted && row.deletion_stage === "approval")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-xs">
+          <XCircle size={11} /> delete
+        </span>
+      );
+    }
+
+    if (lower.includes("extra add") || appAction === "Extra add by approver") {
+      return (
+        <div>
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
+            Extra add by approver
+          </span>
+          {row.approved_box != null && (
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              {parseFloat(row.approved_box).toFixed(2)} Bx • {Math.round(row.approved_qty)} units
+              {row.approver_emp_code ? ` (${row.approver_emp_code})` : ""}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (row.approved_box != null || row.approved_qty != null || lower.includes("approved")) {
+      return (
+        <div>
+          <div className="font-semibold text-emerald-800">{row.item_name}</div>
+          <div className="text-[10px] text-slate-400">
+            {row.approved_box != null ? `${parseFloat(row.approved_box).toFixed(2)} Bx` : ""}
+            {row.approved_box != null && row.approved_qty != null ? " • " : ""}
+            {row.approved_qty != null ? `${Math.round(row.approved_qty)} units` : ""}
+            {row.approver_emp_code ? ` (${row.approver_emp_code})` : ""}
+          </div>
+        </div>
+      );
+    }
+
+    return <span className="text-slate-300 font-medium select-none">—</span>;
+  };
+
+  const renderPoCell = (row) => {
+    const poAction = (row.po_action || "").trim();
+    const lower = poAction.toLowerCase();
+
+    if (lower === "delete" || lower.includes("delete") || lower.includes("removed") || (row.is_deleted && row.deletion_stage === "po")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-xs">
+          <XCircle size={11} /> delete
+        </span>
+      );
+    }
+
+    if (lower.includes("direct add") || poAction === "Direct Added in PO") {
+      return (
+        <div>
+          <div className="font-semibold text-indigo-900">{row.item_name}</div>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-0.5 shadow-xs">
+            Direct Added in PO
+          </span>
+          <div className="text-[10px] text-slate-400 mt-0.5">
+            {row.po_number ? `${row.po_number} • ` : ""}
+            {row.po_box != null ? `${parseFloat(row.po_box).toFixed(2)} Bx` : ""}
+            {row.po_qty != null ? ` • ${Math.round(row.po_qty)} units` : ""}
+          </div>
+        </div>
+      );
+    }
+
+    if (row.po_id || row.po_number || (row.po_box != null && row.po_box > 0)) {
+      return (
+        <div>
+          <div className="font-semibold text-indigo-900">{row.item_name}</div>
+          <div className="text-[10px] text-slate-400">
+            {row.po_number ? <span className="font-bold text-slate-600">{row.po_number} • </span> : null}
+            {row.po_box != null ? `${parseFloat(row.po_box).toFixed(2)} Bx` : ""}
+            {row.po_box != null && row.po_qty != null ? " • " : ""}
+            {row.po_qty != null ? `${Math.round(row.po_qty)} units` : ""}
+          </div>
+        </div>
+      );
+    }
+
+    return <span className="text-slate-300 font-medium select-none">—</span>;
+  };
+
   // Modern Action Badge Styler
   const renderActionBadge = (actionText) => {
     if (!actionText || actionText === "—") {
@@ -359,7 +514,7 @@ const Dashboard = () => {
     }
     const lower = actionText.toLowerCase();
 
-    if (lower.includes("reject") || lower.includes("deleted")) {
+    if (lower.includes("reject") || lower.includes("deleted") || lower === "delete") {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-xs">
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
@@ -584,35 +739,28 @@ const Dashboard = () => {
                 <th className="py-2.5 px-3">Shop</th>
                 <th className="py-2.5 px-3">Company</th>
                 <th className="py-2.5 px-3">Party Name</th>
-                <th className="py-2.5 px-3">Item Name</th>
-                <th className="py-2.5 px-3 text-right bg-blue-50/40">Indent (Box / Qty)</th>
-                <th className="py-2.5 px-3 bg-blue-50/40">Indent By</th>
-                <th className="py-2.5 px-3 text-right bg-emerald-50/40">Approved (Box / Qty)</th>
-                <th className="py-2.5 px-3 bg-emerald-50/40">Approver Action</th>
-                <th className="py-2.5 px-3 text-right bg-indigo-50/40">PO (Box / Qty)</th>
-                <th className="py-2.5 px-3 bg-indigo-50/40">PO Action</th>
-                <th className="py-2.5 px-2.5 text-center">Trader</th>
+                <th className="py-2.5 px-3 font-extrabold text-slate-800">Item Name</th>
+                <th className="py-2.5 px-3 bg-blue-50/50">Order Generated</th>
+                <th className="py-2.5 px-3 bg-emerald-50/50">Approval</th>
+                <th className="py-2.5 px-3 bg-indigo-50/50">PO</th>
+                <th className="py-2.5 px-2.5 text-center">Vendor</th>
                 <th className="py-2.5 px-2.5 text-center">Transporter</th>
                 <th className="py-2.5 px-2.5 text-center">Receiver</th>
-                <th className="py-2.5 px-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-[11px]">
               {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan="15" className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan="11" className="py-12 text-center text-slate-400 font-medium">
                     No matching records found.
                   </td>
                 </tr>
               ) : (
                 paginatedData.map((row) => {
-                  const isDeleted = row.is_deleted;
                   return (
                     <tr
                       key={row.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        isDeleted ? "bg-rose-50/30" : ""
-                      }`}
+                      className="hover:bg-slate-50/80 transition-colors"
                     >
                       {/* Indent ID */}
                       <td className="py-2.5 px-3 font-bold text-indigo-900 whitespace-nowrap">
@@ -640,77 +788,27 @@ const Dashboard = () => {
                         {row.party_name || "—"}
                       </td>
 
-                      {/* Item Name */}
+                      {/* 1. Item Name */}
                       <td className="py-2.5 px-3 font-bold text-slate-900 min-w-50">
                         {row.item_name}
                       </td>
 
-                      {/* 1. Indent Box / Qty */}
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap bg-blue-50/20 font-medium">
-                        <span className="font-bold text-slate-800">
-                          {row.order_box != null ? parseFloat(row.order_box).toFixed(2) : "—"} Bx
-                        </span>
-                        <span className="text-slate-400 text-[10px] block">
-                          {row.order_qty != null ? Math.round(row.order_qty) : "—"} units
-                        </span>
+                      {/* 2. Order Generated */}
+                      <td className="py-2.5 px-3 bg-blue-50/20 whitespace-nowrap min-w-44">
+                        {renderOrderGeneratedCell(row)}
                       </td>
 
-                      {/* Indent By */}
-                      <td className="py-2.5 px-3 whitespace-nowrap bg-blue-50/20">
-                        <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
-                          <User size={11} className="text-slate-400" />
-                          {row.indent_emp_code || "—"}
-                        </span>
+                      {/* 3. Approval */}
+                      <td className="py-2.5 px-3 bg-emerald-50/20 whitespace-nowrap min-w-44">
+                        {renderApprovalCell(row)}
                       </td>
 
-                      {/* 2. Approved Box / Qty */}
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap bg-emerald-50/20 font-medium">
-                        {row.approved_box != null ? (
-                          <>
-                            <span className="font-bold text-emerald-800">
-                              {parseFloat(row.approved_box).toFixed(2)} Bx
-                            </span>
-                            <span className="text-slate-400 text-[10px] block">
-                              {Math.round(row.approved_qty)} units
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-slate-300 font-medium">—</span>
-                        )}
+                      {/* 4. PO */}
+                      <td className="py-2.5 px-3 bg-indigo-50/20 whitespace-nowrap min-w-44">
+                        {renderPoCell(row)}
                       </td>
 
-                      {/* Approver Action */}
-                      <td className="py-2.5 px-3 whitespace-nowrap bg-emerald-50/20">
-                        {renderActionBadge(row.approver_action)}
-                      </td>
-
-                      {/* 3. PO Box / Qty */}
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap bg-indigo-50/20 font-medium">
-                        {row.po_box != null ? (
-                          <>
-                            <span className="font-bold text-indigo-900">
-                              {parseFloat(row.po_box).toFixed(2)} Bx
-                            </span>
-                            <span className="text-slate-400 text-[10px] block">
-                              {Math.round(row.po_qty)} units
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-slate-300 font-medium">—</span>
-                        )}
-                      </td>
-
-                      {/* PO Action */}
-                      <td className="py-2.5 px-3 whitespace-nowrap bg-indigo-50/20">
-                        {row.po_number && (
-                          <span className="text-[10px] font-bold text-slate-500 block">
-                            {row.po_number}
-                          </span>
-                        )}
-                        {renderActionBadge(row.po_action)}
-                      </td>
-
-                      {/* Trader */}
+                      {/* Vendor (Trader) */}
                       <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
                         <span
                           className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -721,7 +819,11 @@ const Dashboard = () => {
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {row.trader_status || "Pending"}
+                          {row.trader_status === "yes" || row.trader_status === "Verified"
+                            ? "✓ Verified"
+                            : row.trader_status === "no"
+                            ? "✗ Rejected"
+                            : (row.trader_status || "Pending")}
                         </span>
                       </td>
 
@@ -736,7 +838,11 @@ const Dashboard = () => {
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {row.transporter_status || "Pending"}
+                          {row.transporter_status === "yes" || row.transporter_status === "Dispatched"
+                            ? "✓ Dispatched"
+                            : row.transporter_status === "no"
+                            ? "✗ Rejected"
+                            : (row.transporter_status || "Pending")}
                         </span>
                       </td>
 
@@ -751,23 +857,12 @@ const Dashboard = () => {
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {row.receiver_status || "Pending"}
+                          {row.receiver_status === "yes" || row.receiver_status === "Received"
+                            ? "✓ Received"
+                            : row.receiver_status === "no"
+                            ? "✗ Rejected"
+                            : (row.receiver_status || "Pending")}
                         </span>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        {isDeleted ? (
-                          <span className="inline-flex items-center gap-1 text-rose-700 font-semibold bg-rose-100 px-2 py-0.5 rounded text-[10px]">
-                            <XCircle size={11} />
-                            Deleted ({row.deleted_by_emp_code || "Admin"}) in {row.deletion_stage || "Stage"}
-                          </span>
-                        ) : (
-                          <span className="text-emerald-700 font-semibold text-[10px] flex items-center gap-1">
-                            <Check size={11} />
-                            Active
-                          </span>
-                        )}
                       </td>
                     </tr>
                   );
