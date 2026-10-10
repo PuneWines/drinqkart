@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle, PauseCircle, RotateCcw, Clock } from "lucide-react";
 import useCompanyStore from "../store/useCompanyStore";
 import useShopStore from "../store/useShopStore";
+import useAuthStore from "../store/useAuthStore";
+import { supabase } from "../lib/supabase";
 import "../styles/PurchaseOrder.css";
 
 // Components
@@ -44,8 +46,20 @@ const PurchaseOrder = () => {
   const [selectedCompanyId, setSelectedCompanyId] = useState("none");
   const [approvedItems, setApprovedItems] = useState([]);
   const [vendorsList, setVendorsList] = useState([]);
-  const [activeParty, setActiveParty] = useState("");
   const [isExcludedModalOpen, setIsExcludedModalOpen] = useState(false);
+  const [activeParty, setActiveParty] = useState(() => {
+    try {
+      return localStorage.getItem("purchase_po_active_party") || "";
+    } catch (e) {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("purchase_po_active_party", activeParty);
+    } catch (e) {}
+  }, [activeParty]);
   const [isRejectedModalOpen, setIsRejectedModalOpen] = useState(false);
   const [addedExcludedItems, setAddedExcludedItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,7 +113,19 @@ const PurchaseOrder = () => {
   }, [heldPOs]);
 
   // Manual PO states
-  const [poMode, setPoMode] = useState("standard"); // "standard", "manual", or "hold"
+  const [poMode, setPoMode] = useState(() => {
+    try {
+      return localStorage.getItem("purchase_po_mode") || "standard";
+    } catch (e) {
+      return "standard";
+    }
+  }); // "standard", "manual", or "hold"
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("purchase_po_mode", poMode);
+    } catch (e) {}
+  }, [poMode]);
   const [manualItems, setManualItems] = useState([]);
   const [newItemName, setNewItemName] = useState("");
   const [newItemBox, setNewItemBox] = useState("");
@@ -186,17 +212,7 @@ const PurchaseOrder = () => {
       if (pageDataResponse.recvData) setReceivers(pageDataResponse.recvData);
 
       const enrichedIndentData = (pageDataResponse.indentData || []).map(item => {
-        let comp = (item.company_name || "").trim();
-        if (!comp) {
-          const rawShop = (item.shop_name || "").trim().toLowerCase();
-          if (rawShop && rawShop !== "all") {
-            const matched = companies.find(c => {
-              const cName = (c.name || "").toLowerCase();
-              return cName.includes(rawShop) || rawShop.includes(cName);
-            });
-            if (matched?.name) comp = matched.name;
-          }
-        }
+        const comp = (item.company_name || "").trim();
         return {
           ...item,
           company_name: comp || null
@@ -998,6 +1014,99 @@ const PurchaseOrder = () => {
         } catch (exError) {
           console.error("Failed to exclude removed items in DB:", exError);
         }
+      }
+
+      // --- Synchronize with purchase_dashboard lifecycle audit table ---
+      try {
+        const currentUser = useAuthStore.getState().currentUser;
+        const currentEmpCode = currentUser?.emp_code || currentUser?.name || "SYSTEM";
+        const cleanIndentId = currentIndentId ? currentIndentId.split("::")[0].trim() : null;
+
+        for (const item of itemsForActiveParty) {
+          const itemTitle = (item.itemName || item.item_name || "").trim();
+          if (!itemTitle) continue;
+
+          let existingRow = null;
+          if (cleanIndentId) {
+            const { data: matchedRows } = await supabase
+              .from("purchase_dashboard")
+              .select("id")
+              .eq("indent_id", cleanIndentId)
+              .eq("item_name", itemTitle)
+              .limit(1);
+            if (matchedRows && matchedRows.length > 0) {
+              existingRow = matchedRows[0];
+            }
+          }
+
+          if (existingRow) {
+            await supabase
+              .from("purchase_dashboard")
+              .update({
+                po_id: insertedPoId,
+                po_number: freshPoNumber,
+                po_box: item.poBox != null ? parseFloat(item.poBox) : null,
+                po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
+                po_action: item.isDirectAdded ? "Direct Added in PO" : "PO Generated",
+                po_emp_code: currentEmpCode,
+                po_generated_at: new Date().toISOString(),
+                trader_status: "Pending",
+                transporter_status: "Pending",
+                receiver_status: "Pending",
+                is_deleted: false,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", existingRow.id);
+          } else {
+            await supabase
+              .from("purchase_dashboard")
+              .insert({
+                indent_id: cleanIndentId || `PO-${freshPoNumber}`,
+                shop_name: currentShopName || selectedShop || "Default",
+                company_name: item.companyName || item.company_name || null,
+                party_name: activeParty,
+                item_name: itemTitle,
+                order_box: 0,
+                order_qty: 0,
+                approved_box: item.approvedBox != null ? parseFloat(item.approvedBox) : 0,
+                approved_qty: item.approvedQty != null ? parseFloat(item.approvedQty) : 0,
+                po_id: insertedPoId,
+                po_number: freshPoNumber,
+                po_box: item.poBox != null ? parseFloat(item.poBox) : null,
+                po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
+                po_action: "Direct Added in PO",
+                po_emp_code: currentEmpCode,
+                po_generated_at: new Date().toISOString(),
+                trader_status: "Pending",
+                transporter_status: "Pending",
+                receiver_status: "Pending",
+                is_deleted: false,
+                indent_created_at: new Date().toISOString()
+              });
+          }
+        }
+
+        // Mark items removed at PO stage as po_action = 'delete'
+        if (removedItemIds.size > 0 && cleanIndentId) {
+          const removedItemsList = filteredApprovedItems.filter(i => removedItemIds.has(i.id));
+          for (const remItem of removedItemsList) {
+            const remTitle = (remItem.item_name || remItem.itemName || "").trim();
+            if (remTitle) {
+              await supabase
+                .from("purchase_dashboard")
+                .update({
+                  po_action: "delete",
+                  po_emp_code: currentEmpCode,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("indent_id", cleanIndentId)
+                .eq("item_name", remTitle);
+            }
+          }
+        }
+        console.log("✅ purchase_dashboard successfully synchronized for PO:", freshPoNumber);
+      } catch (dashSyncErr) {
+        console.error("⚠️ Failed to sync purchase_dashboard during PO creation:", dashSyncErr);
       }
 
       // --- Fetch / Generate Portal Links ---

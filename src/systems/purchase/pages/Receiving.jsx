@@ -182,11 +182,11 @@ const Receiving = () => {
   const poRecords = useMemo(() => {
     return shopFilteredData.map(po => {
       const products = getPoItemsData(po);
+      const isReceived = po.receiver_status === "yes" || po.receiver_status === "no";
       return {
         po,
         products,
-        pendingProducts: products.filter(p => p.dbReceivedQty !== p.orderQty),
-        historyProducts: products.filter(p => p.dbReceivedQty === p.orderQty),
+        isReceived,
       };
     }).filter(r => r.products.length > 0);
   }, [shopFilteredData, itemsData]);
@@ -194,13 +194,19 @@ const Receiving = () => {
   const filteredRecords = poRecords.filter(record => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
-    return record.po.po_number?.toLowerCase().includes(q) || record.po.vendor_name?.toLowerCase().includes(q) || record.po.shop_name?.toLowerCase().includes(q);
+    return (
+      record.po.po_number?.toLowerCase().includes(q) ||
+      record.po.vendor_name?.toLowerCase().includes(q) ||
+      record.po.shop_name?.toLowerCase().includes(q) ||
+      record.po.transporter_number?.toLowerCase().includes(q) ||
+      record.po.tp_number?.toLowerCase().includes(q)
+    );
   });
 
-  const pendingTabRecords = filteredRecords.filter(r => r.pendingProducts.length > 0);
-  const historyTabRecords = filteredRecords.filter(r => r.historyProducts.length > 0);
-  const pendingCount = poRecords.filter(r => r.pendingProducts.length > 0).length;
-  const historyCount = poRecords.filter(r => r.historyProducts.length > 0).length;
+  const pendingTabRecords = filteredRecords.filter(r => !r.isReceived);
+  const historyTabRecords = filteredRecords.filter(r => r.isReceived);
+  const pendingCount = poRecords.filter(r => !r.isReceived).length;
+  const historyCount = poRecords.filter(r => r.isReceived).length;
   const activeRecords = activeTab === "pending" ? pendingTabRecords : historyTabRecords;
 
   const DiffBadge = ({ diff }) => {
@@ -291,9 +297,9 @@ const Receiving = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {activeRecords.map(({ po, products, pendingProducts, historyProducts }) => {
+            {activeRecords.map(({ po, products }) => {
               const isExpanded = !!expandedPoIds[po.id];
-              const targetProducts = activeTab === "pending" ? pendingProducts : historyProducts;
+              const targetProducts = products;
 
               const totalOrderQty = products.reduce((s, p) => s + p.orderQty, 0);
               const totalReceivedQty = products.reduce((s, p) => {
@@ -323,10 +329,31 @@ const Receiving = () => {
                         <span className="text-sm font-semibold text-slate-900">{po.po_number}</span>
                         <span className="text-xs text-slate-400">·</span>
                         <span className="text-sm text-slate-600 truncate">{po.vendor_name}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          po.receiver_status === 'yes'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : po.receiver_status === 'no'
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {po.receiver_status === 'yes' ? 'Received' : po.receiver_status === 'no' ? 'Rejected' : 'Pending Receipt'}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-2.5 mt-1 flex-wrap">
                         <span className="text-xs text-slate-400">{formattedDate}</span>
-                        <span className="text-xs font-medium text-indigo-600">{po.shop_name}</span>
+                        <span className="text-xs font-semibold text-indigo-600 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100">
+                          {po.shop_name}
+                        </span>
+                        {po.tp_number && (
+                          <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            TP: {po.tp_number}
+                          </span>
+                        )}
+                        {po.transporter_number && (
+                          <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            Transporter: {po.transporter_number}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -464,7 +491,7 @@ const Receiving = () => {
                           <div className="flex items-center gap-2 justify-end">
                             <button
                               type="button"
-                              onClick={() => handleMatchAllForPo(po, pendingProducts)}
+                              onClick={() => handleMatchAllForPo(po, products)}
                               className="text-sm font-medium text-slate-600 hover:text-indigo-700 border border-slate-200 hover:border-indigo-300 px-4 py-2 rounded-lg bg-white hover:bg-indigo-50 transition-all"
                             >
                               Match all

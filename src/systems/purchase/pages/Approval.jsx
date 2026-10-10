@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useShopStore from "../store/useShopStore";
 import useCompanyStore from "../store/useCompanyStore";
+import useAuthStore from "../store/useAuthStore";
 import "../styles/Pages.css";
 import { supabase } from "../lib/supabase";
 import { Loader2, Archive, X, Eye, Search, Trash2 } from "lucide-react";
@@ -26,7 +27,13 @@ const Approval = () => {
   const [selectedIndentId, setSelectedIndentId] = useState(null);
   const [indentStatuses, setIndentStatuses] = useState({});
   const [isLoading, setIsLoading] = useState(false); // start as false to avoid layout flicker on cache hit
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      return localStorage.getItem("purchase_approval_active_tab") || "pending";
+    } catch (e) {
+      return "pending";
+    }
+  });
   const { selectedShop } = useShopStore();
   const { companies, fetchCompanies } = useCompanyStore();
 
@@ -40,10 +47,52 @@ const Approval = () => {
   const [excludedSearchQuery, setExcludedSearchQuery] = useState("");
   const [originalIndentItems, setOriginalIndentItems] = useState([]);
   const [originalStatuses, setOriginalStatuses] = useState(null);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState(() => {
+    try {
+      return localStorage.getItem("purchase_approval_start_date") || "";
+    } catch (e) {
+      return "";
+    }
+  });
+  const [endDate, setEndDate] = useState(() => {
+    try {
+      return localStorage.getItem("purchase_approval_end_date") || "";
+    } catch (e) {
+      return "";
+    }
+  });
+  const [searchQuery, setSearchQuery] = useState(() => {
+    try {
+      return localStorage.getItem("purchase_approval_search_query") || "";
+    } catch (e) {
+      return "";
+    }
+  });
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("All");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("purchase_approval_active_tab", activeTab);
+    } catch (e) {}
+  }, [activeTab]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("purchase_approval_search_query", searchQuery);
+    } catch (e) {}
+  }, [searchQuery]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("purchase_approval_start_date", startDate);
+    } catch (e) {}
+  }, [startDate]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("purchase_approval_end_date", endDate);
+    } catch (e) {}
+  }, [endDate]);
 
   const resolveItemCompany = (item) => {
     if (item?.company_name && item.company_name.trim()) {
@@ -96,44 +145,10 @@ const Approval = () => {
   }, [selectedIndentId]);
 
   const handleStatusChange = (itemId, status) => {
-    if (status === 'approved') {
-      const isCurrentlyApproved = indentStatuses[itemId] === 'approved';
-      if (isCurrentlyApproved) {
-        // User unchecks Approve: uncheck only this single item
-        setIndentStatuses(prev => ({
-          ...prev,
-          [itemId]: null
-        }));
-      } else {
-        const hasApprovedItems = activeBatchItems.some(i => indentStatuses[i.id] === 'approved');
-        if (!hasApprovedItems) {
-          // If no items were approved yet, bulk-check Approve for all visible/filtered items,
-          // preserving any items already explicitly marked as rejected
-          setIndentStatuses(prev => {
-            const next = { ...prev };
-            activeBatchItems.forEach(item => {
-              if (prev[item.id] !== 'rejected') {
-                next[item.id] = 'approved';
-              }
-            });
-            next[itemId] = 'approved';
-            return next;
-          });
-        } else {
-          // If some items are already approved, just check this single clicked item
-          setIndentStatuses(prev => ({
-            ...prev,
-            [itemId]: 'approved'
-          }));
-        }
-      }
-    } else {
-      // Reject is ALWAYS strictly single-item: toggle only the clicked item
-      setIndentStatuses(prev => ({
-        ...prev,
-        [itemId]: prev[itemId] === 'rejected' ? null : 'rejected'
-      }));
-    }
+    setIndentStatuses(prev => ({
+      ...prev,
+      [itemId]: prev[itemId] === status ? null : status
+    }));
   };
 
   const handleSelectAllFiltered = (status) => {
@@ -195,6 +210,16 @@ const Approval = () => {
 
       alert(`Batch ${displayLabel} successfully deleted!`);
       
+      // Delete ungenerated items from purchase_dashboard if deleted before PO
+      const targetIndentId = items[0]?.indent_id || items[0]?.party_indent_id;
+      if (targetIndentId) {
+        await supabase
+          .from('purchase_dashboard')
+          .delete()
+          .eq('indent_id', targetIndentId)
+          .is('po_id', null);
+      }
+      
       // Update local state by removing the deleted group
       setGroupedApprovals(prev => {
         const updated = { ...prev };
@@ -224,6 +249,21 @@ const Approval = () => {
       if (error) throw error;
 
       alert(`Item "${itemName}" successfully deleted!`);
+
+      // Delete ungenerated item from purchase_dashboard if deleted before PO
+      const currentItemsList = groupedApprovals[selectedIndentId] || [];
+      const targetItem = currentItemsList.find(item => item.id === itemId);
+      if (targetItem && targetItem.item_name) {
+        const targetIndentId = targetItem.indent_id || targetItem.party_indent_id;
+        if (targetIndentId) {
+          await supabase
+            .from('purchase_dashboard')
+            .delete()
+            .eq('indent_id', targetIndentId)
+            .eq('item_name', targetItem.item_name)
+            .is('po_id', null);
+        }
+      }
 
       // Update groupedApprovals state
       setGroupedApprovals(prev => {
@@ -475,8 +515,15 @@ const Approval = () => {
       setIsLoading(true);
       const currentItems = groupedApprovals[selectedIndentId] || [];
       
-      if (currentItems.length === 0) {
-        alert("No items in this batch to submit.");
+      // Strictly restrict submission to items matching the active company filter and not excluded/already in lifecycle
+      const itemsToProcess = currentItems.filter(item => 
+        !item.is_excluded && 
+        !item.already_in_lifecycle && 
+        isItemInSelectedCompany(item)
+      );
+
+      if (itemsToProcess.length === 0) {
+        alert("No items in the active filter selection to submit.");
         setIsLoading(false);
         return;
       }
@@ -497,7 +544,7 @@ const Approval = () => {
         .select("id");
       const validIndentIds = new Set((validIndents || []).map(i => i.id));
 
-      currentItems.forEach(item => {
+      itemsToProcess.forEach(item => {
         const validParentId = (item.indent_id && validIndentIds.has(item.indent_id)) 
           ? item.indent_id 
           : null;
@@ -512,7 +559,7 @@ const Approval = () => {
         let processedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : autoBox;
         let processedQty = item.approved_qty !== undefined && item.approved_qty !== null ? parseFloat(item.approved_qty) : autoQty;
 
-        if (status === 'approved' && !item.is_excluded && !item.already_in_lifecycle) {
+        if (status === 'approved') {
           approvedIdsToDelete.push(item.id);
           hasAnyApproved = true;
           if (processedBox >= 0.90) {
@@ -525,13 +572,17 @@ const Approval = () => {
             processedQty = bcs > 0 ? processedBox * bcs : processedQty;
           }
 
+          const effectiveCompany = (isCompanyFiltered && selectedCompanyFilter !== '__NONE__')
+            ? selectedCompanyFilter.trim()
+            : null;
+
           approvedItemsPayload.push({
             original_item_id: item.id,
             indent_id: validParentId,
             party_indent_id: item.party_indent_id,
             item_name: item.item_name,
             brand_name: item.brand_name,
-            company_name: (isCompanyFiltered && selectedCompanyFilter !== '__NONE__' ? selectedCompanyFilter.trim() : "") || resolveItemCompany(item) || null,
+            company_name: effectiveCompany,
             bcs: item.bcs,
             mls: item.mls,
             liquor_type: item.liquor_type,
@@ -549,7 +600,7 @@ const Approval = () => {
             unique_indent_id: selectedIndentId,
             po_status: 'pending'
           });
-        } else if (status === 'rejected' && !item.is_excluded && !item.already_in_lifecycle) {
+        } else if (status === 'rejected') {
           // Only items explicitly marked as rejected are updated to rejected
           rejectedIdsToUpdate.push(item.id);
           if (item.item_name) rejectedItemNames.push(item.item_name);
@@ -574,16 +625,7 @@ const Approval = () => {
         }
       }
 
-      // 2. Update parent indent status
-      if (parentIndentId) {
-        const { error: indentErr } = await supabase
-          .from("purchase_indents")
-          .update({ status: hasAnyApproved ? "Approved" : "Rejected" })
-          .eq("id", parentIndentId);
-        if (indentErr) throw indentErr;
-      }
-
-      // 3. Delete approved items from purchase_indent_items
+      // 2. Delete approved items from purchase_indent_items
       if (approvedIdsToDelete.length > 0) {
         const chunkSize = 50;
         for (let i = 0; i < approvedIdsToDelete.length; i += chunkSize) {
@@ -596,7 +638,7 @@ const Approval = () => {
         }
       }
 
-      // 4. Update rejected items in purchase_indent_items to approval_status = 'rejected'
+      // 3. Update rejected items in purchase_indent_items to approval_status = 'rejected'
       if (rejectedIdsToUpdate.length > 0) {
         const chunkSize = 50;
         for (let i = 0; i < rejectedIdsToUpdate.length; i += chunkSize) {
@@ -609,10 +651,134 @@ const Approval = () => {
         }
 
         // Clean up superseded held rows in purchase_indent_items for these rejected item names
-        const shopName = currentItems[0]?.shop_name;
+        const shopName = itemsToProcess[0]?.shop_name;
         if (shopName) {
           await deleteSupersededLifecycleItems(shopName, rejectedItemNames);
         }
+      }
+
+      // 4. Update parent indent status ONLY IF no more pending items exist in purchase_indent_items
+      if (parentIndentId) {
+        const { data: remainingItems } = await supabase
+          .from("purchase_indent_items")
+          .select("id, approval_status")
+          .eq("indent_id", parentIndentId);
+        
+        const remainingPending = (remainingItems || []).filter(
+          i => !approvedIdsToDelete.includes(i.id) && !rejectedIdsToUpdate.includes(i.id) && (!i.approval_status || i.approval_status === 'pending')
+        );
+
+        if (remainingPending.length === 0) {
+          const { error: indentErr } = await supabase
+            .from("purchase_indents")
+            .update({ status: hasAnyApproved ? "Approved" : "Rejected" })
+            .eq("id", parentIndentId);
+          if (indentErr) throw indentErr;
+        }
+      }
+
+      // 5. Strictly sync audit data to purchase_dashboard
+      try {
+        const currentUser = useAuthStore.getState().currentUser;
+        const approverEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Approver";
+        
+        const targetIndentId = currentItems[0]?.indent_id || currentItems[0]?.party_indent_id || selectedIndentId;
+        const validItemNames = itemsToProcess.map(i => i.item_name).filter(Boolean);
+
+        // Fetch existing dashboard rows for this indent
+        const { data: existingDashboardRows } = await supabase
+          .from('purchase_dashboard')
+          .select('id, item_name')
+          .eq('indent_id', targetIndentId)
+          .in('item_name', validItemNames);
+
+        const existingMap = {};
+        (existingDashboardRows || []).forEach(row => {
+          existingMap[row.item_name] = row.id;
+        });
+
+        const updatesToRun = [];
+        const insertsToRun = [];
+
+        itemsToProcess.forEach(item => {
+          const status = indentStatuses[item.id];
+          const isApproved = status === 'approved';
+          const isRejected = status === 'rejected';
+
+          if (!isApproved && !isRejected) return; // Untouched items
+
+          let finalApprovedBox = item.approved_box !== undefined && item.approved_box !== null ? parseFloat(item.approved_box) : parseFloat(item.order_box || 0);
+          let finalApprovedQty = item.approved_qty !== undefined && item.approved_qty !== null ? parseFloat(item.approved_qty) : parseFloat(item.order_qty || 0);
+          
+          const existingId = existingMap[item.item_name];
+
+          let approverAction = "";
+          if (isApproved) {
+            if (!existingId || parseFloat(item.order_box || 0) === 0) {
+              approverAction = "Extra add by approver";
+            } else if (finalApprovedBox !== parseFloat(item.order_box || 0) || Math.round(finalApprovedQty) !== Math.round(parseFloat(item.order_qty || 0))) {
+              approverAction = `Modified by (${approverEmpCode})`;
+            } else {
+              approverAction = `Approved by (${approverEmpCode})`;
+            }
+          } else {
+            approverAction = "delete";
+          }
+
+          const effectiveCompany = (isCompanyFiltered && selectedCompanyFilter !== '__NONE__')
+            ? selectedCompanyFilter.trim()
+            : null;
+
+          if (existingId) {
+            updatesToRun.push(
+              supabase
+                .from('purchase_dashboard')
+                .update({
+                  approved_box: isApproved ? finalApprovedBox : null,
+                  approved_qty: isApproved ? finalApprovedQty : null,
+                  approver_action: approverAction,
+                  approver_emp_code: approverEmpCode,
+                  company_name: effectiveCompany,
+                  approved_at: new Date().toISOString(),
+                  is_deleted: isRejected,
+                  deletion_stage: isRejected ? 'approval' : null,
+                  deletion_reason: isRejected ? 'Rejected by Approver' : null,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingId)
+            );
+          } else {
+            // Extra add by approver that wasn't in original indent!
+            insertsToRun.push({
+              indent_id: targetIndentId,
+              shop_name: item.shop_name || 'UNKNOWN',
+              party_name: item.party_name || 'UNKNOWN',
+              company_name: effectiveCompany,
+              item_name: item.item_name,
+              order_box: 0,
+              order_qty: 0,
+              indent_emp_code: null,
+              approved_box: isApproved ? finalApprovedBox : null,
+              approved_qty: isApproved ? finalApprovedQty : null,
+              approver_action: approverAction,
+              approver_emp_code: approverEmpCode,
+              approved_at: new Date().toISOString(),
+              trader_status: 'Pending',
+              transporter_status: 'Pending',
+              receiver_status: 'Pending',
+              is_deleted: isRejected
+            });
+          }
+        });
+
+        if (insertsToRun.length > 0) {
+          await supabase.from('purchase_dashboard').insert(insertsToRun);
+        }
+        if (updatesToRun.length > 0) {
+          await Promise.all(updatesToRun);
+        }
+      } catch (dashSyncErr) {
+        console.warn("Dashboard sync non-blocking warning:", dashSyncErr);
       }
 
       alert("Successfully submitted approvals!");
@@ -1188,13 +1354,7 @@ const Approval = () => {
                 )}
                 {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => {
                   if (!item.already_in_lifecycle) return false;
-                  if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
-                    if (selectedCompanyFilter === '__NONE__') {
-                      return !(item.company_name || '').trim();
-                    }
-                    return (item.company_name || '').trim() === selectedCompanyFilter;
-                  }
-                  return true;
+                  return isItemInSelectedCompany(item);
                 }) && (
                   <button
                     onClick={() => setShowInProcessModal(true)}
@@ -1219,26 +1379,14 @@ const Approval = () => {
                     View In-Process ({
                       groupedApprovals[selectedIndentId]?.filter(item => {
                         if (!item.already_in_lifecycle) return false;
-                        if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
-                          if (selectedCompanyFilter === '__NONE__') {
-                            return !(item.company_name || '').trim();
-                          }
-                          return (item.company_name || '').trim() === selectedCompanyFilter;
-                        }
-                        return true;
+                        return isItemInSelectedCompany(item);
                       }).length
                     })
                   </button>
                 )}
                 {activeTab !== 'history' && groupedApprovals[selectedIndentId]?.some(item => {
                   if (!item.is_excluded) return false;
-                  if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
-                    if (selectedCompanyFilter === '__NONE__') {
-                      return !(item.company_name || '').trim();
-                    }
-                    return (item.company_name || '').trim() === selectedCompanyFilter;
-                  }
-                  return true;
+                  return isItemInSelectedCompany(item);
                 }) && (
                   <button
                     onClick={() => setShowExcludedModal(true)}
@@ -1263,13 +1411,7 @@ const Approval = () => {
                     View Excluded ({
                       groupedApprovals[selectedIndentId]?.filter(item => {
                         if (!item.is_excluded) return false;
-                        if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
-                          if (selectedCompanyFilter === '__NONE__') {
-                            return !(item.company_name || '').trim();
-                          }
-                          return (item.company_name || '').trim() === selectedCompanyFilter;
-                        }
-                        return true;
+                        return isItemInSelectedCompany(item);
                       }).length
                     })
                   </button>
@@ -1358,18 +1500,7 @@ const Approval = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {groupedApprovals[selectedIndentId]
-                      ?.filter(item => {
-                        if (item.is_excluded || item.already_in_lifecycle) return false;
-                        if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
-                          if (selectedCompanyFilter === '__NONE__') {
-                            return !(item.company_name || '').trim();
-                          }
-                          return (item.company_name || '').trim() === selectedCompanyFilter;
-                        }
-                        return true;
-                      })
-                      .map((item, index) => {
+                    {activeBatchItems.map((item, index) => {
                       // Use nullish coalescing so a falsy but valid id (e.g. 0) is never
                       // replaced by the loop index, which would cause status key collisions.
                       const itemId = item.id ?? `fallback-${selectedIndentId}-${index}`;
@@ -1414,7 +1545,7 @@ const Approval = () => {
                         <td style={{ ...tdStyle, textAlign: 'center', color: '#64748b' }}>{item.party_indent_id || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: 'left' }}>{item.shop_name || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: 'left' }}>{item.item_name}</td>
-                        <td style={{ ...tdStyle, textAlign: 'left', color: '#475569' }}>{item.company_name || "-"}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left', color: '#475569' }}>{resolveItemCompany(item) || item.company_name || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: '700', color: '#0f172a' }}>
                           {item.per_day_sale_last_month !== null && item.per_day_sale_last_month !== undefined ? item.per_day_sale_last_month : "—"}
                         </td>
@@ -1590,16 +1721,10 @@ const Approval = () => {
                               const query = (excludedSearchQuery || "").trim().toLowerCase();
                               const filteredItems = (groupedApprovals[selectedIndentId] || []).filter(item => {
                                 if (!item.is_excluded) return false;
-                                if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
-                                  if (selectedCompanyFilter === '__NONE__') {
-                                    if ((item.company_name || '').trim()) return false;
-                                  } else if ((item.company_name || '').trim() !== selectedCompanyFilter) {
-                                    return false;
-                                  }
-                                }
+                                if (!isItemInSelectedCompany(item)) return false;
                                 const itemName = (item.item_name || "").toLowerCase();
                                 const brandName = (item.brand_name || "").toLowerCase();
-                                const compName = (item.company_name || "").toLowerCase();
+                                const compName = (resolveItemCompany(item) || item.company_name || "").toLowerCase();
                                 return itemName.includes(query) || brandName.includes(query) || compName.includes(query);
                               });
 
@@ -1765,16 +1890,10 @@ const Approval = () => {
                               const currentItems = groupedApprovals[selectedIndentId] || [];
                               const filteredInProcess = currentItems.filter(item => {
                                 if (!item.already_in_lifecycle) return false;
-                                if (selectedCompanyFilter && selectedCompanyFilter !== 'All') {
-                                  if (selectedCompanyFilter === '__NONE__') {
-                                    if ((item.company_name || '').trim()) return false;
-                                  } else if ((item.company_name || '').trim() !== selectedCompanyFilter) {
-                                    return false;
-                                  }
-                                }
+                                if (!isItemInSelectedCompany(item)) return false;
                                 const itemName = (item.item_name || "").toLowerCase();
                                 const brandName = (item.brand_name || "").toLowerCase();
-                                const compName = (item.company_name || "").toLowerCase();
+                                const compName = (resolveItemCompany(item) || item.company_name || "").toLowerCase();
                                 return itemName.includes(query) || brandName.includes(query) || compName.includes(query);
                               });
 
