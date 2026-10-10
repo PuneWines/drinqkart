@@ -460,7 +460,7 @@ export const sendPOConfirmationMessage = async (phoneNumber, vendorName, poNumbe
   try {
     console.log("[WhatsApp] Sending PO confirmation notification...");
     const shopName = await resolveShopName(poNumber);
-    const finalShopName = shopName || companyName || 'DRINQKART';
+    const finalShopName = shopName || companyName || '';
 
     const message = `📩 *Trader - Purchase Order*
 
@@ -502,7 +502,7 @@ export const sendTransporterConfirmationMessage = async (phoneNumber, poNumber, 
     console.log("[WhatsApp] Sending Transporter confirmation notification...");
     const transporterName = await resolveTransporterName(phoneNumber);
     const shopName = await resolveShopName(poNumber);
-    const finalShopName = shopName || companyName || 'DRINQKART';
+    const finalShopName = shopName || companyName || '';
 
     const message = `🚚 *Pick-up Request Notification*
 
@@ -548,7 +548,7 @@ export const sendReceiverConfirmationMessage = async (phoneNumber, poNumber, por
     console.log("[WhatsApp] Sending Receiver confirmation notification...");
     const receiverName = await resolveReceiverName(phoneNumber);
     const shopName = await resolveShopName(poNumber);
-    const finalShopName = shopName || companyName || 'DRINQKART';
+    const finalShopName = shopName || companyName || '';
 
     const message = `📦 *Delivery Alert*
 

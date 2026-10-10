@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import useShopStore from "../store/useShopStore";
-import useCompanyStore from "../store/useCompanyStore";
 import { supabase } from "../lib/supabase";
 import {
   Search,
@@ -15,22 +14,25 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Briefcase,
   PackageCheck,
   FileEdit,
-  AlertCircle
+  AlertCircle,
+  RotateCcw,
+  Clock,
+  CheckCircle2
 } from "lucide-react";
 import "../styles/Dashboard.css";
 
 const Dashboard = () => {
   const { selectedShop: globalShop, setSelectedShop, shops: storeShops, fetchShops } = useShopStore();
-  const { companies, fetchCompanies } = useCompanyStore();
 
   // Load store data on mount
   useEffect(() => {
     if (fetchShops) fetchShops();
-    if (fetchCompanies) fetchCompanies();
-  }, [fetchShops, fetchCompanies]);
+  }, [fetchShops]);
 
   // Filter States with persistent localStorage memory
   const [filterShop, setFilterShop] = useState(() => {
@@ -61,6 +63,10 @@ const Dashboard = () => {
     setFilterShop(shop);
     localStorage.setItem("purchase_dashboard_filter_shop", shop);
     if (setSelectedShop) setSelectedShop(shop);
+    setFilterParty("All");
+    localStorage.setItem("purchase_dashboard_filter_party", "All");
+    setFilterCompany("All");
+    localStorage.setItem("purchase_dashboard_filter_company", "All");
     setCurrentPage(1);
   };
 
@@ -73,6 +79,9 @@ const Dashboard = () => {
   const handlePartyChange = (party) => {
     setFilterParty(party);
     localStorage.setItem("purchase_dashboard_filter_party", party);
+    // When party changes, reset company filter to All so it only filters companies valid for this party
+    setFilterCompany("All");
+    localStorage.setItem("purchase_dashboard_filter_company", "All");
     setCurrentPage(1);
   };
 
@@ -91,6 +100,38 @@ const Dashboard = () => {
   const handleSearchChange = (query) => {
     setSearchQuery(query);
     localStorage.setItem("purchase_dashboard_search_query", query);
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = Boolean(
+    (filterShop && filterShop !== "All") ||
+    (filterCompany && filterCompany !== "All") ||
+    (filterParty && filterParty !== "All") ||
+    (filterStatus && filterStatus !== "All") ||
+    (filterTimeframe && filterTimeframe !== "all") ||
+    (searchQuery && searchQuery.trim() !== "")
+  );
+
+  const resetAllFilters = () => {
+    setFilterShop("All");
+    localStorage.setItem("purchase_dashboard_filter_shop", "All");
+    if (setSelectedShop) setSelectedShop("All");
+
+    setFilterCompany("All");
+    localStorage.setItem("purchase_dashboard_filter_company", "All");
+
+    setFilterParty("All");
+    localStorage.setItem("purchase_dashboard_filter_party", "All");
+
+    setFilterStatus("All");
+    localStorage.setItem("purchase_dashboard_filter_status", "All");
+
+    setFilterTimeframe("all");
+    localStorage.setItem("purchase_dashboard_filter_timeframe", "all");
+
+    setSearchQuery("");
+    localStorage.setItem("purchase_dashboard_search_query", "");
+
     setCurrentPage(1);
   };
 
@@ -165,33 +206,96 @@ const Dashboard = () => {
     return Array.from(set);
   }, [dashboardLogs, storeShops]);
 
-  // Extract Unique Companies for dropdown
-  const availableCompanies = useMemo(() => {
-    const set = new Set(["All"]);
-    (companies || []).forEach(c => {
-      if (c.name) set.add(c.name);
-    });
-    dashboardLogs.forEach(row => {
-      if (row.company_name) set.add(row.company_name);
-    });
-    return Array.from(set);
-  }, [dashboardLogs, companies]);
-
-  // Extract Unique Parties for dropdown
+  // Extract Unique Parties for dropdown (filtered by selected shop)
   const availableParties = useMemo(() => {
-    const set = new Set(["All"]);
+    const set = new Set();
     dashboardLogs.forEach(row => {
-      if (row.party_name) set.add(row.party_name);
+      if (filterShop && filterShop !== "All") {
+        if ((row.shop_name || "").toLowerCase() !== filterShop.toLowerCase()) return;
+      }
+      const p = (row.party_name || "").trim();
+      if (p) set.add(p);
     });
-    return Array.from(set);
-  }, [dashboardLogs]);
+    return ["All", ...Array.from(set).sort()];
+  }, [dashboardLogs, filterShop]);
 
-  // Filtered dataset
-  const filteredData = useMemo(() => {
+  // Extract Unique Companies strictly from sheet data in dashboardLogs,
+  // dynamically filtered by the selected Party (and selected Shop)
+  const availableCompanies = useMemo(() => {
+    const set = new Set();
+    dashboardLogs.forEach(row => {
+      if (filterShop && filterShop !== "All") {
+        if ((row.shop_name || "").toLowerCase() !== filterShop.toLowerCase()) return;
+      }
+      if (filterParty && filterParty !== "All") {
+        if ((row.party_name || "").trim().toLowerCase() !== filterParty.trim().toLowerCase()) return;
+      }
+      const c = (row.company_name || "").trim();
+      if (c) set.add(c);
+    });
+    return ["All", ...Array.from(set).sort()];
+  }, [dashboardLogs, filterShop, filterParty]);
+
+  const hasUnassignedCompanyInLogs = useMemo(() => {
+    return dashboardLogs.some(row => {
+      if (filterShop && filterShop !== "All") {
+        if ((row.shop_name || "").toLowerCase() !== filterShop.toLowerCase()) return false;
+      }
+      if (filterParty && filterParty !== "All") {
+        if ((row.party_name || "").trim().toLowerCase() !== filterParty.trim().toLowerCase()) return false;
+      }
+      return !(row.company_name || "").trim();
+    });
+  }, [dashboardLogs, filterShop, filterParty]);
+
+  // Ensure filterCompany stays valid when availableCompanies changes
+  useEffect(() => {
+    if (filterCompany !== "All" && filterCompany !== "__NONE__") {
+      if (!availableCompanies.includes(filterCompany)) {
+        setFilterCompany("All");
+        localStorage.setItem("purchase_dashboard_filter_company", "All");
+      }
+    }
+  }, [availableCompanies, filterCompany]);
+
+  // Party-specific company filter state: { [partyName]: selectedCompany }
+  const [partyCompanyFilters, setPartyCompanyFilters] = useState({});
+  // Party collapse state: { [partyName]: boolean }
+  const [collapsedParties, setCollapsedParties] = useState({});
+
+  const handlePartyCompanyFilterChange = (partyName, comp) => {
+    setPartyCompanyFilters(prev => ({
+      ...prev,
+      [partyName]: comp
+    }));
+  };
+
+  const togglePartyCollapse = (partyName) => {
+    setCollapsedParties(prev => ({
+      ...prev,
+      [partyName]: !prev[partyName]
+    }));
+  };
+
+  const expandAllParties = () => {
+    setCollapsedParties({});
+  };
+
+  const collapseAllParties = (partyNames) => {
+    const all = {};
+    partyNames.forEach(name => {
+      all[name] = true;
+    });
+    setCollapsedParties(all);
+  };
+
+  // 1. Base Filtered dataset (Shop, Company, Party, Timeframe, Search)
+  const baseFilteredData = useMemo(() => {
     let result = [...dashboardLogs];
 
-    // Rule: Indents or items deleted before PO generation must be completely removed from dashboard
-    result = result.filter(row => !(row.is_deleted && !row.po_id));
+    // Only indents completely deleted at draft/indent stage are omitted.
+    // Items rejected or deleted at approval or PO stage MUST BE DISPLAYED in the audit trail!
+    result = result.filter(row => !(row.is_deleted && row.deletion_stage === "indent"));
 
     // 1. Shop Filter
     if (filterShop && filterShop !== "All") {
@@ -218,34 +322,7 @@ const Dashboard = () => {
       );
     }
 
-    // 4. Status Filter
-    if (filterStatus !== "All") {
-      if (filterStatus === "Completed") {
-        result = result.filter(r => !r.is_deleted && r.po_qty > 0 && r.po_number);
-      } else if (filterStatus === "Modified") {
-        result = result.filter(
-          r =>
-            (r.approver_action && r.approver_action.includes("Modified")) ||
-            (r.po_action && r.po_action.includes("Modified"))
-        );
-      } else if (filterStatus === "DroppedPO") {
-        result = result.filter(
-          r =>
-            r.po_action &&
-            (r.po_action.includes("Deleted") || r.po_action.includes("Removed"))
-        );
-      } else if (filterStatus === "RejectedApproval") {
-        result = result.filter(
-          r =>
-            r.approver_action &&
-            (r.approver_action.includes("Reject") || r.approver_action.includes("Deleted"))
-        );
-      } else if (filterStatus === "DeletedIndent") {
-        result = result.filter(r => r.is_deleted);
-      }
-    }
-
-    // 5. Timeframe Filter
+    // 4. Timeframe Filter
     if (filterTimeframe !== "all") {
       const now = new Date();
       result = result.filter(row => {
@@ -259,7 +336,7 @@ const Dashboard = () => {
       });
     }
 
-    // 6. Search Query
+    // 5. Search Query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -278,43 +355,169 @@ const Dashboard = () => {
     }
 
     return result;
-  }, [dashboardLogs, filterShop, filterCompany, filterParty, filterStatus, filterTimeframe, searchQuery]);
+  }, [dashboardLogs, filterShop, filterCompany, filterParty, filterTimeframe, searchQuery]);
 
-  // High-level KPI metrics computed on the active shop/company/party filtered view
+  // 2. High-level KPI metrics computed on the active shop/company/party filtered view
   const metrics = useMemo(() => {
-    let total = filteredData.length;
+    let total = baseFilteredData.length;
+    let pendingApproval = 0;
+    let approvedReady = 0;
     let completed = 0;
     let modified = 0;
     let rejected = 0;
 
-    filteredData.forEach(r => {
-      if (!r.is_deleted && r.po_qty > 0 && r.po_number) {
-        completed++;
-      }
+    baseFilteredData.forEach(r => {
+      const isCompleted = !r.is_deleted && r.po_qty > 0 && Boolean(r.po_number);
+      const isApproved = !r.is_deleted && !isCompleted && (
+        (r.approved_qty != null && r.approved_qty > 0) ||
+        (r.approver_action && !r.approver_action.includes("delete") && !r.approver_action.includes("Reject"))
+      );
+      const isRejected = r.is_deleted || (r.approver_action && (r.approver_action.includes("delete") || r.approver_action.includes("Reject")));
+      const isPending = !r.is_deleted && !isCompleted && !isApproved && !isRejected;
+
+      if (isCompleted) completed++;
+      else if (isApproved) approvedReady++;
+      else if (isPending) pendingApproval++;
+
       if (
         (r.approver_action && r.approver_action.includes("Modified")) ||
         (r.po_action && r.po_action.includes("Modified"))
       ) {
         modified++;
       }
-      if (
-        r.is_deleted ||
-        (r.po_action && (r.po_action.includes("Deleted") || r.po_action.includes("Removed"))) ||
-        (r.approver_action && (r.approver_action.includes("Reject") || r.approver_action.includes("Deleted")))
-      ) {
+      if (isRejected) {
         rejected++;
       }
     });
 
-    return { total, completed, modified, rejected };
-  }, [filteredData]);
+    return { total, pendingApproval, approvedReady, completed, modified, rejected };
+  }, [baseFilteredData]);
 
-  // Paginated records
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, currentPage, pageSize]);
+  // 3. Final Filtered dataset (applies filterStatus)
+  const filteredData = useMemo(() => {
+    let result = [...baseFilteredData];
+
+    if (filterStatus !== "All") {
+      if (filterStatus === "PendingApproval") {
+        result = result.filter(r => !r.is_deleted && !r.po_number && (r.approved_qty == null || r.approved_qty === 0) && (!r.approver_action || r.approver_action.includes("pending")));
+      } else if (filterStatus === "ApprovedReady") {
+        result = result.filter(r => !r.is_deleted && !r.po_number && (
+          (r.approved_qty != null && r.approved_qty > 0) ||
+          (r.approver_action && !r.approver_action.includes("delete") && !r.approver_action.includes("Reject"))
+        ));
+      } else if (filterStatus === "Completed") {
+        result = result.filter(r => !r.is_deleted && r.po_qty > 0 && r.po_number);
+      } else if (filterStatus === "Modified") {
+        result = result.filter(
+          r =>
+            (r.approver_action && r.approver_action.includes("Modified")) ||
+            (r.po_action && r.po_action.includes("Modified"))
+        );
+      } else if (filterStatus === "DroppedPO") {
+        result = result.filter(
+          r =>
+            r.po_action &&
+            (r.po_action.includes("Deleted") || r.po_action.includes("Removed"))
+        );
+      } else if (filterStatus === "RejectedApproval") {
+        result = result.filter(
+          r =>
+            r.is_deleted ||
+            (r.approver_action && (r.approver_action.includes("Reject") || r.approver_action.includes("Deleted") || r.approver_action.includes("delete"))) ||
+            (r.po_action && (r.po_action.includes("Deleted") || r.po_action.includes("Removed")))
+        );
+      } else if (filterStatus === "DeletedIndent") {
+        result = result.filter(r => r.is_deleted);
+      }
+    }
+
+    return result;
+  }, [baseFilteredData, filterStatus]);
+
+  // Group filtered records into dedicated Party containers
+  const partyGroups = useMemo(() => {
+    const map = new Map();
+
+    filteredData.forEach(row => {
+      const party = (row.party_name || "Unassigned Party").trim();
+      if (!map.has(party)) {
+        map.set(party, []);
+      }
+      map.get(party).push(row);
+    });
+
+    return Array.from(map.entries()).map(([partyName, rawRows]) => {
+      // Find companies extracted from sheets that exist for this specific party
+      const companyCountMap = new Map();
+      let unassignedCount = 0;
+
+      rawRows.forEach(r => {
+        const c = (r.company_name || "").trim();
+        if (c) {
+          companyCountMap.set(c, (companyCountMap.get(c) || 0) + 1);
+        } else {
+          unassignedCount++;
+        }
+      });
+
+      const partyCompanies = Array.from(companyCountMap.keys()).sort();
+      const activePartyCompany = partyCompanyFilters[partyName] || "All";
+
+      // Filter rows by the party-level company dropdown
+      let displayedRows = rawRows;
+      if (activePartyCompany !== "All") {
+        if (activePartyCompany === "__NONE__") {
+          displayedRows = rawRows.filter(r => !(r.company_name || "").trim());
+        } else {
+          displayedRows = rawRows.filter(
+            r => (r.company_name || "").trim().toLowerCase() === activePartyCompany.toLowerCase()
+          );
+        }
+      }
+
+      // Unique shops for this party
+      const shopsSet = new Set();
+      rawRows.forEach(r => {
+        if (r.shop_name) shopsSet.add(r.shop_name);
+      });
+      const uniqueShops = Array.from(shopsSet).sort();
+
+      // Lifecycle counts for this party (using displayedRows)
+      const ordCount = displayedRows.filter(r => r.order_box != null || r.order_qty != null).length;
+      const appCount = displayedRows.filter(
+        r => !r.is_deleted && (r.approved_box != null || r.approved_qty != null || (r.approver_action && !r.approver_action.includes("delete") && !r.approver_action.includes("Reject")))
+      ).length;
+      const poCount = displayedRows.filter(
+        r => !r.is_deleted && ((r.po_box != null && r.po_box > 0) || Boolean(r.po_number))
+      ).length;
+      const rejCount = displayedRows.filter(
+        r => r.is_deleted || (r.approver_action && (r.approver_action.includes("delete") || r.approver_action.includes("Reject")))
+      ).length;
+
+      // Box totals
+      const totalOrderBox = displayedRows.reduce((acc, r) => acc + (parseFloat(r.order_box) || 0), 0);
+      const totalApprovedBox = displayedRows.reduce((acc, r) => acc + (parseFloat(r.approved_box) || 0), 0);
+      const totalPoBox = displayedRows.reduce((acc, r) => acc + (parseFloat(r.po_box) || 0), 0);
+
+      return {
+        partyName,
+        totalItemsCount: rawRows.length,
+        displayedRows,
+        partyCompanies,
+        companyCountMap,
+        unassignedCount,
+        activePartyCompany,
+        uniqueShops,
+        ordCount,
+        appCount,
+        poCount,
+        rejCount,
+        totalOrderBox,
+        totalApprovedBox,
+        totalPoBox
+      };
+    }).sort((a, b) => a.partyName.localeCompare(b.partyName));
+  }, [filteredData, partyCompanyFilters]);
 
   // Export to CSV
   const exportToCSV = () => {
@@ -386,6 +589,124 @@ const Dashboard = () => {
     document.body.removeChild(link);
   };
 
+  // Fetch users from `users` table for rich employee hover details
+  const { data: usersMap = new Map() } = useQuery({
+    queryKey: ["purchaseDashboardUsers"],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select("user_name, employee_id, role, shop_name, Designation");
+        if (error) {
+          console.warn("Could not load users for employee hover:", error);
+          return new Map();
+        }
+        const map = new Map();
+        (data || []).forEach(u => {
+          if (u.user_name) {
+            map.set(u.user_name.toLowerCase().trim(), u);
+          }
+          if (u.employee_id) {
+            map.set(String(u.employee_id).toLowerCase().trim(), u);
+          }
+        });
+        return map;
+      } catch (err) {
+        console.warn("Error fetching users:", err);
+        return new Map();
+      }
+    },
+    staleTime: 5 * 60 * 1000
+  });
+
+  const getEmployeeDetails = (empCode) => {
+    if (!empCode) return null;
+    const clean = String(empCode).trim();
+    const user = usersMap.get(clean.toLowerCase());
+    if (user) {
+      return {
+        name: user.user_name || clean,
+        code: user.employee_id || clean,
+        role: user.role || "Staff",
+        shop: user.shop_name || "—",
+        designation: user.Designation || "—"
+      };
+    }
+    return {
+      name: clean,
+      code: clean,
+      role: "Staff",
+      shop: "—",
+      designation: "—"
+    };
+  };
+
+  const EmployeeBadge = ({ empCode, stage, timestamp, reason }) => {
+    if (!empCode) return null;
+    const emp = getEmployeeDetails(empCode);
+    const formattedDate = timestamp ? new Date(timestamp).toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }) : null;
+
+    return (
+      <div className="relative group inline-block">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200/90 hover:border-indigo-300 transition-all cursor-pointer">
+          <User size={10} className="text-slate-400 group-hover:text-indigo-600 shrink-0" />
+          <span className="truncate max-w-28 font-medium">{emp ? emp.name : empCode}</span>
+        </span>
+
+        {/* Hover Tooltip Popover */}
+        <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-56 p-2.5 bg-slate-900 text-white rounded-lg shadow-2xl text-left pointer-events-none border border-slate-700 animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between border-b border-slate-700 pb-1.5 mb-1.5">
+            <div className="font-bold text-xs text-white flex items-center gap-1.5 truncate">
+              <User size={12} className="text-indigo-400 shrink-0" />
+              <span className="truncate">{emp ? emp.name : empCode}</span>
+            </div>
+            {emp?.role && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 uppercase shrink-0">
+                {emp.role}
+              </span>
+            )}
+          </div>
+          
+          <div className="space-y-1 text-[10px] text-slate-300">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 font-medium">Emp Code:</span>
+              <span className="font-bold text-slate-100 font-mono">{emp?.code || empCode}</span>
+            </div>
+            {stage && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-medium">Action:</span>
+                <span className="font-semibold text-emerald-400">{stage}</span>
+              </div>
+            )}
+            {emp?.shop && emp.shop !== "—" && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-medium">Shop:</span>
+                <span className="font-semibold text-slate-200 truncate max-w-32">{emp.shop}</span>
+              </div>
+            )}
+            {formattedDate && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-medium">Timestamp:</span>
+                <span className="text-[9px] text-slate-300 font-mono">{formattedDate}</span>
+              </div>
+            )}
+            {reason && (
+              <div className="pt-1 text-[9px] text-rose-300 border-t border-slate-800">
+                <span className="font-bold text-rose-400">Reason:</span> {reason}
+              </div>
+            )}
+          </div>
+
+          {/* Tooltip Arrow */}
+          <div className="absolute top-full left-4 border-4 border-transparent border-t-slate-900"></div>
+        </div>
+      </div>
+    );
+  };
+
   // Helper renderers for 3 core lifecycle stages (Order Generated, Approval, PO)
   const renderOrderGeneratedCell = (row) => {
     const isExtraAdded = (row.approver_action || "").toLowerCase().includes("extra add");
@@ -394,9 +715,19 @@ const Dashboard = () => {
 
     if (isIndentDeleted) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-xs">
-          <XCircle size={11} /> delete
-        </span>
+        <div className="space-y-1">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-2xs">
+            <XCircle size={10} /> Deleted
+          </span>
+          <div>
+            <EmployeeBadge
+              empCode={row.deleted_by_emp_code || row.indent_emp_code}
+              stage="Deleted at Indent"
+              timestamp={row.deleted_at || row.indent_created_at}
+              reason={row.deletion_reason}
+            />
+          </div>
+        </div>
       );
     }
 
@@ -405,13 +736,23 @@ const Dashboard = () => {
     }
 
     return (
-      <div>
-        <div className="font-semibold text-slate-800">{row.item_name}</div>
-        <div className="text-[10px] text-slate-400">
-          {row.order_box != null ? `${parseFloat(row.order_box).toFixed(2)} Bx` : ""}
-          {row.order_box != null && row.order_qty != null ? " • " : ""}
-          {row.order_qty != null ? `${Math.round(row.order_qty)} units` : ""}
-          {row.indent_emp_code ? ` (${row.indent_emp_code})` : ""}
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/70">
+            Order Generated
+          </span>
+          <span className="text-[11px] font-bold text-slate-800">
+            {row.order_box != null ? `${parseFloat(row.order_box).toFixed(2)} Bx` : ""}
+            {row.order_box != null && row.order_qty != null ? " • " : ""}
+            {row.order_qty != null ? `${Math.round(row.order_qty)} units` : ""}
+          </span>
+        </div>
+        <div>
+          <EmployeeBadge
+            empCode={row.indent_emp_code}
+            stage="Indent Created"
+            timestamp={row.indent_created_at}
+          />
         </div>
       </div>
     );
@@ -422,44 +763,86 @@ const Dashboard = () => {
     const lower = appAction.toLowerCase();
 
     if (lower === "delete" || lower.includes("reject") || (row.is_deleted && row.deletion_stage === "approval")) {
+      const isRej = lower.includes("reject") || (row.deletion_reason && row.deletion_reason.toLowerCase().includes("reject"));
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-xs">
-          <XCircle size={11} /> delete
-        </span>
-      );
-    }
-
-    if (lower.includes("extra add") || appAction === "Extra add by approver") {
-      return (
-        <div>
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
-            Extra add by approver
+        <div className="space-y-1">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-2xs">
+            <XCircle size={10} /> {isRej ? "Rejected" : "Deleted"}
           </span>
-          {row.approved_box != null && (
-            <div className="text-[10px] text-slate-400 mt-0.5">
-              {parseFloat(row.approved_box).toFixed(2)} Bx • {Math.round(row.approved_qty)} units
-              {row.approver_emp_code ? ` (${row.approver_emp_code})` : ""}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (row.approved_box != null || row.approved_qty != null || lower.includes("approved")) {
-      return (
-        <div>
-          <div className="font-semibold text-emerald-800">{row.item_name}</div>
-          <div className="text-[10px] text-slate-400">
-            {row.approved_box != null ? `${parseFloat(row.approved_box).toFixed(2)} Bx` : ""}
-            {row.approved_box != null && row.approved_qty != null ? " • " : ""}
-            {row.approved_qty != null ? `${Math.round(row.approved_qty)} units` : ""}
-            {row.approver_emp_code ? ` (${row.approver_emp_code})` : ""}
+          <div>
+            <EmployeeBadge
+              empCode={row.approver_emp_code || row.deleted_by_emp_code}
+              stage={isRej ? "Rejected at Approval" : "Deleted at Approval"}
+              timestamp={row.deleted_at || row.approved_at}
+              reason={row.deletion_reason}
+            />
           </div>
         </div>
       );
     }
 
-    return <span className="text-slate-300 font-medium select-none">—</span>;
+    if (lower.includes("extra add") || appAction === "Extra add by approver") {
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200/70">
+              Extra Added
+            </span>
+            {row.approved_box != null && (
+              <span className="text-[11px] font-bold text-purple-900">
+                {parseFloat(row.approved_box).toFixed(2)} Bx • {Math.round(row.approved_qty)} units
+              </span>
+            )}
+          </div>
+          <div>
+            <EmployeeBadge
+              empCode={row.approver_emp_code}
+              stage="Extra Added by Approver"
+              timestamp={row.approved_at}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    const isModified = (
+      (row.approved_box != null && row.order_box != null && parseFloat(row.approved_box) !== parseFloat(row.order_box)) ||
+      lower.includes("modified")
+    );
+
+    if (row.approved_box != null || row.approved_qty != null || lower.includes("approved")) {
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+              isModified
+                ? "bg-amber-50 text-amber-800 border border-amber-200/70"
+                : "bg-emerald-50 text-emerald-800 border border-emerald-200/70"
+            }`}>
+              {isModified ? "Modified" : "Approved"}
+            </span>
+            <span className={`text-[11px] font-bold ${isModified ? "text-amber-900" : "text-emerald-900"}`}>
+              {row.approved_box != null ? `${parseFloat(row.approved_box).toFixed(2)} Bx` : ""}
+              {row.approved_box != null && row.approved_qty != null ? " • " : ""}
+              {row.approved_qty != null ? `${Math.round(row.approved_qty)} units` : ""}
+            </span>
+          </div>
+          <div>
+            <EmployeeBadge
+              empCode={row.approver_emp_code}
+              stage={isModified ? "Modified by Approver" : "Approved"}
+              timestamp={row.approved_at}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">
+        Pending Approval
+      </span>
+    );
   };
 
   const renderPoCell = (row) => {
@@ -468,23 +851,41 @@ const Dashboard = () => {
 
     if (lower === "delete" || lower.includes("delete") || lower.includes("removed") || (row.is_deleted && row.deletion_stage === "po")) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-xs">
-          <XCircle size={11} /> delete
-        </span>
+        <div className="space-y-1">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-2xs">
+            <XCircle size={10} /> Dropped in PO
+          </span>
+          <div>
+            <EmployeeBadge
+              empCode={row.po_emp_code || row.deleted_by_emp_code}
+              stage="Dropped / Removed in PO"
+              timestamp={row.deleted_at || row.po_generated_at}
+              reason={row.deletion_reason}
+            />
+          </div>
+        </div>
       );
     }
 
     if (lower.includes("direct add") || poAction === "Direct Added in PO") {
       return (
-        <div>
-          <div className="font-semibold text-indigo-900">{row.item_name}</div>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-0.5 shadow-xs">
-            Direct Added in PO
-          </span>
-          <div className="text-[10px] text-slate-400 mt-0.5">
-            {row.po_number ? `${row.po_number} • ` : ""}
-            {row.po_box != null ? `${parseFloat(row.po_box).toFixed(2)} Bx` : ""}
-            {row.po_qty != null ? ` • ${Math.round(row.po_qty)} units` : ""}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Direct Added
+            </span>
+            <span className="text-[11px] font-bold text-indigo-950">
+              {row.po_number ? `${row.po_number} • ` : ""}
+              {row.po_box != null ? `${parseFloat(row.po_box).toFixed(2)} Bx` : ""}
+              {row.po_qty != null ? ` • ${Math.round(row.po_qty)} units` : ""}
+            </span>
+          </div>
+          <div>
+            <EmployeeBadge
+              empCode={row.po_emp_code}
+              stage="Direct Added in PO"
+              timestamp={row.po_generated_at}
+            />
           </div>
         </div>
       );
@@ -492,13 +893,23 @@ const Dashboard = () => {
 
     if (row.po_id || row.po_number || (row.po_box != null && row.po_box > 0)) {
       return (
-        <div>
-          <div className="font-semibold text-indigo-900">{row.item_name}</div>
-          <div className="text-[10px] text-slate-400">
-            {row.po_number ? <span className="font-bold text-slate-600">{row.po_number} • </span> : null}
-            {row.po_box != null ? `${parseFloat(row.po_box).toFixed(2)} Bx` : ""}
-            {row.po_box != null && row.po_qty != null ? " • " : ""}
-            {row.po_qty != null ? `${Math.round(row.po_qty)} units` : ""}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              PO Created
+            </span>
+            <span className="text-[11px] font-bold text-indigo-950">
+              {row.po_number ? `${row.po_number} • ` : ""}
+              {row.po_box != null ? `${parseFloat(row.po_box).toFixed(2)} Bx` : ""}
+              {row.po_qty != null ? ` • ${Math.round(row.po_qty)} units` : ""}
+            </span>
+          </div>
+          <div>
+            <EmployeeBadge
+              empCode={row.po_emp_code}
+              stage="PO Created"
+              timestamp={row.po_generated_at}
+            />
           </div>
         </div>
       );
@@ -551,7 +962,8 @@ const Dashboard = () => {
     <div className="w-full max-w-[1750px] mx-auto px-3 sm:px-4 md:px-6 py-4 font-sans space-y-4">
       
       {/* ── Metric Summary Cards ──────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total Items */}
         <div 
           onClick={() => handleStatusChange("All")}
           className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-indigo-300 ${
@@ -566,20 +978,52 @@ const Dashboard = () => {
           <div className="text-[11px] text-slate-400 mt-0.5">Matching active filters</div>
         </div>
 
+        {/* Order Generated (Pending Approval) */}
+        <div 
+          onClick={() => handleStatusChange(filterStatus === "PendingApproval" ? "All" : "PendingApproval")}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-blue-300 ${
+            filterStatus === "PendingApproval" ? "border-blue-500 ring-2 ring-blue-500/10" : "border-slate-200"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+            <span>Order Generated</span>
+            <Clock size={15} className="text-blue-500" />
+          </div>
+          <div className="text-2xl font-bold text-blue-700 mt-1">{metrics.pendingApproval}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Pending approval stage</div>
+        </div>
+
+        {/* Approved (Ready for PO) */}
+        <div 
+          onClick={() => handleStatusChange(filterStatus === "ApprovedReady" ? "All" : "ApprovedReady")}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-emerald-300 ${
+            filterStatus === "ApprovedReady" ? "border-emerald-500 ring-2 ring-emerald-500/10" : "border-slate-200"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+            <span>Approved</span>
+            <CheckCircle2 size={15} className="text-emerald-500" />
+          </div>
+          <div className="text-2xl font-bold text-emerald-700 mt-1">{metrics.approvedReady}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Approved & ready for PO</div>
+        </div>
+
+        {/* PO Completed */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "Completed" ? "All" : "Completed")}
-          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-emerald-300 ${
-            filterStatus === "Completed" ? "border-emerald-500 ring-2 ring-emerald-500/10" : "border-slate-200"
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-indigo-300 ${
+            filterStatus === "Completed" ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-slate-200"
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>PO Completed</span>
-            <PackageCheck size={15} className="text-emerald-500" />
+            <PackageCheck size={15} className="text-indigo-600" />
           </div>
-          <div className="text-2xl font-bold text-emerald-700 mt-1">{metrics.completed}</div>
+          <div className="text-2xl font-bold text-indigo-700 mt-1">{metrics.completed}</div>
           <div className="text-[11px] text-slate-400 mt-0.5">Active & ordered in PO</div>
         </div>
 
+        {/* Modified / Dropped */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "Modified" ? "All" : "Modified")}
           className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-amber-300 ${
@@ -594,6 +1038,7 @@ const Dashboard = () => {
           <div className="text-[11px] text-slate-400 mt-0.5">Quantities updated</div>
         </div>
 
+        {/* Rejected / Deleted */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "RejectedApproval" ? "All" : "RejectedApproval")}
           className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-rose-300 ${
@@ -601,11 +1046,11 @@ const Dashboard = () => {
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-            <span>Rejected / Dropped</span>
-            <AlertCircle size={15} className="text-rose-500" />
+            <span>Rejected / Deleted</span>
+            <XCircle size={15} className="text-rose-500" />
           </div>
           <div className="text-2xl font-bold text-rose-700 mt-1">{metrics.rejected}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Rejected, dropped or deleted</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Rejected or deleted items</div>
         </div>
       </div>
 
@@ -640,24 +1085,9 @@ const Dashboard = () => {
             </select>
           </div>
 
-          {/* Company */}
+          {/* Party (First) */}
           <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-44">
-            <Briefcase size={13} className="text-slate-400" />
-            <select
-              value={filterCompany}
-              onChange={(e) => handleCompanyChange(e.target.value)}
-              className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer truncate w-full"
-            >
-              <option value="All">All Companies</option>
-              {availableCompanies.filter(c => c !== "All").map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-              <option value="__NONE__">Unassigned Company</option>
-            </select>
-          </div>
-
-          {/* Party */}
-          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-44">
+            <User size={13} className="text-slate-400 shrink-0" />
             <select
               value={filterParty}
               onChange={(e) => handlePartyChange(e.target.value)}
@@ -669,6 +1099,24 @@ const Dashboard = () => {
             </select>
           </div>
 
+          {/* Company (Second - filtered by selected Party) */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-44">
+            <Briefcase size={13} className="text-slate-400 shrink-0" />
+            <select
+              value={filterCompany}
+              onChange={(e) => handleCompanyChange(e.target.value)}
+              className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer truncate w-full"
+            >
+              <option value="All">All Companies</option>
+              {availableCompanies.filter(c => c !== "All").map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              {hasUnassignedCompanyInLogs && (
+                <option value="__NONE__">Unassigned Company</option>
+              )}
+            </select>
+          </div>
+
           {/* Status */}
           <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
             <select
@@ -677,6 +1125,8 @@ const Dashboard = () => {
               className="text-xs bg-transparent border-none text-slate-700 font-semibold focus:outline-none cursor-pointer"
             >
               <option value="All">All Stages</option>
+              <option value="PendingApproval">Order Generated (Pending Approval)</option>
+              <option value="ApprovedReady">Approved (Pending PO)</option>
               <option value="Completed">PO Completed</option>
               <option value="Modified">Quantity Modified</option>
               <option value="DroppedPO">Dropped in PO</option>
@@ -703,6 +1153,17 @@ const Dashboard = () => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <button
+              onClick={resetAllFilters}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+              title="Reset all filters to show all records"
+            >
+              <RotateCcw size={12} />
+              <span>Reset Filters</span>
+            </button>
+          )}
+
           <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-md">
             {filteredData.length} records
           </span>
@@ -729,182 +1190,338 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ── Master Reconciliation Data Table ──────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700 border-collapse">
-            <thead className="bg-slate-50/90 backdrop-blur-xs text-slate-600 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 sticky top-0 z-10">
-              <tr>
-                <th className="py-2.5 px-3">Indent ID</th>
-                <th className="py-2.5 px-3">Shop</th>
-                <th className="py-2.5 px-3">Company</th>
-                <th className="py-2.5 px-3">Party Name</th>
-                <th className="py-2.5 px-3 font-extrabold text-slate-800">Item Name</th>
-                <th className="py-2.5 px-3 bg-blue-50/50">Order Generated</th>
-                <th className="py-2.5 px-3 bg-emerald-50/50">Approval</th>
-                <th className="py-2.5 px-3 bg-indigo-50/50">PO</th>
-                <th className="py-2.5 px-2.5 text-center">Vendor</th>
-                <th className="py-2.5 px-2.5 text-center">Transporter</th>
-                <th className="py-2.5 px-2.5 text-center">Receiver</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-[11px]">
-              {paginatedData.length === 0 ? (
-                <tr>
-                  <td colSpan="11" className="py-12 text-center text-slate-400 font-medium">
-                    No matching records found.
-                  </td>
-                </tr>
-              ) : (
-                paginatedData.map((row) => {
-                  return (
-                    <tr
-                      key={row.id}
-                      className="hover:bg-slate-50/80 transition-colors"
-                    >
-                      {/* Indent ID */}
-                      <td className="py-2.5 px-3 font-bold text-indigo-900 whitespace-nowrap">
-                        {row.indent_id}
-                      </td>
-
-                      {/* Shop */}
-                      <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-700">
-                        {row.shop_name || "—"}
-                      </td>
-
-                      {/* Company */}
-                      <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-600">
-                        {row.company_name ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                            {row.company_name}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-[10px]">—</span>
-                        )}
-                      </td>
-
-                      {/* Party */}
-                      <td className="py-2.5 px-3 whitespace-nowrap font-semibold text-slate-800">
-                        {row.party_name || "—"}
-                      </td>
-
-                      {/* 1. Item Name */}
-                      <td className="py-2.5 px-3 font-bold text-slate-900 min-w-50">
-                        {row.item_name}
-                      </td>
-
-                      {/* 2. Order Generated */}
-                      <td className="py-2.5 px-3 bg-blue-50/20 whitespace-nowrap min-w-44">
-                        {renderOrderGeneratedCell(row)}
-                      </td>
-
-                      {/* 3. Approval */}
-                      <td className="py-2.5 px-3 bg-emerald-50/20 whitespace-nowrap min-w-44">
-                        {renderApprovalCell(row)}
-                      </td>
-
-                      {/* 4. PO */}
-                      <td className="py-2.5 px-3 bg-indigo-50/20 whitespace-nowrap min-w-44">
-                        {renderPoCell(row)}
-                      </td>
-
-                      {/* Vendor (Trader) */}
-                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                            row.trader_status === "yes" || row.trader_status === "Verified"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : row.trader_status === "no"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {row.trader_status === "yes" || row.trader_status === "Verified"
-                            ? "✓ Verified"
-                            : row.trader_status === "no"
-                            ? "✗ Rejected"
-                            : (row.trader_status || "Pending")}
-                        </span>
-                      </td>
-
-                      {/* Transporter */}
-                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                            row.transporter_status === "yes" || row.transporter_status === "Dispatched"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : row.transporter_status === "no"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {row.transporter_status === "yes" || row.transporter_status === "Dispatched"
-                            ? "✓ Dispatched"
-                            : row.transporter_status === "no"
-                            ? "✗ Rejected"
-                            : (row.transporter_status || "Pending")}
-                        </span>
-                      </td>
-
-                      {/* Receiver */}
-                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                            row.receiver_status === "yes" || row.receiver_status === "Received"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : row.receiver_status === "no"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {row.receiver_status === "yes" || row.receiver_status === "Received"
-                            ? "✓ Received"
-                            : row.receiver_status === "no"
-                            ? "✗ Rejected"
-                            : (row.receiver_status || "Pending")}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+      {/* ── Party-Wise Indent Management Containers ────────────── */}
+      <div className="flex items-center justify-between px-1 pt-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <User size={14} className="text-indigo-600" />
+            Parties ({partyGroups.length})
+          </span>
+          <span className="text-xs text-slate-400 hidden sm:inline">
+            • Each party has a dedicated container with company filtering
+          </span>
         </div>
-
-        {/* ── Compact Pagination Bar ────────────────────────────── */}
-        {totalPages > 1 && (
-          <div className="p-3 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
-            <div>
-              Showing <span className="font-semibold">{(currentPage - 1) * pageSize + 1}</span> to{" "}
-              <span className="font-semibold">{Math.min(currentPage * pageSize, filteredData.length)}</span> of{" "}
-              <span className="font-semibold">{filteredData.length}</span> entries
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 border border-slate-200 bg-white rounded-md disabled:opacity-40 hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={14} />
-              </button>
-
-              <span className="font-semibold px-2">
-                {currentPage} / {totalPages}
-              </span>
-
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 border border-slate-200 bg-white rounded-md disabled:opacity-40 hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
+        {partyGroups.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={expandAllParties}
+              className="text-[11px] font-semibold text-slate-600 hover:text-indigo-600 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              Expand All
+            </button>
+            <button
+              onClick={() => collapseAllParties(partyGroups.map(p => p.partyName))}
+              className="text-[11px] font-semibold text-slate-600 hover:text-indigo-600 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              Collapse All
+            </button>
           </div>
         )}
       </div>
+
+      {partyGroups.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center">
+          <div className="max-w-md mx-auto space-y-3">
+            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
+              <Search size={22} />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-700">No matching records found</div>
+              <div className="text-xs text-slate-400 mt-1">
+                {hasActiveFilters 
+                  ? "Your active filters returned 0 records. Try resetting filters to view all store indents."
+                  : "No records found in the audit table yet."}
+              </div>
+            </div>
+            {hasActiveFilters && (
+              <button
+                onClick={resetAllFilters}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+              >
+                <RotateCcw size={14} />
+                <span>Reset All Filters</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {partyGroups.map((group) => {
+            const isCollapsed = Boolean(collapsedParties[group.partyName]);
+
+            return (
+              <div
+                key={group.partyName}
+                className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-200 hover:border-slate-300"
+              >
+                {/* ── Party Header Bar ─────────────────────────────── */}
+                <div
+                  onClick={() => togglePartyCollapse(group.partyName)}
+                  className={`p-3.5 bg-gradient-to-r from-slate-50 via-white to-slate-50/80 ${
+                    isCollapsed ? "" : "border-b border-slate-200"
+                  } flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-100/80 transition-colors`}
+                  title={isCollapsed ? `Click to open ${group.partyName}` : `Click to close ${group.partyName}`}
+                >
+                  
+                  {/* Left: Party Identity & Metadata */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                      {group.partyName.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900 text-sm">{group.partyName}</h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                          {group.displayedRows.length}{group.displayedRows.length !== group.totalItemsCount ? ` / ${group.totalItemsCount}` : ""} items
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {group.uniqueShops.map(s => (
+                          <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200/60">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Dedicated Company Dropdown & Stage Summaries & Collapse Toggle */}
+                  <div className="flex items-center flex-wrap gap-2.5">
+                    
+                    {/* Dedicated Company Dropdown for this Party */}
+                    <div 
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1 shadow-2xs hover:border-indigo-400 transition-colors cursor-default"
+                    >
+                      <Briefcase size={13} className="text-indigo-600 shrink-0" />
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Company:</span>
+                      <select
+                        value={group.activePartyCompany}
+                        onChange={(e) => handlePartyCompanyFilterChange(group.partyName, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs font-bold text-slate-800 bg-transparent border-none focus:outline-none cursor-pointer max-w-44 truncate"
+                        title="Filter this party's items by company extracted from sheet"
+                      >
+                        <option value="All">All Companies ({group.totalItemsCount})</option>
+                        {group.partyCompanies.map(comp => (
+                          <option key={comp} value={comp}>
+                            {comp} ({group.companyCountMap.get(comp) || 0})
+                          </option>
+                        ))}
+                        {group.unassignedCount > 0 && (
+                          <option value="__NONE__">Unassigned ({group.unassignedCount})</option>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Quick Stage Status Counts */}
+                    <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold">
+                      <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60" title="Order Generated">
+                        Ord: {group.ordCount}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60" title="Approved">
+                        App: {group.appCount}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60" title="In PO">
+                        PO: {group.poCount}
+                      </span>
+                      {group.rejCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/60 font-bold" title="Rejected or Deleted">
+                          Rej: {group.rejCount}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Collapse / Expand Toggle Icon */}
+                    <div
+                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 rounded-lg transition-colors shrink-0"
+                      title={isCollapsed ? "Expand Party Div" : "Collapse Party Div"}
+                    >
+                      {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Party Table Body ─────────────────────────────── */}
+                {!isCollapsed && (
+                  <div>
+                    {group.displayedRows.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-slate-500">
+                        <p>No records for company <span className="font-bold text-slate-700">"{group.activePartyCompany}"</span> under this party.</p>
+                        <button
+                          onClick={() => handlePartyCompanyFilterChange(group.partyName, "All")}
+                          className="mt-2 text-indigo-600 hover:underline font-semibold cursor-pointer"
+                        >
+                          Show all companies for this party
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto max-h-[620px] overflow-y-auto">
+                        <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                          <thead className="bg-slate-50/95 backdrop-blur-xs text-slate-600 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 sticky top-0 z-10">
+                            <tr>
+                              <th className="py-2.5 px-3">Indent ID</th>
+                              <th className="py-2.5 px-3">Shop</th>
+                              <th className="py-2.5 px-3">Company</th>
+                              <th className="py-2.5 px-3 font-extrabold text-slate-800">Item Name</th>
+                              <th className="py-2.5 px-3 bg-blue-50/50">Order Generated</th>
+                              <th className="py-2.5 px-3 bg-emerald-50/50">Approval</th>
+                              <th className="py-2.5 px-3 bg-indigo-50/50">PO</th>
+                              <th className="py-2.5 px-2.5 text-center">Vendor</th>
+                              <th className="py-2.5 px-2.5 text-center">Transporter</th>
+                              <th className="py-2.5 px-2.5 text-center">Receiver</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-[11px]">
+                            {group.displayedRows.map((row) => (
+                              <tr
+                                key={row.id}
+                                className="hover:bg-slate-50/80 transition-colors"
+                              >
+                                {/* Indent ID */}
+                                <td className="py-2.5 px-3 font-bold text-indigo-900 whitespace-nowrap" title={row.indent_id}>
+                                  {row.indent_id && row.indent_id.length > 15
+                                    ? `IN-${row.indent_id.slice(0, 8).toUpperCase()}`
+                                    : (row.indent_id || "—")}
+                                </td>
+
+                                {/* Shop */}
+                                <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-700">
+                                  {row.shop_name || "—"}
+                                </td>
+
+                                {/* Company */}
+                                <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-600">
+                                  {row.company_name ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                                      {row.company_name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px]">—</span>
+                                  )}
+                                </td>
+
+                                {/* Item Name */}
+                                <td className="py-2.5 px-3 font-bold text-slate-900 min-w-50">
+                                  {row.item_name}
+                                </td>
+
+                                {/* Order Generated */}
+                                <td className="py-2.5 px-3 bg-blue-50/20 whitespace-nowrap min-w-44">
+                                  {renderOrderGeneratedCell(row)}
+                                </td>
+
+                                {/* Approval */}
+                                <td className="py-2.5 px-3 bg-emerald-50/20 whitespace-nowrap min-w-44">
+                                  {renderApprovalCell(row)}
+                                </td>
+
+                                {/* PO */}
+                                <td className="py-2.5 px-3 bg-indigo-50/20 whitespace-nowrap min-w-44">
+                                  {renderPoCell(row)}
+                                </td>
+
+                                {/* Vendor (Trader) */}
+                                <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
+                                  {row.is_deleted && !row.po_number ? (
+                                    <span className="text-slate-300 font-medium select-none">—</span>
+                                  ) : (
+                                    <span
+                                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        row.trader_status === "yes" || row.trader_status === "Verified"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : row.trader_status === "no"
+                                          ? "bg-rose-100 text-rose-800"
+                                          : "bg-slate-100 text-slate-600"
+                                      }`}
+                                    >
+                                      {row.trader_status === "yes" || row.trader_status === "Verified"
+                                        ? "✓ Verified"
+                                        : row.trader_status === "no"
+                                        ? "✗ Rejected"
+                                        : (row.trader_status || "Pending")}
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Transporter */}
+                                <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
+                                  {row.is_deleted && !row.po_number ? (
+                                    <span className="text-slate-300 font-medium select-none">—</span>
+                                  ) : (
+                                    <span
+                                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        row.transporter_status === "yes" || row.transporter_status === "Dispatched"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : row.transporter_status === "no"
+                                          ? "bg-rose-100 text-rose-800"
+                                          : "bg-slate-100 text-slate-600"
+                                      }`}
+                                    >
+                                      {row.transporter_status === "yes" || row.transporter_status === "Dispatched"
+                                        ? "✓ Dispatched"
+                                        : row.transporter_status === "no"
+                                        ? "✗ Rejected"
+                                        : (row.transporter_status || "Pending")}
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Receiver */}
+                                <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
+                                  {row.is_deleted && !row.po_number ? (
+                                    <span className="text-slate-300 font-medium select-none">—</span>
+                                  ) : (
+                                    <span
+                                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        row.receiver_status === "yes" || row.receiver_status === "Received"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : row.receiver_status === "no"
+                                          ? "bg-rose-100 text-rose-800"
+                                          : "bg-slate-100 text-slate-600"
+                                      }`}
+                                    >
+                                      {row.receiver_status === "yes" || row.receiver_status === "Received"
+                                        ? "✓ Received"
+                                        : row.receiver_status === "no"
+                                        ? "✗ Rejected"
+                                        : (row.receiver_status || "Pending")}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {/* Party Table Summary Footer */}
+                          <tfoot className="bg-slate-50 font-semibold text-[11px] text-slate-700 border-t border-slate-200">
+                            <tr>
+                              <td colSpan="4" className="py-2 px-3 text-right text-slate-500 font-bold">
+                                Total for {group.activePartyCompany === "All" ? "All Companies" : group.activePartyCompany}:
+                              </td>
+                              <td className="py-2 px-3 bg-blue-50/40 font-bold text-blue-900">
+                                {group.totalOrderBox.toFixed(2)} Bx
+                              </td>
+                              <td className="py-2 px-3 bg-emerald-50/40 font-bold text-emerald-900">
+                                {group.totalApprovedBox.toFixed(2)} Bx
+                              </td>
+                              <td className="py-2 px-3 bg-indigo-50/40 font-bold text-indigo-900">
+                                {group.totalPoBox.toFixed(2)} Bx
+                              </td>
+                              <td colSpan="3" className="py-2 px-3 text-center text-slate-400">
+                                {group.displayedRows.length} items
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

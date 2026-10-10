@@ -2633,7 +2633,7 @@ UNIQUE (employee_id, year, month);`}
                             {/* 1. Header Banner */}
                             <div className="bg-[#1e3a8a] text-white p-6 rounded-xl flex justify-between items-center mb-6">
                                 <div>
-                                    <h1 className="text-2xl font-black tracking-tight">{selectedPayslip.shopName ? (shopFullNameMap[selectedPayslip.shopName] || selectedPayslip.shopName) : 'DRINQKART'}</h1>
+                                    <h1 className="text-2xl font-black tracking-tight">{selectedPayslip.shopName ? (shopFullNameMap[selectedPayslip.shopName] || selectedPayslip.shopName) : '—'}</h1>
                                     <p className="text-xs text-blue-200 font-semibold mt-0.5">Employee Payslip — Confidential</p>
                                 </div>
                                 <div className="text-right">
@@ -2839,7 +2839,7 @@ UNIQUE (employee_id, year, month);`}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer mb-6"
                             >
                                 {shopsList.length === 0 ? (
-                                    <option value="DRINQKART">DRINQKART</option>
+                                    <option value="" disabled>No shops available</option>
                                 ) : (
                                     shopsList.map(s => (
                                         <option key={s} value={s}>{shopFullNameMap[s] || s}</option>

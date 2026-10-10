@@ -1,10 +1,6 @@
-export const COMPANY = {
-  name: "DRINQKART",
-  address: "10/212 Anna Nagar , Tirupattur - 635601",
-  gstin: "33AAPSDF1ZV",
-  contact: "+91-9047077124",
-  email: "[EMAIL_ADDRESS]",
-};
+// Company info should be fetched dynamically from purchase_company_settings
+export const COMPANY = {};
+
 
 export const TERMS = [
   "We reserve the right to cancel the purchase order anytime before product shipment.",

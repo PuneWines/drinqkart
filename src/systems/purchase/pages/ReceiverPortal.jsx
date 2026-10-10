@@ -2,16 +2,15 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
+import { dashboardSyncService } from "../services/dashboardSyncService";
 import { 
   FileText, CheckCircle2, Loader2, AlertCircle, 
   ChevronDown, ChevronUp, Check, X, Calendar, 
   MessageSquare, Package, ArrowRight, UserCheck, 
-  Hash, Truck, ShieldAlert 
+  Hash, Truck, ShieldAlert, Clock
 } from "lucide-react";
 
-const COMPANY = {
-  name: "DRINQKART",
-};
+// Company info is loaded dynamically from purchase_company_settings
 
 const ReceiverPortal = () => {
   const { receiverId } = useParams();
@@ -346,6 +345,13 @@ const ReceiverPortal = () => {
         .eq("id", poId);
 
       if (dbError) throw dbError;
+
+      // Sync to purchase_dashboard with atomicity
+      await dashboardSyncService.syncPortalStatus({
+        poId,
+        statusType: "receiver",
+        statusValue: status,
+      });
 
       // Clean up superseded held rows for items in this PO
       const itemNames = items.map(i => i.itemName).filter(Boolean);

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Toast, { useToast } from "../components/Toast";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
+import { dashboardSyncService } from "../services/dashboardSyncService";
 import useShopStore from "../store/useShopStore";
 
 const Receiving = () => {
@@ -161,6 +162,13 @@ const Receiving = () => {
       const remarks = editingRemarks[po.id] !== undefined ? editingRemarks[po.id] : (po.receiver_remarks || "");
       const { error } = await supabase.from("purchase_purchase_orders").update({ received_items: updatedMap, receiver_status: "yes", receiver_remarks: remarks || null }).eq("id", po.id);
       if (error) throw error;
+
+      // Sync to purchase_dashboard with atomicity
+      await dashboardSyncService.syncPortalStatus({
+        poId: po.id,
+        statusType: "receiver",
+        statusValue: "yes",
+      });
 
       // Clean up superseded held rows for items in this completed PO
       const itemNames = poProducts.map(p => p.itemName).filter(Boolean);

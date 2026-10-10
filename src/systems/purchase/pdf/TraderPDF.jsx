@@ -262,7 +262,7 @@ const TraderPDF = ({
         {/* Header Block */}
         <View style={styles.headerArea}>
           <View style={styles.logoBlock}>
-            <Text style={styles.companyName}>{companyInfo?.name || "DRINQKART"}</Text>
+            <Text style={styles.companyName}>{companyInfo?.name || "—"}</Text>
           </View>
           
           <View style={styles.detailsRow}>
@@ -324,7 +324,7 @@ const TraderPDF = ({
             <View style={styles.boxBody}>
               <View style={styles.boxFieldRow}>
                 <Text style={styles.boxFieldLabel}>Company Name:</Text>
-                <Text style={[styles.boxFieldValue, { fontWeight: "bold" }]}>{companyInfo?.name || "DRINQKART"}</Text>
+                <Text style={[styles.boxFieldValue, { fontWeight: "bold" }]}>{companyInfo?.name || "—"}</Text>
               </View>
               <View style={styles.boxFieldRow}>
                 <Text style={styles.boxFieldLabel}>Address:</Text>
@@ -416,7 +416,7 @@ const TraderPDF = ({
           {/* Signature Block */}
           <View style={styles.signatureBlock}>
             <View style={styles.signatureBody} />
-            <Text style={styles.signatureHeader}>For {companyInfo?.name || "DRINQKART"}</Text>
+            <Text style={styles.signatureHeader}>For {companyInfo?.name || ""}</Text>
             <Text style={styles.signatureSub}>Authorized signatory</Text>
           </View>
         </View>
