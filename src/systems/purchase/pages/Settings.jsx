@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import useAuthStore from "../store/useAuthStore";
 import useVendorStore from "../store/useVendorStore";
 import useCompanyStore from "../store/useCompanyStore";
@@ -26,6 +26,7 @@ const Settings = ({ readOnly = false }) => {
   const [transporterSearchQuery, setTransporterSearchQuery] = useState("");
   const [receiverSearchQuery, setReceiverSearchQuery] = useState("");
   const [availableParties, setAvailableParties] = useState([]);
+  const [vendorPartyCompanyMap, setVendorPartyCompanyMap] = useState({});
   
   // User Form State
   const [showForm, setShowForm] = useState(false);
@@ -64,6 +65,7 @@ const Settings = ({ readOnly = false }) => {
     contact: "",
     email: "",
     terms: [],
+    requires_transporter: true,
   });
 
   // Transporter Form State
@@ -104,8 +106,14 @@ const Settings = ({ readOnly = false }) => {
   const fetchAvailableParties = async () => {
     try {
       const [res1, res2] = await Promise.all([
-        supabase.from("purchase_indent_items").select("party_name").not("party_name", "is", null),
-        supabase.from("purchase_approved_indent_items").select("party_name").not("party_name", "is", null)
+        supabase
+          .from("purchase_indent_items")
+          .select("party_name, company_name, filtered_company_name, purchase_indents(shop_name)")
+          .not("party_name", "is", null),
+        supabase
+          .from("purchase_approved_indent_items")
+          .select("party_name, company_name, filtered_company_name, purchase_indents(shop_name)")
+          .not("party_name", "is", null)
       ]);
 
       const combined = [
@@ -113,12 +121,77 @@ const Settings = ({ readOnly = false }) => {
         ...(res2.data || [])
       ];
 
-      const uniqueParties = [...new Set(combined.map(d => d.party_name).filter(Boolean))];
+      const uniqueParties = [...new Set(combined.map(d => d.party_name?.trim()).filter(Boolean))];
       setAvailableParties(uniqueParties);
+
+      // Build mapping of party_name -> associated companies & shops
+      const mapping = {};
+      combined.forEach(item => {
+        const partyKey = (item.party_name || "").trim().toLowerCase();
+        if (!partyKey) return;
+        if (!mapping[partyKey]) {
+          mapping[partyKey] = {
+            explicitCompanies: new Set(),
+            shops: new Set()
+          };
+        }
+        if (item.filtered_company_name && item.filtered_company_name.trim()) {
+          mapping[partyKey].explicitCompanies.add(item.filtered_company_name.trim());
+        }
+        if (item.company_name && item.company_name.trim()) {
+          mapping[partyKey].explicitCompanies.add(item.company_name.trim());
+        }
+        const shop = item.purchase_indents?.shop_name;
+        if (shop && typeof shop === "string" && shop.trim() && shop.toLowerCase() !== "all") {
+          mapping[partyKey].shops.add(shop.trim());
+        }
+      });
+
+      setVendorPartyCompanyMap(mapping);
     } catch (error) {
-      console.error("Error fetching available parties:", error);
+      console.error("Error fetching available parties and company mappings:", error);
     }
   };
+
+  const availableCompaniesForSelectedVendor = useMemo(() => {
+    const selectedParty = (vendorFormData.party_name || "").trim().toLowerCase();
+    if (!selectedParty || !vendorPartyCompanyMap[selectedParty]) {
+      return companies;
+    }
+
+    const { explicitCompanies, shops } = vendorPartyCompanyMap[selectedParty];
+    const explicitList = Array.from(explicitCompanies || []);
+    const shopList = Array.from(shops || []);
+
+    if (explicitList.length === 0 && shopList.length === 0) {
+      return companies;
+    }
+
+    // Match companies list by name or by shop matching
+    const matchedSettings = companies.filter(c => {
+      const cLower = (c.name || "").toLowerCase();
+      const matchExplicit = explicitList.some(exp => {
+        const expLower = exp.toLowerCase();
+        return cLower === expLower || cLower.includes(expLower) || expLower.includes(cLower);
+      });
+      if (matchExplicit) return true;
+
+      const matchShop = shopList.some(sh => {
+        const shLower = sh.toLowerCase();
+        return cLower.includes(shLower) || shLower.includes(cLower);
+      });
+      return matchShop;
+    });
+
+    // Also include any explicit company strings not in purchase_company_settings
+    const matchedNames = new Set(matchedSettings.map(c => c.name.toLowerCase()));
+    const extraExplicit = explicitList
+      .filter(exp => !matchedNames.has(exp.toLowerCase()))
+      .map(name => ({ id: name, name }));
+
+    const result = [...matchedSettings, ...extraExplicit];
+    return result.length > 0 ? result : companies;
+  }, [vendorFormData.party_name, companies, vendorPartyCompanyMap]);
 
   const allPermissions = [
     { key: "dashboard", label: "Dashboard" },
@@ -214,6 +287,7 @@ const Settings = ({ readOnly = false }) => {
       contact_number: vendor.contact_number || vendor.contact || "",
       email: vendor.email || "",
       terms: vendor.terms || [],
+      company_name: vendor.company_name || "",
     });
     setShowVendorForm(true);
   };
@@ -228,6 +302,7 @@ const Settings = ({ readOnly = false }) => {
       contact_number: "",
       email: "",
       terms: [],
+      company_name: "",
     });
     setShowVendorForm(true);
   };
@@ -279,6 +354,7 @@ const Settings = ({ readOnly = false }) => {
       contact: "",
       email: "",
       terms: [],
+      requires_transporter: true,
     });
     setShowCompanyForm(true);
   };
@@ -292,6 +368,7 @@ const Settings = ({ readOnly = false }) => {
       contact: company.contact || "",
       email: company.email || "",
       terms: company.terms || [],
+      requires_transporter: company.requires_transporter !== false,
     });
     setShowCompanyForm(true);
   };
@@ -438,6 +515,7 @@ const Settings = ({ readOnly = false }) => {
     const q = vendorSearchQuery.toLowerCase().trim();
     return (
       (v.party_name && v.party_name.toLowerCase().includes(q)) ||
+      (v.company_name && v.company_name.toLowerCase().includes(q)) ||
       ((v.contact_number || v.contact) && String(v.contact_number || v.contact).toLowerCase().includes(q)) ||
       (v.email && v.email.toLowerCase().includes(q)) ||
       (v.gstin && v.gstin.toLowerCase().includes(q)) ||
@@ -447,8 +525,8 @@ const Settings = ({ readOnly = false }) => {
 
   // Transporters Tab Filter
   const filteredTransporters = transporters.filter(t => {
-    if (!transporterSearchQuery.trim()) return true;
-    const q = transporterSearchQuery.toLowerCase().trim();
+    if (!(transporterSearchQuery || "").trim()) return true;
+    const q = (transporterSearchQuery || "").toLowerCase().trim();
     return (
       (t.name && t.name.toLowerCase().includes(q)) ||
       (t.contact_number && String(t.contact_number).toLowerCase().includes(q))
@@ -457,8 +535,8 @@ const Settings = ({ readOnly = false }) => {
 
   // Receivers Tab Filter
   const filteredReceivers = receivers.filter(r => {
-    if (!receiverSearchQuery.trim()) return true;
-    const q = receiverSearchQuery.toLowerCase().trim();
+    if (!(receiverSearchQuery || "").trim()) return true;
+    const q = (receiverSearchQuery || "").toLowerCase().trim();
     return (
       (r.name && r.name.toLowerCase().includes(q)) ||
       (r.contact_number && String(r.contact_number).toLowerCase().includes(q))
@@ -471,6 +549,7 @@ const Settings = ({ readOnly = false }) => {
     const q = searchQuery.toLowerCase().trim();
     return (
       (v.party_name && v.party_name.toLowerCase().includes(q)) ||
+      (v.company_name && v.company_name.toLowerCase().includes(q)) ||
       ((v.contact_number || v.contact) && String(v.contact_number || v.contact).toLowerCase().includes(q)) ||
       (v.email && v.email.toLowerCase().includes(q))
     );
@@ -642,6 +721,26 @@ const Settings = ({ readOnly = false }) => {
                       </div>
                     </div>
 
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Company Scope (Optional)</label>
+                      <select
+                        value={vendorFormData.company_name || ""}
+                        onChange={(e) => setVendorFormData({ ...vendorFormData, company_name: e.target.value })}
+                        disabled={isVendorSubmitting}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                      >
+                        <option value="">Direct / All (No Company Filter)</option>
+                        {availableCompaniesForSelectedVendor.map((c) => (
+                          <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-slate-500">
+                        {vendorFormData.party_name 
+                          ? `Showing ${availableCompaniesForSelectedVendor.length} company option(s) linked to "${vendorFormData.party_name}".`
+                          : "Leave blank for Direct Vendor, or pick a linked company."}
+                      </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-700">Primary Contact Phone</label>
@@ -757,6 +856,7 @@ const Settings = ({ readOnly = false }) => {
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Party / Vendor Name</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Company Name</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Contact</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">GSTIN</th>
@@ -766,7 +866,20 @@ const Settings = ({ readOnly = false }) => {
                     <tbody className="bg-white divide-y divide-slate-100">
                       {filteredVendors.map((vendor) => (
                         <tr key={vendor.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-900 font-bold">{vendor.party_name}</strong></td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <strong className="text-slate-900 font-bold">{vendor.party_name}</strong>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {vendor.company_name ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {vendor.company_name}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                                Direct
+                              </span>
+                            )}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{vendor.contact_number || vendor.contact || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{vendor.email || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase">{vendor.gstin || '—'}</td>
@@ -786,9 +899,9 @@ const Settings = ({ readOnly = false }) => {
                           </td>
                         </tr>
                       ))}
-                      {portalFilteredVendors.length === 0 && (
+                      {filteredVendors.length === 0 && (
                         <tr>
-                          <td colSpan="5" className="px-6 py-8 text-center text-slate-500 font-medium">
+                          <td colSpan="6" className="px-6 py-8 text-center text-slate-500 font-medium">
                             {vendorSearchQuery ? (
                               <div className="space-y-1.5">
                                 <p>No vendors found matching "<strong className="text-slate-800">{vendorSearchQuery}</strong>".</p>
@@ -905,6 +1018,29 @@ const Settings = ({ readOnly = false }) => {
                       />
                     </div>
 
+                    {/* Transporter Requirement Toggle */}
+                    <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex items-center justify-between">
+                      <div>
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Truck size={14} className="text-indigo-600" />
+                          Require Transporter for Purchase Orders
+                        </label>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Turn OFF if this shop/company operates via self-pickup or vendor direct delivery.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={companyFormData.requires_transporter !== false}
+                          onChange={(e) => setCompanyFormData({ ...companyFormData, requires_transporter: e.target.checked })}
+                          disabled={isCompanySubmitting}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+
                     {/* Invoicing Terms */}
                     <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
                       <div className="flex justify-between items-center border-b border-slate-200 pb-2">
@@ -976,6 +1112,7 @@ const Settings = ({ readOnly = false }) => {
                       <tr>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Company Name</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">GSTIN</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Transporter</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Billing Contact</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Terms Count</th>
@@ -987,6 +1124,11 @@ const Settings = ({ readOnly = false }) => {
                         <tr key={company.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-900 font-bold">{company.name}</strong></td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase">{company.gstin}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 text-[11px] font-bold rounded ${company.requires_transporter !== false ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                              {company.requires_transporter !== false ? 'Required' : 'Not Required'}
+                            </span>
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{company.contact}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">{company.email}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold">{company.terms?.length || 0}</td>
@@ -1436,6 +1578,7 @@ const Settings = ({ readOnly = false }) => {
                       <thead className="bg-slate-50/70">
                         <tr>
                           <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor Name</th>
+                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Company Name</th>
                           <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Contact Number</th>
                           <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Permanent Portal URL</th>
                           <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
@@ -1452,7 +1595,20 @@ const Settings = ({ readOnly = false }) => {
 
                           return (
                             <tr key={v.id} className="hover:bg-slate-50/30 transition-colors">
-                              <td className="px-6 py-4 whitespace-nowrap"><strong className="text-slate-950 font-bold">{v.party_name}</strong></td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <strong className="text-slate-950 font-bold">{v.party_name}</strong>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {v.company_name ? (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    {v.company_name}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                                    Direct
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-semibold">{v.contact || "—"}</td>
                               <td className="px-6 py-4 whitespace-nowrap max-w-xs md:max-w-sm truncate">
                                 <code className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded text-xs font-mono text-indigo-700 break-all select-all">
@@ -1473,9 +1629,9 @@ const Settings = ({ readOnly = false }) => {
                             </tr>
                           );
                         })}
-                        {filteredVendors.length === 0 && (
+                        {portalFilteredVendors.length === 0 && (
                           <tr>
-                            <td colSpan="4" className="px-6 py-8 text-center text-slate-500 font-medium italic">No matching vendors found.</td>
+                            <td colSpan="5" className="px-6 py-8 text-center text-slate-500 font-medium italic">No matching vendors found.</td>
                           </tr>
                         )}
                       </tbody>

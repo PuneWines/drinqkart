@@ -1,14 +1,57 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, ChevronDown, Check, Trash2 } from "lucide-react";
 
+const parseStringParts = (str) => {
+  if (!str) return { vendorName: "", companyName: "" };
+  if (str.includes("::")) {
+    const [party, comp] = str.split("::");
+    return { vendorName: (party || "").trim(), companyName: (comp || "").trim() };
+  }
+  const match = str.match(/^(.*?)\s*\((.*?)\)$/);
+  if (match) {
+    return { vendorName: match[1].trim(), companyName: match[2].trim() };
+  }
+  return { vendorName: str.trim(), companyName: "" };
+};
+
+const getOptionParts = (option) => {
+  if (option == null) return { vendorName: "", companyName: "" };
+
+  if (typeof option === "object") {
+    let vendor = (option.partyName || option.name || "").trim();
+    let comp = (option.filteredCompanyName || option.companyName || "").trim();
+
+    if (vendor) {
+      if (vendor.includes("::")) {
+        const parts = vendor.split("::");
+        vendor = parts[0].trim();
+        if (!comp) comp = (parts[1] || "").trim();
+      } else if (!comp) {
+        const match = vendor.match(/^(.*?)\s*\((.*?)\)$/);
+        if (match) {
+          vendor = match[1].trim();
+          comp = match[2].trim();
+        }
+      }
+      return { vendorName: vendor, companyName: comp };
+    }
+
+    const keyOrLabel = option.label || option.key || "";
+    return parseStringParts(keyOrLabel);
+  }
+
+  return parseStringParts(String(option));
+};
+
 const getOptionLabel = (option) => {
   if (option == null) return "";
-  if (typeof option === "string") return option;
+  const { vendorName, companyName } = getOptionParts(option);
+  if (vendorName && companyName) {
+    return `${vendorName} (${companyName})`;
+  }
+  if (vendorName) return vendorName;
   if (typeof option === "object") {
-    if (option.companyName) {
-      return `${option.partyName || option.label || option.key} (${option.companyName})`;
-    }
-    return option.partyName || option.label || option.key || option.name || "";
+    return option.label || option.key || option.partyName || "";
   }
   return String(option);
 };
@@ -40,38 +83,65 @@ const SearchableDropdown = ({ options = [], value, onChange, placeholder = "Sele
   const safeOptions = Array.isArray(options) ? options : [];
 
   const filteredOptions = safeOptions.filter(option => {
+    const { vendorName, companyName } = getOptionParts(option);
     const label = getOptionLabel(option);
-    return label.toLowerCase().includes((searchTerm || "").toLowerCase());
+    const search = (searchTerm || "").toLowerCase().trim();
+    if (!search) return true;
+    return (
+      (vendorName && vendorName.toLowerCase().includes(search)) ||
+      (companyName && companyName.toLowerCase().includes(search)) ||
+      (label && label.toLowerCase().includes(search))
+    );
   });
 
-  const displayValue = (() => {
-    if (!value) return placeholder;
-    if (typeof value === "string" && value.includes("::")) {
-      const [party, comp] = value.split("::");
-      return comp ? `${party} (${comp})` : party;
-    }
+  const selectedParts = (() => {
+    if (!value) return null;
     const matched = safeOptions.find(o => getOptionValue(o) === value);
-    if (matched) return getOptionLabel(matched);
-    return typeof value === "object" ? getOptionLabel(value) : value;
+    if (matched) return getOptionParts(matched);
+    return getOptionParts(value);
   })();
 
   return (
-    <div className="searchable-dropdown" ref={dropdownRef} style={{ position: 'relative', display: 'inline-block', width: '100%', maxWidth: '300px' }}>
+    <div className="searchable-dropdown" ref={dropdownRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+          padding: '7px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
           backgroundColor: '#f8fafc', cursor: 'pointer', fontSize: '0.875rem',
           color: '#334155', transition: 'border-color 0.2s',
-          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)',
+          minHeight: '38px'
         }}
         onMouseEnter={(e) => e.currentTarget.style.borderColor = '#94a3b8'}
         onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-          {displayValue}
-        </span>
+        {!selectedParts || !selectedParts.vendorName ? (
+          <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{placeholder}</span>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', overflow: 'hidden', minWidth: 0 }}>
+            <span style={{ 
+              fontWeight: 700, 
+              color: '#0f172a', 
+              fontSize: '0.875rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {selectedParts.vendorName}
+            </span>
+            {selectedParts.companyName && (
+              <span style={{ 
+                fontSize: '0.75rem', 
+                color: '#64748b', 
+                fontWeight: 400,
+                flexShrink: 0 
+              }}>
+                ({selectedParts.companyName})
+              </span>
+            )}
+          </div>
+        )}
         <ChevronDown size={16} color="#64748b" style={{ marginLeft: '8px', minWidth: '16px' }} />
       </div>
 
@@ -83,11 +153,11 @@ const SearchableDropdown = ({ options = [], value, onChange, placeholder = "Sele
           zIndex: 100, maxHeight: '250px', display: 'flex', flexDirection: 'column'
         }}>
           <div style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center' }}>
-            <Search size={14} color="#94a3b8" style={{ marginRight: '8px' }} />
+            <Search size={14} color="#94a3b8" style={{ marginRight: '8px', flexShrink: 0 }} />
             <input
               autoFocus
               type="text"
-              placeholder="Search party..."
+              placeholder="Search vendor or company..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -99,6 +169,7 @@ const SearchableDropdown = ({ options = [], value, onChange, placeholder = "Sele
             {filteredOptions.length > 0 ? filteredOptions.map((option, idx) => {
               const optVal = getOptionValue(option);
               const optLabel = getOptionLabel(option);
+              const parts = getOptionParts(option);
               const isSelected = value === optVal || value === option || value === optLabel;
 
               return (
@@ -110,11 +181,11 @@ const SearchableDropdown = ({ options = [], value, onChange, placeholder = "Sele
                     setSearchTerm("");
                   }}
                   style={{
-                    padding: '8px 12px', cursor: 'pointer', fontSize: '0.875rem',
+                    padding: '8px 12px', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
-                    color: isSelected ? '#0284c7' : '#475569',
-                    fontWeight: isSelected ? 600 : 400
+                    borderBottom: idx < filteredOptions.length - 1 ? '1px solid #f8fafc' : 'none',
+                    transition: 'background-color 0.15s ease'
                   }}
                   onMouseEnter={(e) => {
                     if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc';
@@ -123,10 +194,33 @@ const SearchableDropdown = ({ options = [], value, onChange, placeholder = "Sele
                     if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }}>
-                    {optLabel}
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', marginRight: '8px', minWidth: 0, flex: 1 }}>
+                    <span style={{ 
+                      overflow: 'hidden', 
+                      textOverflow: 'ellipsis', 
+                      whiteSpace: 'nowrap',
+                      fontSize: '0.9rem',
+                      fontWeight: 650,
+                      color: isSelected ? '#0284c7' : '#0f172a',
+                      lineHeight: 1.25
+                    }}>
+                      {parts.vendorName || optLabel}
+                    </span>
+                    {parts.companyName ? (
+                      <span style={{ 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.75rem',
+                        fontWeight: 400,
+                        color: isSelected ? '#0284c7' : '#64748b',
+                        lineHeight: 1.2
+                      }}>
+                        {parts.companyName}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                     {isSelected && <Check size={14} color="#0284c7" style={{ minWidth: '14px' }} />}
                     {onDeleteOption && (
                       <button

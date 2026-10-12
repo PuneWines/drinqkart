@@ -67,7 +67,7 @@ export const fetchPageData = async () => {
     // Query 3: Fetch recent purchase orders to check for existing POs (avoiding full table scan)
     supabase
       .from("purchase_purchase_orders")
-      .select("indent_id, vendor_name")
+      .select("indent_id, vendor_name, filtered_company_name, company_name")
       .order("created_at", { ascending: false })
       .limit(500),
 
@@ -128,14 +128,23 @@ export const fetchPageData = async () => {
   };
 };
 
-export const generateVendorId = async (activeParty) => {
+export const generateVendorId = async (activeParty, filteredCompanyName) => {
   if (!activeParty) return "VN-000";
-  const { data: vendor } = await supabase
+  const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
+  const comp = filteredCompanyName || (activeParty.includes("::") ? activeParty.split("::")[1].trim() : null);
+
+  let query = supabase
     .from('purchase_vendors')
     .select('id')
-    .ilike('party_name', activeParty.trim())
-    .limit(1)
-    .maybeSingle();
+    .ilike('party_name', cleanParty);
+
+  if (comp) {
+    query = query.ilike('company_name', comp.trim());
+  } else {
+    query = query.is('company_name', null);
+  }
+
+  const { data: vendor } = await query.limit(1).maybeSingle();
 
   if (vendor) {
     return `VN-${String(vendor.id).padStart(3, "0")}`;
@@ -148,6 +157,8 @@ const ALLOWED_PO_COLUMNS = [
   'po_number',
   'indent_id',
   'vendor_name',
+  'company_name',
+  'filtered_company_name',
   'total_order_qty',
   'total_order_box',
   'total_approved_qty',
@@ -198,14 +209,23 @@ export const insertPurchaseOrder = async (poData) => {
   return data;
 };
 
-export const getOrCreateVendorPortalLink = async (activeParty, currentVendorId, baseUrl) => {
+export const getOrCreateVendorPortalLink = async (activeParty, filteredCompanyName, baseUrl) => {
   if (!activeParty) return "";
-  const { data: vendorRow } = await supabase
+  const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
+  const comp = filteredCompanyName || (activeParty.includes("::") ? activeParty.split("::")[1].trim() : null);
+
+  let query = supabase
     .from("purchase_vendors")
     .select("id, portal_link")
-    .ilike("party_name", activeParty.trim())
-    .limit(1)
-    .maybeSingle();
+    .ilike("party_name", cleanParty);
+
+  if (comp) {
+    query = query.ilike("company_name", comp.trim());
+  } else {
+    query = query.is("company_name", null);
+  }
+
+  const { data: vendorRow } = await query.limit(1).maybeSingle();
 
   if (!vendorRow) return "";
 

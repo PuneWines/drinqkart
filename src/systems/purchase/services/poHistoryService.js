@@ -8,6 +8,8 @@ export const PO_LIGHT_COLUMNS = [
   "po_type",
   "shop_name",
   "vendor_name",
+  "company_name",
+  "filtered_company_name",
   "vendor_id",
   "created_at",
   "total_order_qty",
