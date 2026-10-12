@@ -144,13 +144,15 @@ const POHistory = () => {
       list = list.filter((o) => o.vendor_name === vendorFilter);
     }
 
-    // Search filter (PO number, vendor, brand, indent id, shop name, or type)
+    // Search filter (PO number, vendor, filtered company, brand, indent id, shop name, or type)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(
         (o) =>
           (o.po_number || "").toLowerCase().includes(q) ||
           (o.vendor_name || "").toLowerCase().includes(q) ||
+          (o.filtered_company_name || "").toLowerCase().includes(q) ||
+          (o.company_name || "").toLowerCase().includes(q) ||
           (o.first_brand_name || "").toLowerCase().includes(q) ||
           (o.indent_id || "").toLowerCase().includes(q) ||
           (o.shop_name || "").toLowerCase().includes(q) ||
@@ -500,7 +502,23 @@ const POHistory = () => {
                         <span className="poh-shop-name" style={{ fontWeight: 700, color: "var(--color-primary, #0052cc)" }}>{order.shop_name || "—"}</span>
                       </td>
                       <td>
-                        <span className="poh-vendor-name">{order.vendor_name || "—"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <span className="poh-vendor-name">{order.vendor_name || "—"}</span>
+                          {order.filtered_company_name && (
+                            <span style={{
+                              display: "inline-block",
+                              padding: "2px 6px",
+                              fontSize: "0.7rem",
+                              fontWeight: 600,
+                              backgroundColor: "#eff6ff",
+                              color: "#1d4ed8",
+                              border: "1px solid #bfdbfe",
+                              borderRadius: "4px"
+                            }}>
+                              {order.filtered_company_name}
+                            </span>
+                          )}
+                        </div>
                         {order.vendor_id && (
                           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: 2 }}>
                             {order.vendor_id}

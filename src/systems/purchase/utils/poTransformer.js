@@ -14,13 +14,16 @@ export const transformActivePartyItems = (filteredApprovedItems, activeParty) =>
     .filter(item => {
       const pMatch = (item.party_name || "").trim().toLowerCase() === (targetParty || "").trim().toLowerCase();
       if (!pMatch) return false;
+
+      // Resolve item's filtered company (or fallback to company_name for legacy records)
+      const itemComp = (item.filtered_company_name || (isKey ? item.company_name : "") || "").trim().toLowerCase();
+
       if (!isKey) {
-        // If activeParty has no company key, only match items that also have no company
-        return !(item.company_name || "").trim();
+        // If activeParty has no company key, match items that also have no filtered company
+        return !itemComp;
       }
-      const itemCompany = (item.company_name || "").trim().toLowerCase();
       const tgtComp = (targetCompany || "").trim().toLowerCase();
-      return itemCompany === tgtComp;
+      return itemComp === tgtComp;
     })
     .map(row => {
       const hasApprovedInDb = row.approved_box !== null && row.approved_box !== undefined;

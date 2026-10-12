@@ -9,7 +9,8 @@ const ALLOWED_VENDOR_COLUMNS = [
   'address',
   'gstin',
   'portal_link',
-  'terms'
+  'terms',
+  'company_name'
 ];
 
 const sanitizeVendorData = (data) => {

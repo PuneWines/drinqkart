@@ -56,6 +56,7 @@ const combineDateWithCurrentTime = (dateStr) => {
 const VendorPortal = () => {
   const { vendorId } = useParams();
   const [vendorName, setVendorName] = useState("Vendor");
+  const [companyName, setCompanyName] = useState("");
   const [poList, setPoList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -115,10 +116,10 @@ const VendorPortal = () => {
         numericId = parseInt(vendorId.replace("VN-", ""), 10);
       }
 
-      // 2. Fetch vendor name from vendors table
+      // 2. Fetch vendor name and company scope from vendors table
       const { data: vendorRow, error: vendorErr } = await supabase
         .from("purchase_vendors")
-        .select("id, party_name")
+        .select("id, party_name, company_name")
         .eq("id", numericId)
         .limit(1)
         .single();
@@ -128,17 +129,40 @@ const VendorPortal = () => {
       }
 
       setVendorName(vendorRow.party_name);
+      setCompanyName(vendorRow.company_name || "");
 
-      // 3. Fetch POs matching this vendor name (case-insensitive for resilience)
-      const { data: pos, error: posError } = await supabase
+      const targetParty = (vendorRow.party_name || "").trim();
+      const targetCompany = (vendorRow.company_name || "").trim();
+
+      // 3. Fetch POs with strict scoping:
+      // Direct vendor sees only direct POs (filtered_company_name IS NULL)
+      // Vendor + Company sees only their specific company POs
+      let poQuery = supabase
         .from("purchase_purchase_orders")
         .select("*")
-        .ilike("vendor_name", vendorRow.party_name.trim())
         .order("created_at", { ascending: false })
         .limit(100);
 
+      if (targetCompany) {
+        // Vendor + Company account:
+        poQuery = poQuery.or(
+          `and(vendor_name.eq."${targetParty}",filtered_company_name.eq."${targetCompany}"),vendor_name.eq."${targetParty}::${targetCompany}"`
+        );
+      } else {
+        // Direct Vendor account:
+        poQuery = poQuery
+          .eq("vendor_name", targetParty)
+          .or("filtered_company_name.is.null,filtered_company_name.eq.''");
+      }
+
+      const { data: pos, error: posError } = await poQuery;
+
       if (posError) throw posError;
       setPoList(pos || []);
+
+      if (!targetCompany && pos?.[0]?.filtered_company_name) {
+        setCompanyName(pos[0].filtered_company_name);
+      }
 
       // Initialize form fields for submitted POs
       const newTpNumbers = {};
@@ -575,6 +599,7 @@ const VendorPortal = () => {
               po={previewPo}
               items={poItems[previewPoId] || []}
               vendorName={vendorName}
+              companyName={companyName}
               submittedAt={submittedAt}
               onClose={() => setPreviewPoId(null)}
             />
@@ -594,9 +619,16 @@ const VendorPortal = () => {
             <h1 className="text-2xl font-bold tracking-tight">{vendorName}</h1>
             <p className="text-slate-400 text-sm mt-1">Supplier Verification Portal</p>
           </div>
-          <span className="bg-sky-500/10 text-sky-400 border border-sky-500/20 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider">
-            Vendor: {vendorId}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {companyName && (
+              <span className="bg-indigo-950/80 text-indigo-300 border border-indigo-700/80 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider">
+                Company: {companyName}
+              </span>
+            )}
+            <span className="bg-sky-500/10 text-sky-400 border border-sky-500/20 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider">
+              Vendor: {vendorId}
+            </span>
+          </div>
         </div>
 
         {/* Success Banner for submissions in current session */}
@@ -743,6 +775,11 @@ const VendorPortal = () => {
                       <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-lg text-xs font-bold">
                         {shopName}
                       </span>
+                      {(po.filtered_company_name || companyName) && (
+                        <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-lg text-xs font-bold">
+                          {po.filtered_company_name || companyName}
+                        </span>
+                      )}
                       <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-semibold">
                         {totalQty} Qty
                       </span>
@@ -1164,7 +1201,7 @@ const VendorPortal = () => {
   );
 };
 
-const SubmissionPreview = ({ po, items, vendorName, submittedAt, onClose }) => {
+const SubmissionPreview = ({ po, items, vendorName, companyName, submittedAt, onClose }) => {
   const [copiedId, setCopiedId] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
 
@@ -1304,7 +1341,14 @@ const SubmissionPreview = ({ po, items, vendorName, submittedAt, onClose }) => {
               </div>
               <div className="sm:col-span-2">
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Supplier Name</span>
-                <strong className="text-slate-900 font-bold text-sm block mt-0.5">{vendorName}</strong>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <strong className="text-slate-900 font-bold text-sm block">{vendorName}</strong>
+                  {(companyName || po.filtered_company_name) && (
+                    <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-md text-xs font-bold">
+                      {companyName || po.filtered_company_name}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>

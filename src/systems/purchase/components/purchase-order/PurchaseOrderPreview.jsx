@@ -38,11 +38,18 @@ const PurchaseOrderPreview = ({
   newItemQty,
   onBottleQtyChange,
   onAddItem,
-  headerActions
+  headerActions,
+  filteredCompanyName,
+  isMissingVendorLedger,
+  cleanVendorName
 }) => {
   const isKunalShop = items.some(
     item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL")
   ) || (companyInfo?.name || "").toUpperCase().includes("KUNAL");
+
+  const isTransporterNotRequired = companyInfo?.requires_transporter !== undefined
+    ? !companyInfo.requires_transporter
+    : isKunalShop;
 
   return (
     <div className="po-document" id={id}>
@@ -60,6 +67,9 @@ const PurchaseOrderPreview = ({
           onPartyChange={onPartyChange}
           vendorDetails={vendorDetails}
           onDeleteVendor={onDeleteVendor}
+          filteredCompanyName={filteredCompanyName}
+          isMissingVendorLedger={isMissingVendorLedger}
+          cleanVendorName={cleanVendorName}
         />
         <POShipToBox companyInfo={companyInfo} />
       </div>
@@ -181,7 +191,7 @@ const PurchaseOrderPreview = ({
         selectedReceiver={selectedReceiver}
         setSelectedReceiver={setSelectedReceiver}
         shippingError={shippingError}
-        isKunalShop={isKunalShop}
+        isKunalShop={isTransporterNotRequired}
       />
     </div>
   );

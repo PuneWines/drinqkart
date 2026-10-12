@@ -34,11 +34,16 @@ const PODocument = ({
   setSelectedTransporter, 
   selectedReceiver, 
   setSelectedReceiver, 
-  shippingError 
+  shippingError,
+  filteredCompanyName,
+  isMissingVendorLedger,
+  cleanVendorName
 }) => {
-  const isKunalShop = items.some(
-    item => item.shopName?.toUpperCase() === "KUNAL" || item.shop_name?.toUpperCase() === "KUNAL"
-  );
+  const isTransporterNotRequired = companyInfo?.requires_transporter !== undefined
+    ? !companyInfo.requires_transporter
+    : items.some(
+        item => item.shopName?.toUpperCase() === "KUNAL" || item.shop_name?.toUpperCase() === "KUNAL"
+      );
 
   return (
     <div className="po-document" id={id || `po-${poNumber.replace(/\//g, "-")}`}>
@@ -55,6 +60,9 @@ const PODocument = ({
           partyName={partyName}
           onPartyChange={onPartyChange}
           vendorDetails={vendorDetails}
+          filteredCompanyName={filteredCompanyName}
+          isMissingVendorLedger={isMissingVendorLedger}
+          cleanVendorName={cleanVendorName}
         />
         <POShipToBox companyInfo={companyInfo} />
       </div>
@@ -83,7 +91,7 @@ const PODocument = ({
         selectedReceiver={selectedReceiver}
         setSelectedReceiver={setSelectedReceiver}
         shippingError={shippingError}
-        isKunalShop={isKunalShop}
+        isKunalShop={isTransporterNotRequired}
       />
     </div>
   );

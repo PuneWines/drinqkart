@@ -214,9 +214,11 @@ const PurchaseOrder = () => {
 
       const enrichedIndentData = (pageDataResponse.indentData || []).map(item => {
         const comp = (item.company_name || "").trim();
+        const filteredComp = (item.filtered_company_name || "").trim();
         return {
           ...item,
-          company_name: comp || null
+          company_name: comp || null,
+          filtered_company_name: filteredComp || null
         };
       });
 
@@ -226,19 +228,28 @@ const PurchaseOrder = () => {
         if (!item.unique_indent_id || !item.party_name) return true;
 
         const itemParty = (item.party_name || "").trim().toLowerCase();
-        const itemComp = (item.company_name || "").trim().toLowerCase();
-        const itemKey = itemComp ? `${itemParty}::${itemComp}` : itemParty;
+        const itemFilteredComp = (item.filtered_company_name || "").trim().toLowerCase();
 
-        // A PO blocks this item only if the PO was specifically for the same party AND same company
+        // A PO blocks this item only if the PO was specifically for the same party AND same filtered company
         const hasPo = existingPos.some(po => {
           if (po.indent_id !== item.unique_indent_id) return false;
-          const poVendor = (po.vendor_name || "").trim().toLowerCase();
           
-          if (poVendor.includes("::")) {
-            return itemComp ? poVendor === itemKey : poVendor.split("::")[0].trim() === itemParty;
+          const poVendor = po.vendor_name?.includes("::")
+            ? po.vendor_name.split("::")[0].trim().toLowerCase()
+            : (po.vendor_name || "").trim().toLowerCase();
+
+          if (poVendor !== itemParty) return false;
+
+          const poFilteredComp = (
+            po.filtered_company_name ||
+            (po.vendor_name?.includes("::") ? po.vendor_name.split("::")[1] : "") ||
+            ""
+          ).trim().toLowerCase();
+
+          if (itemFilteredComp) {
+            return poFilteredComp === itemFilteredComp;
           }
-          if (itemComp) return false;
-          return poVendor === itemParty;
+          return !poFilteredComp;
         });
 
         return !hasPo;
@@ -330,22 +341,36 @@ const PurchaseOrder = () => {
 
   const dbParties = useMemo(() => {
     if (poMode === "manual") {
-      return [...new Set(vendorsList.map(v => v.party_name).filter(Boolean))];
+      return vendorsList.map(v => ({
+        key: v.company_name ? `${v.party_name}::${v.company_name}` : v.party_name,
+        partyName: v.party_name,
+        companyName: v.company_name || "",
+        filteredCompanyName: v.company_name || null,
+        label: v.company_name ? `${v.party_name} (${v.company_name})` : v.party_name
+      }));
     }
     
-    // Group approved items by party_name and company_name combination
+    // Group approved items by party_name and filtered_company_name combination
     const partyCompanyMap = new Map();
     filteredApprovedItems.forEach(item => {
-      const party = (item.party_name || "").trim();
+      let party = (item.party_name || "").trim();
+      let filteredComp = (item.filtered_company_name || "").trim();
+      if (party.includes("::")) {
+        const parts = party.split("::");
+        party = parts[0].trim();
+        if (!filteredComp) filteredComp = parts[1].trim();
+      }
       if (!party) return;
-      const company = (item.company_name || "").trim();
-      const key = company ? `${party}::${company}` : party;
+      const origComp = (item.company_name || "").trim();
+      const key = filteredComp ? `${party}::${filteredComp}` : party;
       if (!partyCompanyMap.has(key)) {
         partyCompanyMap.set(key, {
           key,
           partyName: party,
-          companyName: company,
-          label: party // base string representation for matching
+          companyName: filteredComp || "",
+          filteredCompanyName: filteredComp || null,
+          originalCompanyName: origComp || null,
+          label: filteredComp ? `${party} (${filteredComp})` : party
         });
       }
     });
@@ -739,14 +764,15 @@ const PurchaseOrder = () => {
       return;
     }
 
-    // Strictly match both party_name AND company_name (if company is specified)
+    // Strictly match both party_name AND filtered_company_name (if company is specified)
     const itemsToExclude = filteredApprovedItems.filter(item => {
       const pMatch = (item.party_name || "").trim().toLowerCase() === targetParty.toLowerCase();
       if (!pMatch) return false;
+      const itemComp = (item.filtered_company_name || item.company_name || "").trim().toLowerCase();
       if (targetCompany) {
-        return (item.company_name || "").trim().toLowerCase() === targetCompany.toLowerCase();
+        return itemComp === targetCompany.toLowerCase();
       }
-      return !(item.company_name || "").trim();
+      return !itemComp;
     });
 
     const displayLabel = targetCompany ? `${targetParty} (${targetCompany})` : targetParty;
@@ -810,23 +836,20 @@ const PurchaseOrder = () => {
     }
   };
 
-  // Reactively auto-select company based on selected vendor (activeParty) and their items
+  // Reactively auto-select company based on active shop or selected vendor's items
   useEffect(() => {
-    if (!activeParty) {
-      setSelectedCompanyId("none");
-      return;
+    let targetShopName = "";
+    if (selectedShop && selectedShop !== "All") {
+      targetShopName = selectedShop;
+    } else if (itemsForActiveParty.length > 0) {
+      targetShopName = itemsForActiveParty[0]?.shopName || itemsForActiveParty[0]?.shop_name || "";
+    } else if (filteredApprovedItems.length > 0) {
+      targetShopName = filteredApprovedItems[0]?.shopName || filteredApprovedItems[0]?.shop_name || "";
     }
 
-    let shopName = "";
-    if (poMode === "manual") {
-      shopName = (selectedShop || "").trim().toLowerCase();
-    } else {
-      if (itemsForActiveParty.length > 0) {
-        shopName = (itemsForActiveParty[0]?.shopName || itemsForActiveParty[0]?.shop_name || "").trim().toLowerCase();
-      }
-    }
+    const cleanShop = (targetShopName || "").trim().toLowerCase();
 
-    if (!shopName || shopName === "all") {
+    if (!cleanShop || cleanShop === "all") {
       setSelectedCompanyId("none");
       return;
     }
@@ -834,7 +857,7 @@ const PurchaseOrder = () => {
     // Search for a company whose name matches the shop name (case-insensitive fuzzy match)
     const matched = companies.find(c => {
       const companyName = (c.name || "").toLowerCase();
-      return companyName.includes(shopName) || shopName.includes(companyName);
+      return companyName.includes(cleanShop) || cleanShop.includes(companyName);
     });
 
     if (matched) {
@@ -842,7 +865,7 @@ const PurchaseOrder = () => {
     } else {
       setSelectedCompanyId("none");
     }
-  }, [activeParty, itemsForActiveParty, companies, poMode, selectedShop]);
+  }, [activeParty, itemsForActiveParty, filteredApprovedItems, companies, poMode, selectedShop]);
 
   const activeShopRecord = useMemo(() => {
     let targetShop = "";
@@ -850,10 +873,12 @@ const PurchaseOrder = () => {
       targetShop = selectedShop;
     } else if (itemsForActiveParty.length > 0) {
       targetShop = itemsForActiveParty[0]?.shopName || itemsForActiveParty[0]?.shop_name || "";
+    } else if (filteredApprovedItems.length > 0) {
+      targetShop = filteredApprovedItems[0]?.shopName || filteredApprovedItems[0]?.shop_name || "";
     }
     if (!targetShop) return null;
     return getShopRecord(targetShop) || { shop_name: targetShop, full_name: targetShop };
-  }, [selectedShop, itemsForActiveParty, getShopRecord]);
+  }, [selectedShop, itemsForActiveParty, filteredApprovedItems, getShopRecord]);
 
   const activeCompany = useMemo(() => {
     let baseCompany = null;
@@ -862,25 +887,59 @@ const PurchaseOrder = () => {
     }
 
     if (activeShopRecord) {
-      const resolvedName = activeShopRecord.full_name || activeShopRecord.shop_name;
+      const resolvedName = baseCompany?.name || activeShopRecord.full_name || activeShopRecord.shop_name;
       return {
         ...(baseCompany || {}),
         name: resolvedName,
-        address: activeShopRecord.address || baseCompany?.address || "",
-        gstin: activeShopRecord.gstin || baseCompany?.gstin || "",
-        contact: activeShopRecord.contact || baseCompany?.contact || "",
-        email: activeShopRecord.email || baseCompany?.email || ""
+        address: baseCompany?.address || activeShopRecord.address || "",
+        gstin: baseCompany?.gstin || activeShopRecord.gstin || "",
+        contact: baseCompany?.contact || activeShopRecord.contact || "",
+        email: baseCompany?.email || activeShopRecord.email || ""
       };
     }
     return baseCompany;
   }, [selectedCompanyId, companies, activeShopRecord]);
 
+  const activeVendorInfo = useMemo(() => {
+    if (!activeParty) return { vendorName: "", filteredCompany: null };
+    if (activeParty.includes("::")) {
+      const parts = activeParty.split("::");
+      return {
+        vendorName: parts[0].trim(),
+        filteredCompany: parts[1]?.trim() || null
+      };
+    }
+    const found = (dbParties || []).find(p => (typeof p === 'object' ? p.key === activeParty : p === activeParty));
+    if (found && typeof found === 'object') {
+      return {
+        vendorName: found.partyName || activeParty,
+        filteredCompany: found.filteredCompanyName || null
+      };
+    }
+    return { vendorName: activeParty.trim(), filteredCompany: null };
+  }, [activeParty, dbParties]);
+
   const activeVendorDetails = useMemo(() => {
-    if (!activeParty || !vendorsList.length) return null;
-    const rawPartyName = activeParty.includes("::") ? activeParty.split("::")[0] : activeParty;
-    const vendor = vendorsList.find(
-      v => v.party_name?.trim().toLowerCase() === rawPartyName?.trim().toLowerCase()
-    );
+    const { vendorName: cleanVendorName, filteredCompany: activeFilteredCompany } = activeVendorInfo;
+    if (!cleanVendorName || !vendorsList.length) return null;
+    const searchName = cleanVendorName.toLowerCase();
+
+    let vendor = null;
+    if (activeFilteredCompany) {
+      // Must match party_name AND company_name
+      const searchComp = activeFilteredCompany.toLowerCase();
+      vendor = vendorsList.find(
+        v => (v.party_name || "").trim().toLowerCase() === searchName &&
+             (v.company_name || "").trim().toLowerCase() === searchComp
+      );
+    } else {
+      // Direct vendor: must match party_name AND have no company_name
+      vendor = vendorsList.find(
+        v => (v.party_name || "").trim().toLowerCase() === searchName &&
+             (!v.company_name || v.company_name.trim() === "")
+      );
+    }
+
     if (!vendor) return null;
     return {
       ...vendor,
@@ -891,7 +950,25 @@ const PurchaseOrder = () => {
       contact_number: vendor.contact_number || vendor.contact || vendor.phone || vendor.mobile || "",
       email: vendor.email || vendor.vendor_email || ""
     };
-  }, [activeParty, vendorsList]);
+  }, [activeVendorInfo, vendorsList]);
+
+  const isMissingVendorLedger = useMemo(() => {
+    if (!activeParty) return false;
+    const { vendorName, filteredCompany } = activeVendorInfo;
+    if (!vendorName) return false;
+    if (!vendorsList.length) return false;
+    if (filteredCompany) {
+      return !vendorsList.some(
+        v => (v.party_name || "").trim().toLowerCase() === vendorName.toLowerCase() &&
+             (v.company_name || "").trim().toLowerCase() === filteredCompany.toLowerCase()
+      );
+    } else {
+      return !vendorsList.some(
+        v => (v.party_name || "").trim().toLowerCase() === vendorName.toLowerCase() &&
+             (!v.company_name || v.company_name.trim() === "")
+      );
+    }
+  }, [activeParty, activeVendorInfo, vendorsList]);
 
   const handleDownloadPDF = async () => {
     if (isSubmittingRef.current || isUploading) return;
@@ -903,6 +980,19 @@ const PurchaseOrder = () => {
 
     if (itemsForActiveParty.length === 0) {
       addToast("Please select a vendor and add at least one item before generating the PO.", "error");
+      return;
+    }
+
+    if (isMissingVendorLedger) {
+      const errorMsg = activeVendorInfo.filteredCompany
+        ? `Error: Vendor "${activeVendorInfo.vendorName}" scoped to company "${activeVendorInfo.filteredCompany}" is not registered in Supplier Ledger (Settings → Vendor Management). Please add this Vendor + Company before submitting this PO.`
+        : `Error: Direct vendor "${activeVendorInfo.vendorName}" is not registered in Supplier Ledger (Settings → Vendor Management). Please add this Vendor before submitting this PO.`;
+      addToast(errorMsg, "error");
+      setShippingError(errorMsg);
+      const vendorBoxEl = document.querySelector('.po-box');
+      if (vendorBoxEl) {
+        vendorBoxEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -918,12 +1008,14 @@ const PurchaseOrder = () => {
       return;
     }
 
-    const isKunalShop = poMode === "manual"
-      ? (selectedShop || "").toUpperCase().includes("KUNAL")
-      : (selectedShop || "").toUpperCase().includes("KUNAL") ||
-      itemsForActiveParty.some(item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL"));
+    const isTransporterRequired = activeCompany?.requires_transporter !== undefined
+      ? Boolean(activeCompany.requires_transporter)
+      : !(
+        (selectedShop || "").toUpperCase().includes("KUNAL") ||
+        itemsForActiveParty.some(item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL"))
+      );
 
-    if (isKunalShop) {
+    if (!isTransporterRequired) {
       if (!selectedReceiver) {
         setShippingError("Please select Receiver before generating the PO.");
         const shippingSection = document.getElementById('shipping-details-pdf-trader');
@@ -958,12 +1050,13 @@ const PurchaseOrder = () => {
       setNextPoNumber(freshPoNumber);
 
       // Use Vendor party name for PDF file names
-      const baseFilename = activeParty ? `PO_${activeParty.replace(/\s+/g, '_')}` : "Purchase_Order";
+      const baseFilename = activeVendorInfo.vendorName ? `PO_${activeVendorInfo.vendorName.replace(/\s+/g, '_')}` : "Purchase_Order";
 
       // Create React-PDF documents
       const traderDoc = (
         <TraderPDF
-          partyName={activeParty}
+          partyName={activeVendorInfo.vendorName}
+          filteredCompanyName={activeVendorInfo.filteredCompany}
           items={itemsForActiveParty}
           poNumber={freshPoNumber}
           poDate={poDate}
@@ -974,7 +1067,8 @@ const PurchaseOrder = () => {
 
       const receiverDoc = (
         <ReceiverPDF
-          partyName={activeParty}
+          partyName={activeVendorInfo.vendorName}
+          filteredCompanyName={activeVendorInfo.filteredCompany}
           items={itemsForActiveParty}
           poNumber={freshPoNumber}
           poDate={poDate}
@@ -996,8 +1090,8 @@ const PurchaseOrder = () => {
       const receiverUrl = await uploadPdfBlob('purchase_PO', receiverStoragePath, receiverBlob);
 
       // --- Generate / Fetch Unique Vendor ID ---
-      const rawParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
-      const currentVendorId = await generateVendorId(rawParty);
+      const rawParty = activeVendorInfo.vendorName || (activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim());
+      const currentVendorId = await generateVendorId(rawParty, activeVendorInfo.filteredCompany);
 
       // --- Insert Database Record ---
       const validIndentItem = itemsForActiveParty.find(item => item.unique_indent_id || item.indent_id);
@@ -1048,9 +1142,15 @@ const PurchaseOrder = () => {
       totalPoBox = Math.round(totalPoBox);
       totalPoQty = Math.round(totalPoQty);
 
+      const rawPartyName = activeVendorInfo.vendorName || (activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim());
+      const currentFilteredComp = activeVendorInfo.filteredCompany || (activeParty.includes("::") ? activeParty.split("::")[1].trim() : null);
+      const currentOrigCompany = itemsForActiveParty[0]?.company_name || activeCompany?.name || null;
+
       const insertedData = await insertPurchaseOrder({
         po_number: freshPoNumber,
-        vendor_name: activeParty,
+        vendor_name: rawPartyName,
+        company_name: currentOrigCompany,
+        filtered_company_name: currentFilteredComp,
         trader_pdf_url: traderUrl,
         receiver_pdf_url: receiverUrl,
         indent_id: currentIndentId,
@@ -1117,7 +1217,7 @@ const PurchaseOrder = () => {
       // 1. Get/Create Vendor Portal Link
       let vendorPortalLink = "";
       if (activeVendorDetails?.contact) {
-        vendorPortalLink = await getOrCreateVendorPortalLink(rawParty, currentVendorId, baseUrl);
+        vendorPortalLink = await getOrCreateVendorPortalLink(rawPartyName, currentFilteredComp, baseUrl);
       }
 
       // 2. Get/Create Transporter Portal Link
@@ -1250,7 +1350,8 @@ const PurchaseOrder = () => {
     try {
       const traderDoc = (
         <TraderPDF
-          partyName={activeParty}
+          partyName={activeVendorInfo.vendorName}
+          filteredCompanyName={activeVendorInfo.filteredCompany}
           items={itemsForActiveParty}
           poNumber={nextPoNumber || "Loading..."}
           poDate={poDate}
@@ -1542,6 +1643,9 @@ const PurchaseOrder = () => {
               dbParties={dbParties}
               onPartyChange={setActiveParty}
               vendorDetails={activeVendorDetails}
+              filteredCompanyName={activeVendorInfo.filteredCompany}
+              isMissingVendorLedger={isMissingVendorLedger}
+              cleanVendorName={activeVendorInfo.vendorName}
               companyInfo={activeCompany}
               transporters={transporters}
               receivers={receivers}

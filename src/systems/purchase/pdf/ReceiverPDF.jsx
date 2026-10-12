@@ -230,6 +230,7 @@ const styles = StyleSheet.create({
 
 const ReceiverPDF = ({
   partyName,
+  filteredCompanyName,
   items = [],
   poNumber,
   poDate,
@@ -298,6 +299,12 @@ const ReceiverPDF = ({
                 <Text style={styles.boxFieldLabel}>Party Name:</Text>
                 <Text style={[styles.boxFieldValue, { fontWeight: "bold" }]}>{partyName || "—"}</Text>
               </View>
+              {filteredCompanyName ? (
+                <View style={styles.boxFieldRow}>
+                  <Text style={styles.boxFieldLabel}>Company Name:</Text>
+                  <Text style={[styles.boxFieldValue, { fontWeight: "bold", color: "#1e3a8a" }]}>{filteredCompanyName}</Text>
+                </View>
+              ) : null}
               <View style={styles.boxFieldRow}>
                 <Text style={styles.boxFieldLabel}>Address:</Text>
                 <Text style={styles.boxFieldValue}>{vendorDetails?.address || "—"}</Text>
