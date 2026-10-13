@@ -39,9 +39,13 @@ const PurchaseOrderPreview = ({
   onBottleQtyChange,
   onAddItem,
   headerActions,
+  companyScope,
   filteredCompanyName,
   isMissingVendorLedger,
-  cleanVendorName
+  cleanVendorName,
+  availableDistricts = [],
+  selectedDistrict = "",
+  onDistrictChange
 }) => {
   const isKunalShop = items.some(
     item => (item.shopName || item.shop_name || "").toUpperCase().includes("KUNAL")
@@ -67,9 +71,13 @@ const PurchaseOrderPreview = ({
           onPartyChange={onPartyChange}
           vendorDetails={vendorDetails}
           onDeleteVendor={onDeleteVendor}
+          companyScope={companyScope || filteredCompanyName}
           filteredCompanyName={filteredCompanyName}
           isMissingVendorLedger={isMissingVendorLedger}
           cleanVendorName={cleanVendorName}
+          availableDistricts={availableDistricts}
+          selectedDistrict={selectedDistrict}
+          onDistrictChange={onDistrictChange}
         />
         <POShipToBox companyInfo={companyInfo} />
       </div>

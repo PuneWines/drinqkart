@@ -37,6 +37,7 @@ export default function JoiningCompany({ readOnly = false }) {
   const [editQrPreview, setEditQrPreview] = useState(null)
 
   const [qrModalShop, setQrModalShop] = useState(null)
+  const [hasLocationColumn, setHasLocationColumn] = useState(false)
 
   const SHOP_NAME_TO_LOCATION = {
     'MADHURA': 'BAVDHAN',
@@ -47,10 +48,38 @@ export default function JoiningCompany({ readOnly = false }) {
     'KUNAL KHARGHAR': 'KHARGHAR'
   }
 
+  const CUSTOM_LOCATIONS_KEY = 'drinqkart_custom_shop_locations'
+
+  const getCustomLocations = () => {
+    try {
+      return JSON.parse(localStorage.getItem(CUSTOM_LOCATIONS_KEY) || '{}')
+    } catch {
+      return {}
+    }
+  }
+
+  const setCustomLocationForShop = (shopName, loc) => {
+    try {
+      const current = getCustomLocations()
+      const key = (shopName || '').trim().toUpperCase()
+      if (!key) return
+      if (loc && loc.trim()) {
+        current[key] = loc.trim()
+      } else {
+        delete current[key]
+      }
+      localStorage.setItem(CUSTOM_LOCATIONS_KEY, JSON.stringify(current))
+    } catch (e) {
+      console.warn('Could not save custom location to localStorage', e)
+    }
+  }
+
   const getShopLocation = (company) => {
     if (!company) return ''
     if (company.location && company.location.trim()) return company.location.trim()
     const shopName = (company.shop_name || company.company_name || '').trim().toUpperCase()
+    const customLocs = getCustomLocations()
+    if (customLocs[shopName]) return customLocs[shopName]
     return SHOP_NAME_TO_LOCATION[shopName] || ''
   }
 
@@ -67,6 +96,8 @@ export default function JoiningCompany({ readOnly = false }) {
         .order('shop_name', { ascending: true })
 
       if (error) throw error
+      const hasLoc = Boolean(data && data.length > 0 && ('location' in data[0]))
+      setHasLocationColumn(hasLoc)
       setCompanies(data || [])
     } catch (err) {
       showAlert('error', 'Failed to fetch shops: ' + err.message)
@@ -135,7 +166,8 @@ export default function JoiningCompany({ readOnly = false }) {
   const handleAddCompany = async (e) => {
     e.preventDefault()
     if (readOnly) return
-    if (!addForm.shop_name.trim()) {
+    const shopName = addForm.shop_name.trim()
+    if (!shopName) {
       showAlert('error', 'Shop Name is required')
       return
     }
@@ -145,14 +177,19 @@ export default function JoiningCompany({ readOnly = false }) {
 
       let uploadedQrUrl = null
       if (addQrFile) {
-        uploadedQrUrl = await uploadQrCodeFile(addForm.shop_name.trim(), addQrFile)
+        uploadedQrUrl = await uploadQrCodeFile(shopName, addQrFile)
       }
 
-      const defaultLoc = getShopLocation({ shop_name: addForm.shop_name })
+      const defaultLoc = getShopLocation({ shop_name: shopName })
+      const locValue = addForm.location.trim() || defaultLoc || null
+
+      if (locValue) {
+        setCustomLocationForShop(shopName, locValue)
+      }
+
       const payload = {
-        shop_name: addForm.shop_name.trim(),
+        shop_name: shopName,
         full_name: addForm.full_name.trim() || null,
-        location: addForm.location.trim() || defaultLoc || null,
         gstin: addForm.gstin.trim() || null,
         contact: addForm.contact.trim() || null,
         email: addForm.email.trim() || null,
@@ -160,10 +197,23 @@ export default function JoiningCompany({ readOnly = false }) {
         qr_link: uploadedQrUrl || null
       }
 
-      const { data, error } = await supabase
+      if (hasLocationColumn && locValue) {
+        payload.location = locValue
+      }
+
+      let { error } = await supabase
         .from('shop')
         .insert([payload])
         .select()
+
+      if (error && error.message?.toLowerCase().includes('location')) {
+        delete payload.location
+        const retry = await supabase
+          .from('shop')
+          .insert([payload])
+          .select()
+        error = retry.error
+      }
 
       if (error) throw error
 
@@ -194,16 +244,22 @@ export default function JoiningCompany({ readOnly = false }) {
   const handleUpdateCompany = async (e) => {
     if (e) e.preventDefault()
     if (!editingCompany) return
+    const shopName = editingCompany.shop_name || editingCompany.company_name || ''
     setUpdating(true)
     try {
       let uploadedQrUrl = editQrPreview || editingCompany.qr_link || null
       if (editQrFile) {
-        uploadedQrUrl = await uploadQrCodeFile(editingCompany.shop_name, editQrFile)
+        uploadedQrUrl = await uploadQrCodeFile(shopName, editQrFile)
+      }
+
+      const locValue = editForm.location.trim() || getShopLocation(editingCompany) || null
+
+      if (locValue) {
+        setCustomLocationForShop(shopName, locValue)
       }
 
       const payload = {
         full_name: editForm.full_name.trim() || null,
-        location: editForm.location.trim() || getShopLocation(editingCompany) || null,
         gstin: editForm.gstin.trim() || null,
         contact: editForm.contact.trim() || null,
         email: editForm.email.trim() || null,
@@ -211,14 +267,27 @@ export default function JoiningCompany({ readOnly = false }) {
         qr_link: uploadedQrUrl
       }
 
-      const { error } = await supabase
+      if (hasLocationColumn && locValue) {
+        payload.location = locValue
+      }
+
+      let { error } = await supabase
         .from('shop')
         .update(payload)
         .eq('id', editingCompany.id)
 
+      if (error && error.message?.toLowerCase().includes('location')) {
+        delete payload.location
+        const retry = await supabase
+          .from('shop')
+          .update(payload)
+          .eq('id', editingCompany.id)
+        error = retry.error
+      }
+
       if (error) throw error
 
-      showAlert('success', `Shop "${editingCompany.shop_name}" updated successfully!`)
+      showAlert('success', `Shop "${shopName}" updated successfully!`)
       setEditingCompany(null)
       fetchCompanies()
     } catch (err) {

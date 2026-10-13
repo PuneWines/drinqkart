@@ -32,11 +32,19 @@ import {
   ShieldAlert,
   UserCheck,
   LogOut,
-  Video
+  Video,
+  Gift,
+  Boxes,
+  PackagePlus,
+  PackageMinus
 } from 'lucide-react';
 
 const getSubtabIcon = (label) => {
   const l = (label || '').toLowerCase();
+  if (l.includes('gift')) return Gift;
+  if (l.includes('stock in')) return PackagePlus;
+  if (l.includes('stock out')) return PackageMinus;
+  if (l.includes('current stock')) return Boxes;
   if (l.includes('dashboard')) return LayoutDashboard;
   if (l.includes('add') || l.includes('create')) return PlusCircle;
   if (l.includes('announcement') || l.includes('notification')) return Bell;

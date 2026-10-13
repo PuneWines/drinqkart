@@ -7,6 +7,7 @@ import HelpCenterRecords from './pages/HelpCenterRecords';
 import ShopVisit from './pages/ShopVisit';
 import StockBalance from './pages/StockBalance';
 import StockBalanceDashboard from './pages/StockBalanceDashboard';
+import GiftStockDashboard from './pages/GiftStockDashboard';
 import { Toaster } from 'react-hot-toast';
 
 function BusinessOverviewApp({ onCollapseSidebar }) {
@@ -31,6 +32,14 @@ function BusinessOverviewApp({ onCollapseSidebar }) {
             <Route path="help-center/all" element={<HelpCenterRecords activeTab="all" />} />
             <Route path="help-center/follow-up" element={<HelpCenterRecords activeTab="follow-up" />} />
             <Route path="help-center/completed" element={<HelpCenterRecords activeTab="completed" />} />
+            <Route path="gift-stock" element={<Navigate to="gift-stock/dashboard" replace />} />
+            <Route path="gift-stock/dashboard" element={<GiftStockDashboard defaultTab="dashboard" />} />
+            <Route path="gift-stock/stock-in" element={<GiftStockDashboard defaultTab="stock-in" />} />
+            <Route path="gift-stock/stock-out" element={<GiftStockDashboard defaultTab="stock-out" />} />
+            <Route path="gift-stock/current-stock" element={<GiftStockDashboard defaultTab="current-stock" />} />
+            <Route path="gift-stock/item-master" element={<GiftStockDashboard defaultTab="item-master" />} />
+            <Route path="gift-stock/trader-master" element={<GiftStockDashboard defaultTab="trader-master" />} />
+            <Route path="gift-stock/:tab" element={<GiftStockDashboard />} />
             <Route path="*" element={<Navigate to="feedback/customer" replace />} />
           </Routes>
         </main>

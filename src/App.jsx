@@ -91,7 +91,7 @@ const AppLayout = () => {
   // standalone documents, no storefront chrome.
   const isPurchasePublicPage = [
     '/confirm-po/', '/transporter-confirmation/', '/receiver-confirmation/',
-    '/vendor-portal/', '/transporter-portal/', '/receiver-portal/', '/feedback',
+    '/vendor-portal/', '/vendor/', '/transporter-portal/', '/receiver-portal/', '/feedback',
     '/trader-invoice-form',
   ].some((prefix) => location.pathname.startsWith(prefix));
   const hideChrome = isLoginPage || isConsolePage || isPurchasePublicPage;
@@ -117,6 +117,7 @@ const AppLayout = () => {
           <Route path="/transporter-confirmation/:id" element={<TransporterConfirmation />} />
           <Route path="/receiver-confirmation/:id" element={<ReceiverConfirmation />} />
           <Route path="/vendor-portal/:vendorId" element={<VendorPortal />} />
+          <Route path="/vendor/:vendorId" element={<VendorPortal />} />
           <Route path="/transporter-portal/:transporterId" element={<TransporterPortal />} />
           <Route path="/receiver-portal/:receiverId" element={<ReceiverPortal />} />
           <Route

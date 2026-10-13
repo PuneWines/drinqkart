@@ -15,8 +15,8 @@ export const transformActivePartyItems = (filteredApprovedItems, activeParty) =>
       const pMatch = (item.party_name || "").trim().toLowerCase() === (targetParty || "").trim().toLowerCase();
       if (!pMatch) return false;
 
-      // Resolve item's filtered company (or fallback to company_name for legacy records)
-      const itemComp = (item.filtered_company_name || (isKey ? item.company_name : "") || "").trim().toLowerCase();
+      // Resolve item's company scope (or fallback to company_name for legacy records)
+      const itemComp = (item.company_scope || item.filtered_company_name || (isKey ? item.company_name : "") || "").trim().toLowerCase();
 
       if (!isKey) {
         // If activeParty has no company key, match items that also have no filtered company

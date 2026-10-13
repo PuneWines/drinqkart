@@ -92,9 +92,16 @@ const TraderVerification = () => {
             shopName = parentIndentId ? (indentMap[parentIndentId] || "Unknown") : "Unknown";
           }
 
+          const effectiveCompany = (item.company_scope || item.company_name || item.filtered_company_name || (item.vendor_name && item.vendor_name.includes("::") ? item.vendor_name.split("::")[1] : "") || "").trim();
+          const cleanVendor = (item.vendor_name && item.vendor_name.includes("::") ? item.vendor_name.split("::")[0] : item.vendor_name || "").trim();
+
           return {
             ...item,
             shop_name: shopName,
+            clean_vendor_name: cleanVendor,
+            company_name: effectiveCompany || null,
+            total_order_box: Number(item.total_order_box) || 0,
+            total_order_qty: Number(item.total_order_qty) || 0,
             formattedDate: new Date(item.created_at).toLocaleDateString("en-IN", {
               day: "2-digit", month: "short", year: "numeric",
               hour: "2-digit", minute: "2-digit"
@@ -126,29 +133,79 @@ const TraderVerification = () => {
         }) : <span style={{ color: "#94a3b8" }}>—</span>
       },
       { key: "shop_name", label: "Shop Name", sortable: true },
-      { key: "vendor_name", label: "Vendor Name", sortable: true },
-      { key: "total_items", label: "Total Items", sortable: true },
-      { key: "total_order_qty", label: "Total Order Qty (Bottles)", sortable: true },
-      { key: "total_order_box", label: "Total Order Box", sortable: true },
-      {
-        key: "trader_item_statuses",
-        label: "Item Approvals",
-        sortable: false,
-        render: (statuses) => {
-          if (!statuses || typeof statuses !== 'object' || Object.keys(statuses).length === 0) {
-            return <span style={{ color: "#94a3b8" }}>—</span>;
-          }
-          const values = Object.values(statuses);
-          const approvedCount = values.filter(v => v === 'approved').length;
-          const rejectedCount = values.filter(v => v === 'rejected').length;
+      { 
+        key: "vendor_name", 
+        label: "Vendor Name", 
+        sortable: true,
+        render: (vendor, row) => {
+          const cleanVendor = row.clean_vendor_name || (vendor && vendor.includes("::") ? vendor.split("::")[0] : vendor) || "—";
+          const comp = row.company_scope || row.company_name || row.filtered_company_name;
           return (
-            <span style={{ fontWeight: "600", fontSize: "13px" }}>
-              {approvedCount > 0 && <span style={{ color: "#16a34a" }}>{approvedCount} ✅ </span>}
-              {rejectedCount > 0 && <span style={{ color: "#dc2626" }}>{rejectedCount} ❌</span>}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 600 }}>{cleanVendor}</span>
+              {comp && (
+                <span style={{
+                  display: "inline-block",
+                  padding: "2px 6px",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  backgroundColor: "#eff6ff",
+                  color: "#1d4ed8",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: "4px"
+                }}>
+                  {comp}
+                </span>
+              )}
+            </div>
           );
         }
       },
+      { 
+        key: "total_items", 
+        label: "Total Items", 
+        sortable: true,
+        render: (val) => (
+          <span style={{ fontWeight: 600, color: "#475569" }}>{val != null ? val : "—"}</span>
+        )
+      },
+      { 
+        key: "total_order_box", 
+        label: "Order Box", 
+        sortable: true,
+        render: (val) => (
+          <span style={{ fontWeight: 600, color: "#1e293b" }}>{val != null ? val : "—"}</span>
+        )
+      },
+      { 
+        key: "total_order_qty", 
+        label: "Order Bottles", 
+        sortable: true,
+        render: (val) => (
+          <span style={{ fontWeight: 600, color: "#1e293b" }}>{val != null ? val : "—"}</span>
+        )
+      },
+      ...(activeTab === "history" ? [
+        {
+          key: "trader_item_statuses",
+          label: "Item Approvals",
+          sortable: false,
+          render: (statuses) => {
+            if (!statuses || typeof statuses !== 'object' || Object.keys(statuses).length === 0) {
+              return <span style={{ color: "#94a3b8" }}>—</span>;
+            }
+            const values = Object.values(statuses);
+            const approvedCount = values.filter(v => v === 'approved').length;
+            const rejectedCount = values.filter(v => v === 'rejected').length;
+            return (
+              <span style={{ fontWeight: "600", fontSize: "13px" }}>
+                {approvedCount > 0 && <span style={{ color: "#16a34a" }}>{approvedCount} ✅ </span>}
+                {rejectedCount > 0 && <span style={{ color: "#dc2626" }}>{rejectedCount} ❌</span>}
+              </span>
+            );
+          }
+        }
+      ] : []),
       {
         key: "trader_pdf_url",
         label: "Trader PDF",
@@ -352,7 +409,7 @@ const TraderVerification = () => {
           data={currentTabData}
           columns={columns}
           title={activeTab === 'pending' ? "Pending Trader Approvals" : "Trader Approvals History"}
-          searchableColumns={["po_number", "shop_name", "vendor_name", "total_items"]}
+          searchableColumns={["po_number", "shop_name", "vendor_name", "company_name", "clean_vendor_name", "total_items", "total_order_box", "total_order_qty"]}
           showHeader={false}
         />
       )}

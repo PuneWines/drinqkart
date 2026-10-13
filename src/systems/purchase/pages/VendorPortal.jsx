@@ -7,9 +7,12 @@ import {
   FileText, CheckCircle2, Loader2, AlertCircle, 
   ChevronDown, ChevronUp, Check, X, Calendar, 
   Hash, MessageSquare, ArrowRight, ShoppingBag,
-  Share2, Download, Copy, ArrowLeft, Clock
+  Share2, Download, Copy, ArrowLeft, Clock,
+  ShieldCheck, Phone, MapPin, RefreshCw
 } from "lucide-react";
 import html2pdf from "html2pdf.js";
+import useCompanyStore from "../store/useCompanyStore";
+import { isTransporterSkippedForOrder } from "../utils/poHelpers";
 import "../styles/PurchaseOrder.css"; // Kept solely for off-screen PDF styling
 
 // Company info is loaded dynamically from purchase_company_settings
@@ -57,9 +60,168 @@ const VendorPortal = () => {
   const { vendorId } = useParams();
   const [vendorName, setVendorName] = useState("Vendor");
   const [companyName, setCompanyName] = useState("");
+  const { companies, fetchCompanies } = useCompanyStore();
+
+  useEffect(() => {
+    if (!companies || companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [companies, fetchCompanies]);
+
   const [poList, setPoList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Scoped District & Identity Authentication State
+  const [vendorData, setVendorData] = useState(null);
+  const [authorizedContact, setAuthorizedContact] = useState(null);
+  const [authorizedDistrict, setAuthorizedDistrict] = useState(null);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneAuthError, setPhoneAuthError] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const isCompanyScoped = useMemo(() => {
+    return Boolean(vendorData?.company_name && vendorData.company_name.trim() !== "");
+  }, [vendorData]);
+
+  // Authorization check: Company-filtered requires authorizedDistrict (or authorizedContact if no district contacts); Direct requires verified primary contact
+  const isAuthorized = useMemo(() => {
+    if (!vendorData) return false;
+    if (isCompanyScoped) {
+      const contacts = Array.isArray(vendorData?.district_contacts) ? vendorData.district_contacts : [];
+      if (contacts.length > 0) {
+        return Boolean(authorizedDistrict);
+      }
+      return Boolean(authorizedContact);
+    } else {
+      return Boolean(authorizedContact);
+    }
+  }, [vendorData, isCompanyScoped, authorizedDistrict, authorizedContact]);
+
+  const handleVerify = async (e) => {
+    if (e) e.preventDefault();
+    setPhoneAuthError("");
+
+    const cleanInput = (phoneInput || "").replace(/\D/g, "");
+    if (cleanInput.length < 10) {
+      setPhoneAuthError("Please enter a valid 10-digit registered mobile number.");
+      return;
+    }
+    const last10 = cleanInput.slice(-10);
+
+    if (isCompanyScoped) {
+      // Scenario: Company-Scoped Vendor -> Phone number automatically determines District
+      const contacts = Array.isArray(vendorData?.district_contacts) ? vendorData.district_contacts : [];
+      
+      const matchedContact = contacts.find(c => {
+        const cPhone = (c.phone || c.contact || c.contact_number || "").replace(/\D/g, "").slice(-10);
+        return cPhone && cPhone === last10;
+      });
+
+      if (matchedContact && matchedContact.district) {
+        const authInfo = {
+          isDirect: false,
+          phone: last10,
+          district: matchedContact.district,
+          name: matchedContact.name || ""
+        };
+        try {
+          if (vendorData?.id) {
+            sessionStorage.setItem(`drinqkart_vendor_auth_${vendorData.id}`, JSON.stringify(authInfo));
+          }
+        } catch (err) {}
+        setAuthorizedContact(authInfo);
+        setAuthorizedDistrict(matchedContact.district);
+
+        // Immediately fetch latest POs so pending items appear without requiring a refresh
+        setIsVerifying(true);
+        try {
+          await fetchPortalData(true);
+        } finally {
+          setIsVerifying(false);
+        }
+      } else {
+        // Fallback: Check if phone matches the primary vendor phone number when no district contacts configured
+        const primaryPhone = (
+          vendorData?.contact_number || 
+          vendorData?.contact || 
+          vendorData?.phone || 
+          vendorData?.mobile || 
+          ""
+        ).replace(/\D/g, "").slice(-10);
+
+        if (contacts.length === 0 && primaryPhone === last10) {
+          const authInfo = {
+            isDirect: false,
+            phone: last10,
+            district: null,
+            name: vendorData?.contact_name || vendorData?.contact_person || ""
+          };
+          try {
+            if (vendorData?.id) {
+              sessionStorage.setItem(`drinqkart_vendor_auth_${vendorData.id}`, JSON.stringify(authInfo));
+            }
+          } catch (err) {}
+          setAuthorizedContact(authInfo);
+          setAuthorizedDistrict(null);
+
+          setIsVerifying(true);
+          try {
+            await fetchPortalData(true);
+          } finally {
+            setIsVerifying(false);
+          }
+        } else {
+          setPhoneAuthError(`Mobile number +91 ${last10} is not registered for ${vendorData?.company_name ? `"${vendorData.company_name}"` : "this supplier"}. Please check your number or contact administration.`);
+        }
+      }
+    } else {
+      // Scenario: Direct Vendor (No Company Scope) -> Phone Number Verification
+      const registeredPrimaryPhone = (
+        vendorData?.contact_number || 
+        vendorData?.contact || 
+        vendorData?.phone || 
+        vendorData?.mobile || 
+        ""
+      ).replace(/\D/g, "").slice(-10);
+
+      if (!registeredPrimaryPhone || registeredPrimaryPhone === last10) {
+        const authInfo = {
+          isDirect: true,
+          phone: last10,
+          district: null,
+          name: vendorData?.contact_name || vendorData?.contact_person || ""
+        };
+        try {
+          if (vendorData?.id) {
+            sessionStorage.setItem(`drinqkart_vendor_auth_${vendorData.id}`, JSON.stringify(authInfo));
+          }
+        } catch (err) {}
+        setAuthorizedContact(authInfo);
+        setAuthorizedDistrict(null);
+
+        // Immediately fetch latest POs so pending items appear without requiring a refresh
+        setIsVerifying(true);
+        try {
+          await fetchPortalData(true);
+        } finally {
+          setIsVerifying(false);
+        }
+      } else {
+        setPhoneAuthError(`Mobile number +91 ${last10} does not match the registered primary contact number for this supplier. Please check your number or contact administration.`);
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    if (vendorData?.id) {
+      sessionStorage.removeItem(`drinqkart_vendor_auth_${vendorData.id}`);
+    }
+    setAuthorizedContact(null);
+    setAuthorizedDistrict(null);
+    setPhoneInput("");
+    setPhoneAuthError("");
+  };
   
   // Expanded PO Tracking
   const [expandedPoId, setExpandedPoId] = useState(null);
@@ -88,15 +250,26 @@ const VendorPortal = () => {
   // Active Tab: pending | history
   const [activeTab, setActiveTab] = useState("pending");
 
+  // Filter PO list strictly by authorized district for company-scoped vendors (no legacy fallback)
+  const districtFilteredPoList = useMemo(() => {
+    if (!authorizedDistrict) return poList;
+    const authDistLower = (authorizedDistrict || "").trim().toLowerCase();
+
+    return poList.filter(po => {
+      if (!po.district || !po.district.trim()) return false;
+      return po.district.trim().toLowerCase() === authDistLower;
+    });
+  }, [poList, authorizedDistrict]);
+
   // Memoized filter for pending purchase orders
   const pendingPoList = useMemo(() => {
-    return poList.filter(po => po.trader_status !== "yes" && po.trader_status !== "no" && !successPoIds[po.id]);
-  }, [poList, successPoIds]);
+    return districtFilteredPoList.filter(po => po.trader_status !== "yes" && po.trader_status !== "no" && !successPoIds[po.id]);
+  }, [districtFilteredPoList, successPoIds]);
 
   // Memoized filter for history purchase orders
   const historyPoList = useMemo(() => {
-    return poList.filter(po => po.trader_status === "yes" || po.trader_status === "no" || successPoIds[po.id]);
-  }, [poList, successPoIds]);
+    return districtFilteredPoList.filter(po => po.trader_status === "yes" || po.trader_status === "no" || successPoIds[po.id]);
+  }, [districtFilteredPoList, successPoIds]);
 
   const displayedPoList = activeTab === "pending" ? pendingPoList : historyPoList;
 
@@ -105,63 +278,187 @@ const VendorPortal = () => {
   const [pdfData, setPdfData] = useState(null);
 
   // Fetch Vendor details and purchase orders
-  const fetchPortalData = async () => {
+  const fetchPortalData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
-      // 1. Resolve numeric ID (handles backward-compatibility with VN-xxx)
-      let numericId = vendorId;
-      if (typeof vendorId === "string" && vendorId.startsWith("VN-")) {
-        numericId = parseInt(vendorId.replace("VN-", ""), 10);
+      // Ensure companies are loaded for reliable district matching
+      if (!companies || companies.length === 0) {
+        try { await fetchCompanies(); } catch (e) {}
       }
 
-      // 2. Fetch vendor name and company scope from vendors table
-      const { data: vendorRow, error: vendorErr } = await supabase
-        .from("purchase_vendors")
-        .select("id, party_name, company_name")
-        .eq("id", numericId)
-        .limit(1)
-        .single();
+      // 1. Resolve vendor profile by numeric ID, VN-xxx prefix, or party_name
+      let vendorRow = null;
+      let vendorErr = null;
+
+      const rawParam = String(vendorId || "").trim();
+      let cleanNumeric = rawParam;
+      if (cleanNumeric.startsWith("VN-")) {
+        cleanNumeric = cleanNumeric.replace("VN-", "").trim();
+      }
+
+      const isNumeric = cleanNumeric !== "" && !isNaN(cleanNumeric) && !isNaN(parseInt(cleanNumeric, 10));
+
+      if (isNumeric) {
+        const res = await supabase
+          .from("purchase_vendors")
+          .select("*")
+          .eq("id", parseInt(cleanNumeric, 10))
+          .limit(1)
+          .maybeSingle();
+        if (res.data) {
+          vendorRow = res.data;
+        } else if (res.error) {
+          vendorErr = res.error;
+        }
+      }
+
+      // If not found by numeric ID, fallback to match by party_name or portal_link
+      if (!vendorRow) {
+        const decodedParam = decodeURIComponent(rawParam).trim();
+        const res = await supabase
+          .from("purchase_vendors")
+          .select("*")
+          .or(`party_name.ilike."${decodedParam}",portal_link.ilike."%${decodedParam}%"`)
+          .limit(1)
+          .maybeSingle();
+        if (res.data) {
+          vendorRow = res.data;
+          vendorErr = null;
+        } else if (res.error && !vendorErr) {
+          vendorErr = res.error;
+        }
+      }
 
       if (vendorErr || !vendorRow) {
-        throw new Error(vendorErr?.message || "Vendor profile not found.");
+        throw new Error(vendorErr?.message || `Vendor profile not found for identifier "${vendorId}".`);
       }
 
       setVendorName(vendorRow.party_name);
       setCompanyName(vendorRow.company_name || "");
 
+      let contacts = vendorRow.district_contacts;
+      if (typeof contacts === "string") {
+        try { contacts = JSON.parse(contacts); } catch(e) { contacts = []; }
+      }
+      if (!Array.isArray(contacts) || contacts.length === 0) {
+        try {
+          const cached = localStorage.getItem(`drinqkart_vendor_district_contacts_${vendorRow.id}`);
+          if (cached) {
+            contacts = JSON.parse(cached);
+          }
+        } catch(e) {}
+      }
+      const enrichedVendor = {
+        ...vendorRow,
+        district_contacts: Array.isArray(contacts) ? contacts : []
+      };
+      setVendorData(enrichedVendor);
+
+      // Check session storage for existing authorization
+      try {
+        const savedAuth = sessionStorage.getItem(`drinqkart_vendor_auth_${vendorRow.id}`);
+        if (savedAuth) {
+          const parsed = JSON.parse(savedAuth);
+          if (parsed) {
+            if (parsed.isDirect && !enrichedVendor.company_name) {
+              setAuthorizedContact(parsed);
+              setAuthorizedDistrict(null);
+            } else if (enrichedVendor.company_name) {
+              const contacts = enrichedVendor.district_contacts || [];
+              const matched = contacts.find(c => {
+                const cPh = (c.phone || c.contact || c.contact_number || "").replace(/\D/g, "").slice(-10);
+                return (parsed.phone && cPh === parsed.phone) || 
+                       (parsed.district && (c.district || "").toLowerCase() === parsed.district.toLowerCase());
+              });
+              if (matched && matched.district) {
+                setAuthorizedContact({ ...parsed, district: matched.district, name: matched.name || parsed.name });
+                setAuthorizedDistrict(matched.district);
+              } else if (contacts.length === 0) {
+                setAuthorizedContact(parsed);
+                setAuthorizedDistrict(null);
+              } else {
+                sessionStorage.removeItem(`drinqkart_vendor_auth_${vendorRow.id}`);
+              }
+            }
+          }
+        }
+      } catch (e) {}
+
       const targetParty = (vendorRow.party_name || "").trim();
       const targetCompany = (vendorRow.company_name || "").trim();
 
-      // 3. Fetch POs with strict scoping:
-      // Direct vendor sees only direct POs (filtered_company_name IS NULL)
-      // Vendor + Company sees only their specific company POs
-      let poQuery = supabase
-        .from("purchase_purchase_orders")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100);
+      // 3. Fetch POs with strict scoping and safe fallback
+      let pos = [];
+      try {
+        let poQuery = supabase
+          .from("purchase_purchase_orders")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(100);
 
-      if (targetCompany) {
-        // Vendor + Company account:
-        poQuery = poQuery.or(
-          `and(vendor_name.eq."${targetParty}",filtered_company_name.eq."${targetCompany}"),vendor_name.eq."${targetParty}::${targetCompany}"`
-        );
-      } else {
-        // Direct Vendor account:
-        poQuery = poQuery
-          .eq("vendor_name", targetParty)
-          .or("filtered_company_name.is.null,filtered_company_name.eq.''");
+        if (targetCompany) {
+          const safeParty = targetParty.replace(/"/g, '""');
+          const safeComp = targetCompany.replace(/"/g, '""');
+          poQuery = poQuery.or(
+            `and(vendor_name.eq."${safeParty}",company_scope.eq."${safeComp}"),and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty}::${safeComp}"`
+          );
+        } else {
+          const safeParty = targetParty.replace(/"/g, '""');
+          poQuery = poQuery
+            .eq("vendor_name", safeParty)
+            .or("company_scope.is.null,company_scope.eq.'',filtered_company_name.is.null,filtered_company_name.eq.''");
+        }
+
+        const res = await poQuery;
+        if (res.error) {
+          console.warn("Scoped PO query with company_scope warning, attempting legacy column fallback:", res.error.message);
+          let fallbackQuery = supabase
+            .from("purchase_purchase_orders")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(100);
+
+          if (targetCompany) {
+            const safeParty = targetParty.replace(/"/g, '""');
+            const safeComp = targetCompany.replace(/"/g, '""');
+            fallbackQuery = fallbackQuery.or(
+              `and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty}::${safeComp}"`
+            );
+          } else {
+            const safeParty = targetParty.replace(/"/g, '""');
+            fallbackQuery = fallbackQuery
+              .eq("vendor_name", safeParty)
+              .or("filtered_company_name.is.null,filtered_company_name.eq.''");
+          }
+
+          const fbRes = await fallbackQuery;
+          if (fbRes.error) {
+            console.warn("Legacy column query warning, using relaxed fallback:", fbRes.error.message);
+            const cleanPartyPart = targetParty.includes("::") ? targetParty.split("::")[0].trim() : targetParty;
+            const fallbackRes = await supabase
+              .from("purchase_purchase_orders")
+              .select("*")
+              .ilike("vendor_name", `%${cleanPartyPart}%`)
+              .order("created_at", { ascending: false })
+              .limit(100);
+            pos = fallbackRes.data || [];
+          } else {
+            pos = fbRes.data || [];
+          }
+        } else {
+          pos = res.data || [];
+        }
+      } catch (poErr) {
+        console.warn("PO fetch caught error, using empty list:", poErr);
+        pos = [];
       }
 
-      const { data: pos, error: posError } = await poQuery;
-
-      if (posError) throw posError;
       setPoList(pos || []);
 
-      if (!targetCompany && pos?.[0]?.filtered_company_name) {
-        setCompanyName(pos[0].filtered_company_name);
+      if (!targetCompany && (pos?.[0]?.company_scope || pos?.[0]?.filtered_company_name)) {
+        setCompanyName(pos[0].company_scope || pos[0].filtered_company_name);
       }
 
       // Initialize form fields for submitted POs
@@ -186,7 +483,7 @@ const VendorPortal = () => {
 
     } catch (err) {
       console.error("Error loading vendor portal data:", err);
-      setError("Unable to load portal records. Please check the portal link.");
+      setError(err?.message || "Unable to load portal records. Please check the portal link.");
     } finally {
       setLoading(false);
     }
@@ -196,6 +493,26 @@ const VendorPortal = () => {
     if (vendorId) {
       fetchPortalData();
     }
+
+    // Realtime subscription for incoming/updated POs
+    const channel = supabase
+      .channel(`realtime:vendor_portal_${vendorId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "purchase_purchase_orders"
+        },
+        () => {
+          fetchPortalData(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [vendorId]);
 
   // Fetch PO items when expanding a card
@@ -358,7 +675,7 @@ const VendorPortal = () => {
     setSubmittingPoId(poId);
 
     try {
-      const isKunalShop = items.some(item => item.shopName?.toUpperCase() === "KUNAL");
+      const isTransporterSkipped = isTransporterSkippedForOrder(po, companies);
 
       const updatePayload = {
         trader_status: allRejected ? "no" : "yes",
@@ -367,10 +684,10 @@ const VendorPortal = () => {
         trader_remarks: rem
       };
 
-      if (isKunalShop && !allRejected) {
+      if (isTransporterSkipped && !allRejected) {
         updatePayload.transporter_status = "yes";
         updatePayload.pickup_date = finalDispatchDate;
-        updatePayload.transporter_remarks = "Transporter Bypassed (KUNAL Shop)";
+        updatePayload.transporter_remarks = `Transporter Bypassed (${po.shop_name || "Direct Delivery"})`;
       }
 
       // 2. Perform DB Update
@@ -388,7 +705,7 @@ const VendorPortal = () => {
         statusValue: allRejected ? "no" : "yes",
       });
 
-      if (isKunalShop && !allRejected) {
+      if (isTransporterSkipped && !allRejected) {
         await dashboardSyncService.syncPortalStatus({
           poId,
           statusType: "transporter",
@@ -589,6 +906,100 @@ const VendorPortal = () => {
     );
   }
 
+  // Verification Gate:
+  // - Requires Registered Mobile Number ONLY (Auto-identifies regional district for company-scoped suppliers)
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+          {/* Header */}
+          <div className="bg-slate-900 text-white p-6 sm:p-8 text-center relative overflow-hidden">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto mb-4 shadow-inner">
+              <ShieldCheck size={32} />
+            </div>
+            <span className="inline-block bg-indigo-500/10 text-indigo-300 border border-indigo-400/20 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
+              Supplier Verification Portal
+            </span>
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+              {vendorName}
+            </h2>
+            {companyName ? (
+              <p className="text-slate-400 text-xs mt-1 font-medium">
+                Company Scope: <span className="text-indigo-300 font-semibold">{companyName}</span>
+              </p>
+            ) : (
+              <p className="text-slate-400 text-xs mt-1 font-medium">
+                Direct Supplier Account
+              </p>
+            )}
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleVerify} className="p-6 sm:p-8 space-y-5">
+            {/* Registered Mobile Number Input (Number verification ONLY) */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                Registered Mobile Number <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Phone size={18} />
+                </div>
+                <input
+                  type="tel"
+                  autoFocus
+                  value={phoneInput}
+                  onChange={(e) => {
+                    setPhoneInput(e.target.value);
+                    if (phoneAuthError) setPhoneAuthError("");
+                  }}
+                  placeholder="e.g. 9822746825"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-base font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-1.5">
+                {isCompanyScoped
+                  ? `Enter your 10-digit registered mobile number for ${companyName}.`
+                  : "Enter your registered 10-digit primary contact number."}
+              </p>
+            </div>
+
+            {phoneAuthError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-start gap-2.5 text-red-700 text-xs leading-relaxed">
+                <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
+                <span>{phoneAuthError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isVerifying}
+              className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-75 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+            >
+              {isVerifying ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Verifying & Loading Orders...</span>
+                </>
+              ) : (
+                <>
+                  <span>Verify & Access Orders</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+
+            <div className="pt-2 border-t border-slate-100 text-center">
+              <p className="text-[11px] text-slate-400">
+                DRINQKART B2B Purchase Management System &bull; Secure Portal
+              </p>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (previewPoId) {
     const previewPo = poList.find(p => p.id === previewPoId);
     if (previewPo) {
@@ -601,7 +1012,11 @@ const VendorPortal = () => {
               vendorName={vendorName}
               companyName={companyName}
               submittedAt={submittedAt}
-              onClose={() => setPreviewPoId(null)}
+              onClose={() => {
+                setPreviewPoId(null);
+                setActiveTab("history");
+                setExpandedPoId(previewPoId);
+              }}
             />
           </div>
         </div>
@@ -625,9 +1040,49 @@ const VendorPortal = () => {
                 Company: {companyName}
               </span>
             )}
+            {authorizedDistrict ? (
+              <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
+                <MapPin size={13} />
+                <span>District: {authorizedDistrict}</span>
+                {authorizedContact?.name && (
+                  <span className="opacity-80 text-[11px]">({authorizedContact.name})</span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="ml-1 text-emerald-400 hover:text-white underline text-[11px] font-semibold cursor-pointer"
+                  title="Switch District / Sign Out"
+                >
+                  Switch
+                </button>
+              </span>
+            ) : authorizedContact?.phone ? (
+              <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
+                <Phone size={13} />
+                <span>Verified: +91 {authorizedContact.phone}</span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="ml-1 text-emerald-400 hover:text-white underline text-[11px] font-semibold cursor-pointer"
+                  title="Sign Out / Switch"
+                >
+                  Switch
+                </button>
+              </span>
+            ) : null}
             <span className="bg-sky-500/10 text-sky-400 border border-sky-500/20 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider">
               Vendor: {vendorId}
             </span>
+            <button
+              type="button"
+              onClick={() => fetchPortalData(false)}
+              disabled={loading}
+              className="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              title="Sync latest purchase orders"
+            >
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              <span>Sync Orders</span>
+            </button>
           </div>
         </div>
 
@@ -775,17 +1230,9 @@ const VendorPortal = () => {
                       <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-lg text-xs font-bold">
                         {shopName}
                       </span>
-                      {(po.filtered_company_name || companyName) && (
+                      {(po.company_scope || po.filtered_company_name || companyName) && (
                         <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-lg text-xs font-bold">
-                          {po.filtered_company_name || companyName}
-                        </span>
-                      )}
-                      <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-semibold">
-                        {totalQty} Qty
-                      </span>
-                      {totalBox > 0 && (
-                        <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-semibold">
-                          {totalBox} Boxes
+                          {po.company_scope || po.filtered_company_name || companyName}
                         </span>
                       )}
                     </div>
@@ -839,6 +1286,18 @@ const VendorPortal = () => {
                           >
                             <FileText size={16} /> View Current PO Invoice
                           </a>
+                        )}
+                        {isSubmitted && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewPoId(po.id);
+                              setSubmittedAt(po.dispatch_date || po.updated_at || po.created_at);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                          >
+                            <FileText size={14} /> View Submission Receipt
+                          </button>
                         )}
                       </div>
 
@@ -916,6 +1375,60 @@ const VendorPortal = () => {
                                     );
                                   })}
                                 </tbody>
+                                <tfoot>
+                                  {(() => {
+                                    const sumBoxes = items.reduce((sum, item) => {
+                                      const isBox = (item.qtyType || "").toLowerCase() === "box";
+                                      const val = parseFloat(item.displayQty) || parseFloat(item.orderBox) || 0;
+                                      return isBox ? sum + val : sum;
+                                    }, 0);
+
+                                    const sumBottles = items.reduce((sum, item) => {
+                                      const isBottle = (item.qtyType || "").toLowerCase() === "bottles" || (item.qtyType || "").toLowerCase() === "bottle";
+                                      const val = parseFloat(item.displayQty) || parseFloat(item.orderQty) || 0;
+                                      return isBottle ? sum + val : sum;
+                                    }, 0);
+
+                                    const calculatedTotalBoxes = sumBoxes > 0 ? Math.round(sumBoxes) : (Number(po.total_order_box) || 0);
+                                    const calculatedTotalBottles = sumBottles > 0 ? Math.round(sumBottles) : (sumBoxes === 0 && Number(po.total_order_qty) > 0 ? Number(po.total_order_qty) : 0);
+
+                                    return (
+                                      <tr className="bg-slate-50 border-t-2 border-slate-300 text-slate-900 font-bold">
+                                        <td colSpan={2} className="p-3.5 text-right text-xs uppercase tracking-wider text-slate-700 font-bold">
+                                          {calculatedTotalBottles > 0 && calculatedTotalBoxes > 0 ? "Total Order:" : "Total Box:"}
+                                        </td>
+                                        <td className="p-3.5 text-center text-sm font-extrabold text-slate-900">
+                                          {calculatedTotalBottles > 0 && calculatedTotalBoxes > 0 ? (
+                                            <span>{calculatedTotalBoxes} bx / {calculatedTotalBottles} un</span>
+                                          ) : calculatedTotalBoxes > 0 ? (
+                                            <span>{calculatedTotalBoxes}</span>
+                                          ) : (
+                                            <span>{calculatedTotalBottles}</span>
+                                          )}
+                                        </td>
+                                        <td className="p-3.5 text-center text-xs font-bold text-slate-600">
+                                          {calculatedTotalBottles > 0 && calculatedTotalBoxes > 0 ? "Mixed" : calculatedTotalBoxes > 0 ? "Box" : "Bottles"}
+                                        </td>
+                                        <td className="p-3.5 text-center text-xs font-semibold text-slate-500">
+                                          {isSubmitted ? (
+                                            <div className="inline-flex items-center gap-1.5 justify-center">
+                                              <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-xs font-bold">
+                                                {items.filter(it => (itemStatuses[po.id] || {})[it.id] === "approved").length} Approved
+                                              </span>
+                                              {items.some(it => (itemStatuses[po.id] || {})[it.id] === "rejected") && (
+                                                <span className="text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded text-xs font-bold">
+                                                  {items.filter(it => (itemStatuses[po.id] || {})[it.id] === "rejected").length} Rejected
+                                                </span>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <span className="text-slate-400 font-normal">—</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })()}
+                                </tfoot>
                               </table>
                             </div>
                           </div>
@@ -1231,19 +1744,61 @@ const SubmissionPreview = ({ po, items, vendorName, companyName, submittedAt, on
     }
   };
 
-  const handleDownloadPdf = () => {
-    const element = document.getElementById("submission-preview-card");
-    if (!element) return;
-    
-    const opt = {
-      margin:       0.3,
-      filename:     `Submission_${po.po_number.replace(/\//g, "_")}.pdf`,
-      image:        { type: "jpeg", quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, logging: false },
-      jsPDF:        { unit: "in", format: "letter", orientation: "portrait" }
-    };
-    
-    html2pdf().set(opt).from(element).save();
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      // 1. If official generated Trader PDF URL exists, open/download it directly
+      if (po.trader_pdf_url) {
+        const win = window.open(po.trader_pdf_url, "_blank");
+        if (!win || win.closed || typeof win.closed === "undefined") {
+          // Fallback if popup is blocked by browser: trigger anchor tag download/open
+          const link = document.createElement("a");
+          link.href = po.trader_pdf_url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+        setIsGeneratingPdf(false);
+        return;
+      }
+
+      // 2. Otherwise capture submission card
+      const element = document.getElementById("submission-preview-card");
+      if (!element) {
+        window.print();
+        setIsGeneratingPdf(false);
+        return;
+      }
+      
+      const opt = {
+        margin:       0.3,
+        filename:     `Submission_${(po.po_number || "PO").replace(/\//g, "_")}.pdf`,
+        image:        { type: "jpeg", quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: "in", format: "letter", orientation: "portrait" }
+      };
+
+      const h2p = typeof html2pdf === "function" ? html2pdf : html2pdf?.default;
+      if (h2p) {
+        // Run with safety timeout fallback to window.print if html2pdf hangs
+        const savePromise = h2p().set(opt).from(element).save();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("PDF generation timeout")), 4000)
+        );
+        await Promise.race([savePromise, timeoutPromise]);
+      } else {
+        window.print();
+      }
+    } catch (err) {
+      console.warn("PDF capture failed or timed out, triggering system print fallback:", err);
+      window.print();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const isConfirmed = po.trader_status === "yes";
@@ -1260,15 +1815,20 @@ const SubmissionPreview = ({ po, items, vendorName, companyName, submittedAt, on
   return (
     <div className="animate-fade-in space-y-6 max-w-3xl mx-auto py-2">
       {/* Action Bar (Top) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="print:hidden flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
         <button
-          onClick={onClose}
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            onClose?.();
+          }}
           className="inline-flex items-center gap-2 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl transition-all cursor-pointer border border-slate-200"
         >
           <ArrowLeft size={16} /> Back to Portal
         </button>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handleCopyId}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer relative"
           >
@@ -1276,17 +1836,30 @@ const SubmissionPreview = ({ po, items, vendorName, companyName, submittedAt, on
             {copiedId ? "Copied!" : "Copy ID"}
           </button>
           <button
+            type="button"
             onClick={handleShare}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
           >
             <Share2 size={14} />
             {shareSuccess ? "Link Copied!" : "Share"}
           </button>
+          {po.trader_pdf_url && (
+            <a
+              href={po.trader_pdf_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              <FileText size={14} /> PO Invoice
+            </a>
+          )}
           <button
+            type="button"
             onClick={handleDownloadPdf}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            disabled={isGeneratingPdf}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-75"
           >
-            <Download size={14} /> PDF
+            <Download size={14} /> {isGeneratingPdf ? "Opening..." : "PDF"}
           </button>
         </div>
       </div>
@@ -1343,9 +1916,9 @@ const SubmissionPreview = ({ po, items, vendorName, companyName, submittedAt, on
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Supplier Name</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <strong className="text-slate-900 font-bold text-sm block">{vendorName}</strong>
-                  {(companyName || po.filtered_company_name) && (
+                  {(companyName || po.company_scope || po.filtered_company_name) && (
                     <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-md text-xs font-bold">
-                      {companyName || po.filtered_company_name}
+                      {companyName || po.company_scope || po.filtered_company_name}
                     </span>
                   )}
                 </div>
@@ -1489,9 +2062,13 @@ const SubmissionPreview = ({ po, items, vendorName, companyName, submittedAt, on
       </div>
 
       {/* Action Bar (Bottom) */}
-      <div className="flex justify-center pt-2">
+      <div className="print:hidden flex justify-center pt-2">
         <button
-          onClick={onClose}
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            onClose?.();
+          }}
           className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl shadow-md transition-all cursor-pointer"
         >
           <ArrowLeft size={16} /> Return to Portal Dashboard

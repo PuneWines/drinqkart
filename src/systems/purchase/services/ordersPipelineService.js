@@ -21,11 +21,13 @@ export const fetchPipelineOrders = async ({
   }
 
   // Apply search query filter
+  let hasSearchQuery = false;
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;
     query = query.or(
-      `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q}`
+      `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q},company_name.ilike.${q},company_scope.ilike.${q},filtered_company_name.ilike.${q}`
     );
+    hasSearchQuery = true;
   }
 
   // Apply date range filter
@@ -77,7 +79,41 @@ export const fetchPipelineOrders = async ({
     .order("id", { ascending: true }) // Tie-breaker
     .range(offset, offset + limit - 1);
 
-  const { data: poData, error: poError } = await query;
+  let { data: poData, error: poError } = await query;
+  if (poError && hasSearchQuery) {
+    const q = `%${search.trim()}%`;
+    let retryQuery = supabase.from("purchase_purchase_orders").select("*");
+    if (shop && shop !== "All") retryQuery = retryQuery.eq("shop_name", shop);
+    retryQuery = retryQuery.or(
+      `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q},company_name.ilike.${q},filtered_company_name.ilike.${q}`
+    );
+    if (startDate) {
+      const startLocal = new Date(`${startDate}T00:00:00`);
+      retryQuery = retryQuery.gte("created_at", startLocal.toISOString());
+    }
+    if (endDate) {
+      const endLocal = new Date(`${endDate}T23:59:59.999`);
+      retryQuery = retryQuery.lte("created_at", endLocal.toISOString());
+    }
+    if (status && status !== "All") {
+      if (status === "Completed") {
+        retryQuery = retryQuery.eq("receiver_status", "yes");
+      } else if (status === "Transit" || status === "In Transit") {
+        retryQuery = retryQuery.eq("transporter_status", "yes").neq("receiver_status", "yes");
+      } else if (status === "Trader" || status === "Vendor Accepted") {
+        retryQuery = retryQuery.eq("trader_status", "yes").neq("transporter_status", "yes").neq("receiver_status", "yes");
+      } else if (status === "Generated" || status === "Pending") {
+        retryQuery = retryQuery.or("trader_status.is.null,trader_status.eq.no").neq("transporter_status", "yes").neq("receiver_status", "yes");
+      }
+    }
+    retryQuery = retryQuery
+      .order(orderField, { ascending: orderAsc })
+      .order("id", { ascending: true })
+      .range(offset, offset + limit - 1);
+    const retryRes = await retryQuery;
+    poData = retryRes.data;
+    poError = retryRes.error;
+  }
   if (poError) throw poError;
 
   if (!poData || poData.length === 0) {

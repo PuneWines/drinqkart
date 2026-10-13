@@ -160,7 +160,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: "BUSINESS OVERVIEW MODULES",
-        pages: ["Feedback", "Trader Invoices", "Shop Visit", "Help Center"],
+        pages: ["Feedback", "Trader Invoices", "Shop Visit", "Help Center", "Gift Stock"],
       },
     ],
   },

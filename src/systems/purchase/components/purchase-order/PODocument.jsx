@@ -35,9 +35,13 @@ const PODocument = ({
   selectedReceiver, 
   setSelectedReceiver, 
   shippingError,
+  companyScope,
   filteredCompanyName,
   isMissingVendorLedger,
-  cleanVendorName
+  cleanVendorName,
+  availableDistricts = [],
+  selectedDistrict = "",
+  onDistrictChange
 }) => {
   const isTransporterNotRequired = companyInfo?.requires_transporter !== undefined
     ? !companyInfo.requires_transporter
@@ -60,9 +64,13 @@ const PODocument = ({
           partyName={partyName}
           onPartyChange={onPartyChange}
           vendorDetails={vendorDetails}
+          companyScope={companyScope || filteredCompanyName}
           filteredCompanyName={filteredCompanyName}
           isMissingVendorLedger={isMissingVendorLedger}
           cleanVendorName={cleanVendorName}
+          availableDistricts={availableDistricts}
+          selectedDistrict={selectedDistrict}
+          onDistrictChange={onDistrictChange}
         />
         <POShipToBox companyInfo={companyInfo} />
       </div>
