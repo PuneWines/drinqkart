@@ -3191,13 +3191,24 @@ const Roster = () => {
                     const rShiftLower = String(rEntry?.shift_type || '').toLowerCase();
                     const isRosterWeeklyOff = hasRoster && (rShiftLower.includes('weekly off') || rShiftLower === 'wo' || rShiftLower === 'weeklyoff');
                     const isRosterDayOff = hasRoster && (rShiftLower.includes('day off') || rShiftLower === 'do' || rShiftLower === 'dayoff');
-                    const isRosterHoliday = hasRoster && (rShiftLower.includes('holiday') || rShiftLower === 'hd');
+                    const isRosterHoliday = hasRoster && (rShiftLower.includes('holiday'));
+                    const isRosterHalfDay = hasRoster && (rShiftLower.includes('half day') || rShiftLower.includes('half-day') || rShiftLower.includes('halfday') || rShiftLower === 'hd' || rShiftLower === 'h');
 
                     let status = att.status;
                     const statusLower = String(status || '').toLowerCase().trim();
                     const isExplicitWeeklyOff = statusLower === 'weekly off' || statusLower === 'wo' || statusLower === 'weeklyoff' || isRosterWeeklyOff;
                     const isExplicitDayOff = statusLower === 'day off' || statusLower === 'do' || statusLower === 'dayoff' || isRosterDayOff;
-                    const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday' || statusLower === 'hd';
+                    const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday';
+                    const isExplicitHalfDay = (
+                        statusLower === 'half day' || 
+                        statusLower === 'hd' || 
+                        statusLower === 'h' || 
+                        statusLower === 'half-day' || 
+                        statusLower === 'half_day' || 
+                        statusLower.includes('half') ||
+                        isRosterHalfDay ||
+                        Boolean(att.half_day)
+                    );
 
                     if (isBeforeJoining) {
                         status = '—';
@@ -3206,26 +3217,26 @@ const Roster = () => {
                         if (isExplicitHoliday) {
                             totalHoliday++;
                             if (hasValidWorkingPunch && !isSingleMidnightPunch) {
-                                status = lateMins > 0 ? 'Late' : 'Present';
+                                status = isExplicitHalfDay ? 'Half Day' : (lateMins > 0 ? 'Late' : 'Present');
                             } else {
                                 status = 'HOLIDAY';
                                 totalUnpunchedHoliday++;
                             }
+                        } else if (isExplicitHalfDay) {
+                            status = 'Half Day';
                         } else if (hasValidWorkingPunch && !isSingleMidnightPunch) {
-                            status = lateMins > 0 ? 'Late' : (status === 'Half Day' ? 'Half Day' : (status || 'Present'));
+                            status = lateMins > 0 ? 'Late' : (status || 'Present');
                         } else if (isExplicitWeeklyOff) {
                             status = 'Weekly Off';
                         } else if (isExplicitDayOff) {
                             status = 'Day Off';
                         } else if (isOnLeaveInTable || statusLower === 'on leave' || statusLower === 'leave') {
                             status = 'On Leave';
-                        } else if (statusLower === 'half day' || statusLower === 'hd') {
-                            status = 'Half Day';
                         } else {
                             status = 'Absent';
                         }
 
-                        if (status === 'Half Day' || status === 'HD') {
+                        if (status === 'Half Day' || status === 'HD' || status === 'H') {
                             totalHalfDay++;
                         } else if (status === 'Present' || status === 'Late') {
                             totalPresent++;

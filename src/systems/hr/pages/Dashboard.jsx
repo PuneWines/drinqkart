@@ -478,11 +478,23 @@ export default function Dashboard() {
                             }
                         }
 
+                        const resolvedName = (emp.name_as_per_aadhar && emp.name_as_per_aadhar !== 'Unknown' && emp.name_as_per_aadhar !== 'Employee')
+                            ? emp.name_as_per_aadhar
+                            : ((log.employee_name && log.employee_name !== 'Unknown') ? log.employee_name : (emp.name_as_per_aadhar || `Employee ${emp.employee_id}`));
+
+                        const resolvedDesignation = (emp.designation && emp.designation !== '-')
+                            ? emp.designation
+                            : ((log.designation && log.designation !== '-') ? log.designation : '-');
+
+                        const resolvedStore = (emp.joining_place && emp.joining_place !== '-')
+                            ? emp.joining_place
+                            : ((log.store_name && log.store_name.trim()) ? log.store_name : '-');
+
                         const empWithLog = {
                             ...emp,
-                            name_as_per_aadhar: log.employee_name || emp.name_as_per_aadhar,
-                            designation: log.designation || emp.designation,
-                            joining_place: (log.store_name && log.store_name.trim()) ? log.store_name : emp.joining_place,
+                            name_as_per_aadhar: resolvedName,
+                            designation: resolvedDesignation,
+                            joining_place: resolvedStore,
                             in_time: effectiveInTime,
                             out_time: log.out_time,
                             late_minute: effectiveLateMins,
@@ -640,11 +652,19 @@ export default function Dashboard() {
                         }
                     }
 
+                    const hrMatch = mappedList.find(e => {
+                        const eId = String(e.employee_id || '').trim().toLowerCase();
+                        const lId = logEmpId.toLowerCase();
+                        return eId === lId || eId.replace(/^0+/, '') === lId.replace(/^0+/, '');
+                    });
+
                     const empFromLog = {
                         employee_id: logEmpId,
-                        name_as_per_aadhar: log.employee_name || `Employee ${logEmpId}`,
-                        designation: log.designation || '',
-                        joining_place: log.store_name || '',
+                        name_as_per_aadhar: (hrMatch?.name_as_per_aadhar && hrMatch.name_as_per_aadhar !== 'Unknown' && hrMatch.name_as_per_aadhar !== 'Employee')
+                            ? hrMatch.name_as_per_aadhar
+                            : ((log.employee_name && log.employee_name !== 'Unknown') ? log.employee_name : `Employee ${logEmpId}`),
+                        designation: hrMatch?.designation || (log.designation !== '-' ? log.designation : '') || '',
+                        joining_place: log.store_name || hrMatch?.joining_place || '',
                         in_time: effectiveInTime,
                         out_time: log.out_time,
                         late_minute: effectiveLateMins,
@@ -1398,7 +1418,11 @@ export default function Dashboard() {
                                                             >
                                                                 <td className="px-4 py-3 text-slate-400 text-xs">{index + 1}</td>
                                                                 <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{emp.employee_id}</td>
-                                                                <td className="px-4 py-3 font-semibold text-slate-800">{emp.name_as_per_aadhar}</td>
+                                                                <td className="px-4 py-3 font-semibold text-slate-800">
+                                                                    {emp.name_as_per_aadhar && emp.name_as_per_aadhar !== 'Unknown' 
+                                                                        ? emp.name_as_per_aadhar 
+                                                                        : `Employee ${emp.employee_id}`}
+                                                                </td>
                                                                 <td className="px-4 py-3 text-slate-500">{emp.designation || '-'}</td>
                                                                 <td className="px-4 py-3 text-slate-500">{emp.joining_place || '-'}</td>
                                                                 <td className="px-4 py-3">

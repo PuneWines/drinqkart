@@ -186,15 +186,20 @@ export const syncDeviceLogsToSupabase = async (month, year, device) => {
 
     const { data: hrEmps } = await supabase
         .from('hr_management_employees')
-        .select('employee_id, name_as_per_aadhar, joining_place');
+        .select('employee_id, name_as_per_aadhar, joining_place, designation');
 
     const empMap = {};
     (hrEmps || []).forEach(e => {
         if (e.employee_id) {
-            empMap[e.employee_id.toString().trim().toLowerCase()] = {
-                name: e.name_as_per_aadhar || 'Unknown',
-                store: e.joining_place || ''
+            const rawId = e.employee_id.toString().trim().toLowerCase();
+            const numId = !isNaN(rawId) ? String(parseInt(rawId, 10)) : null;
+            const val = {
+                name: (e.name_as_per_aadhar && e.name_as_per_aadhar !== 'Unknown') ? e.name_as_per_aadhar : `Employee ${e.employee_id}`,
+                store: e.joining_place || '',
+                designation: e.designation || '-'
             };
+            empMap[rawId] = val;
+            if (numId) empMap[numId] = val;
         }
     });
 
@@ -263,7 +268,8 @@ export const syncDeviceLogsToSupabase = async (month, year, device) => {
     const upsertRows = Object.values(grouped).map(item => {
         item.punches.sort((a, b) => new Date(a.replace(/-/g, '/')) - new Date(b.replace(/-/g, '/')));
         const cleanEmpKey = item.empId.toLowerCase();
-        const empInfo = empMap[cleanEmpKey] || { name: 'Unknown', store: item.devName };
+        const numEmpKey = !isNaN(cleanEmpKey) ? String(parseInt(cleanEmpKey, 10)) : null;
+        const empInfo = empMap[cleanEmpKey] || (numEmpKey ? empMap[numEmpKey] : null) || { name: `Employee ${item.empId}`, store: item.devName, designation: '-' };
 
         const inTimeRaw = item.punches[0];
         const outTimeRaw = item.punches.length > 1 ? item.punches[item.punches.length - 1] : item.punches[0];
@@ -306,6 +312,7 @@ export const syncDeviceLogsToSupabase = async (month, year, device) => {
         return {
             employee_id: item.empId,
             employee_name: empInfo.name,
+            designation: empInfo.designation || '-',
             attendance_date: item.date,
             status: derivedStatus,
             late_minute: lateMins,

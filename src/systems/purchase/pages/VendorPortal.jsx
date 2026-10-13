@@ -84,19 +84,15 @@ const VendorPortal = () => {
     return Boolean(vendorData?.company_name && vendorData.company_name.trim() !== "");
   }, [vendorData]);
 
-  // Authorization check: Company-filtered requires authorizedDistrict (or authorizedContact if no district contacts); Direct requires verified primary contact
+  // Authorization check: If vendor has district contacts, require authorizedDistrict; otherwise require authorizedContact
   const isAuthorized = useMemo(() => {
     if (!vendorData) return false;
-    if (isCompanyScoped) {
-      const contacts = Array.isArray(vendorData?.district_contacts) ? vendorData.district_contacts : [];
-      if (contacts.length > 0) {
-        return Boolean(authorizedDistrict);
-      }
-      return Boolean(authorizedContact);
-    } else {
-      return Boolean(authorizedContact);
+    const contacts = Array.isArray(vendorData?.district_contacts) ? vendorData.district_contacts : [];
+    if (contacts.length > 0) {
+      return Boolean(authorizedDistrict);
     }
-  }, [vendorData, isCompanyScoped, authorizedDistrict, authorizedContact]);
+    return Boolean(authorizedContact);
+  }, [vendorData, authorizedDistrict, authorizedContact]);
 
   const handleVerify = async (e) => {
     if (e) e.preventDefault();
@@ -109,75 +105,39 @@ const VendorPortal = () => {
     }
     const last10 = cleanInput.slice(-10);
 
-    if (isCompanyScoped) {
-      // Scenario: Company-Scoped Vendor -> Phone number automatically determines District
-      const contacts = Array.isArray(vendorData?.district_contacts) ? vendorData.district_contacts : [];
-      
-      const matchedContact = contacts.find(c => {
-        const cPhone = (c.phone || c.contact || c.contact_number || "").replace(/\D/g, "").slice(-10);
-        return cPhone && cPhone === last10;
-      });
+    const contacts = Array.isArray(vendorData?.district_contacts) ? vendorData.district_contacts : [];
+    
+    // 1. Check if phone matches any registered district contact (for both company-scoped and direct vendors)
+    const matchedContact = contacts.find(c => {
+      const cPhone = (c.phone || c.contact || c.contact_number || "").replace(/\D/g, "").slice(-10);
+      return cPhone && cPhone === last10;
+    });
 
-      if (matchedContact && matchedContact.district) {
-        const authInfo = {
-          isDirect: false,
-          phone: last10,
-          district: matchedContact.district,
-          name: matchedContact.name || ""
-        };
-        try {
-          if (vendorData?.id) {
-            sessionStorage.setItem(`drinqkart_vendor_auth_${vendorData.id}`, JSON.stringify(authInfo));
-          }
-        } catch (err) {}
-        setAuthorizedContact(authInfo);
-        setAuthorizedDistrict(matchedContact.district);
-
-        // Immediately fetch latest POs so pending items appear without requiring a refresh
-        setIsVerifying(true);
-        try {
-          await fetchPortalData(true);
-        } finally {
-          setIsVerifying(false);
+    if (matchedContact && matchedContact.district) {
+      const authInfo = {
+        isDirect: !isCompanyScoped,
+        phone: last10,
+        district: matchedContact.district,
+        name: matchedContact.name || ""
+      };
+      try {
+        if (vendorData?.id) {
+          sessionStorage.setItem(`drinqkart_vendor_auth_${vendorData.id}`, JSON.stringify(authInfo));
         }
-      } else {
-        // Fallback: Check if phone matches the primary vendor phone number when no district contacts configured
-        const primaryPhone = (
-          vendorData?.contact_number || 
-          vendorData?.contact || 
-          vendorData?.phone || 
-          vendorData?.mobile || 
-          ""
-        ).replace(/\D/g, "").slice(-10);
+      } catch (err) {}
+      setAuthorizedContact(authInfo);
+      setAuthorizedDistrict(matchedContact.district);
 
-        if (contacts.length === 0 && primaryPhone === last10) {
-          const authInfo = {
-            isDirect: false,
-            phone: last10,
-            district: null,
-            name: vendorData?.contact_name || vendorData?.contact_person || ""
-          };
-          try {
-            if (vendorData?.id) {
-              sessionStorage.setItem(`drinqkart_vendor_auth_${vendorData.id}`, JSON.stringify(authInfo));
-            }
-          } catch (err) {}
-          setAuthorizedContact(authInfo);
-          setAuthorizedDistrict(null);
-
-          setIsVerifying(true);
-          try {
-            await fetchPortalData(true);
-          } finally {
-            setIsVerifying(false);
-          }
-        } else {
-          setPhoneAuthError(`Mobile number +91 ${last10} is not registered for ${vendorData?.company_name ? `"${vendorData.company_name}"` : "this supplier"}. Please check your number or contact administration.`);
-        }
+      // Immediately fetch latest POs so pending items appear without requiring a refresh
+      setIsVerifying(true);
+      try {
+        await fetchPortalData(true);
+      } finally {
+        setIsVerifying(false);
       }
     } else {
-      // Scenario: Direct Vendor (No Company Scope) -> Phone Number Verification
-      const registeredPrimaryPhone = (
+      // 2. Fallback: Check primary vendor phone if no district contacts or matching primary contact
+      const primaryPhone = (
         vendorData?.contact_number || 
         vendorData?.contact || 
         vendorData?.phone || 
@@ -185,9 +145,9 @@ const VendorPortal = () => {
         ""
       ).replace(/\D/g, "").slice(-10);
 
-      if (!registeredPrimaryPhone || registeredPrimaryPhone === last10) {
+      if (contacts.length === 0 && (!primaryPhone || primaryPhone === last10)) {
         const authInfo = {
-          isDirect: true,
+          isDirect: !isCompanyScoped,
           phone: last10,
           district: null,
           name: vendorData?.contact_name || vendorData?.contact_person || ""
@@ -200,7 +160,6 @@ const VendorPortal = () => {
         setAuthorizedContact(authInfo);
         setAuthorizedDistrict(null);
 
-        // Immediately fetch latest POs so pending items appear without requiring a refresh
         setIsVerifying(true);
         try {
           await fetchPortalData(true);
@@ -208,7 +167,10 @@ const VendorPortal = () => {
           setIsVerifying(false);
         }
       } else {
-        setPhoneAuthError(`Mobile number +91 ${last10} does not match the registered primary contact number for this supplier. Please check your number or contact administration.`);
+        const targetLabel = vendorData?.company_name
+          ? `"${vendorData.company_name}"`
+          : (contacts.length > 0 ? "any assigned district contact for this supplier" : "this supplier");
+        setPhoneAuthError(`Mobile number +91 ${last10} is not registered for ${targetLabel}. Please check your number or contact administration.`);
       }
     }
   };
@@ -362,11 +324,8 @@ const VendorPortal = () => {
         if (savedAuth) {
           const parsed = JSON.parse(savedAuth);
           if (parsed) {
-            if (parsed.isDirect && !enrichedVendor.company_name) {
-              setAuthorizedContact(parsed);
-              setAuthorizedDistrict(null);
-            } else if (enrichedVendor.company_name) {
-              const contacts = enrichedVendor.district_contacts || [];
+            const contacts = enrichedVendor.district_contacts || [];
+            if (contacts.length > 0) {
               const matched = contacts.find(c => {
                 const cPh = (c.phone || c.contact || c.contact_number || "").replace(/\D/g, "").slice(-10);
                 return (parsed.phone && cPh === parsed.phone) || 
@@ -375,12 +334,12 @@ const VendorPortal = () => {
               if (matched && matched.district) {
                 setAuthorizedContact({ ...parsed, district: matched.district, name: matched.name || parsed.name });
                 setAuthorizedDistrict(matched.district);
-              } else if (contacts.length === 0) {
-                setAuthorizedContact(parsed);
-                setAuthorizedDistrict(null);
               } else {
                 sessionStorage.removeItem(`drinqkart_vendor_auth_${vendorRow.id}`);
               }
+            } else {
+              setAuthorizedContact(parsed);
+              setAuthorizedDistrict(null);
             }
           }
         }
@@ -958,9 +917,9 @@ const VendorPortal = () => {
                 />
               </div>
               <p className="text-xs text-slate-500 mt-1.5">
-                {isCompanyScoped
-                  ? `Enter your 10-digit registered mobile number for ${companyName}.`
-                  : "Enter your registered 10-digit primary contact number."}
+                {vendorData?.district_contacts?.length > 0
+                  ? "Enter the registered mobile number assigned to your regional district."
+                  : "Enter your registered 10-digit mobile number."}
               </p>
             </div>
 
