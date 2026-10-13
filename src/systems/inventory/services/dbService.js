@@ -378,40 +378,54 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
       shopNameStr = shopData?.shop_name || shopData?.name || '';
     }
 
-    // Get previous balance for this shop
-    const { data: prevReport, error: prevErr } = await supabase
-      .from('Inventory_manager_report')
-      .select('balance')
-      .eq('shop_name', shopNameStr)
-      .order('report_date', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 1. Check if a manager report row already exists for this date and shop
+    if (shopNameStr) {
+      const { data: existingReport, error: checkError } = await supabase
+        .from('Inventory_manager_report')
+        .select('id')
+        .eq('report_date', date)
+        .eq('shop_name', shopNameStr)
+        .maybeSingle();
 
-    if (prevErr) throw prevErr;
+      if (checkError) throw checkError;
 
-    const prevBalance = parseFloat(prevReport?.balance) || 0;
+      const gpayAmt = parseFloat(gpay) || 0;
+      const cashAmt = parseFloat(cash) || 0;
+      const expenseAmt = parseFloat(expense) || 0;
 
-    const gpayAmt = parseFloat(gpay) || 0;
-    const cashAmt = parseFloat(cash) || 0;
-    const expenseAmt = parseFloat(expense) || 0;
+      if (existingReport) {
+        const { error: managerUpdateErr } = await supabase
+          .from('Inventory_manager_report')
+          .update({
+            gpay_amount: gpayAmt,
+            cash_amount: cashAmt,
+            expense_amount: expenseAmt,
+            withdrawal_amount: withdrawalAmt,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingReport.id);
 
-    const balance = prevBalance + gpayAmt + cashAmt - expenseAmt - withdrawalAmt;
+        if (managerUpdateErr) throw managerUpdateErr;
+      } else {
+        const { error: managerInsertErr } = await supabase
+          .from('Inventory_manager_report')
+          .insert([{
+            report_date: date,
+            shop_name: shopNameStr,
+            gpay_amount: gpayAmt,
+            cash_amount: cashAmt,
+            expense_amount: expenseAmt,
+            withdrawal_amount: withdrawalAmt,
+            balance: 0, // temporary, will be recalculated below
+            updated_at: new Date().toISOString()
+          }]);
 
-    const { error: managerErr } = await supabase
-      .from('Inventory_manager_report')
-      .insert([{
-        report_date: date,
-        shop_name: shopNameStr,
-        gpay_amount: gpayAmt,
-        cash_amount: cashAmt,
-        expense_amount: expenseAmt,
-        withdrawal_amount: withdrawalAmt,
-        balance: balance,
-        updated_at: new Date().toISOString()
-      }]);
+        if (managerInsertErr) throw managerInsertErr;
+      }
 
-    if (managerErr) throw managerErr;
+      // Recalculate subsequent balances starting from this date
+      await recalculateManagerReportBalances(shopNameStr, date);
+    }
 
     // ==========================================================
 
