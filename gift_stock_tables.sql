@@ -50,8 +50,13 @@ CREATE TABLE IF NOT EXISTS public.gift_stock_outs (
     qty INTEGER NOT NULL CHECK (qty > 0),
     customer TEXT NOT NULL,
     contact TEXT NOT NULL,
+    proof_image TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure proof_image column exists on existing installations
+ALTER TABLE public.gift_stock_outs 
+ADD COLUMN IF NOT EXISTS proof_image TEXT;
 
 -- =========================================================================
 -- Enable Row Level Security (RLS) & Policies
