@@ -7,10 +7,15 @@ const POVendorBox = ({
   onPartyChange, 
   vendorDetails, 
   onDeleteVendor,
+  companyScope,
   filteredCompanyName,
   isMissingVendorLedger,
-  cleanVendorName
+  cleanVendorName,
+  availableDistricts = [],
+  selectedDistrict = "",
+  onDistrictChange
 }) => {
+  const activeCompanyScope = companyScope || filteredCompanyName;
   return (
     <div className="po-box">
       <div className="po-box-header">Vendor</div>
@@ -37,8 +42,8 @@ const POVendorBox = ({
           />
         </div>
 
-        {/* Company Name Field (shown if vendor is filtered by company) */}
-        {filteredCompanyName && (
+        {/* Company Scope Field (shown if vendor is scoped to a specific company) */}
+        {activeCompanyScope && (
           <div style={{
             marginBottom: '8px',
             padding: '6px 8px',
@@ -54,11 +59,67 @@ const POVendorBox = ({
               letterSpacing: '0.05em',
               marginBottom: '2px'
             }}>
-              Company Name (Filtered)
+              Company Scope
             </div>
             <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
-              {filteredCompanyName}
+              {activeCompanyScope}
             </div>
+          </div>
+        )}
+
+        {/* District Selection Dropdown (shown when vendor has district contacts) */}
+        {availableDistricts && availableDistricts.length > 0 && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '8px',
+            backgroundColor: '#f8fafc',
+            borderRadius: '6px',
+            border: '1px solid #cbd5e1'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '4px'
+            }}>
+              <span style={{
+                color: '#475569',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Vendor District *
+              </span>
+              {!selectedDistrict && (
+                <span style={{ fontSize: '0.65rem', color: '#dc2626', fontWeight: 600 }}>
+                  Select District
+                </span>
+              )}
+            </div>
+            <select
+              value={selectedDistrict}
+              onChange={(e) => onDistrictChange && onDistrictChange(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: selectedDistrict ? '#0f172a' : '#64748b',
+                backgroundColor: '#ffffff',
+                border: selectedDistrict ? '1px solid #94a3b8' : '1px solid #f87171',
+                borderRadius: '4px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="">Select District</option>
+              {availableDistricts.map((dist) => (
+                <option key={dist} value={dist}>
+                  {dist}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -76,8 +137,8 @@ const POVendorBox = ({
           }}>
             <strong style={{ display: 'block', marginBottom: '2px' }}>⚠️ Not Registered in Supplier Ledger</strong>
             <div>
-              {filteredCompanyName ? (
-                <>No vendor record found in Supplier Ledger for <strong>{cleanVendorName || partyName}</strong> with Company Scope <strong>{filteredCompanyName}</strong>.</>
+              {activeCompanyScope ? (
+                <>No vendor record found in Supplier Ledger for <strong>{cleanVendorName || partyName}</strong> with Company Scope <strong>{activeCompanyScope}</strong>.</>
               ) : (
                 <>No Direct vendor record found in Supplier Ledger for <strong>{cleanVendorName || partyName}</strong>.</>
               )}

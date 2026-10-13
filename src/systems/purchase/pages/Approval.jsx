@@ -641,6 +641,7 @@ const Approval = () => {
             item_name: item.item_name,
             brand_name: item.brand_name,
             company_name: item.company_name || null,
+            company_scope: effectiveCompany,
             filtered_company_name: effectiveCompany,
             bcs: item.bcs,
             mls: item.mls,
@@ -677,9 +678,16 @@ const Approval = () => {
         const chunkSize = 100;
         for (let i = 0; i < approvedItemsPayload.length; i += chunkSize) {
           const chunk = approvedItemsPayload.slice(i, i + chunkSize);
-          const { error: insertErr } = await supabase
+          let { error: insertErr } = await supabase
             .from("purchase_approved_indent_items")
             .insert(chunk);
+          if (insertErr && (insertErr.code === 'PGRST204' || insertErr.message?.includes('company_scope'))) {
+            const fallbackChunk = chunk.map(({ company_scope, ...rest }) => rest);
+            const retry = await supabase
+              .from("purchase_approved_indent_items")
+              .insert(fallbackChunk);
+            insertErr = retry.error;
+          }
           if (insertErr) throw insertErr;
         }
       }

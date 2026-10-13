@@ -2,14 +2,13 @@ import { supabase } from "../lib/supabase";
 
 const PAGE_SIZE = 1000;
 
-export const PO_LIGHT_COLUMNS = [
+const BASE_PO_COLUMNS = [
   "id",
   "po_number",
   "po_type",
   "shop_name",
   "vendor_name",
   "company_name",
-  "filtered_company_name",
   "vendor_id",
   "created_at",
   "total_order_qty",
@@ -26,6 +25,19 @@ export const PO_LIGHT_COLUMNS = [
   "trader_status",
   "transporter_status",
   "receiver_status",
+  "transporter_number",
+  "transporter_remarks",
+];
+
+export const PO_LIGHT_COLUMNS_WITH_SCOPE = [
+  ...BASE_PO_COLUMNS,
+  "company_scope",
+  "filtered_company_name",
+].join(", ");
+
+export const PO_LIGHT_COLUMNS = [
+  ...BASE_PO_COLUMNS,
+  "filtered_company_name",
 ].join(", ");
 
 /**
@@ -33,21 +45,41 @@ export const PO_LIGHT_COLUMNS = [
  * Returns the full list for client-side filtering/search in < 1 second.
  */
 export const fetchAllPurchaseOrders = async () => {
+  let selectCols = PO_LIGHT_COLUMNS_WITH_SCOPE;
   // Fetch initial 2 pages (0..1999) in parallel along with the total count
-  const [res0, res1] = await Promise.all([
+  let [res0, res1] = await Promise.all([
     supabase
       .from("purchase_purchase_orders")
-      .select(PO_LIGHT_COLUMNS, { count: "exact" })
+      .select(selectCols, { count: "exact" })
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .range(0, PAGE_SIZE - 1),
     supabase
       .from("purchase_purchase_orders")
-      .select(PO_LIGHT_COLUMNS)
+      .select(selectCols)
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .range(PAGE_SIZE, PAGE_SIZE * 2 - 1),
   ]);
+
+  if (res0.error) {
+    // If column company_scope is not yet present, fallback cleanly
+    selectCols = PO_LIGHT_COLUMNS;
+    [res0, res1] = await Promise.all([
+      supabase
+        .from("purchase_purchase_orders")
+        .select(selectCols, { count: "exact" })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(0, PAGE_SIZE - 1),
+      supabase
+        .from("purchase_purchase_orders")
+        .select(selectCols)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(PAGE_SIZE, PAGE_SIZE * 2 - 1),
+    ]);
+  }
 
   if (res0.error) throw res0.error;
   if (res1.error) throw res1.error;
@@ -63,7 +95,7 @@ export const fetchAllPurchaseOrders = async () => {
       remainingPromises.push(
         supabase
           .from("purchase_purchase_orders")
-          .select(PO_LIGHT_COLUMNS)
+          .select(selectCols)
           .order("created_at", { ascending: false })
           .order("id", { ascending: true })
           .range(p * PAGE_SIZE, (p + 1) * PAGE_SIZE - 1)

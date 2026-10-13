@@ -19,6 +19,8 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAllPurchaseOrders } from "../services/poHistoryService";
 import useShopStore from "../store/useShopStore";
+import useCompanyStore from "../store/useCompanyStore";
+import { isTransporterSkippedForOrder } from "../utils/poHelpers";
 import "../styles/POHistory.css";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 
@@ -74,7 +76,14 @@ const SkeletonRows = ({ count = 8 }) =>
 /* ── Main Component ──────────────────────────────────────────── */
 const POHistory = () => {
   const { selectedShop } = useShopStore();
+  const { companies, fetchCompanies } = useCompanyStore();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!companies || companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [companies, fetchCompanies]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -151,7 +160,7 @@ const POHistory = () => {
         (o) =>
           (o.po_number || "").toLowerCase().includes(q) ||
           (o.vendor_name || "").toLowerCase().includes(q) ||
-          (o.filtered_company_name || "").toLowerCase().includes(q) ||
+          (o.company_scope || o.filtered_company_name || "").toLowerCase().includes(q) ||
           (o.company_name || "").toLowerCase().includes(q) ||
           (o.first_brand_name || "").toLowerCase().includes(q) ||
           (o.indent_id || "").toLowerCase().includes(q) ||
@@ -504,7 +513,7 @@ const POHistory = () => {
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                           <span className="poh-vendor-name">{order.vendor_name || "—"}</span>
-                          {order.filtered_company_name && (
+                          {(order.company_scope || order.filtered_company_name) && (
                             <span style={{
                               display: "inline-block",
                               padding: "2px 6px",
@@ -515,7 +524,7 @@ const POHistory = () => {
                               border: "1px solid #bfdbfe",
                               borderRadius: "4px"
                             }}>
-                              {order.filtered_company_name}
+                              {order.company_scope || order.filtered_company_name}
                             </span>
                           )}
                         </div>
@@ -549,42 +558,55 @@ const POHistory = () => {
                       </td>
                       <td>
                         <div className="poh-pdf-actions">
-                          {order.trader_pdf_url ? (
-                            <a
-                              href={order.trader_pdf_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="poh-pdf-btn trader"
-                              title="View Trader PDF"
-                            >
-                              <Eye size={11} /> Trader
-                            </a>
-                          ) : null}
-                          {(order.transporter_pdf_url || order.trader_pdf_url) ? (
-                            <a
-                              href={order.transporter_pdf_url || order.trader_pdf_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="poh-pdf-btn transporter"
-                              title="View Transporter PDF"
-                            >
-                              <Truck size={11} /> Transporter
-                            </a>
-                          ) : null}
-                          {order.receiver_pdf_url ? (
-                            <a
-                              href={order.receiver_pdf_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="poh-pdf-btn receiver"
-                              title="View Receiver PDF"
-                            >
-                              <FileDown size={11} /> Receiver
-                            </a>
-                          ) : null}
-                          {!order.trader_pdf_url && !order.transporter_pdf_url && !order.receiver_pdf_url && (
-                            <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>—</span>
-                          )}
+                          {(() => {
+                            const showTransporter =
+                              !isTransporterSkippedForOrder(order, companies) &&
+                              (order.transporter_pdf_url || order.trader_pdf_url);
+                            const showTrader = Boolean(order.trader_pdf_url);
+                            const showReceiver = Boolean(order.receiver_pdf_url);
+
+                            if (!showTrader && !showTransporter && !showReceiver) {
+                              return <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>—</span>;
+                            }
+
+                            return (
+                              <>
+                                {showTrader && (
+                                  <a
+                                    href={order.trader_pdf_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="poh-pdf-btn trader"
+                                    title="View Trader PDF"
+                                  >
+                                    <Eye size={11} /> Trader
+                                  </a>
+                                )}
+                                {showTransporter && (
+                                  <a
+                                    href={order.transporter_pdf_url || order.trader_pdf_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="poh-pdf-btn transporter"
+                                    title="View Transporter PDF"
+                                  >
+                                    <Truck size={11} /> Transporter
+                                  </a>
+                                )}
+                                {showReceiver && (
+                                  <a
+                                    href={order.receiver_pdf_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="poh-pdf-btn receiver"
+                                    title="View Receiver PDF"
+                                  >
+                                    <FileDown size={11} /> Receiver
+                                  </a>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
                     </tr>

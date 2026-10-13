@@ -9,12 +9,22 @@ import {
   MessageSquare, Package, ArrowRight, UserCheck, 
   Hash, Truck, ShieldAlert, Clock
 } from "lucide-react";
+import useCompanyStore from "../store/useCompanyStore";
+import { isTransporterSkippedForOrder } from "../utils/poHelpers";
 
 // Company info is loaded dynamically from purchase_company_settings
 
 const ReceiverPortal = () => {
   const { receiverId } = useParams();
   const [receiver, setReceiver] = useState(null);
+  const { companies, fetchCompanies } = useCompanyStore();
+
+  useEffect(() => {
+    if (!companies || companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [companies, fetchCompanies]);
+
   const [poList, setPoList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -276,9 +286,22 @@ const ReceiverPortal = () => {
         savedDelivered = {};
       }
     }
+    let traderDecisions = po?.trader_item_statuses || {};
+    if (typeof traderDecisions === "string") {
+      try {
+        traderDecisions = JSON.parse(traderDecisions);
+      } catch (e) {
+        traderDecisions = {};
+      }
+    }
     const matched = {};
     items.forEach(item => {
-      matched[item.id] = (savedDelivered && typeof savedDelivered === "object" ? savedDelivered[item.id]?.deliveredQty : undefined) ?? parseFloat(item.displayQty);
+      const isApprovedByTrader = (traderDecisions[item.id] || "approved") === "approved";
+      if (!isApprovedByTrader) {
+        matched[item.id] = 0;
+      } else {
+        matched[item.id] = (savedDelivered && typeof savedDelivered === "object" ? savedDelivered[item.id]?.deliveredQty : undefined) ?? parseFloat(item.displayQty);
+      }
     });
     setReceivedQtys(prev => ({ ...prev, [poId]: matched }));
   };
@@ -525,9 +548,9 @@ const ReceiverPortal = () => {
               };
               const shopName = getShopName();
 
-              // Bypass lock for KUNAL ULWE shop
-              const isKunalShop = (shopName || "").trim().toUpperCase().includes("KUNAL");
-              const isLocked = isKunalShop ? false : po.transporter_status !== "yes";
+              // Check if transporter is skipped for this shop / order
+              const isTransporterSkipped = isTransporterSkippedForOrder(po, companies);
+              const isLocked = isTransporterSkipped ? false : po.transporter_status !== "yes";
 
               // Totals
               const totalQty = po.total_order_qty || 0;
@@ -666,7 +689,11 @@ const ReceiverPortal = () => {
                                 </div>
                                 <div>
                                   <span className="text-slate-500 font-medium block">Logistics Partner</span>
-                                  <strong className="text-slate-800 font-bold">{po.transporter_remarks === "Transporter Bypassed (KUNAL Shop)" ? "Bypassed" : "Confirmed"}</strong>
+                                  <strong className="text-slate-800 font-bold">
+                                    {isTransporterSkipped
+                                      ? "Bypassed / Direct Delivery"
+                                      : (po.transporter_status === "yes" ? "Confirmed" : "Pending")}
+                                  </strong>
                                 </div>
                               </div>
                             </div>
@@ -702,7 +729,9 @@ const ReceiverPortal = () => {
                                     <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Item Details</th>
                                     <th className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Order Qty</th>
                                     <th className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-28">Closing Qty</th>
-                                    <th className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-32">Transporter Delivered</th>
+                                    <th className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-32">
+                                      {isTransporterSkipped ? "Supplier Dispatched" : "Transporter Delivered"}
+                                    </th>
                                     <th className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-36">Received Qty</th>
                                     <th className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-36">Difference</th>
                                   </tr>
@@ -780,7 +809,7 @@ const ReceiverPortal = () => {
                                           </span>
                                         </td>
 
-                                        {/* Transporter Delivered Qty – read-only */}
+                                        {/* Transporter / Supplier Delivered Qty – read-only */}
                                         <td className="p-3 text-center">
                                           <div className="flex flex-col items-center gap-1 justify-center">
                                             {!isApprovedByTrader ? (
@@ -792,6 +821,15 @@ const ReceiverPortal = () => {
                                                 </span>
                                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase tracking-wider">
                                                   {item.qtyType}
+                                                </span>
+                                              </>
+                                            ) : isTransporterSkipped ? (
+                                              <>
+                                                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-xs font-bold">
+                                                  {item.displayQty}
+                                                </span>
+                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100/60 text-emerald-700 uppercase tracking-wider">
+                                                  Direct ({item.qtyType})
                                                 </span>
                                               </>
                                             ) : (

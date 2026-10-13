@@ -14,10 +14,17 @@ const useCompanyStore = create((set, get) => ({
       .order('name');
     
     if (!error && data) {
-      set({ companies: data });
+      const normalized = data.map((c) => ({
+        ...c,
+        district:
+          c.district ||
+          (c.bank_details && typeof c.bank_details === 'object' ? c.bank_details.district : '') ||
+          ''
+      }));
+      set({ companies: normalized });
       // If we don't have an active company selected yet, default to the first one
-      if (data.length > 0) {
-        set({ companySettings: data[0] });
+      if (normalized.length > 0) {
+        set({ companySettings: normalized[0] });
       } else {
         set({ companySettings: null });
       }
@@ -34,11 +41,27 @@ const useCompanyStore = create((set, get) => ({
     set({ loading: true });
     // Remove id from insertion if it is present
     const { id, ...insertData } = companyData;
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('purchase_company_settings')
       .insert([insertData])
       .select()
       .single();
+    
+    // Fallback if 'district' column is not yet in schema cache (PGRST204)
+    if (error && error.code === 'PGRST204' && insertData.district !== undefined) {
+      const { district, ...fallbackData } = insertData;
+      fallbackData.bank_details = {
+        ...(typeof fallbackData.bank_details === 'object' && fallbackData.bank_details ? fallbackData.bank_details : {}),
+        district: district || ''
+      };
+      const fallbackRes = await supabase
+        .from('purchase_company_settings')
+        .insert([fallbackData])
+        .select()
+        .single();
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+    }
     
     set({ loading: false });
     if (!error && data) {
@@ -52,12 +75,31 @@ const useCompanyStore = create((set, get) => ({
     set({ loading: true });
     // Strip id from companyData
     const { id: _, ...updateData } = companyData;
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('purchase_company_settings')
       .update(updateData)
       .eq('id', id)
       .select()
       .single();
+    
+    // Fallback if 'district' column is not yet in schema cache (PGRST204)
+    if (error && error.code === 'PGRST204' && updateData.district !== undefined) {
+      const { district, ...fallbackData } = updateData;
+      const existing = get().companies.find((c) => c.id === id);
+      const existingBank = (existing && typeof existing.bank_details === 'object' && existing.bank_details) ? existing.bank_details : {};
+      fallbackData.bank_details = {
+        ...existingBank,
+        district: district || ''
+      };
+      const fallbackRes = await supabase
+        .from('purchase_company_settings')
+        .update(fallbackData)
+        .eq('id', id)
+        .select()
+        .single();
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+    }
     
     set({ loading: false });
     if (!error && data) {

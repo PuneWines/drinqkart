@@ -150,6 +150,18 @@ export const systems = [
           { label: 'Follow-Up', to: '/systems/business-overview/help-center/follow-up' },
           { label: 'Completed', to: '/systems/business-overview/help-center/completed' }
         ]
+      },
+      {
+        label: 'Gift Stock',
+        to: '/systems/business-overview/gift-stock/dashboard',
+        children: [
+          { label: 'Dashboard', to: '/systems/business-overview/gift-stock/dashboard' },
+          { label: 'Stock In', to: '/systems/business-overview/gift-stock/stock-in' },
+          { label: 'Stock Out', to: '/systems/business-overview/gift-stock/stock-out' },
+          { label: 'Current Stock', to: '/systems/business-overview/gift-stock/current-stock' },
+          { label: 'Item Master', to: '/systems/business-overview/gift-stock/item-master' },
+          { label: 'Trader Master', to: '/systems/business-overview/gift-stock/trader-master' }
+        ]
       }
     ]
   },
@@ -206,7 +218,8 @@ export const getVisibleSystems = (user) => {
     }
   } catch (e) {}
 
-  const isMasterAdmin = (userObj.user_name || userObj.username || currentUserStored?.user_name || currentUserStored?.username || '').toLowerCase() === 'masteradmin';
+  const currentUserNameClean = (userObj.user_name || userObj.username || currentUserStored?.user_name || currentUserStored?.username || '').toLowerCase();
+  const isMasterAdmin = currentUserNameClean === 'masteradmin' || currentUserNameClean === 'admin';
   const userRole = (userObj.role || currentUserStored?.role || '').toLowerCase();
 
   const primaryMasterAccess = [
@@ -285,6 +298,17 @@ export const getVisibleSystems = (user) => {
           sub.label === 'Completed'
         ) {
           labelsToCheck.push('Help Center', 'Help Center Records');
+        }
+        if (
+          sub.label === 'Gift Stock' ||
+          sub.label === 'Gift Stock Dashboard' ||
+          sub.label === 'Stock In' ||
+          sub.label === 'Stock Out' ||
+          sub.label === 'Current Stock' ||
+          sub.label === 'Item Master' ||
+          sub.label === 'Trader Master'
+        ) {
+          labelsToCheck.push('Gift Stock', 'Gift Stock Dashboard', 'Gift');
         }
       }
       if (systemId === 'checklist') {
@@ -420,6 +444,10 @@ export const getActiveSystem = (visibleSystems, pathname) => {
   const matches = visibleSystems.filter((s) => pathname.startsWith(s.base));
   if (matches.length > 0) {
     return matches.sort((a, b) => b.base.length - a.base.length)[0];
+  }
+  const allMatches = systems.filter((s) => pathname && pathname.startsWith(s.base));
+  if (allMatches.length > 0) {
+    return allMatches.sort((a, b) => b.base.length - a.base.length)[0];
   }
   return visibleSystems[0];
 };

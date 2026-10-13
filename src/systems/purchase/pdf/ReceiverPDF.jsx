@@ -230,13 +230,23 @@ const styles = StyleSheet.create({
 
 const ReceiverPDF = ({
   partyName,
+  companyScope,
   filteredCompanyName,
+  companyName,
   items = [],
   poNumber,
   poDate,
   vendorDetails,
   companyInfo
 }) => {
+  const effectiveCompany = (
+    companyScope ||
+    filteredCompanyName ||
+    companyName ||
+    (items && items.length > 0 ? (items[0]?.company_name || items[0]?.companyName) : null) ||
+    ""
+  ).trim();
+
   const totalBoxes = items.reduce((s, r) => {
     const boxVal = parseFloat(r.poBox !== undefined && r.poBox !== null && r.poBox !== "" ? r.poBox : (r.orderBox ?? 0)) || 0;
     const type = r.qtyType || ((boxVal > 0 && boxVal % 1 === 0) ? "Box" : "Bottles");
@@ -299,12 +309,10 @@ const ReceiverPDF = ({
                 <Text style={styles.boxFieldLabel}>Party Name:</Text>
                 <Text style={[styles.boxFieldValue, { fontWeight: "bold" }]}>{partyName || "—"}</Text>
               </View>
-              {filteredCompanyName ? (
-                <View style={styles.boxFieldRow}>
-                  <Text style={styles.boxFieldLabel}>Company Name:</Text>
-                  <Text style={[styles.boxFieldValue, { fontWeight: "bold", color: "#1e3a8a" }]}>{filteredCompanyName}</Text>
-                </View>
-              ) : null}
+              <View style={styles.boxFieldRow}>
+                <Text style={styles.boxFieldLabel}>Company Name:</Text>
+                <Text style={[styles.boxFieldValue, { fontWeight: "bold", color: "#1e3a8a" }]}>{effectiveCompany || "—"}</Text>
+              </View>
               <View style={styles.boxFieldRow}>
                 <Text style={styles.boxFieldLabel}>Address:</Text>
                 <Text style={styles.boxFieldValue}>{vendorDetails?.address || "—"}</Text>
@@ -386,9 +394,14 @@ const ReceiverPDF = ({
                 <Text style={[styles.tableCell, styles.colShopName, styles.tableCellBold]}>
                   {item.shopName || "—"}
                 </Text>
-                <Text style={[styles.tableCell, styles.colItemName, styles.tableCellBold]}>
-                  {item.itemName || "—"}
-                </Text>
+                <View style={[styles.tableCell, styles.colItemName]}>
+                  <Text style={styles.tableCellBold}>{item.itemName || item.item_name || "—"}</Text>
+                  {(item.company_name || item.companyName || item.brand_name || item.brandName) ? (
+                    <Text style={{ fontSize: 7, color: "#64748b", marginTop: 1 }}>
+                      {[item.brand_name || item.brandName, item.company_name || item.companyName].filter(Boolean).join(" • ")}
+                    </Text>
+                  ) : null}
+                </View>
                 <Text style={[styles.tableCell, styles.colClosingStock]}>
                   {item.closingQty != null ? item.closingQty : "—"}
                 </Text>

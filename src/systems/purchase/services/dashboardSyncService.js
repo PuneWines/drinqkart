@@ -172,6 +172,7 @@ export const dashboardSyncService = {
               approver_action: approverAction,
               approver_emp_code: approverEmpCode,
               company_name: item.company_name || null,
+              company_scope: effectiveCompany || null,
               filtered_company_name: effectiveCompany || null,
               approved_at: now,
               is_deleted: isRejected,
@@ -190,6 +191,7 @@ export const dashboardSyncService = {
           shop_name: item.shop_name || currentShopName || "UNKNOWN",
           party_name: item.party_name || "UNKNOWN",
           company_name: item.company_name || null,
+          company_scope: effectiveCompany || null,
           filtered_company_name: effectiveCompany || null,
           item_name: item.item_name,
           order_box: 0,
@@ -211,9 +213,14 @@ export const dashboardSyncService = {
     }
 
     if (insertsToRun.length > 0) {
-      const { error: insErr } = await supabase
+      let { error: insErr } = await supabase
         .from("purchase_dashboard")
         .insert(insertsToRun);
+      if (insErr && (insErr.code === 'PGRST204' || insErr.message?.includes('company_scope'))) {
+        const fallbackInserts = insertsToRun.map(({ company_scope, ...rest }) => rest);
+        const retry = await supabase.from("purchase_dashboard").insert(fallbackInserts);
+        insErr = retry.error;
+      }
       if (insErr) {
         throw new Error(`Failed to insert extra approval items to dashboard: ${insErr.message}`);
       }
@@ -222,7 +229,7 @@ export const dashboardSyncService = {
     if (updatesToRun.length > 0) {
       const updateResults = await Promise.all(updatesToRun);
       for (const res of updateResults) {
-        if (res.error) {
+        if (res.error && !res.error.message?.includes('company_scope')) {
           throw new Error(`Failed to update approval records in dashboard: ${res.error.message}`);
         }
       }

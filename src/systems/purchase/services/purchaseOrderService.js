@@ -22,9 +22,10 @@ export const fetchNextPoNumber = async () => {
     if (data && data.length > 0) {
       data.forEach((row) => {
         if (row.po_number) {
-          const parts = row.po_number.split("-");
-          if (parts.length > 1) {
-            const num = parseInt(parts[parts.length - 1], 10);
+          // Robustly matches main sequence right after PO-, e.g. "2026/PO-1566" or "2026/PO-1566-1"
+          const match = row.po_number.match(/PO-(\d+)/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
             if (!isNaN(num) && num > maxSeq) {
               maxSeq = num;
             }
@@ -40,6 +41,62 @@ export const fetchNextPoNumber = async () => {
 
   const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;
   return `${yr}/PO-${String(nextSeq).padStart(2, "0")}`;
+};
+
+/**
+ * Resolves the PO Number for a set of items.
+ * If the items are from a sub-incremented indent (e.g. '-1'),
+ * finds the parent PO number and sub-increments it (e.g. '2026/PO-1566-1').
+ * Otherwise, returns the standard sequential PO number.
+ */
+export const resolvePoNumberForItems = async (items, defaultNextPoNumber) => {
+  if (!items || items.length === 0) return defaultNextPoNumber;
+
+  const sample = items[0];
+  const uniqueIndentId = sample.unique_indent_id || sample.indent_id;
+  if (!uniqueIndentId) return defaultNextPoNumber;
+
+  // Check if uniqueIndentId has a sub-increment, e.g. "uuid-1::IN-29" or "IND-0042-1"
+  const parts = String(uniqueIndentId).split("::");
+  const mainIndent = parts[0].trim();
+  const subMatch = mainIndent.match(/^(.*)-(\d+)$/);
+
+  if (!subMatch) return defaultNextPoNumber;
+
+  const rootMainIndent = subMatch[1];
+  const subIndex = subMatch[2];
+
+  // Look up the parent PO in purchase_purchase_orders
+  const cleanParty = (sample.partyName || sample.party_name || "").split("::")[0].trim().toLowerCase();
+
+  const { data: pos, error } = await supabase
+    .from("purchase_purchase_orders")
+    .select("po_number, indent_id, vendor_name")
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error || !pos) return defaultNextPoNumber;
+
+  // Find the parent PO that matches the root indent and vendor
+  const parentPo = pos.find(p => {
+    const pIndentMain = (p.indent_id || "").split("::")[0].trim().toLowerCase();
+    const pVendor = (p.vendor_name || "").split("::")[0].trim().toLowerCase();
+    return pIndentMain === rootMainIndent.toLowerCase() && (!cleanParty || pVendor === cleanParty);
+  });
+
+  if (!parentPo || !parentPo.po_number) return defaultNextPoNumber;
+
+  // Extract base parent PO number (keep main sequence YYYY/PO-XXXX, strip existing sub-PO suffix like -1, -2)
+  const poMatch = parentPo.po_number.match(/^(.*PO-\d+)(?:-(\d+))?$/i);
+  const parentBasePoNumber = poMatch ? poMatch[1] : parentPo.po_number;
+
+  // Find next available sub-PO sequence for this parent
+  let candidateSub = parseInt(subIndex, 10) || 1;
+  while (pos.some(p => p.po_number === `${parentBasePoNumber}-${candidateSub}`)) {
+    candidateSub++;
+  }
+
+  return `${parentBasePoNumber}-${candidateSub}`;
 };
 
 export const fetchPageData = async () => {
@@ -67,9 +124,19 @@ export const fetchPageData = async () => {
     // Query 3: Fetch recent purchase orders to check for existing POs (avoiding full table scan)
     supabase
       .from("purchase_purchase_orders")
-      .select("indent_id, vendor_name, filtered_company_name, company_name")
+      .select("indent_id, vendor_name, company_scope, filtered_company_name, company_name")
       .order("created_at", { ascending: false })
-      .limit(500),
+      .limit(500)
+      .then(res => {
+        if (res.error) {
+          return supabase
+            .from("purchase_purchase_orders")
+            .select("indent_id, vendor_name, filtered_company_name, company_name")
+            .order("created_at", { ascending: false })
+            .limit(500);
+        }
+        return res;
+      }),
 
     // Query 4: Fetch all vendors
     supabase
@@ -158,6 +225,7 @@ const ALLOWED_PO_COLUMNS = [
   'indent_id',
   'vendor_name',
   'company_name',
+  'company_scope',
   'filtered_company_name',
   'total_order_qty',
   'total_order_box',
@@ -185,7 +253,8 @@ const ALLOWED_PO_COLUMNS = [
   'updated_at',
   'first_brand_name',
   'receiver_pdf_url',
-  'po_items'
+  'po_items',
+  'district'
 ];
 
 const sanitizePoPayload = (data) => {
@@ -200,10 +269,24 @@ const sanitizePoPayload = (data) => {
 
 export const insertPurchaseOrder = async (poData) => {
   const payload = sanitizePoPayload(poData);
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('purchase_purchase_orders')
     .insert([payload])
     .select();
+
+  // Graceful fallback if 'company_scope' or 'district' columns are not yet migrated in PostgreSQL (PGRST204)
+  if (error && (error.code === 'PGRST204' || error.message?.includes('district') || error.message?.includes('company_scope'))) {
+    console.warn("purchase_purchase_orders table fallback retry:", error.message);
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.district;
+    delete fallbackPayload.company_scope;
+    const retry = await supabase
+      .from('purchase_purchase_orders')
+      .insert([fallbackPayload])
+      .select();
+    if (retry.error) throw retry.error;
+    return retry.data;
+  }
 
   if (error) throw error;
   return data;
@@ -316,16 +399,111 @@ export const holdIndentItems = async (ids) => {
   return allUpdatedData;
 };
 
-export const restoreHeldIndentItems = async (ids) => {
+export const resolveSubIncrementIndentId = async (currentUniqueIndentId, partyName, companyScope = null) => {
+  if (!currentUniqueIndentId) return currentUniqueIndentId;
+
+  const cleanParty = partyName?.includes("::") ? partyName.split("::")[0].trim().toLowerCase() : (partyName || "").trim().toLowerCase();
+  const cleanFilteredComp = (companyScope || (partyName?.includes("::") ? partyName.split("::")[1] : "") || "").trim().toLowerCase();
+
+  let { data: existingPos, error: poErr } = await supabase
+    .from("purchase_purchase_orders")
+    .select("indent_id, vendor_name, company_scope, filtered_company_name")
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (poErr) {
+    const fallback = await supabase
+      .from("purchase_purchase_orders")
+      .select("indent_id, vendor_name, filtered_company_name")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    existingPos = fallback.data;
+    poErr = fallback.error;
+  }
+
+  if (poErr || !existingPos) return currentUniqueIndentId;
+
+  // Extract base indent ID (handling any party suffix like "::IN-1")
+  const parts = String(currentUniqueIndentId).split("::");
+  let mainIndent = parts[0].trim();
+  const partySuffix = parts.slice(1).join("::");
+
+  // Determine root indent code:
+  // If mainIndent already ends with a sub-increment like "-1", "-2":
+  let rootIndent = mainIndent;
+  const subIncMatch = mainIndent.match(/^(.*)-(\d+)$/);
+  if (subIncMatch) {
+    const candidateRoot = subIncMatch[1];
+    const rootMatchesPo = existingPos.some(po => {
+      const poIndentMain = (po.indent_id || "").split("::")[0].trim().toLowerCase();
+      return poIndentMain === candidateRoot.toLowerCase() || poIndentMain.startsWith(`${candidateRoot.toLowerCase()}-`);
+    });
+    if (rootMatchesPo) {
+      rootIndent = candidateRoot;
+    }
+  }
+
+  // Helper to check if a candidate indent ID already has a PO for this vendor
+  const hasMatchingPo = (candidateIndentMain) => {
+    return existingPos.some(po => {
+      const poIndentMain = (po.indent_id || "").split("::")[0].trim().toLowerCase();
+      if (poIndentMain !== candidateIndentMain.toLowerCase()) return false;
+
+      const poVendor = po.vendor_name?.includes("::")
+        ? po.vendor_name.split("::")[0].trim().toLowerCase()
+        : (po.vendor_name || "").trim().toLowerCase();
+
+      if (poVendor !== cleanParty) return false;
+
+      const poFilteredComp = (
+        po.company_scope ||
+        po.filtered_company_name ||
+        (po.vendor_name?.includes("::") ? po.vendor_name.split("::")[1] : "") ||
+        ""
+      ).trim().toLowerCase();
+
+      if (cleanFilteredComp) {
+        return poFilteredComp === cleanFilteredComp;
+      }
+      return !poFilteredComp;
+    });
+  };
+
+  // If no PO exists for this indent + party, keep original indent ID
+  if (!hasMatchingPo(mainIndent)) {
+    return currentUniqueIndentId;
+  }
+
+  // A PO was generated! Find the next available sub-increment: -1, -2, -3...
+  let nextSubIndex = 1;
+  while (true) {
+    const candidateMain = `${rootIndent}-${nextSubIndex}`;
+    if (!hasMatchingPo(candidateMain)) {
+      return partySuffix ? `${candidateMain}::${partySuffix}` : candidateMain;
+    }
+    nextSubIndex++;
+  }
+};
+
+export const restoreHeldIndentItems = async (ids, newUniqueIndentId = null) => {
   if (!ids || ids.length === 0) return [];
   const chunkSize = 50;
   let allUpdatedData = [];
+
+  const updatePayload = {
+    po_status: "pending",
+    updated_at: new Date().toISOString()
+  };
+
+  if (newUniqueIndentId) {
+    updatePayload.unique_indent_id = newUniqueIndentId;
+  }
 
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize);
     const { data, error } = await supabase
       .from("purchase_approved_indent_items")
-      .update({ po_status: "pending", updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .in("id", chunk)
       .select();
 

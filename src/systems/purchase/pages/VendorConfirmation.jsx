@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { FileText, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import useCompanyStore from "../store/useCompanyStore";
+import { isTransporterSkippedForOrder } from "../utils/poHelpers";
 import "../styles/VendorConfirmation.css";
 
 const VendorConfirmation = () => {
@@ -11,6 +13,13 @@ const VendorConfirmation = () => {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const { companies, fetchCompanies } = useCompanyStore();
+
+  useEffect(() => {
+    if (!companies || companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [companies, fetchCompanies]);
 
   // Form State
   const [status, setStatus] = useState(""); // "yes" or "no"
@@ -98,17 +107,17 @@ const VendorConfirmation = () => {
 
     setSubmitting(true);
     try {
-      const isKunalShop = shopName?.toUpperCase() === "KUNAL";
+      const isTransporterSkipped = isTransporterSkippedForOrder(poData, companies);
       const updatePayload = {
         trader_status: status,
         dispatch_date: status === "no" ? new Date().toISOString() : (dispatchDate || null),
         trader_remarks: remarks || null
       };
 
-      if (status === "yes" && isKunalShop) {
+      if (status === "yes" && isTransporterSkipped) {
         updatePayload.transporter_status = "yes";
         updatePayload.pickup_date = dispatchDate || null;
-        updatePayload.transporter_remarks = "Transporter Bypassed (KUNAL Shop)";
+        updatePayload.transporter_remarks = `Transporter Bypassed (${shopName || "Direct Delivery"})`;
       }
 
       const { error } = await supabase

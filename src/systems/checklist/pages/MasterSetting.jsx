@@ -98,7 +98,7 @@ const AVAILABLE_SYSTEMS = [
   {
     id: "business-overview",
     name: "Business overview",
-    pages: ["Feedback", "Trader Invoices", "Shop Visit", "Help Center"],
+    pages: ["Feedback", "Trader Invoices", "Shop Visit", "Help Center", "Gift Stock"],
   },
   {
     id: "sale-analytics",

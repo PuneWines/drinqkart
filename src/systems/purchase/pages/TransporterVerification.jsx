@@ -3,6 +3,8 @@ import Table from "../components/Table";
 import { supabase } from "../lib/supabase";
 import { FileText } from "lucide-react";
 import useShopStore from "../store/useShopStore";
+import useCompanyStore from "../store/useCompanyStore";
+import { isTransporterSkippedForOrder } from "../utils/poHelpers";
 import "../styles/Pages.css";
 
 const TransporterVerification = () => {
@@ -10,8 +12,15 @@ const TransporterVerification = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
   const { selectedShop } = useShopStore();
+  const { companies, fetchCompanies } = useCompanyStore();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  useEffect(() => {
+    if (!companies || companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [companies, fetchCompanies]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -67,9 +76,14 @@ const TransporterVerification = () => {
             }
           }
 
+          const effectiveCompany = (item.company_scope || item.filtered_company_name || (item.vendor_name && item.vendor_name.includes("::") ? item.vendor_name.split("::")[1] : "") || "").trim();
+          const cleanVendor = (item.vendor_name && item.vendor_name.includes("::") ? item.vendor_name.split("::")[0] : item.vendor_name || "").trim();
+
           return {
             ...item,
             shop_name: shopName,
+            clean_vendor_name: cleanVendor,
+            company_name: effectiveCompany || null,
             pickedUpCount,
             formattedDate: new Date(item.created_at).toLocaleDateString("en-IN", {
               day: "2-digit", month: "short", year: "numeric",
@@ -99,7 +113,34 @@ const TransporterVerification = () => {
         }) : <span style={{ color: "#94a3b8" }}>—</span>
       },
       { key: "shop_name", label: "Shop Name", sortable: true },
-      { key: "vendor_name", label: "Vendor Name", sortable: true },
+      { 
+        key: "vendor_name", 
+        label: "Vendor Name", 
+        sortable: true,
+        render: (vendor, row) => {
+          const cleanVendor = row.clean_vendor_name || (vendor && vendor.includes("::") ? vendor.split("::")[0] : vendor) || "—";
+          const comp = row.company_scope || row.company_name || row.filtered_company_name;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 600 }}>{cleanVendor}</span>
+              {comp && (
+                <span style={{
+                  display: "inline-block",
+                  padding: "2px 6px",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  backgroundColor: "#eff6ff",
+                  color: "#1d4ed8",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: "4px"
+                }}>
+                  {comp}
+                </span>
+              )}
+            </div>
+          );
+        }
+      },
       {
         key: "pickedUpCount",
         label: "Items Picked Up",
@@ -176,7 +217,7 @@ const TransporterVerification = () => {
   }, [activeTab]);
 
   const filteredData = useMemo(() => {
-    let result = data.filter(item => item.shop_name?.toUpperCase() !== "KUNAL");
+    let result = data.filter(item => !isTransporterSkippedForOrder(item, companies));
     if (selectedShop !== "All") {
       result = result.filter(item => item.shop_name === selectedShop);
     }
@@ -324,7 +365,7 @@ const TransporterVerification = () => {
           data={currentTabData}
           columns={columns}
           title={activeTab === 'pending' ? "Pending Transporter Confirmations" : "Transporter Log History"}
-          searchableColumns={["po_number", "vendor_name", "transporter_number", "shop_name"]}
+          searchableColumns={["po_number", "vendor_name", "company_name", "clean_vendor_name", "transporter_number", "shop_name"]}
           showHeader={false}
         />
       )}
