@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, X, Store, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
+import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, Pencil, X, Store, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2pdf from 'html2pdf.js';
 import SignaturePadModal from '../components/SignaturePadModal';
@@ -535,29 +535,34 @@ function SignatureField({ label, value, onChange }) {
   );
 }
 
-function ChecklistModal({ shops, onClose, onSaved }) {
-  const [date, setDate] = useState(todayISO());
-  const [visitor, setVisitor] = useState('');
-  const [shop, setShop] = useState('');
-  const [handover, setHandover] = useState('');
-  const [takeover, setTakeover] = useState('');
-  const [remark, setRemark] = useState('');
-  const [manager1Name, setManager1Name] = useState('');
-  const [manager1Sig, setManager1Sig] = useState('');
-  const [manager2Name, setManager2Name] = useState('');
-  const [manager2Sig, setManager2Sig] = useState('');
-  const [checks, setChecks] = useState({});
+function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose, onSaved }) {
+  const [date, setDate] = useState(() => initialVisit?.visit_date ? initialVisit.visit_date.slice(0, 10) : todayISO());
+  const [visitor, setVisitor] = useState(() => initialVisit?.visitor_name || '');
+  const [shop, setShop] = useState(() => initialVisit?.shop_name || (defaultShop && defaultShop !== 'ALL' ? defaultShop : ''));
+  const [handover, setHandover] = useState(() => initialVisit?.handover_by || '');
+  const [takeover, setTakeover] = useState(() => initialVisit?.takeover_by || '');
+  const [remark, setRemark] = useState(() => initialVisit?.remark || initialVisit?.checks?.remark || '');
+  const [manager1Name, setManager1Name] = useState(() => initialVisit?.manager1_name || initialVisit?.checks?.manager1_name || '');
+  const [manager1Sig, setManager1Sig] = useState(() => initialVisit?.manager1_signature || initialVisit?.checks?.manager1_signature || '');
+  const [manager2Name, setManager2Name] = useState(() => initialVisit?.manager2_name || initialVisit?.checks?.manager2_name || '');
+  const [manager2Sig, setManager2Sig] = useState(() => initialVisit?.manager2_signature || initialVisit?.checks?.manager2_signature || '');
+  const [checks, setChecks] = useState(() => initialVisit ? parseVisitChecks(initialVisit) : {});
   const [coll, setColl] = useState({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    try { const u = JSON.parse(localStorage.getItem('user') || localStorage.getItem('currentUser') || '{}'); if (u.name || u.user_name || u.username) setVisitor(u.name || u.user_name || u.username); } catch (_) { }
+    if (!initialVisit) {
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || localStorage.getItem('currentUser') || '{}');
+        if (u.name || u.user_name || u.username) setVisitor(u.name || u.user_name || u.username);
+      } catch (_) { }
+    }
     const orig = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = orig;
     };
-  }, []);
+  }, [initialVisit]);
 
   const done = Object.values(checks).filter(Boolean).length;
   const ok = Object.values(checks).filter(v => v === 'ok').length;
@@ -595,7 +600,6 @@ function ChecklistModal({ shops, onClose, onSaved }) {
   const save = async () => {
     if (!shop) { toast.error('Select a shop.'); return; }
     if (!visitor) { toast.error('Enter visitor name.'); return; }
-    if (done < TOTAL) { toast.error(`${TOTAL - done} item(s) unchecked.`); return; }
     setSaving(true);
     try {
       const payload = {
@@ -608,7 +612,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
         not_ok_count: bad,
         missing_count: miss,
         total_items: TOTAL,
-        all_ok: bad + miss === 0,
+        all_ok: bad + miss === 0 && done === TOTAL,
         checks: {
           ...checks,
           remark: remark || '',
@@ -630,22 +634,33 @@ function ChecklistModal({ shops, onClose, onSaved }) {
         payload[colName] = checks[itemId] || null;
       });
 
-      let { error } = await supabase.from('shop_visit').insert([payload]);
-
-      // If top-level columns don't exist in Supabase schema cache, retry without top-level extras (they are preserved in checks JSON)
-      if (error && (error.message?.includes('schema cache') || error.message?.includes('column') || error.code === 'PGRST204')) {
-        const fallbackPayload = { ...payload };
-        delete fallbackPayload.remark;
-        delete fallbackPayload.manager1_name;
-        delete fallbackPayload.manager1_signature;
-        delete fallbackPayload.manager2_name;
-        delete fallbackPayload.manager2_signature;
-        const res = await supabase.from('shop_visit').insert([fallbackPayload]);
-        error = res.error;
+      let res;
+      if (initialVisit?.id) {
+        res = await supabase.from('shop_visit').update(payload).eq('id', initialVisit.id);
+        if (res.error && (res.error.message?.includes('schema cache') || res.error.message?.includes('column') || res.error.code === 'PGRST204')) {
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.remark;
+          delete fallbackPayload.manager1_name;
+          delete fallbackPayload.manager1_signature;
+          delete fallbackPayload.manager2_name;
+          delete fallbackPayload.manager2_signature;
+          res = await supabase.from('shop_visit').update(fallbackPayload).eq('id', initialVisit.id);
+        }
+      } else {
+        res = await supabase.from('shop_visit').insert([payload]);
+        if (res.error && (res.error.message?.includes('schema cache') || res.error.message?.includes('column') || res.error.code === 'PGRST204')) {
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.remark;
+          delete fallbackPayload.manager1_name;
+          delete fallbackPayload.manager1_signature;
+          delete fallbackPayload.manager2_name;
+          delete fallbackPayload.manager2_signature;
+          res = await supabase.from('shop_visit').insert([fallbackPayload]);
+        }
       }
 
-      if (error) throw error;
-      toast.success('Saved to Supabase ✓');
+      if (res.error) throw res.error;
+      toast.success(initialVisit?.id ? 'Visit updated successfully ✓' : 'Saved to Supabase ✓');
       onSaved?.();
       onClose();
     } catch (e) { toast.error('Failed to save: ' + e.message); } finally { setSaving(false); }
@@ -669,7 +684,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
         <div style={{ background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)', color: '#fff', padding: '22px 56px 22px 20px', position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
           <div style={{ position: 'absolute', right: -40, top: -60, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.07)' }} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
-            <div style={{ flex: 1 }}><p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>🏪 New Shop Visit</p><h1 style={{ margin: '4px 0 0', fontSize: 19, fontWeight: 800, lineHeight: 1.3 }}>{hero}</h1></div>
+            <div style={{ flex: 1 }}><p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>{initialVisit ? '✏️ Edit Shop Visit' : '🏪 New Shop Visit'}</p><h1 style={{ margin: '4px 0 0', fontSize: 19, fontWeight: 800, lineHeight: 1.3 }}>{hero}</h1></div>
             <Ring pct={pct} />
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
@@ -803,7 +818,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
             <button onClick={share} style={{ flex: 1, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#334155', borderRadius: 11, padding: 13, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}><Share2 size={15} /> Share report</button>
             <button onClick={save} disabled={saving} style={{ flex: 1, background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)', color: '#fff', border: 'none', borderRadius: 11, padding: 13, fontSize: 14.5, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.7 : 1, fontFamily: 'inherit' }}>
               {saving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-              {saving ? 'Saving…' : 'Save visit'}
+              {saving ? 'Saving…' : initialVisit ? 'Update visit' : 'Save visit'}
             </button>
           </div>
         </div>
@@ -812,7 +827,7 @@ function ChecklistModal({ shops, onClose, onSaved }) {
   );
 }
 
-function ViewModal({ visit, onClose }) {
+function ViewModal({ visit, onClose, onEdit, onSaved }) {
   const scrollRef = useRef(null);
   const [filter, setFilter] = useState('all'); // 'all' | 'issues' | 'ok'
   const [copied, setCopied] = useState(false);
@@ -826,6 +841,19 @@ function ViewModal({ visit, onClose }) {
   const manager1Sig = visit.manager1_signature || checks?.manager1_signature || '';
   const manager2Name = visit.manager2_name || checks?.manager2_name || '';
   const manager2Sig = visit.manager2_signature || checks?.manager2_signature || '';
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete this inspection visit for ${shopName}?`)) return;
+    try {
+      const { error } = await supabase.from('shop_visit').delete().eq('id', visit.id);
+      if (error) throw error;
+      toast.success('Inspection visit deleted ✓');
+      onClose();
+      onSaved?.();
+    } catch (err) {
+      toast.error('Failed to delete: ' + err.message);
+    }
+  };
 
   useEffect(() => {
     const orig = document.body.style.overflow;
@@ -1336,43 +1364,86 @@ function ViewModal({ visit, onClose }) {
         </div>
 
         {/* Modal Footer */}
-        <div style={{ padding: '12px 22px', borderTop: '1.5px solid #e2e8f0', background: '#fff', display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ padding: '12px 22px', borderTop: '1.5px solid #e2e8f0', background: '#fff', display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
           <button
-            onClick={downloadPDF}
+            onClick={handleDelete}
             style={{
-              background: '#2563eb',
-              color: '#fff',
-              border: 'none',
+              background: '#fff',
+              color: '#dc2626',
+              border: '1.5px solid #fca5a5',
               borderRadius: 10,
-              padding: '10px 18px',
-              fontSize: 13.5,
-              fontWeight: 700,
+              padding: '10px 16px',
+              fontSize: 13,
+              fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              fontFamily: 'inherit',
-              boxShadow: '0 2px 8px rgba(37,99,235,0.25)'
-            }}
-          >
-            <Download size={15} /> Download PDF
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 10,
-              padding: '10px 24px',
-              fontSize: 13.5,
-              fontWeight: 700,
-              cursor: 'pointer',
               fontFamily: 'inherit'
             }}
           >
-            Close
+            <Trash2 size={14} /> Delete
           </button>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                onClose();
+                onEdit?.(visit);
+              }}
+              style={{
+                background: '#eff6ff',
+                color: '#1d4ed8',
+                border: '1.5px solid #bfdbfe',
+                borderRadius: 10,
+                padding: '10px 18px',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontFamily: 'inherit'
+              }}
+            >
+              <Pencil size={14} /> Edit Visit
+            </button>
+            <button
+              onClick={downloadPDF}
+              style={{
+                background: '#2563eb',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 10,
+                padding: '10px 18px',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontFamily: 'inherit',
+                boxShadow: '0 2px 8px rgba(37,99,235,0.25)'
+              }}
+            >
+              <Download size={15} /> Download PDF
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 10,
+                padding: '10px 24px',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'inherit'
+              }}
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1382,6 +1453,7 @@ function ViewModal({ visit, onClose }) {
 export default function ShopVisit() {
   const [shops, setShops] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [editRow, setEditRow] = useState(null);
   const [visits, setVisits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [viewRow, setViewRow] = useState(null);
@@ -1413,7 +1485,7 @@ export default function ShopVisit() {
   });
 
   const total = visits.length;
-  const issues = visits.filter(v => !v.all_ok).length;
+  const issues = visits.filter(v => (v.not_ok_count || 0) + (v.missing_count || 0) > 0).length;
   const clear = visits.filter(v => v.all_ok).length;
 
   return (
@@ -1460,7 +1532,7 @@ export default function ShopVisit() {
       ) : (
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 850 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 880 }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap', width: 100 }}>Date</th>
@@ -1471,7 +1543,7 @@ export default function ShopVisit() {
                   <th style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap', width: 90 }}>Checked</th>
                   <th style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap', width: 80 }}>Issues</th>
                   <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap', width: 110 }}>Status</th>
-                  <th style={{ padding: '12px 14px', width: 70 }}></th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap', width: 140 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1487,7 +1559,50 @@ export default function ShopVisit() {
                       <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}><span style={{ background: '#f1f5f9', borderRadius: 6, padding: '3px 9px', fontWeight: 700, color: '#475569', fontSize: 12 }}>{v.checked_count || 0}/{v.total_items || TOTAL}</span></td>
                       <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>{iss > 0 ? <span style={{ background: '#fceaea', color: '#d64545', borderRadius: 6, padding: '3px 9px', fontWeight: 700, fontSize: 12 }}>{iss}</span> : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}</td>
                       <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>{v.all_ok ? <span style={{ background: '#e5f7ee', color: '#1a9e5c', border: '1px solid #1a9e5c', borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 700, display: 'inline-block' }}>All Clear ✓</span> : <span style={{ background: '#fceaea', color: '#d64545', border: '1px solid #d64545', borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 700, display: 'inline-block' }}>{iss > 0 ? `${iss} Issues` : 'Incomplete'}</span>}</td>
-                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}><button onClick={() => setViewRow(v)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit' }}><Eye size={12} /> View</button></td>
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          <button
+                            onClick={() => setViewRow(v)}
+                            style={{
+                              background: '#f1f5f9',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 8,
+                              padding: '5px 10px',
+                              cursor: 'pointer',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#334155',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontFamily: 'inherit'
+                            }}
+                            title="View Inspection Report"
+                          >
+                            <Eye size={12} /> View
+                          </button>
+                          <button
+                            onClick={() => setEditRow(v)}
+                            style={{
+                              background: '#eff6ff',
+                              border: '1.5px solid #bfdbfe',
+                              borderRadius: 8,
+                              padding: '5px 10px',
+                              cursor: 'pointer',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#1d4ed8',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontFamily: 'inherit'
+                            }}
+                            title="Edit Visit"
+                          >
+                            <Pencil size={12} /> Edit
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -1496,8 +1611,29 @@ export default function ShopVisit() {
           </div>
         </div>
       )}
-      {showModal && <ChecklistModal shops={shops} onClose={() => setShowModal(false)} onSaved={fetch_} />}
-      {viewRow && <ViewModal visit={viewRow} onClose={() => setViewRow(null)} />}
+      {(showModal || editRow) && (
+        <ChecklistModal
+          shops={shops}
+          defaultShop={shopFilt}
+          initialVisit={editRow}
+          onClose={() => {
+            setShowModal(false);
+            setEditRow(null);
+          }}
+          onSaved={fetch_}
+        />
+      )}
+      {viewRow && (
+        <ViewModal
+          visit={viewRow}
+          onClose={() => setViewRow(null)}
+          onEdit={(v) => {
+            setViewRow(null);
+            setEditRow(v);
+          }}
+          onSaved={fetch_}
+        />
+      )}
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .modal-scrollbar {
