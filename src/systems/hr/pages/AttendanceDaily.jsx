@@ -1712,12 +1712,25 @@ const AttendanceDaily = () => {
           dMap = mappingList.find(m => m.name && m.name.toString().toLowerCase() === entryName);
         }
 
-        const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNumeric ? 'Unknown' : code));
-        const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (isNumeric ? code : 'Unknown'));
+        // Also cross-reference against hr_management_employees table
+        const hrEmp = (employeesData || []).find(e => {
+          const eId = String(e.employee_id || e.id || '').trim().toLowerCase();
+          const cleanCode = code.toLowerCase();
+          return eId === cleanCode || eId.replace(/^0+/, '') === cleanCode.replace(/^0+/, '');
+        });
+
+        const displayName = (dMap && dMap.name && dMap.name !== 'Unknown')
+          ? dMap.name
+          : (empMeta && empMeta.name && empMeta.name !== 'Unknown')
+            ? empMeta.name
+            : (hrEmp && hrEmp.name_as_per_aadhar && hrEmp.name_as_per_aadhar !== 'Unknown')
+              ? hrEmp.name_as_per_aadhar
+              : (isNumeric ? `Employee ${code}` : code);
+        const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (hrEmp ? hrEmp.employee_id : (isNumeric ? code : 'Unknown')));
 
         // Preserve actual hardware punch device store and serial number
         const matchedPunchDevice = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
-        const displayStore = matchedPunchDevice ? matchedPunchDevice.name : (group.SourceDeviceName && group.SourceDeviceName !== 'ALL DEVICES' ? group.SourceDeviceName : (dMap ? dMap.storeName : (empMeta ? empMeta.store : '-')));
+        const displayStore = matchedPunchDevice ? matchedPunchDevice.name : (group.SourceDeviceName && group.SourceDeviceName !== 'ALL DEVICES' ? group.SourceDeviceName : (dMap ? dMap.storeName : (empMeta ? empMeta.store : (hrEmp ? hrEmp.joining_place : '-'))));
         const displayDeviceId = dMap ? dMap.deviceId : '-';
         const displayAssignedSerial = serial || (dMap ? dMap.serialNo : '-');
 
@@ -1779,7 +1792,7 @@ const AttendanceDaily = () => {
           PunchLogStatus: punchLogStatus,
           StoreName: displayStore,
           DeviceID: displayDeviceId,
-          Designation: empMeta ? empMeta.designation : '-',
+          Designation: empMeta ? empMeta.designation : (hrEmp ? hrEmp.designation : '-'),
           SerialNumber: serial,
           AssignedSerial: displayAssignedSerial,
           Status: status,

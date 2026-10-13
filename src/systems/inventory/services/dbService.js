@@ -402,7 +402,7 @@ export async function submitSaleAmountTransaction(date, gpay, cash, expense, tot
       .from('Inventory_manager_report')
       .insert([{
         report_date: date,
-        shop_name: shopData.shop_name,
+        shop_name: shopNameStr,
         gpay_amount: gpayAmt,
         cash_amount: cashAmt,
         expense_amount: expenseAmt,
@@ -1896,28 +1896,16 @@ export async function getSalesByDate(date, shopId = null) {
         acc.cash += Number(row.cash_amount) || 0;
         acc.expense += Number(row.expense_amount) || 0;
         acc.netSales += Number(row.total_closing_amount) || 0;
+        acc.savedTotalSales += Number(row.Total_sales_amt) || 0;
         return acc;
       },
-      { gpay: 0, cash: 0, expense: 0, netSales: 0 }
+      { gpay: 0, cash: 0, expense: 0, netSales: 0, savedTotalSales: 0 }
     );
 
-    // 2. Fetch from sale_history for the selected date and shop
-    let historyQuery = supabase
-      .from('Inventory_sale_history')
-      .select('item_name, sale_qty, shop_id, transaction_date')
-      .eq('transaction_date', date);
-
-    if (shopId) {
-      historyQuery = historyQuery.eq('shop_id', Number(shopId));
-    }
-
-    const { data: historyData, error: historyError } = await historyQuery;
-    if (historyError) throw historyError;
-
-    // 3. Fetch items to map item_name to its mrp
+    // 2. Fetch items for this shop with their MRP
     let itemsQuery = supabase
       .from('Inventory_items')
-      .select('item_name, mrp, shop_id');
+      .select('id, item_name, mrp, shop_id');
 
     if (shopId) {
       itemsQuery = itemsQuery.eq('shop_id', Number(shopId));
@@ -1926,21 +1914,72 @@ export async function getSalesByDate(date, shopId = null) {
     const { data: itemsData, error: itemsError } = await itemsQuery;
     if (itemsError) throw itemsError;
 
-    const mrpMap = {};
+    const mrpMapById = {};
+    const mrpMapByName = {};
+    const itemIds = [];
     (itemsData || []).forEach(item => {
-      mrpMap[item.item_name] = parseFloat(item.mrp) || 20;
+      const mrp = parseFloat(item.mrp) || 20;
+      mrpMapById[item.id] = mrp;
+      mrpMapByName[item.item_name] = mrp;
+      itemIds.push(item.id);
     });
 
-    // Calculate total sales from history
+    // 3. Calculate total sales from real-time stock ledger (primary source of truth)
     let calculatedSales = 0;
-    (historyData || []).forEach(row => {
-      const qty = parseFloat(row.sale_qty) || 0;
-      const mrp = mrpMap[row.item_name] !== undefined ? mrpMap[row.item_name] : 20;
-      calculatedSales += qty * mrp;
-    });
+    if (itemIds.length > 0) {
+      const { data: ledgerData } = await supabase
+        .from('Inventory_stock_ledger')
+        .select('item_id, sale_qty')
+        .eq('ledger_date', date)
+        .in('item_id', itemIds);
+
+      (ledgerData || []).forEach(row => {
+        const qty = parseFloat(row.sale_qty) || 0;
+        const mrp = mrpMapById[row.item_id] !== undefined ? mrpMapById[row.item_id] : 20;
+        calculatedSales += qty * mrp;
+      });
+    } else {
+      const { data: ledgerData } = await supabase
+        .from('Inventory_stock_ledger')
+        .select('item_id, sale_qty')
+        .eq('ledger_date', date);
+
+      (ledgerData || []).forEach(row => {
+        const qty = parseFloat(row.sale_qty) || 0;
+        const mrp = mrpMapById[row.item_id] !== undefined ? mrpMapById[row.item_id] : 20;
+        calculatedSales += qty * mrp;
+      });
+    }
+
+    // 4. Fallback: if stock ledger has 0, check sale_history
+    if (calculatedSales === 0) {
+      let historyQuery = supabase
+        .from('Inventory_sale_history')
+        .select('item_name, sale_qty, shop_id, transaction_date')
+        .eq('transaction_date', date);
+
+      if (shopId) {
+        historyQuery = historyQuery.eq('shop_id', Number(shopId));
+      }
+
+      const { data: historyData } = await historyQuery;
+      (historyData || []).forEach(row => {
+        const qty = parseFloat(row.sale_qty) || 0;
+        const mrp = mrpMapByName[row.item_name] !== undefined ? mrpMapByName[row.item_name] : 20;
+        calculatedSales += qty * mrp;
+      });
+    }
+
+    // 5. Fallback: if still 0 but summary was previously saved with Total_sales_amt
+    if (calculatedSales === 0 && summaryResult.savedTotalSales > 0) {
+      calculatedSales = summaryResult.savedTotalSales;
+    }
 
     return {
-      ...summaryResult,
+      gpay: summaryResult.gpay,
+      cash: summaryResult.cash,
+      expense: summaryResult.expense,
+      netSales: summaryResult.netSales,
       calculatedSales
     };
   } catch (err) {

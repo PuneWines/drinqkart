@@ -589,6 +589,13 @@ export default function EmployeeOverviewModal({
     const isRosterHoliday = hasRoster && (
       rShiftLower.includes('holiday')
     );
+    const isRosterHalfDay = hasRoster && (
+      rShiftLower.includes('half day') ||
+      rShiftLower.includes('half-day') ||
+      rShiftLower.includes('halfday') ||
+      rShiftLower === 'hd' ||
+      rShiftLower === 'h'
+    );
 
     // Compute lunch break duration dynamically from raw punch_log or manual_punches if not stored
     let computedLunchStr = att.standard_lunch || att.lunch_time || att.lunch_duration || att.lunch_hours || att.lunch || '-';
@@ -641,13 +648,23 @@ export default function EmployeeOverviewModal({
     );
 
     let status = att.status;
-    const isLate = Boolean((att.late_minutes && att.late_minutes > 0) || (att.late_minute && att.late_minute > 0) || status === 'Late');
+    const lateMinsVal = Number(att.late_minutes ?? att.late_minute ?? 0);
+    const isLate = Boolean((lateMinsVal > 0) || status === 'Late');
 
     const statusLower = String(status || '').toLowerCase().trim();
     const isExplicitWeeklyOff = statusLower === 'weekly off' || statusLower === 'wo' || statusLower === 'weeklyoff' || isRosterWeeklyOff;
     const isExplicitDayOff = statusLower === 'day off' || statusLower === 'do' || statusLower === 'dayoff' || isRosterDayOff;
     const isExplicitOnLeave = statusLower === 'on leave' || statusLower === 'leave';
-    const isExplicitHalfDay = statusLower === 'half day' || statusLower === 'hd';
+    const isExplicitHalfDay = (
+      statusLower === 'half day' || 
+      statusLower === 'hd' || 
+      statusLower === 'h' || 
+      statusLower === 'half-day' || 
+      statusLower === 'half_day' || 
+      statusLower.includes('half') ||
+      isRosterHalfDay ||
+      Boolean(att.half_day)
+    );
     const isExplicitHoliday = isHoliday || isRosterHoliday || statusLower === 'holiday';
 
     if (isBeforeJoining) {
@@ -657,28 +674,28 @@ export default function EmployeeOverviewModal({
       if (isExplicitHoliday) {
         totalHoliday++;
         if (hasValidWorkingPunch && !isSingleMidnightPunch) {
-          status = isLate ? 'Late' : 'Present';
+          status = isExplicitHalfDay ? 'Half Day' : (isLate ? 'Late' : 'Present');
         } else {
           status = 'HOLIDAY';
           totalUnpunchedHoliday++;
         }
+      } else if (isExplicitHalfDay) {
+        status = 'Half Day';
       } else if (hasValidWorkingPunch && !isSingleMidnightPunch) {
-        status = isLate ? 'Late' : (isExplicitHalfDay ? 'Half Day' : (status || 'Present'));
+        status = isLate ? 'Late' : (status || 'Present');
       } else if (isExplicitWeeklyOff) {
         status = 'Weekly Off';
       } else if (isExplicitDayOff) {
         status = 'Day Off';
       } else if (isExplicitOnLeave) {
         status = 'On Leave';
-      } else if (isExplicitHalfDay) {
-        status = 'Half Day';
       } else {
         status = 'Absent';
       }
 
-      const lateMins = att.late_minutes || 0;
+      const lateMins = isBeforeJoining ? 0 : lateMinsVal;
 
-      if (status === 'Half Day' || status === 'HD') {
+      if (status === 'Half Day' || status === 'HD' || status === 'H') {
         totalHalfDay++;
       } else if (status === 'Present' || status === 'Late') {
         totalPresent++;
@@ -697,7 +714,7 @@ export default function EmployeeOverviewModal({
       totalWorkMs += dayWorkMs;
     }
 
-    const lateMins = isBeforeJoining ? 0 : (att.late_minutes || 0);
+    const lateMins = isBeforeJoining ? 0 : lateMinsVal;
 
     // Build timeline shift segments dynamically
     let shiftSegments = [];
@@ -958,7 +975,8 @@ export default function EmployeeOverviewModal({
                       const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
                       const hasValidPunches = row.hasValidWorkingPunch;
                       const isAbsentOrLeave = 
-                        !row.isBeforeJoining && (
+                        !row.isBeforeJoining && 
+                        !['Half Day', 'HD', 'H'].includes(row.status) && (
                           !hasValidPunches ||
                           row.status === 'Absent' ||
                           String(row.status || '').toLowerCase() === 'absent' ||
@@ -1077,10 +1095,10 @@ export default function EmployeeOverviewModal({
                                   if (isHoliday) return <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">HOLIDAY</span>;
                                   if (row.status === 'Present') return <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">P</span>;
                                   if (row.status === 'Late') return <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">L</span>;
-                                  if (row.status === 'Half Day') return <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold">HD</span>;
-                                  if (row.status === 'Weekly Off') return <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">WO</span>;
-                                  if (row.status === 'Day Off') return <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700 text-[10px] font-bold">DO</span>;
-                                  if (row.status === 'On Leave') return <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">Leave</span>;
+                                  if (row.status === 'Half Day' || row.status === 'HD' || row.status === 'H') return <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold">HD</span>;
+                                  if (row.status === 'Weekly Off' || row.status === 'WO') return <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">WO</span>;
+                                  if (row.status === 'Day Off' || row.status === 'DO') return <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700 text-[10px] font-bold">DO</span>;
+                                  if (row.status === 'On Leave' || row.status === 'Leave') return <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">Leave</span>;
                                   return <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-[10px] font-bold">A</span>;
                                 })()}
                               </td>
@@ -1100,7 +1118,8 @@ export default function EmployeeOverviewModal({
                 const isHoliday = row.status === 'HOLIDAY' || row.status === 'Holiday';
                 const hasValidPunches = row.hasValidWorkingPunch;
                 const isAbsentOrLeave = 
-                  !row.isBeforeJoining && (
+                  !row.isBeforeJoining && 
+                  !['Half Day', 'HD', 'H'].includes(row.status) && (
                     !hasValidPunches ||
                     row.status === 'Absent' ||
                     String(row.status || '').toLowerCase() === 'absent' ||
@@ -1125,6 +1144,8 @@ export default function EmployeeOverviewModal({
                         ? 'bg-indigo-50/60 border-indigo-200 shadow-xs'
                         : row.status === 'Day Off' || row.status === 'DO'
                         ? 'bg-slate-50 border-slate-200 shadow-xs'
+                        : row.status === 'Half Day' || row.status === 'HD' || row.status === 'H'
+                        ? 'bg-yellow-50/70 border-yellow-200 shadow-xs'
                         : isWeekendAbsent 
                         ? 'bg-red-50/90 border-red-300 ring-1 ring-red-400/30 shadow-sm' 
                         : row.status === 'Absent'
@@ -1155,6 +1176,10 @@ export default function EmployeeOverviewModal({
                         ) : row.status === 'Day Off' || row.status === 'DO' ? (
                           <span className="px-2 py-0.5 rounded bg-slate-200 border border-slate-300 text-slate-700 font-bold text-[10px]">
                             📅 Day Off
+                          </span>
+                        ) : row.status === 'Half Day' || row.status === 'HD' || row.status === 'H' ? (
+                          <span className="px-2 py-0.5 rounded bg-yellow-100 border border-yellow-200 text-yellow-800 font-bold text-[10px]">
+                            🌗 Half Day
                           </span>
                         ) : row.hasRoster ? (
                           <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 font-semibold text-[10px]">
@@ -1236,6 +1261,10 @@ export default function EmployeeOverviewModal({
                     ) : row.status === 'On Leave' ? (
                       <div className="py-2.5 px-4 text-center rounded-xl bg-sky-100/80 border border-sky-300 flex items-center justify-center gap-2">
                         <span className="text-xs font-bold text-sky-900">✈️ Approved Leave</span>
+                      </div>
+                    ) : row.status === 'Half Day' || row.status === 'HD' || row.status === 'H' ? (
+                      <div className="py-2.5 px-4 text-center rounded-xl bg-yellow-100/70 border border-yellow-300 flex items-center justify-center gap-2">
+                        <span className="text-xs font-bold text-yellow-900">🌗 Half Day</span>
                       </div>
                     ) : (
                       <div className={`py-2 text-center rounded-xl border border-dashed ${isWeekendAbsent ? 'bg-red-100/70 border-red-300' : 'bg-slate-50 border-slate-200'}`}>

@@ -276,14 +276,29 @@ const PurchaseOrder = () => {
         return new Set([...Array.from(dbHeldItemIds), ...manualIds]);
       });
 
-      // Group DB held items by party_name
-      const groupedByParty = {};
+      // Group DB held items by company_name with vendor_name (party_name)
+      const groupedBatches = {};
       dbHeldItems.forEach(rawItem => {
-        const party = rawItem.party_name || "Unspecified Vendor";
-        if (!groupedByParty[party]) {
-          groupedByParty[party] = [];
+        let party = (rawItem.party_name || "Unspecified Vendor").trim();
+        let scope = (rawItem.company_scope || rawItem.filtered_company_name || rawItem.company_name || "").trim();
+
+        if (party.includes("::")) {
+          const parts = party.split("::");
+          party = parts[0].trim();
+          if (!scope) scope = parts[1].trim();
         }
-        groupedByParty[party].push({
+
+        const groupKey = scope ? `${party}::${scope}` : party;
+        if (!groupedBatches[groupKey]) {
+          groupedBatches[groupKey] = {
+            partyKey: groupKey,
+            partyName: party,
+            companyName: scope || null,
+            items: []
+          };
+        }
+
+        groupedBatches[groupKey].items.push({
           id: rawItem.id,
           itemName: rawItem.item_name,
           brandName: rawItem.item_name,
@@ -292,24 +307,29 @@ const PurchaseOrder = () => {
           orderBox: rawItem.order_box,
           orderQty: rawItem.order_qty,
           shopName: rawItem.shop_name,
-          partyName: rawItem.party_name,
+          partyName: party,
           unique_indent_id: rawItem.unique_indent_id,
           indent_id: rawItem.indent_id,
           company_name: rawItem.company_name,
-          company_scope: rawItem.company_scope || rawItem.filtered_company_name,
-          filtered_company_name: rawItem.company_scope || rawItem.filtered_company_name,
+          company_scope: scope || null,
+          filtered_company_name: scope || null,
           is_on_hold: true
         });
       });
 
-      const dbBatches = Object.entries(groupedByParty).map(([party, items]) => ({
-        batchId: `db-hold-${party.replace(/\s+/g, '-')}`,
-        type: "complete_po",
-        partyName: party,
-        shopName: items[0]?.shopName || "",
-        heldAt: new Date().toLocaleDateString(),
-        items
-      }));
+      const dbBatches = Object.values(groupedBatches).map(group => {
+        const uniqueShops = [...new Set(group.items.map(i => i.shopName).filter(Boolean))];
+        return {
+          batchId: `db-hold-${group.partyKey.replace(/[^a-zA-Z0-9-_]/g, '-')}`,
+          type: "complete_po",
+          partyKey: group.partyKey,
+          partyName: group.partyName,
+          companyName: group.companyName,
+          shopName: uniqueShops.join(', ') || "",
+          heldAt: new Date().toLocaleDateString(),
+          items: group.items
+        };
+      });
 
       setHeldPOs(prev => {
         const manualBatches = prev.filter(b => b.batchId && b.batchId.startsWith("manual-hold-"));
@@ -551,11 +571,15 @@ const PurchaseOrder = () => {
     });
 
     const holdBatchId = `manual-hold-item-${Date.now()}`;
+    const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty;
+    const cleanComp = activeParty.includes("::") ? activeParty.split("::")[1].trim() : (itemToHold.company_scope || itemToHold.company_name || null);
     const newHeldRecord = {
       batchId: holdBatchId,
       type: "single_item",
-      partyName: activeParty,
-      shopName: selectedShop,
+      partyKey: activeParty,
+      partyName: cleanParty,
+      companyName: cleanComp,
+      shopName: selectedShop !== "All" ? selectedShop : (itemToHold.shopName || ""),
       heldAt: new Date().toLocaleString(),
       items: [{ ...itemToHold, is_on_hold: true }]
     };
@@ -591,11 +615,15 @@ const PurchaseOrder = () => {
     });
 
     const holdBatchId = `manual-hold-po-${Date.now()}`;
+    const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty;
+    const cleanComp = activeParty.includes("::") ? activeParty.split("::")[1].trim() : null;
     const newHeldRecord = {
       batchId: holdBatchId,
       type: "complete_po",
-      partyName: activeParty,
-      shopName: selectedShop,
+      partyKey: activeParty,
+      partyName: cleanParty,
+      companyName: cleanComp,
+      shopName: selectedShop !== "All" ? selectedShop : "",
       heldAt: new Date().toLocaleString(),
       items: itemsForActiveParty.map(item => ({ ...item, is_on_hold: true }))
     };
@@ -618,7 +646,7 @@ const PurchaseOrder = () => {
       newIndentId = await resolveSubIncrementIndentId(
         originalUniqueId,
         targetBatch.partyName,
-        sampleItem?.company_scope || sampleItem?.filtered_company_name
+        sampleItem?.company_scope || sampleItem?.filtered_company_name || targetBatch.companyName
       );
       await restoreHeldIndentItems(itemIdsToRestore, newIndentId);
 
@@ -650,7 +678,9 @@ const PurchaseOrder = () => {
     });
 
     setHeldPOs(prev => prev.filter(b => b.batchId !== batchId));
-    if (targetBatch.partyName) setActiveParty(targetBatch.partyName);
+    if (targetBatch.partyKey || targetBatch.partyName) {
+      setActiveParty(targetBatch.partyKey || targetBatch.partyName);
+    }
     setPoMode("standard");
 
     if (newIndentId && originalUniqueId && newIndentId !== originalUniqueId) {
@@ -673,7 +703,7 @@ const PurchaseOrder = () => {
       newIndentId = await resolveSubIncrementIndentId(
         originalUniqueId,
         targetBatch?.partyName || itemToRestore?.partyName,
-        itemToRestore?.company_scope || itemToRestore?.filtered_company_name
+        itemToRestore?.company_scope || itemToRestore?.filtered_company_name || targetBatch?.companyName
       );
       await restoreHeldIndentItems([itemId], newIndentId);
 
@@ -713,7 +743,9 @@ const PurchaseOrder = () => {
       }).filter(Boolean);
     });
 
-    if (targetBatch?.partyName) setActiveParty(targetBatch.partyName);
+    if (targetBatch?.partyKey || targetBatch?.partyName) {
+      setActiveParty(targetBatch.partyKey || targetBatch.partyName);
+    }
     setPoMode("standard");
 
     if (newIndentId && originalUniqueId && newIndentId !== originalUniqueId) {
@@ -1046,12 +1078,26 @@ const PurchaseOrder = () => {
 
   const availableVendorDistricts = useMemo(() => {
     if (!matchedVendorRecord) return [];
-    if (!activeVendorInfo.companyScope && !activeVendorInfo.filteredCompany) return []; // Direct vendors have no district dropdown
     if (!Array.isArray(matchedVendorRecord.district_contacts)) return [];
     return matchedVendorRecord.district_contacts
       .map((dc) => dc && dc.district)
       .filter(Boolean);
-  }, [matchedVendorRecord, activeVendorInfo.companyScope, activeVendorInfo.filteredCompany]);
+  }, [matchedVendorRecord]);
+
+  // Auto-select district based on active company's district or active shop record if available
+  useEffect(() => {
+    if (!selectedVendorDistrict && availableVendorDistricts.length > 0) {
+      const targetDistrict = activeCompany?.district || activeShopRecord?.district;
+      if (targetDistrict) {
+        const found = availableVendorDistricts.find(
+          d => d.toLowerCase() === targetDistrict.toLowerCase()
+        );
+        if (found) {
+          setSelectedVendorDistrict(found);
+        }
+      }
+    }
+  }, [availableVendorDistricts, activeCompany, activeShopRecord, selectedVendorDistrict]);
 
   const activeVendorDetails = useMemo(() => {
     const vendor = matchedVendorRecord;
@@ -1061,7 +1107,7 @@ const PurchaseOrder = () => {
     let contactPhone = vendor.contact_number || vendor.contact || vendor.phone || vendor.mobile || "";
     let contactEmail = vendor.email || vendor.vendor_email || "";
 
-    const hasDistrictContacts = availableVendorDistricts.length > 0;
+    const hasDistrictContacts = Array.isArray(vendor.district_contacts) && vendor.district_contacts.length > 0;
 
     if (hasDistrictContacts) {
       if (selectedVendorDistrict) {
@@ -1069,9 +1115,9 @@ const PurchaseOrder = () => {
           (dc) => (dc.district || "").toLowerCase() === selectedVendorDistrict.toLowerCase()
         );
         if (match) {
-          contactName = match.name || "";
-          contactPhone = match.phone || "";
-          contactEmail = match.email || "";
+          contactName = match.name || contactName;
+          contactPhone = match.phone || contactPhone;
+          contactEmail = match.email || contactEmail;
         }
       } else {
         // District required but not selected yet: leave blank
@@ -1091,7 +1137,7 @@ const PurchaseOrder = () => {
       email: contactEmail,
       selected_district: selectedVendorDistrict
     };
-  }, [matchedVendorRecord, availableVendorDistricts, selectedVendorDistrict]);
+  }, [matchedVendorRecord, selectedVendorDistrict]);
 
   const isMissingVendorLedger = useMemo(() => {
     if (!activeParty) return false;
@@ -1723,6 +1769,15 @@ const PurchaseOrder = () => {
                         {batch.type === "complete_po" ? "Complete PO Hold" : "Item Hold"}
                       </span>
                       <h4 className="font-bold text-amber-950 text-sm">{batch.partyName || "Unspecified Vendor"}</h4>
+                      {batch.companyName ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {batch.companyName}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                          Direct
+                        </span>
+                      )}
                       {batch.shopName && <span className="text-xs text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded">Shop: {batch.shopName}</span>}
                       <span className="text-xs text-slate-500 flex items-center gap-1"><Clock size={12} /> {batch.heldAt}</span>
                     </div>
@@ -1747,6 +1802,7 @@ const PurchaseOrder = () => {
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 uppercase text-[10px]">
                           <th className="py-2 px-3">Item Name</th>
+                          <th className="py-2 px-3 text-center">Company</th>
                           <th className="py-2 px-3 text-center">Shop</th>
                           <th className="py-2 px-3 text-right">PO Box</th>
                           <th className="py-2 px-3 text-right">PO Qty</th>
@@ -1759,6 +1815,9 @@ const PurchaseOrder = () => {
                             <td className="py-2 px-3 font-medium text-slate-800">
                               {item.itemName}
                               <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800">On Hold</span>
+                            </td>
+                            <td className="py-2 px-3 text-center text-slate-600 font-medium">
+                              {item.company_scope || item.filtered_company_name || item.company_name || "Direct"}
                             </td>
                             <td className="py-2 px-3 text-center text-slate-500">{item.shopName || item.shop_name || "—"}</td>
                             <td className="py-2 px-3 text-right font-medium">{item.poBox ?? item.orderBox ?? 0}</td>

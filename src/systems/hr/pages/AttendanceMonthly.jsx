@@ -309,7 +309,15 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
 
                     let status = att?.status;
                     const statusLower = String(status || '').toLowerCase().trim();
-                    const isExplicitHalfDay = statusLower === 'half day' || statusLower === 'hd';
+                    const isExplicitHalfDay = (
+                        statusLower === 'half day' || 
+                        statusLower === 'hd' || 
+                        statusLower === 'h' || 
+                        statusLower === 'half-day' || 
+                        statusLower === 'half_day' || 
+                        statusLower.includes('half') ||
+                        Boolean(att?.half_day)
+                    );
                     const hasPunches = Boolean(inTime || outTime || (att?.punch_log && att.punch_log !== '-'));
                     const isLate = Boolean((att?.late_minutes && att.late_minutes > 0) || (att?.late_minute && att.late_minute > 0) || status === 'Late');
                     const isHoliday = Boolean(holidayMap[dateStr]);
@@ -317,20 +325,20 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     if (isHoliday) {
                         holidayCount++;
                         if (hasPunches) {
-                            status = isLate ? 'Late' : (isExplicitHalfDay ? 'Half Day' : 'Present');
+                            status = isExplicitHalfDay ? 'Half Day' : (isLate ? 'Late' : 'Present');
                             if (isExplicitHalfDay) {
                                 halfDayCount++;
                             } else {
                                 presentCount++;
                             }
-                            if (isLate) lateCount++;
+                            if (isLate && !isExplicitHalfDay) lateCount++;
                         } else {
                             status = 'HOLIDAY';
                             unpunchedHolidayCount++;
                         }
                     } else if (isExplicitHalfDay) {
+                        status = 'Half Day';
                         halfDayCount++;
-                        if (isLate) lateCount++;
                     } else if (hasPunches) {
                         status = isLate ? 'Late' : 'Present';
                         presentCount++;

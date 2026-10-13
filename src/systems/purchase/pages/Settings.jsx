@@ -390,9 +390,8 @@ const Settings = ({ readOnly = false }) => {
       }
     }
 
-    // If company_name is set and contacts is empty, but there is an existing phone number:
+    // If contacts is empty, but there is an existing phone number:
     if (
-      vendor.company_name &&
       contacts.length === 0 &&
       (vendor.contact_number || vendor.contact)
     ) {
@@ -423,6 +422,7 @@ const Settings = ({ readOnly = false }) => {
   const handleAddNewVendor = () => {
     setEditingVendor(null);
     setIsCustomCompany(false);
+    const firstDist = districts.length > 0 ? districts[0].name : "";
     setVendorFormData({
       party_name: availableParties.length > 0 ? availableParties[0] : "",
       address: "",
@@ -432,7 +432,7 @@ const Settings = ({ readOnly = false }) => {
       email: "",
       terms: [],
       company_name: "",
-      district_contacts: [],
+      district_contacts: firstDist ? [{ district: firstDist, phone: "", name: "", email: "" }] : [],
     });
     setShowVendorForm(true);
   };
@@ -476,30 +476,32 @@ const Settings = ({ readOnly = false }) => {
       return;
     }
 
+    const validDistrictContacts = (
+      vendorFormData.district_contacts || []
+    ).filter((dc) => dc && (dc.district || dc.phone || dc.name || dc.email));
+
+    if (validDistrictContacts.length === 0) {
+      alert("Please add at least one District Contact with a District and Contact Number.");
+      return;
+    }
+
+    const incompleteContact = validDistrictContacts.find(dc => !dc.district || !dc.phone);
+    if (incompleteContact) {
+      alert("Please provide both District and Contact Number for each district contact.");
+      return;
+    }
+
     setIsVendorSubmitting(true);
 
-    const isScoped = Boolean(
-      vendorFormData.company_name && vendorFormData.company_name.trim(),
-    );
     let payload = { ...vendorFormData };
+    payload.district_contacts = validDistrictContacts;
 
-    if (isScoped) {
-      // When company scope is selected: data is stored exclusively via district_contacts
-      const validDistrictContacts = (
-        vendorFormData.district_contacts || []
-      ).filter((dc) => dc && (dc.district || dc.phone || dc.name || dc.email));
-      payload.district_contacts = validDistrictContacts;
-
-      // Sync primary fields to the first district contact for database / schema compatibility
-      const firstContact = validDistrictContacts[0];
-      payload.contact_number = firstContact ? firstContact.phone || "" : "";
-      payload.contact = firstContact ? firstContact.phone || "" : "";
-      payload.contact_name = firstContact ? firstContact.name || "" : "";
-      payload.email = firstContact ? firstContact.email || "" : "";
-    } else {
-      // When Direct (no company scope): district_contacts is not used
-      payload.district_contacts = [];
-    }
+    // Primary contact fields auto-sync to the first district contact
+    const firstContact = validDistrictContacts[0];
+    payload.contact_number = firstContact ? firstContact.phone || "" : "";
+    payload.contact = firstContact ? firstContact.phone || "" : "";
+    payload.contact_name = firstContact ? firstContact.name || "" : "";
+    payload.email = firstContact ? firstContact.email || "" : "";
 
     let res;
     if (editingVendor) {
@@ -1113,72 +1115,8 @@ const Settings = ({ readOnly = false }) => {
                         </p>
                       </div>
 
-                      {/* Primary Contact Details (Only shown when company scope is NOT selected) */}
-                      {!vendorFormData.company_name && (
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-slate-700">
-                                Primary Contact Phone
-                              </label>
-                              <input
-                                type="text"
-                                value={vendorFormData.contact_number}
-                                onChange={(e) =>
-                                  setVendorFormData({
-                                    ...vendorFormData,
-                                    contact_number: e.target.value,
-                                  })
-                                }
-                                disabled={isVendorSubmitting}
-                                placeholder="e.g. 9822746825"
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-slate-700">
-                                Email Address
-                              </label>
-                              <input
-                                type="email"
-                                value={vendorFormData.email}
-                                onChange={(e) =>
-                                  setVendorFormData({
-                                    ...vendorFormData,
-                                    email: e.target.value,
-                                  })
-                                }
-                                disabled={isVendorSubmitting}
-                                placeholder="e.g. contact@supplier.com"
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700">
-                              Contact Person Name
-                            </label>
-                            <input
-                              type="text"
-                              value={vendorFormData.contact_name}
-                              onChange={(e) =>
-                                setVendorFormData({
-                                  ...vendorFormData,
-                                  contact_name: e.target.value,
-                                })
-                              }
-                              disabled={isVendorSubmitting}
-                              placeholder="e.g. Rahul Sharma"
-                              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* District-Wise Vendor Contacts (Only shown when company scope IS selected) */}
-                      {Boolean(vendorFormData.company_name) && (
-                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
+                      {/* District-Wise Vendor Contacts (Available for all vendors) */}
+                      <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
                           <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                             <div>
                               <div className="flex items-center gap-1.5">
@@ -1224,8 +1162,9 @@ const Settings = ({ readOnly = false }) => {
                           vendorFormData.district_contacts.length === 0 ? (
                             <div className="text-center py-4 bg-white/70 border border-dashed border-slate-200 rounded-lg">
                               <p className="text-slate-500 text-xs font-medium italic">
-                                No district-specific numbers defined for "
-                                {vendorFormData.company_name}".
+                                {vendorFormData.company_name
+                                  ? `No district-specific numbers defined for "${vendorFormData.company_name}".`
+                                  : "No district-specific contacts defined for this vendor."}
                               </p>
                               <button
                                 type="button"
@@ -1389,7 +1328,6 @@ const Settings = ({ readOnly = false }) => {
                             </div>
                           )}
                         </div>
-                      )}
 
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-700">
@@ -1558,8 +1496,7 @@ const Settings = ({ readOnly = false }) => {
                             )}
                           </td>
                           <td className="px-6 py-4 text-slate-600 font-medium">
-                            {vendor.company_name &&
-                            Array.isArray(vendor.district_contacts) &&
+                            {Array.isArray(vendor.district_contacts) &&
                             vendor.district_contacts.length > 0 ? (
                               <div className="flex flex-wrap gap-1 max-w-xs">
                                 {vendor.district_contacts.map((dc, idx) => (
@@ -2871,7 +2808,7 @@ const Settings = ({ readOnly = false }) => {
                                     ? contacts
                                     : [];
 
-                                  if (v.company_name && list.length > 0) {
+                                  if (list.length > 0) {
                                     return (
                                       <div className="flex flex-wrap gap-1 max-w-xs">
                                         {list.map((dc, idx) => (
