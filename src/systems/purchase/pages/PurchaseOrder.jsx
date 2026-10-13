@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle, PauseCircle, RotateCcw, Clock } from "lucide-react";
+import { Printer, ShoppingCart, FileText, Trash2, AlertTriangle, XCircle, PauseCircle, RotateCcw, Clock, Building2, Store } from "lucide-react";
 import useCompanyStore from "../store/useCompanyStore";
 import useShopStore from "../store/useShopStore";
 import useAuthStore from "../store/useAuthStore";
@@ -276,11 +276,11 @@ const PurchaseOrder = () => {
         return new Set([...Array.from(dbHeldItemIds), ...manualIds]);
       });
 
-      // Group DB held items by company_name with vendor_name (party_name)
+      // Group DB held items by vendor name (party_name) with company scope (company_scope)
       const groupedBatches = {};
       dbHeldItems.forEach(rawItem => {
         let party = (rawItem.party_name || "Unspecified Vendor").trim();
-        let scope = (rawItem.company_scope || rawItem.filtered_company_name || rawItem.company_name || "").trim();
+        let scope = (rawItem.company_scope || rawItem.filtered_company_name || "").trim();
 
         if (party.includes("::")) {
           const parts = party.split("::");
@@ -293,6 +293,7 @@ const PurchaseOrder = () => {
           groupedBatches[groupKey] = {
             partyKey: groupKey,
             partyName: party,
+            companyScope: scope || null,
             companyName: scope || null,
             items: []
           };
@@ -310,8 +311,8 @@ const PurchaseOrder = () => {
           partyName: party,
           unique_indent_id: rawItem.unique_indent_id,
           indent_id: rawItem.indent_id,
-          company_name: rawItem.company_name,
-          company_scope: scope || null,
+          company_name: rawItem.company_name, // Liquor item manufacturer/brand
+          company_scope: scope || null,       // Vendor company scope
           filtered_company_name: scope || null,
           is_on_hold: true
         });
@@ -324,6 +325,7 @@ const PurchaseOrder = () => {
           type: "complete_po",
           partyKey: group.partyKey,
           partyName: group.partyName,
+          companyScope: group.companyScope,
           companyName: group.companyName,
           shopName: uniqueShops.join(', ') || "",
           heldAt: new Date().toLocaleDateString(),
@@ -572,12 +574,15 @@ const PurchaseOrder = () => {
 
     const holdBatchId = `manual-hold-item-${Date.now()}`;
     const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty;
-    const cleanComp = activeParty.includes("::") ? activeParty.split("::")[1].trim() : (itemToHold.company_scope || itemToHold.company_name || null);
+    const cleanComp = activeParty.includes("::") 
+      ? activeParty.split("::")[1].trim() 
+      : (activeVendorInfo.companyScope || activeVendorInfo.filteredCompany || itemToHold.company_scope || itemToHold.filtered_company_name || null);
     const newHeldRecord = {
       batchId: holdBatchId,
       type: "single_item",
       partyKey: activeParty,
       partyName: cleanParty,
+      companyScope: cleanComp,
       companyName: cleanComp,
       shopName: selectedShop !== "All" ? selectedShop : (itemToHold.shopName || ""),
       heldAt: new Date().toLocaleString(),
@@ -616,12 +621,15 @@ const PurchaseOrder = () => {
 
     const holdBatchId = `manual-hold-po-${Date.now()}`;
     const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty;
-    const cleanComp = activeParty.includes("::") ? activeParty.split("::")[1].trim() : null;
+    const cleanComp = activeParty.includes("::") 
+      ? activeParty.split("::")[1].trim() 
+      : (activeVendorInfo.companyScope || activeVendorInfo.filteredCompany || null);
     const newHeldRecord = {
       batchId: holdBatchId,
       type: "complete_po",
       partyKey: activeParty,
       partyName: cleanParty,
+      companyScope: cleanComp,
       companyName: cleanComp,
       shopName: selectedShop !== "All" ? selectedShop : "",
       heldAt: new Date().toLocaleString(),
@@ -1761,82 +1769,125 @@ const PurchaseOrder = () => {
                 <p className="text-slate-400 text-sm">When you click "Hold PO" or hold individual items, they will appear here.</p>
               </div>
             ) : (
-              heldPOs.map((batch) => (
-                <div key={batch.batchId} className="border border-amber-200 rounded-xl bg-amber-50/30 overflow-hidden shadow-sm">
-                  <div className="flex items-center justify-between bg-amber-100/60 px-4 py-3 border-b border-amber-200">
-                    <div className="flex items-center gap-3">
-                      <span className="px-2 py-0.5 bg-amber-600 text-white text-[11px] font-semibold rounded">
-                        {batch.type === "complete_po" ? "Complete PO Hold" : "Item Hold"}
-                      </span>
-                      <h4 className="font-bold text-amber-950 text-sm">{batch.partyName || "Unspecified Vendor"}</h4>
-                      {batch.companyName ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          {batch.companyName}
+              heldPOs.map((batch) => {
+                const scope = batch.companyScope || batch.companyName;
+                return (
+                  <div key={batch.batchId} className="border border-amber-200/90 rounded-xl bg-white shadow-xs overflow-hidden transition-all duration-150 hover:shadow-md">
+                    {/* Batch Card Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-linear-to-r from-amber-50 via-amber-50/50 to-white px-4 py-3 border-b border-amber-200">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="px-2.5 py-1 bg-amber-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-md shadow-xs">
+                          {batch.type === "complete_po" ? "Complete PO Hold" : "Item Hold"}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-                          Direct
-                        </span>
-                      )}
-                      {batch.shopName && <span className="text-xs text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded">Shop: {batch.shopName}</span>}
-                      <span className="text-xs text-slate-500 flex items-center gap-1"><Clock size={12} /> {batch.heldAt}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleRestoreHeldBatch(batch.batchId)}
-                        className="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-1.5 rounded-md font-medium transition cursor-pointer"
-                      >
-                        <RotateCcw size={13} /> Restore All Items
-                      </button>
-                      <button
-                        onClick={() => handleDeleteHeldBatch(batch.batchId)}
-                        className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs px-2.5 py-1.5 rounded-md font-medium transition cursor-pointer"
-                      >
-                        <Trash2 size={13} /> Delete
-                      </button>
-                    </div>
-                  </div>
+                        
+                        <div className="flex items-center gap-1.5 ml-1">
+                          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Vendor:</span>
+                          <h4 className="font-bold text-slate-900 text-sm">{batch.partyName || "Unspecified Vendor"}</h4>
+                        </div>
 
-                  <div className="p-3 bg-white">
-                    <table className="w-full text-xs text-left text-slate-700 border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 uppercase text-[10px]">
-                          <th className="py-2 px-3">Item Name</th>
-                          <th className="py-2 px-3 text-center">Company</th>
-                          <th className="py-2 px-3 text-center">Shop</th>
-                          <th className="py-2 px-3 text-right">PO Box</th>
-                          <th className="py-2 px-3 text-right">PO Qty</th>
-                          <th className="py-2 px-3 text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {batch.items.map((item) => (
-                          <tr key={item.id} className="border-b border-slate-100 hover:bg-amber-50/20">
-                            <td className="py-2 px-3 font-medium text-slate-800">
-                              {item.itemName}
-                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800">On Hold</span>
-                            </td>
-                            <td className="py-2 px-3 text-center text-slate-600 font-medium">
-                              {item.company_scope || item.filtered_company_name || item.company_name || "Direct"}
-                            </td>
-                            <td className="py-2 px-3 text-center text-slate-500">{item.shopName || item.shop_name || "—"}</td>
-                            <td className="py-2 px-3 text-right font-medium">{item.poBox ?? item.orderBox ?? 0}</td>
-                            <td className="py-2 px-3 text-right font-medium">{item.poQty ?? item.orderQty ?? 0}</td>
-                            <td className="py-2 px-3 text-center">
-                              <button
-                                onClick={() => handleRestoreHeldItem(batch.batchId, item.id)}
-                                className="text-amber-700 hover:text-amber-900 font-medium text-[11px] underline cursor-pointer"
-                              >
-                                Restore Item
-                              </button>
-                            </td>
+                        {scope ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <Building2 size={12} />
+                            {scope}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                            Direct Scope
+                          </span>
+                        )}
+
+                        {batch.shopName && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-amber-900 bg-amber-100/70 border border-amber-200/80 rounded-md font-medium">
+                            <Store size={12} />
+                            Shop: {batch.shopName}
+                          </span>
+                        )}
+
+                        <span className="text-xs text-slate-400 flex items-center gap-1 font-mono ml-1">
+                          <Clock size={12} /> {batch.heldAt}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreHeldBatch(batch.batchId)}
+                          className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs px-3.5 py-1.5 rounded-lg font-semibold shadow-xs transition-colors cursor-pointer"
+                        >
+                          <RotateCcw size={13} /> Restore All Items
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteHeldBatch(batch.batchId)}
+                          className="flex items-center gap-1 bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 border border-red-200 text-xs px-2.5 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Table View */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left text-slate-700 border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 uppercase text-[10px] font-semibold tracking-wider">
+                            <th className="py-2.5 px-4">Item Name</th>
+                            <th className="py-2.5 px-3 text-center">Company Scope</th>
+                            <th className="py-2.5 px-3 text-center">Shop</th>
+                            <th className="py-2.5 px-3 text-right">PO Box</th>
+                            <th className="py-2.5 px-3 text-right">PO Qty</th>
+                            <th className="py-2.5 px-4 text-center">Action</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {batch.items.map((item) => {
+                            const itemScope = item.company_scope || item.filtered_company_name;
+                            return (
+                              <tr key={item.id} className="hover:bg-amber-50/30 transition-colors">
+                                <td className="py-2.5 px-4 font-medium text-slate-900">
+                                  {item.itemName}
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                    On Hold
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {itemScope ? (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                      {itemScope}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                      Direct
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
+                                  {item.shopName || item.shop_name || "—"}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-700">
+                                  {item.poBox ?? item.orderBox ?? 0}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                                  {item.poQty ?? item.orderQty ?? 0}
+                                </td>
+                                <td className="py-2.5 px-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRestoreHeldItem(batch.batchId, item.id)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/90 transition-colors cursor-pointer"
+                                  >
+                                    <RotateCcw size={11} /> Restore Item
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
