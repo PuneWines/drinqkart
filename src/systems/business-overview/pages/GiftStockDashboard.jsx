@@ -76,6 +76,7 @@ function fromDb(c, r) {
       qty: Number(r.qty) || 0,
       customer: r.customer,
       contact: r.contact,
+      proofImage: r.proof_image || r.proofImage || null,
       ts: r.created_at ? new Date(r.created_at).getTime() : Date.now()
     };
   }
@@ -107,7 +108,8 @@ function toDb(c, r) {
       item_name: r.itemName,
       qty: r.qty,
       customer: r.customer,
-      contact: r.contact
+      contact: r.contact,
+      proof_image: r.proofImage || r.proof_image || null
     };
   }
   if (c === 'items') {
@@ -126,6 +128,93 @@ function toDb(c, r) {
   }
   return r;
 }
+
+async function compressImage(file, maxDimension = 1200, quality = 0.82) {
+  return new Promise((resolve) => {
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else resolve(file);
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    } catch (err) {
+      resolve(file);
+    }
+  });
+}
+
+async function uploadProofImage(file) {
+  if (!file) return null;
+  const compressed = await compressImage(file, 1200, 0.82);
+  const cleanName = (file.name || 'proof.jpg').replace(/[^a-zA-Z0-9.-]/g, '_');
+  const path = `stock_outs/${Date.now()}_${cleanName}`;
+
+  // 1. Try uploading to 'task-proofs' bucket
+  try {
+    const { error: err1 } = await supabase.storage.from('task-proofs').upload(path, compressed, {
+      contentType: 'image/jpeg',
+      upsert: true
+    });
+    if (!err1) {
+      const { data } = supabase.storage.from('task-proofs').getPublicUrl(path);
+      if (data?.publicUrl) return data.publicUrl;
+    }
+  } catch (e) {
+    console.warn('Storage task-proofs upload failed, trying gift-stock...', e);
+  }
+
+  // 2. Try uploading to 'gift-stock' bucket
+  try {
+    const { error: err2 } = await supabase.storage.from('gift-stock').upload(path, compressed, {
+      contentType: 'image/jpeg',
+      upsert: true
+    });
+    if (!err2) {
+      const { data } = supabase.storage.from('gift-stock').getPublicUrl(path);
+      if (data?.publicUrl) return data.publicUrl;
+    }
+  } catch (e) {
+    console.warn('Storage gift-stock upload failed, falling back to base64...', e);
+  }
+
+  // 3. Fallback: convert compressed image to base64 Data URL
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(compressed);
+  });
+}
+
 
 export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
   const { tab: routeTab } = useParams();
@@ -563,8 +652,17 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
         box.innerHTML = emptyBox(S.outs.length ? 'No matching entries' : 'No sales yet', 'Entries you add above appear here.');
         return;
       }
-      let h = '<table><thead><tr><th>Date</th><th>Store</th><th>Item</th><th class="r">Qty</th><th>Customer</th><th>Contact</th><th></th></tr></thead><tbody>';
+      let h = '<table><thead><tr><th>Date</th><th>Store</th><th>Item</th><th class="r">Qty</th><th>Customer</th><th>Contact</th><th>Proof</th><th></th></tr></thead><tbody>';
       rows.slice(0, 200).forEach(function (r) {
+        const proofHtml = r.proofImage
+          ? '<button type="button" class="btn sm ghost" data-act="view-proof" data-img="' +
+            esc(r.proofImage) +
+            '" title="Click to view full image" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;color:#2563eb;cursor:pointer;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;">' +
+            '<img src="' +
+            esc(r.proofImage) +
+            '" alt="Proof" style="width:24px;height:24px;object-fit:cover;border-radius:3px;" />' +
+            '<span style="font-size:12px;font-weight:600;">View</span></button>'
+          : '<span style="color:#94a3b8;font-size:13px;">—</span>';
         h +=
           '<tr><td class="mono">' +
           fmtD(r.date) +
@@ -578,6 +676,8 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
           esc(r.customer) +
           '</td><td class="mono">' +
           esc(r.contact) +
+          '</td><td>' +
+          proofHtml +
           '</td><td class="act"><button class="btn sm ghost danger write" data-act="del-out" data-id="' +
           esc(r.id) +
           '">Delete</button></td></tr>';
@@ -1242,6 +1342,32 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
         renderTraders();
         return;
       }
+      if (act === 'view-proof') {
+        const src = b.getAttribute('data-img');
+        const m = $('#modal');
+        if (m && src) {
+          m.innerHTML =
+            '<div class="sheet" style="max-width:550px;width:95%;padding:20px;text-align:center;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">' +
+            '<h3 style="margin:0;font-size:16px;">Stock Out Proof Image</h3>' +
+            '<button type="button" class="btn sm" data-act="close-modal">✕ Close</button>' +
+            '</div>' +
+            '<div style="max-height:65vh;overflow:auto;display:flex;justify-content:center;align-items:center;background:#0f172a;border-radius:8px;padding:8px;">' +
+            '<img src="' +
+            esc(src) +
+            '" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:4px;" alt="Stock Out Proof" />' +
+            '</div>' +
+            '<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">' +
+            '<a href="' +
+            esc(src) +
+            '" target="_blank" rel="noopener noreferrer" class="btn sm primary" style="text-decoration:none;">Open in New Tab</a>' +
+            '<button type="button" class="btn sm" data-act="close-modal">Close</button>' +
+            '</div>' +
+            '</div>';
+          m.hidden = false;
+        }
+        return;
+      }
       if (!needWrite()) return;
       if (act === 'del-in') {
         armed(b, function () {
@@ -1436,15 +1562,44 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
       });
     }
 
+    const outProof = $('#out-proof');
+    const outProofPreview = $('#out-proof-preview');
+    const outProofThumb = $('#out-proof-thumb');
+    const outProofName = $('#out-proof-name');
+    const outProofClear = $('#out-proof-clear');
+
+    if (outProof) {
+      outProof.addEventListener('change', function () {
+        const file = outProof.files && outProof.files[0];
+        if (file) {
+          if (outProofThumb) outProofThumb.src = URL.createObjectURL(file);
+          if (outProofName) outProofName.textContent = file.name;
+          if (outProofPreview) outProofPreview.style.display = 'inline-flex';
+        } else {
+          if (outProofPreview) outProofPreview.style.display = 'none';
+        }
+      });
+    }
+
+    if (outProofClear) {
+      outProofClear.addEventListener('click', function () {
+        if (outProof) outProof.value = '';
+        if (outProofPreview) outProofPreview.style.display = 'none';
+      });
+    }
+
     const fOut = $('#f-out');
     if (fOut) {
-      fOut.addEventListener('submit', function (e) {
+      fOut.addEventListener('submit', async function (e) {
         e.preventDefault();
         if (!needWrite()) return;
         const outQtyEl = $('#out-qty');
         const outCustomerEl = $('#out-customer');
         const outContactEl = $('#out-contact');
         const outDateEl = $('#out-date');
+        const outProofEl = $('#out-proof');
+        const submitBtn = fOut.querySelector('button[type="submit"]');
+
         const q = Number(outQtyEl ? outQtyEl.value : '');
         const id = $('#out-item') ? $('#out-item').value : '';
         const st = $('#out-store') ? $('#out-store').value : '';
@@ -1467,6 +1622,26 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
           toast('Enter a valid contact number.');
           return;
         }
+
+        let proofUrl = null;
+        const file = outProofEl && outProofEl.files && outProofEl.files[0] ? outProofEl.files[0] : null;
+        if (file) {
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Uploading proof...';
+          }
+          try {
+            proofUrl = await uploadProofImage(file);
+          } catch (err) {
+            console.error('Failed to upload proof image:', err);
+          } finally {
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Add stock out';
+            }
+          }
+        }
+
         const rec = {
           date: (outDateEl ? outDateEl.value : '') || today(),
           store: st,
@@ -1475,6 +1650,7 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
           qty: q,
           customer: outCustomerEl ? outCustomerEl.value.trim() : '',
           contact: phone,
+          proofImage: proofUrl,
           ts: Date.now()
         };
         save(store.put('outs', 'out_' + uid(), rec), 'Stock out added').then(function (ok) {
@@ -1482,6 +1658,9 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
             if (outQtyEl) outQtyEl.value = '';
             if (outCustomerEl) outCustomerEl.value = '';
             if (outContactEl) outContactEl.value = '';
+            if (outProofEl) outProofEl.value = '';
+            const previewWrap = $('#out-proof-preview');
+            if (previewWrap) previewWrap.style.display = 'none';
             updateOutHint();
           }
         });
@@ -1718,6 +1897,15 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
                 <label>
                   Contact no
                   <input type="tel" id="out-contact" inputMode="tel" maxLength={15} placeholder="10 digit mobile" required />
+                </label>
+                <label>
+                  Proof image (Single Image)
+                  <input type="file" id="out-proof" accept="image/*" />
+                  <div id="out-proof-preview" style={{ display: 'none', marginTop: '6px', alignItems: 'center', gap: '8px' }}>
+                    <img id="out-proof-thumb" src="" alt="Proof Preview" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+                    <span id="out-proof-name" style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}></span>
+                    <button type="button" id="out-proof-clear" className="btn sm ghost danger" style={{ padding: '2px 6px', fontSize: '11px' }}>✕</button>
+                  </div>
                 </label>
                 <div className="form-actions">
                   <button className="btn out write" type="submit">
