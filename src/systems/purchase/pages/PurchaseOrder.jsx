@@ -417,20 +417,34 @@ const PurchaseOrder = () => {
     return Array.from(partyCompanyMap.values());
   }, [filteredApprovedItems, vendorsList, poMode]);
 
-  // Handle options list format differences between standard mode (objects or strings) and manual mode
+  // Extract string identifiers for validating activeParty across both standard and manual modes
   const dbPartyOptions = useMemo(() => {
-    if (poMode === "manual") {
-      return dbParties;
-    }
-    return dbParties.map(p => typeof p === 'string' ? p : p.key);
-  }, [dbParties, poMode]);
+    const validKeys = new Set();
+    dbParties.forEach(p => {
+      if (typeof p === 'string') {
+        validKeys.add(p);
+      } else if (p && typeof p === 'object') {
+        if (p.key) validKeys.add(p.key);
+        if (p.partyName) validKeys.add(p.partyName);
+        if (p.label) validKeys.add(p.label);
+      }
+    });
+    return Array.from(validKeys);
+  }, [dbParties]);
 
   // If activeParty is no longer valid for the selected shop/mode filter, clear it
   useEffect(() => {
+    if (isLoading || isPageDataLoading) return;
+    if (dbParties.length === 0) {
+      if (activeParty && poMode !== "manual") {
+        setActiveParty("");
+      }
+      return;
+    }
     if (activeParty && !dbPartyOptions.includes(activeParty)) {
       setActiveParty("");
     }
-  }, [selectedShop, dbPartyOptions, activeParty]);
+  }, [selectedShop, dbPartyOptions, activeParty, isLoading, isPageDataLoading, dbParties.length, poMode]);
 
   const handleAddExcludedItems = (newItems) => {
     setAddedExcludedItems(prev => {
@@ -1052,7 +1066,7 @@ const PurchaseOrder = () => {
         filteredCompany: scope
       };
     }
-    const found = (dbParties || []).find(p => (typeof p === 'object' ? p.key === activeParty : p === activeParty));
+    const found = (dbParties || []).find(p => (typeof p === 'object' ? (p.key === activeParty || p.partyName === activeParty || p.label === activeParty) : p === activeParty));
     if (found && typeof found === 'object') {
       const scope = found.companyScope || found.filteredCompanyName || null;
       return {
