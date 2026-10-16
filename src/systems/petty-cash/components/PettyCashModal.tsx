@@ -466,135 +466,195 @@ export default function PettyCashModal({
     setIsLoading(true);
 
     try {
-      // Generate ID only if it's a new entry (not editing)
-      let generatedId = formData.id;
-      if (!initialData?.id) {
-        try {
-          const { data, error } = await supabase
-            .from('petty_cash_expense')
-            .select('patty_id');
- 
-          if (error) throw error;
+      const buildRecords = (baseId: string) => {
+        if (!formData.otherExpenses || formData.otherExpenses.length === 0) {
+          return [{
+            patty_id: `${baseId}-01`,
+            date: formData.date,
+            opening_qty: parseFloat(formData.openingQty) || 0,
+            closing: parseFloat(formData.closing) || 0,
+            shop_name: formData.shopName,
+            tea_nasta: parseFloat(formData.teaNasta) || 0,
+            water_jar: parseFloat(formData.waterJar) || 0,
+            light_bill: parseFloat(formData.lightBill) || 0,
+            recharge: parseFloat(formData.recharge) || 0,
+            post_office: parseFloat(formData.postOffice) || 0,
+            customer_discount: parseFloat(formData.customerDiscount) || 0,
+            repair_maintenance: parseFloat(formData.repairMaintenance) || 0,
+            stationary: parseFloat(formData.stationary) || 0,
+            petrol: parseFloat(formData.petrol) || 0,
+            patil_petrol: parseFloat(formData.patilPetrol) || 0,
+            excise_police: parseFloat(formData.excisePolice) || 0,
+            desi_bhada: parseFloat(formData.desiBhada) || 0,
+            room_expense: parseFloat(formData.roomExpense) || 0,
+            office_expense: parseFloat(formData.officeExpense) || 0,
+            personal_expense: parseFloat(formData.personalExpense) || 0,
+            misc_expense: parseFloat(formData.miscExpense) || 0,
+            misc_remarks: formData.miscRemarks || "",
+            other_purchase_voucher_no: formData.otherPurchaseVoucherNo || "",
+            other_vendor_payment: parseFloat(formData.otherVendorPayment) || 0,
+            difference_amount: parseFloat(formData.differenceAmount) || 0,
+            credit_card_charges: parseFloat(formData.creditCardCharges) || 0,
+            username: formData.username || user?.name || "",
+            total_expense: totalExpense,
+            transaction_status: formData.transactionStatus || 'Pending',
+            total_amount: totalAmount,
+            status: formData.status || 'pending',
+            expense_name: null,
+            employee_name: null,
+            from_shop: null,
+            to_shop: null,
+            description: null,
+            amount: 0
+          }];
+        } else {
+          return formData.otherExpenses.map((entry, index) => ({
+            patty_id: `${baseId}-${String(index + 1).padStart(2, '0')}`,
+            date: formData.date,
+            opening_qty: parseFloat(formData.openingQty) || 0,
+            closing: parseFloat(formData.closing) || 0,
+            shop_name: formData.shopName,
+            tea_nasta: parseFloat(formData.teaNasta) || 0,
+            water_jar: parseFloat(formData.waterJar) || 0,
+            light_bill: parseFloat(formData.lightBill) || 0,
+            recharge: parseFloat(formData.recharge) || 0,
+            post_office: parseFloat(formData.postOffice) || 0,
+            customer_discount: parseFloat(formData.customerDiscount) || 0,
+            repair_maintenance: parseFloat(formData.repairMaintenance) || 0,
+            stationary: parseFloat(formData.stationary) || 0,
+            petrol: parseFloat(formData.petrol) || 0,
+            patil_petrol: parseFloat(formData.patilPetrol) || 0,
+            excise_police: parseFloat(formData.excisePolice) || 0,
+            desi_bhada: parseFloat(formData.desiBhada) || 0,
+            room_expense: parseFloat(formData.roomExpense) || 0,
+            office_expense: parseFloat(formData.officeExpense) || 0,
+            personal_expense: parseFloat(formData.personalExpense) || 0,
+            misc_expense: parseFloat(formData.miscExpense) || 0,
+            misc_remarks: formData.miscRemarks || "",
+            other_purchase_voucher_no: formData.otherPurchaseVoucherNo || "",
+            other_vendor_payment: parseFloat(formData.otherVendorPayment) || 0,
+            difference_amount: parseFloat(formData.differenceAmount) || 0,
+            credit_card_charges: parseFloat(formData.creditCardCharges) || 0,
+            username: formData.username || user?.name || "",
+            total_expense: totalExpense,
+            transaction_status: formData.transactionStatus || 'Pending',
+            total_amount: totalAmount,
+            status: formData.status || 'pending',
+            expense_name: entry.expenseName || null,
+            employee_name: (entry.expenseName !== 'Shop Name' && entry.expenseName !== 'Custom Expense Name' && entry.expenseName !== 'Incentive') ? (entry.employeeName || null) : null,
+            from_shop: null,
+            to_shop: entry.expenseName === 'Shop Name' ? (entry.toShop || null) : null,
+            description: entry.description || null,
+            amount: parseFloat(entry.amount) || 0
+          }));
+        }
+      };
 
-          let maxNumber = 0;
-          if (data && data.length > 0) {
-            data.forEach(item => {
+      let finalId = initialData?.id || formData.id;
+
+      if (!initialData?.id) {
+        // Fetch all patty_ids with pagination so we are never limited by the PostgREST 1000 row cap
+        let maxNumber = 0;
+        let from = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        try {
+          while (hasMore) {
+            const { data, error } = await supabase
+              .from('petty_cash_expense')
+              .select('patty_id')
+              .range(from, from + pageSize - 1);
+
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+
+            for (const item of data) {
               const idStr = item.patty_id;
               if (idStr && idStr.startsWith('PT-')) {
-                const num = parseInt(idStr.split('-')[1]);
+                const parts = idStr.split('-');
+                const num = parseInt(parts[1], 10);
                 if (!isNaN(num) && num > maxNumber) {
                   maxNumber = num;
                 }
               }
-            });
+            }
+
+            if (data.length < pageSize) {
+              hasMore = false;
+            } else {
+              from += pageSize;
+            }
           }
-          generatedId = `PT-${String(maxNumber + 1).padStart(2, '0')}`;
         } catch (error) {
-          console.error("Error generating next PT ID:", error);
-          generatedId = `PT-${Date.now()}`;
+          console.error("Error fetching max PT ID:", error);
         }
-      }
 
-      let recordsToSubmit = [];
-      if (!formData.otherExpenses || formData.otherExpenses.length === 0) {
-        recordsToSubmit.push({
-          patty_id: `${generatedId}-01`,
-          date: formData.date,
-          opening_qty: parseFloat(formData.openingQty) || 0,
-          closing: parseFloat(formData.closing) || 0,
-          shop_name: formData.shopName,
-          tea_nasta: parseFloat(formData.teaNasta) || 0,
-          water_jar: parseFloat(formData.waterJar) || 0,
-          light_bill: parseFloat(formData.lightBill) || 0,
-          recharge: parseFloat(formData.recharge) || 0,
-          post_office: parseFloat(formData.postOffice) || 0,
-          customer_discount: parseFloat(formData.customerDiscount) || 0,
-          repair_maintenance: parseFloat(formData.repairMaintenance) || 0,
-          stationary: parseFloat(formData.stationary) || 0,
-          petrol: parseFloat(formData.petrol) || 0,
-          patil_petrol: parseFloat(formData.patilPetrol) || 0,
-          excise_police: parseFloat(formData.excisePolice) || 0,
-          desi_bhada: parseFloat(formData.desiBhada) || 0,
-          room_expense: parseFloat(formData.roomExpense) || 0,
-          office_expense: parseFloat(formData.officeExpense) || 0,
-          personal_expense: parseFloat(formData.personalExpense) || 0,
-          misc_expense: parseFloat(formData.miscExpense) || 0,
-          misc_remarks: formData.miscRemarks || "",
-          other_purchase_voucher_no: formData.otherPurchaseVoucherNo || "",
-          other_vendor_payment: parseFloat(formData.otherVendorPayment) || 0,
-          difference_amount: parseFloat(formData.differenceAmount) || 0,
-          credit_card_charges: parseFloat(formData.creditCardCharges) || 0,
-          username: formData.username || user?.name || "",
-          total_expense: totalExpense,
-          transaction_status: formData.transactionStatus || 'Pending',
-          total_amount: totalAmount,
-          status: formData.status || 'pending',
-          expense_name: null,
-          employee_name: null,
-          from_shop: null,
-          to_shop: null,
-          description: null,
-          amount: 0
-        });
+        // Find the next available unused PT ID
+        let nextNum = maxNumber + 1;
+        while (true) {
+          const candidateId = `PT-${String(nextNum).padStart(2, '0')}`;
+          const { data: existing, error: checkError } = await supabase
+            .from('petty_cash_expense')
+            .select('patty_id')
+            .like('patty_id', `${candidateId}%`)
+            .limit(1);
+
+          if (!checkError && existing && existing.length > 0) {
+            nextNum++;
+          } else {
+            finalId = candidateId;
+            break;
+          }
+        }
+
+        // Insert new records with automatic retry if conflict arises
+        let insertSuccess = false;
+        let attempts = 0;
+        let currentCandidateId = finalId;
+
+        while (!insertSuccess && attempts < 5) {
+          attempts++;
+          const recordsToSubmit = buildRecords(currentCandidateId);
+          const { error: insertError } = await supabase
+            .from('petty_cash_expense')
+            .insert(recordsToSubmit);
+
+          if (!insertError) {
+            insertSuccess = true;
+            finalId = currentCandidateId;
+          } else if (insertError.code === '23505' || insertError.message?.includes('duplicate key') || insertError.message?.includes('already exists')) {
+            console.warn(`Conflict on ${currentCandidateId}, trying next ID...`);
+            const match = currentCandidateId.match(/^PT-(\d+)/);
+            const num = match ? parseInt(match[1], 10) : nextNum;
+            currentCandidateId = `PT-${String(num + 1).padStart(2, '0')}`;
+          } else {
+            throw insertError;
+          }
+        }
+
+        if (!insertSuccess) {
+          throw new Error("Unable to generate unique Petty Cash ID. Please try again.");
+        }
       } else {
-        recordsToSubmit = formData.otherExpenses.map((entry, index) => ({
-          patty_id: `${generatedId}-${String(index + 1).padStart(2, '0')}`,
-          date: formData.date,
-          opening_qty: parseFloat(formData.openingQty) || 0,
-          closing: parseFloat(formData.closing) || 0,
-          shop_name: formData.shopName,
-          tea_nasta: parseFloat(formData.teaNasta) || 0,
-          water_jar: parseFloat(formData.waterJar) || 0,
-          light_bill: parseFloat(formData.lightBill) || 0,
-          recharge: parseFloat(formData.recharge) || 0,
-          post_office: parseFloat(formData.postOffice) || 0,
-          customer_discount: parseFloat(formData.customerDiscount) || 0,
-          repair_maintenance: parseFloat(formData.repairMaintenance) || 0,
-          stationary: parseFloat(formData.stationary) || 0,
-          petrol: parseFloat(formData.petrol) || 0,
-          patil_petrol: parseFloat(formData.patilPetrol) || 0,
-          excise_police: parseFloat(formData.excisePolice) || 0,
-          desi_bhada: parseFloat(formData.desiBhada) || 0,
-          room_expense: parseFloat(formData.roomExpense) || 0,
-          office_expense: parseFloat(formData.officeExpense) || 0,
-          personal_expense: parseFloat(formData.personalExpense) || 0,
-          misc_expense: parseFloat(formData.miscExpense) || 0,
-          misc_remarks: formData.miscRemarks || "",
-          other_purchase_voucher_no: formData.otherPurchaseVoucherNo || "",
-          other_vendor_payment: parseFloat(formData.otherVendorPayment) || 0,
-          difference_amount: parseFloat(formData.differenceAmount) || 0,
-          credit_card_charges: parseFloat(formData.creditCardCharges) || 0,
-          username: formData.username || user?.name || "",
-          total_expense: totalExpense,
-          transaction_status: formData.transactionStatus || 'Pending',
-          total_amount: totalAmount,
-          status: formData.status || 'pending',
-          expense_name: entry.expenseName || null,
-          employee_name: (entry.expenseName !== 'Shop Name' && entry.expenseName !== 'Custom Expense Name' && entry.expenseName !== 'Incentive') ? (entry.employeeName || null) : null,
-          from_shop: null,
-          to_shop: entry.expenseName === 'Shop Name' ? (entry.toShop || null) : null,
-          description: entry.description || null,
-          amount: parseFloat(entry.amount) || 0
-        }));
-      }
-
-      if (initialData?.id) {
+        // Editing existing entry: delete existing and re-insert
         const { error: delError } = await supabase
           .from('petty_cash_expense')
           .delete()
           .like('patty_id', `${initialData.id}%`);
         if (delError) throw delError;
+
+        const recordsToSubmit = buildRecords(finalId);
+        const { error: insertError } = await supabase
+          .from('petty_cash_expense')
+          .insert(recordsToSubmit);
+
+        if (insertError) throw insertError;
       }
-
-      const { error: insertError } = await supabase
-        .from('petty_cash_expense')
-        .insert(recordsToSubmit);
-
-      if (insertError) throw insertError;
 
       setToast({ message: "Data saved successfully!", type: "success" });
       setTimeout(() => {
-        onSave({ ...formData, id: generatedId });
+        onSave({ ...formData, id: finalId });
         onClose();
         setIsLoading(false);
       }, 1000);
