@@ -77,8 +77,8 @@ export default function CustomerFeedback() {
       if (typeof item !== 'string') return false;
       const itemLower = item.toLowerCase().trim();
       return (
-        itemLower === 'business-overview.feedback.view' ||
-        itemLower === 'business-overview.feedback.modify' ||
+        itemLower === 'business-overview.customer feedback.view' ||
+        itemLower === 'business-overview.customer feedback.modify' ||
         itemLower === 'business-overview'
       );
     });
@@ -87,7 +87,7 @@ export default function CustomerFeedback() {
       if (typeof item !== 'string') return false;
       const itemLower = item.toLowerCase().trim();
       return (
-        itemLower === 'business-overview.feedback.modify' ||
+        itemLower === 'business-overview.customer feedback.modify' ||
         itemLower === 'business-overview'
       );
     });

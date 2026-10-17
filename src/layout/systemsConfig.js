@@ -283,34 +283,7 @@ export const getVisibleSystems = (user) => {
       if (sub.label === 'Bank Audit') labelsToCheck.push('Bank Audit', 'bank audit', 'bank-audit', 'bankaudit');
       if (sub.label === 'Cash Tally Counter') labelsToCheck.push('Cash Tally Counter', 'Cash Tally', 'Counter', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3');
       if (sub.label === 'Financial Reports') labelsToCheck.push('Financial Reports', 'Reports', 'financialreports');
-      if (systemId === 'business-overview') {
-        if (
-          sub.label === 'Customer Feedback' ||
-          sub.label === 'Assigned Complaints' ||
-          sub.label === 'Complaint Resolution'
-        ) {
-          labelsToCheck.push('Feedback');
-        }
-        if (
-          sub.label === 'Help Center' ||
-          sub.label === 'All Tickets' ||
-          sub.label === 'Follow-Up' ||
-          sub.label === 'Completed'
-        ) {
-          labelsToCheck.push('Help Center', 'Help Center Records');
-        }
-        if (
-          sub.label === 'Gift Stock' ||
-          sub.label === 'Gift Stock Dashboard' ||
-          sub.label === 'Stock In' ||
-          sub.label === 'Stock Out' ||
-          sub.label === 'Current Stock' ||
-          sub.label === 'Item Master' ||
-          sub.label === 'Trader Master'
-        ) {
-          labelsToCheck.push('Gift Stock', 'Gift Stock Dashboard', 'Gift');
-        }
-      }
+      // business-overview: Feedback, Help Center and Gift Stock pages are granted individually by their own label
       if (systemId === 'checklist') {
         if (sub.label === 'Holiday List' || sub.label === 'Working Day Calendar') {
           labelsToCheck.push('Holiday');
@@ -430,7 +403,8 @@ export const getVisibleSystems = (user) => {
       if (sub.children) {
         const allowedChildren = sub.children.filter((child) => isSubtabAllowed(system.id, child));
         if (allowedChildren.length === 0 && !isSubtabAllowed(system.id, sub)) return null;
-        return { ...sub, children: allowedChildren };
+        // Point the parent link at the first child the user can open
+        return { ...sub, to: allowedChildren[0]?.to || sub.to, children: allowedChildren };
       }
       return isSubtabAllowed(system.id, sub) ? sub : null;
     }).filter(Boolean);

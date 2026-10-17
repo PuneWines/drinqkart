@@ -1,12 +1,48 @@
 import React, { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../context/AuthContext';
+import { parseMasterAccessList } from '../../../layout/systemsConfig';
 import '../styles/GiftStock.css';
 
 const ALL = 'ALL STORES';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const COLLS = ['items', 'pairs', 'ins', 'outs'];
 const TABS = ['dashboard', 'stock-in', 'stock-out', 'current-stock', 'item-master', 'trader-master'];
+// Master Setting page names (business-overview.<page>.view|modify) for each tab
+const TAB_PAGES = {
+  dashboard: 'Dashboard',
+  'stock-in': 'Stock In',
+  'stock-out': 'Stock Out',
+  'current-stock': 'Current Stock',
+  'item-master': 'Item Master',
+  'trader-master': 'Trader Master'
+};
+
+// Returns { tab: 'none' | 'view' | 'modify' } for the given user
+function getTabLevels(user) {
+  const levels = {};
+  const userName = (user?.user_name || user?.username || '').toLowerCase();
+  const role = (user?.role || '').toLowerCase();
+  if (userName === 'masteradmin' || role === 'admin') {
+    TABS.forEach((t) => (levels[t] = 'modify'));
+    return levels;
+  }
+  const keys = [
+    ...parseMasterAccessList(user?.master_user_system_page_access),
+    ...parseMasterAccessList(localStorage.getItem('master_user_system_page_access'))
+  ]
+    .filter((k) => typeof k === 'string')
+    .map((k) => k.toLowerCase().trim());
+  const fullAccess = keys.includes('business-overview');
+  TABS.forEach((t) => {
+    const base = 'business-overview.' + TAB_PAGES[t].toLowerCase();
+    if (fullAccess || keys.includes(base + '.modify') || keys.includes(base)) levels[t] = 'modify';
+    else if (keys.includes(base + '.view')) levels[t] = 'view';
+    else levels[t] = 'none';
+  });
+  return levels;
+}
 
 const TABLE_MAP = {
   items: 'gift_stock_items',
@@ -219,7 +255,10 @@ async function uploadProofImage(file) {
 export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
   const { tab: routeTab } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const containerRef = useRef(null);
+  const tabLevelsRef = useRef(null);
+  tabLevelsRef.current = getTabLevels(user);
 
   const showTabRef = useRef(null);
   const activeTabParam = routeTab || defaultTab || 'dashboard';
@@ -238,8 +277,9 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
     let STORES = [];
     const S = { items: [], pairs: [], ins: [], outs: [] };
     const loaded = { items: false, pairs: false, ins: false, outs: false };
-    const ro = false;
     let currentTab = activeTabParam;
+    // View-only when the user lacks .modify on the tab being shown
+    const isRo = () => tabLevelsRef.current[currentTab] !== 'modify';
     let selTrader = null;
     let csView = 'detail';
 
@@ -1247,7 +1287,7 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
     }
 
     function needWrite() {
-      if (ro) {
+      if (isRo()) {
         toast('View only. You cannot change data.');
         return false;
       }
@@ -1310,11 +1350,30 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
 
     function showTab(t, updateRoute = true) {
       if (TABS.indexOf(t) < 0) t = 'dashboard';
+      const levels = tabLevelsRef.current;
+      if (levels[t] === 'none') {
+        // Fall back to the first tab the user is allowed to open
+        const firstAllowed = TABS.filter(function (x) {
+          return levels[x] !== 'none';
+        })[0];
+        if (firstAllowed) {
+          t = firstAllowed;
+          updateRoute = true;
+        }
+      }
       currentTab = t;
+      const noAccess = levels[t] === 'none';
       TABS.forEach(function (x) {
         const sec = $('#v-' + x);
-        if (sec) sec.hidden = x !== t;
+        if (sec) sec.hidden = noAccess || x !== t;
       });
+      const banner = $('#ro-banner');
+      if (banner) {
+        banner.hidden = !isRo();
+        banner.textContent = noAccess
+          ? 'You do not have access to Gift Stock. Ask the owner for access.'
+          : 'You can view this page but not change stock. Ask the owner for edit access.';
+      }
       if (updateRoute) {
         navigate('/systems/business-overview/gift-stock/' + t);
       }
@@ -1578,6 +1637,29 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
         } else {
           if (outProofPreview) outProofPreview.style.display = 'none';
         }
+      });
+    }
+
+    const outProofCamera = $('#out-proof-camera');
+    const outProofChooser = $('#out-proof-chooser');
+
+    if (outProof && outProofChooser) {
+      // Close the mobile chooser once an image has been picked
+      outProof.addEventListener('change', function () {
+        outProofChooser.open = false;
+      });
+    }
+
+    // Copy a camera photo into the main proof input so upload/preview stay the same
+    if (outProofCamera && outProof) {
+      outProofCamera.addEventListener('change', function () {
+        const file = outProofCamera.files && outProofCamera.files[0];
+        if (!file) return;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        outProof.files = dt.files;
+        outProofCamera.value = '';
+        outProof.dispatchEvent(new Event('change'));
       });
     }
 
@@ -1898,15 +1980,24 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
                   Contact no
                   <input type="tel" id="out-contact" inputMode="tel" maxLength={15} placeholder="10 digit mobile" required />
                 </label>
-                <label>
-                  Proof image (Single Image)
-                  <input type="file" id="out-proof" accept="image/*" />
+                <div className="proof-field">
+                  <label htmlFor="out-proof">Proof image (Single Image)</label>
+                  <input type="file" id="out-proof" className="proof-input-desktop" accept="image/*" />
+                  <input type="file" id="out-proof-camera" accept="image/*" capture="environment" style={{ display: 'none' }} />
+                  <details id="out-proof-chooser" className="proof-chooser-mobile">
+                    <summary>Choose proof image</summary>
+                    <div className="proof-chooser-options">
+                      <div className="proof-chooser-title">Add proof image</div>
+                      <label htmlFor="out-proof">Upload from device</label>
+                      <label htmlFor="out-proof-camera">Take a photo</label>
+                    </div>
+                  </details>
                   <div id="out-proof-preview" style={{ display: 'none', marginTop: '6px', alignItems: 'center', gap: '8px' }}>
                     <img id="out-proof-thumb" src="" alt="Proof Preview" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
                     <span id="out-proof-name" style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}></span>
                     <button type="button" id="out-proof-clear" className="btn sm ghost danger" style={{ padding: '2px 6px', fontSize: '11px' }}>✕</button>
                   </div>
-                </label>
+                </div>
                 <div className="form-actions">
                   <button className="btn out write" type="submit">
                     Add stock out
