@@ -160,7 +160,30 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: "BUSINESS OVERVIEW MODULES",
-        pages: ["Feedback", "Trader Invoices", "Shop Visit", "Help Center", "Gift Stock"],
+        pages: ["Trader Invoices", "Shop Visit"],
+      },
+      {
+        title: "FEEDBACK MODULE",
+        pages: [
+          "Customer Feedback",
+          "Assigned Complaints",
+          "Complaint Resolution",
+        ],
+      },
+      {
+        title: "HELP CENTER MODULE",
+        pages: ["All Tickets", "Follow-Up", "Completed"],
+      },
+      {
+        title: "GIFT STOCK MODULE",
+        pages: [
+          "Dashboard",
+          "Stock In",
+          "Stock Out",
+          "Current Stock",
+          "Item Master",
+          "Trader Master",
+        ],
       },
     ],
   },

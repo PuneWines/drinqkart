@@ -833,8 +833,86 @@
   max-width: 90vw;
 }
 
+/* Proof image chooser (mobile only) */
+.gift-stock-dashboard-container .proof-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.gift-stock-dashboard-container .proof-chooser-mobile {
+  display: none;
+}
+.gift-stock-dashboard-container .proof-chooser-mobile summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.gift-stock-dashboard-container .proof-chooser-mobile summary::-webkit-details-marker {
+  display: none;
+}
+/* Backdrop: tapping it toggles the summary, which closes the popup */
+.gift-stock-dashboard-container .proof-chooser-mobile[open] > summary::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  z-index: 1000;
+  cursor: default;
+}
+.gift-stock-dashboard-container .proof-chooser-options {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(320px, calc(100vw - 32px));
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.3);
+}
+.gift-stock-dashboard-container .proof-chooser-title {
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: none;
+  letter-spacing: normal;
+  border-bottom: 1px solid #e2e8f0;
+}
+.gift-stock-dashboard-container .proof-chooser-options label {
+  display: block;
+  margin: 0;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.gift-stock-dashboard-container .proof-chooser-options label + label {
+  border-top: 1px solid #e2e8f0;
+}
+
 /* Mobile responsive */
 @media (max-width: 900px) {
+  .gift-stock-dashboard-container .proof-input-desktop {
+    display: none;
+  }
+  .gift-stock-dashboard-container .proof-chooser-mobile {
+    display: block;
+  }
   .gift-stock-dashboard-container main {
     padding: 18px 16px 40px;
   }

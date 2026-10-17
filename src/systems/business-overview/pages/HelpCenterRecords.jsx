@@ -44,10 +44,16 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
     else if (raw && typeof raw === 'object') accessKeys = Object.keys(raw);
   }
 
+  // Each Help Center tab has its own page in Master Setting (business-overview.<page>.modify)
+  const TAB_PAGES = { all: 'All Tickets', 'follow-up': 'Follow-Up', completed: 'Completed' };
+  const modifyKey = `business-overview.${TAB_PAGES[activeTab] || ''}.modify`.toLowerCase();
   const isModifyAllowed =
     isMasterAdmin ||
-    accessKeys.includes('business-overview.Help Center.modify') ||
-    accessKeys.includes('Help Center.modify');
+    accessKeys.some((k) => {
+      if (typeof k !== 'string') return false;
+      const kLower = k.toLowerCase().trim();
+      return kLower === modifyKey || kLower === 'business-overview';
+    });
 
   const [records, setRecords] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
