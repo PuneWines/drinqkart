@@ -1,12 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
 import { 
-  FileSpreadsheet, RefreshCw, Search, Trash2, Calendar, Store, CheckSquare, BarChart3
+  FileSpreadsheet, RefreshCw, Search, Trash2, Calendar, Store, CheckSquare, BarChart3,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 
-const PAGE_SIZE = 1000;
+const PAGE_SIZE = 100;
+const SEARCH_DEBOUNCE_MS = 400;
+
+// Quote a value for a PostgREST or() filter so commas, brackets etc. in the search text don't break it
+const quoteFilterValue = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+
+// Page numbers to show around the current page, with '…' gaps
+function getPageList(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) pages.push('…');
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (end < total - 1) pages.push('…');
+  pages.push(total);
+  return pages;
+}
 
 // stock_balance has no id column; rows are unique on (store_name, snapshot_date, item_id)
 const STOCK_TABLE = 'stock_balance';
@@ -32,6 +50,13 @@ export default function StockBalance() {
   const [shopFilter, setShopFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Pagination States
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const latestRequestRef = useRef(0);
 
   // Bulk Selection States
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -64,13 +89,31 @@ export default function StockBalance() {
     loadShops();
   }, []);
 
-  // Fetch Stock Records: strictly limited to top 1,000 records
+  // Wait until the user stops typing before searching, and go back to page 1
+  useEffect(() => {
+    const next = search.trim();
+    if (next === debouncedSearch) return;
+    const t = setTimeout(() => {
+      setDebouncedSearch(next);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [search, debouncedSearch]);
+
+  // Any filter change starts again from page 1
+  const handleShopFilterChange = (value) => { setShopFilter(value); setPage(1); };
+  const handleStartDateChange = (value) => { setStartDate(value); setPage(1); };
+  const handleEndDateChange = (value) => { setEndDate(value); setPage(1); };
+
+  // Fetch one page (PAGE_SIZE rows) of stock records, plus the total count for the current filters
   const fetchStockRecords = useCallback(async () => {
+    const requestId = ++latestRequestRef.current;
     setLoading(true);
     try {
+      const from = (page - 1) * PAGE_SIZE;
       let query = supabase
         .from(STOCK_TABLE)
-        .select('*');
+        .select('*', { count: 'exact' });
 
       if (shopFilter) {
         query = query.eq('store_name', shopFilter);
@@ -83,19 +126,49 @@ export default function StockBalance() {
         query = query.lte('snapshot_date', endDate);
       }
 
-      if (search.trim()) {
-        const term = search.trim();
-        query = query.or(`item_description.ilike.%${term}%,brand_name.ilike.%${term}%,subhead.ilike.%${term}%,party_name.ilike.%${term}%,company_name.ilike.%${term}%`);
+      if (debouncedSearch) {
+        const v = quoteFilterValue(`%${debouncedSearch}%`);
+        query = query.or(`item_description.ilike.${v},item_id.ilike.${v},brand_name.ilike.${v},subhead.ilike.${v},party_name.ilike.${v},company_name.ilike.${v}`);
       }
 
+      // Unique ordering so rows never repeat or go missing between pages
       query = query
         .order('snapshot_date', { ascending: false })
-        .limit(PAGE_SIZE);
+        .order('store_name', { ascending: true })
+        .order('item_id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
 
-      const { data, error } = await query;
+      const { data, error, count } = await query;
+
+      // A newer request (filter / page change) has started; ignore this result
+      if (requestId !== latestRequestRef.current) return;
 
       if (error) {
+        // Page is past the end of the results (e.g. rows were deleted) - go back to page 1
+        if (error.code === 'PGRST103' && page > 1) {
+          setPage(1);
+          return;
+        }
         console.warn('Table stock_balance query notice:', error.message);
+        if (error.code === '57014') {
+          // Postgres statement timeout - usually a broad search across all dates/shops
+          toast.error('Search took too long. Narrow it down with a Shop or Date filter and try again.', { id: 'stock-timeout' });
+        } else {
+          toast.error('Failed to load stock records: ' + error.message);
+        }
+        setStockRecords([]);
+        setTotalCount(0);
+        return;
+      }
+
+      const total = count || 0;
+      setTotalCount(total);
+
+      // Current page no longer exists (e.g. after deleting rows) - jump to the last page
+      const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      if (page > lastPage) {
+        setPage(lastPage);
+        return;
       }
 
       // Map stock_balance columns to the shape the table renders
@@ -113,11 +186,13 @@ export default function StockBalance() {
       }));
       setStockRecords(mapped);
     } catch (err) {
+      if (requestId !== latestRequestRef.current) return;
       console.error('Error fetching stock records:', err);
+      toast.error('Failed to load stock records');
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestRef.current) setLoading(false);
     }
-  }, [shopFilter, startDate, endDate, search]);
+  }, [shopFilter, startDate, endDate, debouncedSearch, page]);
 
   useEffect(() => {
     fetchStockRecords();
@@ -377,7 +452,7 @@ export default function StockBalance() {
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => handleStartDateChange(e.target.value)}
                 className="bg-transparent text-xs text-slate-700 outline-none font-medium"
                 id="filter-start-date"
               />
@@ -388,14 +463,14 @@ export default function StockBalance() {
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => handleEndDateChange(e.target.value)}
                 className="bg-transparent text-xs text-slate-700 outline-none font-medium"
                 id="filter-end-date"
               />
             </div>
             {(startDate || endDate) && (
               <button
-                onClick={() => { setStartDate(''); setEndDate(''); }}
+                onClick={() => { setStartDate(''); setEndDate(''); setPage(1); }}
                 className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
               >
                 Clear Dates
@@ -437,7 +512,7 @@ export default function StockBalance() {
             <Store size={14} className="text-slate-400 shrink-0" />
             <select
               value={shopFilter}
-              onChange={(e) => setShopFilter(e.target.value)}
+              onChange={(e) => handleShopFilterChange(e.target.value)}
               className="px-3 py-2 text-xs border border-slate-200 rounded-xl font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 outline-none transition cursor-pointer"
               id="filter-shop-select"
             >
@@ -448,7 +523,7 @@ export default function StockBalance() {
             </select>
           </div>
           <span className="text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/60 whitespace-nowrap">
-            Loaded: <b className="text-indigo-900">{stockRecords.length.toLocaleString()}</b>
+            Total: <b className="text-indigo-900">{totalCount.toLocaleString()}</b>
           </span>
         </div>
       </div>
@@ -478,6 +553,7 @@ export default function StockBalance() {
                 <th className="px-2 py-3 text-center w-10">Action</th>
                 <th className="px-3 py-3">Shop</th>
                 <th className="px-3 py-3">Date</th>
+                <th className="px-3 py-3">Item ID</th>
                 <th className="px-3 py-3">Item Name</th>
                 <th className="px-3 py-3 text-right">Opening Qty</th>
                 <th className="px-3 py-3 text-right">Qty In</th>
@@ -486,6 +562,7 @@ export default function StockBalance() {
                 <th className="px-3 py-3 text-right">Purchase Rate</th>
                 <th className="px-3 py-3 text-right">MRP Rate</th>
                 <th className="px-3 py-3">Subhead</th>
+                <th className="px-3 py-3">Brand ID</th>
                 <th className="px-3 py-3">Brand Name</th>
                 <th className="px-3 py-3">Liquor Type</th>
                 <th className="px-3 py-3">B/Cs</th>
@@ -498,7 +575,7 @@ export default function StockBalance() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={isSelectMode ? 20 : 19} className="text-center py-12 text-slate-400">
+                  <td colSpan={isSelectMode ? 21 : 20} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={20} className="animate-spin text-indigo-600" />
                       <span className="text-xs font-semibold text-slate-600">Loading stock records from database...</span>
@@ -507,7 +584,7 @@ export default function StockBalance() {
                 </tr>
               ) : stockRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={isSelectMode ? 20 : 19} className="text-center py-14 text-slate-400">
+                  <td colSpan={isSelectMode ? 21 : 20} className="text-center py-14 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
                       <span className="text-sm font-semibold text-slate-600">No stock balance records found</span>
@@ -551,6 +628,7 @@ export default function StockBalance() {
                       {/* Data Columns */}
                       <td className="px-3 py-2.5 font-bold text-indigo-900">{r.shop_id || '—'}</td>
                       <td className="px-3 py-2.5 text-slate-600 font-mono text-[11px]">{r.date || '—'}</td>
+                      <td className="px-3 py-2.5 text-slate-600 font-mono text-[11px]">{r.item_id || '—'}</td>
                       <td className="px-3 py-2.5 font-bold text-slate-900">{r.item_name}</td>
                       <td className="px-3 py-2.5 text-right font-mono text-slate-600">{r.opening_qty}</td>
                       <td className="px-3 py-2.5 text-right font-mono text-emerald-600 font-semibold">+{r.quantity_in}</td>
@@ -561,6 +639,7 @@ export default function StockBalance() {
                       <td className="px-3 py-2.5 text-right font-mono text-slate-700">₹{r.purchase_rate}</td>
                       <td className="px-3 py-2.5 text-right font-mono text-slate-700 font-semibold">₹{r.mrp_rate}</td>
                       <td className="px-3 py-2.5 text-slate-600">{r.subhead || '—'}</td>
+                      <td className="px-3 py-2.5 text-slate-600 font-mono text-[11px]">{r.brand_id ?? '—'}</td>
                       <td className="px-3 py-2.5 text-slate-800 font-semibold">{r.brand_name || '—'}</td>
                       <td className="px-3 py-2.5 text-slate-600">{r.liquor_type || '—'}</td>
                       <td className="px-3 py-2.5 text-slate-600">{r.b_cs || '—'}</td>
@@ -581,13 +660,76 @@ export default function StockBalance() {
         {/* Footer */}
         <div className="bg-slate-50 border-t border-slate-200/80 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 font-medium">
           <div>
-            Showing <span className="font-bold text-slate-800">{stockRecords.length.toLocaleString()}</span> records
-            {stockRecords.length >= PAGE_SIZE && (
-              <span className="ml-2 text-indigo-600 font-semibold">(Limited to 1,000 to keep the system lightning fast)</span>
+            {totalCount > 0 ? (
+              <>
+                Showing <span className="font-bold text-slate-800">{((page - 1) * PAGE_SIZE + 1).toLocaleString()}</span>
+                {'–'}
+                <span className="font-bold text-slate-800">{Math.min(page * PAGE_SIZE, totalCount).toLocaleString()}</span>
+                {' of '}
+                <span className="font-bold text-slate-800">{totalCount.toLocaleString()}</span> records
+              </>
+            ) : (
+              <>Showing <span className="font-bold text-slate-800">0</span> records</>
             )}
           </div>
-          <div className="text-[11px] text-slate-400">
-            Use Search, Shop or Date filters to find and manage specific entries.
+
+          {/* Pagination */}
+          <div className="flex items-center gap-1 flex-wrap justify-center" id="stock-pagination">
+            <button
+              onClick={() => setPage(1)}
+              disabled={loading || page <= 1}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              title="First page"
+            >
+              <ChevronsLeft size={14} />
+            </button>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={loading || page <= 1}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              title="Previous page"
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            {getPageList(page, totalPages).map((p, i) => (
+              p === '…' ? (
+                <span key={`gap-${i}`} className="px-1.5 text-slate-400">…</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  disabled={loading}
+                  className={`min-w-[30px] px-2 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed ${
+                    p === page
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {p.toLocaleString()}
+                </button>
+              )
+            ))}
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={loading || page >= totalPages}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              title="Next page"
+            >
+              <ChevronRight size={14} />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={loading || page >= totalPages}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              title="Last page"
+            >
+              <ChevronsRight size={14} />
+            </button>
+            <span className="ml-2 text-[11px] text-slate-400">
+              Page {page.toLocaleString()} of {totalPages.toLocaleString()}
+            </span>
           </div>
         </div>
       </div>
