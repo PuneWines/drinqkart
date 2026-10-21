@@ -1765,7 +1765,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
       try {
         const [shopsRes, distinctShopsRes] = await Promise.all([
           supabase.from("shop").select("shop_name"),
-          supabase.from("stock_balance_records").select("shop_id").limit(2000),
+          supabase.from("stock_balance").select("shop_id:store_name").limit(2000),
         ]);
 
         const names = new Set();
@@ -1790,7 +1790,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     loadMetadata();
   }, []);
 
-  // 2. Fetch real data from stock_balance_records strictly based on filters
+  // 2. Fetch real data from stock_balance strictly based on filters
+  // (columns are aliased to the field names the aggregations below use)
   const fetchRealStockData = useCallback(async () => {
     setLoading(true);
     try {
@@ -1800,13 +1801,13 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
 
       for (let i = 0; i < numBatches; i++) {
         let q = supabase
-          .from("stock_balance_records")
+          .from("stock_balance")
           .select(
-            "date, shop_id, liquor_type, subhead, item_name, quantity_out, quantity_in, closing_qty, mrp_rate, purchase_rate, b_cs, type1, type2, type5, brand_name, company_name, party_name",
+            "date:snapshot_date, shop_id:store_name, liquor_type, subhead, item_name:item_description, quantity_out:qty_out, quantity_in:qty_in, closing_qty, mrp_rate:mrp_bottle_rate, purchase_rate:purchase_bottle_rate, b_cs:bottles_per_case, type1, type2, type5, brand_name, company_name, party_name",
           );
 
         if (selectedStore !== "All") {
-          q = q.eq("shop_id", selectedStore);
+          q = q.eq("store_name", selectedStore);
         }
         if (selectedLiquorType !== "All") {
           q = q.ilike("liquor_type", `%${selectedLiquorType}%`);
@@ -1815,11 +1816,17 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
           q = q.ilike("subhead", `%${selectedSubhead}%`);
         }
         if (startDate) {
-          q = q.gte("date", startDate);
+          q = q.gte("snapshot_date", startDate);
         }
         if (endDate) {
-          q = q.lte("date", endDate);
+          q = q.lte("snapshot_date", endDate);
         }
+
+        // Stable order so the parallel page ranges don't overlap or skip rows
+        q = q
+          .order("snapshot_date", { ascending: true })
+          .order("store_name", { ascending: true })
+          .order("item_id", { ascending: true });
 
         promises.push(q.range(i * batchSize, (i + 1) * batchSize - 1));
       }
