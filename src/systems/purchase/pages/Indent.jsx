@@ -1,6 +1,26 @@
 import React, { useState, useRef, useEffect } from "react";
-import * as XLSX from 'xlsx';
-import { Upload, Settings2, Loader2, List, Clock, CheckCircle, Send, ChevronDown, Package, Trash2, AlertTriangle, X, TrendingUp, TrendingDown, Database, RefreshCw, Eye, Filter, Search } from "lucide-react";
+import * as XLSX from "xlsx";
+import {
+  Upload,
+  Settings2,
+  Loader2,
+  List,
+  Clock,
+  CheckCircle,
+  Send,
+  ChevronDown,
+  Package,
+  Trash2,
+  AlertTriangle,
+  X,
+  TrendingUp,
+  TrendingDown,
+  Database,
+  RefreshCw,
+  Eye,
+  Filter,
+  Search,
+} from "lucide-react";
 import "../styles/Pages.css";
 
 import Toast, { useToast } from "../components/Toast";
@@ -20,12 +40,19 @@ const AccordionItem = ({ item, calcs, handleInlineChange }) => {
         className="w-full p-3 flex justify-between items-center hover:bg-[#f8fafc] transition-colors"
       >
         <div className="text-left">
-          <p className="font-semibold text-[#0f172a] text-sm">{item.itemName}</p>
+          <p className="font-semibold text-[#0f172a] text-sm">
+            {item.itemName}
+          </p>
           <p className="text-[10px] text-[#64748b]">{item.brandName}</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold text-[#4338ca]">{calcs.orderBox} boxes</span>
-          <ChevronDown size={14} className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+          <span className="text-xs font-semibold text-[#4338ca]">
+            {calcs.orderBox} boxes
+          </span>
+          <ChevronDown
+            size={14}
+            className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          />
         </div>
       </button>
       {expanded && (
@@ -33,22 +60,32 @@ const AccordionItem = ({ item, calcs, handleInlineChange }) => {
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <span className="text-[#64748b] block">Qty Out:</span>
-              <span className="font-semibold text-[#0f172a]">{item.qtyOut !== null ? item.qtyOut : "—"}</span>
+              <span className="font-semibold text-[#0f172a]">
+                {item.qtyOut !== null ? item.qtyOut : "—"}
+              </span>
             </div>
             <div>
               <span className="text-[#64748b] block">Closing Qty:</span>
-              <span className="font-semibold text-[#0f172a]">{item.closingQty !== null ? item.closingQty : "—"}</span>
+              <span className="font-semibold text-[#0f172a]">
+                {item.closingQty !== null ? item.closingQty : "—"}
+              </span>
             </div>
             <div className="col-span-2">
               <span className="text-[#64748b] block">B/Cs:</span>
-              <span className="font-semibold text-[#0f172a]">{item.bcs !== null ? item.bcs : "—"}</span>
+              <span className="font-semibold text-[#0f172a]">
+                {item.bcs !== null ? item.bcs : "—"}
+              </span>
             </div>
             <div className="col-span-2 mt-1">
-              <span className="text-[#64748b] block">Order Qty (Editable):</span>
+              <span className="text-[#64748b] block">
+                Order Qty (Editable):
+              </span>
               <input
                 type="number"
                 value={calcs.orderQty}
-                onChange={(e) => handleInlineChange(item.id, 'orderQty', e.target.value)}
+                onChange={(e) =>
+                  handleInlineChange(item.id, "orderQty", e.target.value)
+                }
                 className="w-full mt-1 px-2 py-1 border rounded font-semibold text-[#4338ca] text-xs bg-white"
                 placeholder="-"
               />
@@ -62,7 +99,9 @@ const AccordionItem = ({ item, calcs, handleInlineChange }) => {
 
 // Stat Pill Component
 const StatPill = ({ label, value, icon: Icon, color }) => (
-  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${color} bg-white shadow-sm`}>
+  <div
+    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${color} bg-white shadow-sm`}
+  >
     <Icon size={14} />
     <span className="text-xs font-medium">{label}</span>
     <span className="text-xs font-bold">{value}</span>
@@ -70,14 +109,22 @@ const StatPill = ({ label, value, icon: Icon, color }) => (
 );
 
 // View Modal Component
-const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem, onRefresh }) => {
+const SubmissionViewModal = ({
+  isOpen,
+  onClose,
+  submission,
+  items,
+  onDeleteItem,
+  onRefresh,
+}) => {
   const [searchTerm, setSearchTerm] = useState("");
 
   if (!isOpen) return null;
 
-  const filteredItems = items.filter(item =>
-    item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.party_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredItems = items.filter(
+    (item) =>
+      item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.party_name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -86,20 +133,34 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-[#e2e8f0]">
           <div>
-            <h2 className="text-xl font-bold text-[#0f172a]">{submission?.shop_name}</h2>
+            <h2 className="text-xl font-bold text-[#0f172a]">
+              {submission?.shop_name}
+            </h2>
             <div className="flex items-center gap-3 mt-1">
               <span className="text-xs text-[#64748b] flex items-center gap-1">
                 <Clock size={12} />
                 {new Date(submission?.created_at).toLocaleString()}
               </span>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${submission?.status === 'Pending' ? 'bg-[#fef3c7] text-[#d97706]' : 'bg-[#dcfce7] text-[#16a34a]'
-                }`}>
-                {submission?.status === 'Pending' ? <Clock size={10} /> : <CheckCircle size={10} />}
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${
+                  submission?.status === "Pending"
+                    ? "bg-[#fef3c7] text-[#d97706]"
+                    : "bg-[#dcfce7] text-[#16a34a]"
+                }`}
+              >
+                {submission?.status === "Pending" ? (
+                  <Clock size={10} />
+                ) : (
+                  <CheckCircle size={10} />
+                )}
                 {submission?.status}
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-[#f1f5f9] rounded-lg transition-colors">
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-[#f1f5f9] rounded-lg transition-colors"
+          >
             <X size={20} className="text-[#64748b]" />
           </button>
         </div>
@@ -107,7 +168,10 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
         {/* Search Bar */}
         <div className="p-4 border-b border-[#e2e8f0]">
           <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+            />
             <input
               type="text"
               placeholder="Search items by name or party..."
@@ -123,22 +187,47 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white">
               <tr className="border-b border-[#e2e8f0]">
-                <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">Item Name</th>
-                <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">Company Name</th>
-                <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">Party Name</th>
-                <th className="text-right py-2 px-3 text-xs font-semibold text-[#64748b]">Order Box</th>
-                <th className="text-right py-2 px-3 text-xs font-semibold text-[#64748b]">Order Qty</th>
-                <th className="text-center py-2 px-3 text-xs font-semibold text-[#64748b]">Action</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">
+                  Item Name
+                </th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">
+                  Company Name
+                </th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-[#64748b]">
+                  Party Name
+                </th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-[#64748b]">
+                  Order Box
+                </th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-[#64748b]">
+                  Order Qty
+                </th>
+                <th className="text-center py-2 px-3 text-xs font-semibold text-[#64748b]">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredItems.map((item) => (
-                <tr key={item.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
-                  <td className="py-2 px-3 text-[#0f172a] font-medium">{item.item_name}</td>
-                  <td className="py-2 px-3 text-[#64748b] text-sm">{item.company_name || "-"}</td>
-                  <td className="py-2 px-3 text-[#64748b] text-sm">{item.party_name || "-"}</td>
-                  <td className="py-2 px-3 text-right font-bold text-[#4338ca]">{item.order_box}</td>
-                  <td className="py-2 px-3 text-right font-bold text-[#4338ca]">{item.order_qty}</td>
+                <tr
+                  key={item.id}
+                  className="border-b border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors"
+                >
+                  <td className="py-2 px-3 text-[#0f172a] font-medium">
+                    {item.item_name}
+                  </td>
+                  <td className="py-2 px-3 text-[#64748b] text-sm">
+                    {item.company_name || "-"}
+                  </td>
+                  <td className="py-2 px-3 text-[#64748b] text-sm">
+                    {item.party_name || "-"}
+                  </td>
+                  <td className="py-2 px-3 text-right font-bold text-[#4338ca]">
+                    {item.order_box}
+                  </td>
+                  <td className="py-2 px-3 text-right font-bold text-[#4338ca]">
+                    {item.order_qty}
+                  </td>
                   <td className="py-2 px-3 text-center">
                     <button
                       onClick={() => onDeleteItem(item.id, submission.id)}
@@ -152,7 +241,9 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
               ))}
               {filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-[#94a3b8]">No items found</td>
+                  <td colSpan="6" className="py-8 text-center text-[#94a3b8]">
+                    No items found
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -161,7 +252,9 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
 
         {/* Footer */}
         <div className="p-4 border-t border-[#e2e8f0] flex justify-between items-center">
-          <span className="text-xs text-[#64748b]">{items.length} items total</span>
+          <span className="text-xs text-[#64748b]">
+            {items.length} items total
+          </span>
           <button
             onClick={onRefresh}
             className="px-4 py-2 bg-[#4f46e5] text-white rounded-lg text-sm font-medium hover:bg-[#4338ca] transition-colors"
@@ -177,7 +270,7 @@ const SubmissionViewModal = ({ isOpen, onClose, submission, items, onDeleteItem,
 const Indent = () => {
   const [tableData, setTableData] = useState(() => {
     try {
-      const saved = sessionStorage.getItem('indent_tableData');
+      const saved = sessionStorage.getItem("indent_tableData");
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
       return [];
@@ -185,7 +278,7 @@ const Indent = () => {
   });
   const [duplicateCount, setDuplicateCount] = useState(() => {
     try {
-      const saved = sessionStorage.getItem('indent_duplicateCount');
+      const saved = sessionStorage.getItem("indent_duplicateCount");
       return saved ? JSON.parse(saved) : 0;
     } catch (e) {
       return 0;
@@ -193,7 +286,10 @@ const Indent = () => {
   });
 
   useEffect(() => {
-    sessionStorage.setItem('indent_duplicateCount', JSON.stringify(duplicateCount));
+    sessionStorage.setItem(
+      "indent_duplicateCount",
+      JSON.stringify(duplicateCount),
+    );
   }, [duplicateCount]);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -211,7 +307,7 @@ const Indent = () => {
   const [alertDialog, setAlertDialog] = useState({
     isOpen: false,
     title: "",
-    message: ""
+    message: "",
   });
 
   const showAlert = (title, message) => {
@@ -220,7 +316,9 @@ const Indent = () => {
     setAlertDialog({
       isOpen: true,
       title: title || "Clear Previous Shop Indent",
-      message: message || "An indent submission already exists for this shop. Please delete it from Recent Indent Submissions before importing Excel/CSV again."
+      message:
+        message ||
+        "An indent submission already exists for this shop. Please delete it from Recent Indent Submissions before importing Excel/CSV again.",
     });
   };
   const [mobileView, setMobileView] = useState(false);
@@ -234,8 +332,8 @@ const Indent = () => {
       setMobileView(window.innerWidth < 1024);
     };
     checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   const fetchSubmittedHistory = async () => {
@@ -243,13 +341,15 @@ const Indent = () => {
     try {
       const { data: indents, error } = await supabase
         .from("purchase_indents")
-        .select(`
+        .select(
+          `
           id,
           shop_name,
           status,
           created_at
-        `)
-        .order('created_at', { ascending: false });
+        `,
+        )
+        .order("created_at", { ascending: false });
 
       if (error) {
         addToast("Error fetching history: " + error.message, "error");
@@ -262,7 +362,7 @@ const Indent = () => {
       }
 
       // Fetch all indent items for these indents, paginated to bypass the 1000-row limit
-      const indentIds = indents.map(indent => indent.id);
+      const indentIds = indents.map((indent) => indent.id);
       let allItems = [];
       let page = 0;
       const pageSize = 1000;
@@ -314,9 +414,9 @@ const Indent = () => {
       }
 
       // Map approved items to have is_excluded = false (they are non-excluded approved indents)
-      const mappedApproved = allApprovedItems.map(item => ({
+      const mappedApproved = allApprovedItems.map((item) => ({
         ...item,
-        is_excluded: false
+        is_excluded: false,
       }));
 
       // Combine both lists
@@ -331,12 +431,12 @@ const Indent = () => {
         return acc;
       }, {});
 
-      const historyData = indents.map(row => {
+      const historyData = indents.map((row) => {
         const items = itemsByIndent[row.id] || [];
         return {
           ...row,
-          itemCount: items.filter(i => !i.is_excluded).length,
-          excludedCount: items.filter(i => i.is_excluded).length
+          itemCount: items.filter((i) => !i.is_excluded).length,
+          excludedCount: items.filter((i) => i.is_excluded).length,
         };
       });
       setSubmittedHistory(historyData);
@@ -354,39 +454,43 @@ const Indent = () => {
   const hasExistingSubmissionForShop = (shopName) => {
     if (!shopName) return false;
     const cleanShop = shopName.toString().trim().toLowerCase();
-    return submittedHistory.some(h => (h.shop_name || '').toString().trim().toLowerCase() === cleanShop);
+    return submittedHistory.some(
+      (h) => (h.shop_name || "").toString().trim().toLowerCase() === cleanShop,
+    );
   };
 
   React.useEffect(() => {
-    sessionStorage.setItem('indent_tableData', JSON.stringify(tableData));
+    sessionStorage.setItem("indent_tableData", JSON.stringify(tableData));
   }, [tableData]);
 
   const [thresholdDays, setThresholdDays] = useState(() => {
     try {
-      const saved = localStorage.getItem('indent_thresholdDays');
-      return saved ? JSON.parse(saved) : {
-        IMFL: 4,
-        BEER: 6,
-        WINE: 4,
-        MML: 4
-      };
+      const saved = localStorage.getItem("indent_thresholdDays");
+      return saved
+        ? JSON.parse(saved)
+        : {
+            IMFL: 4,
+            BEER: 6,
+            WINE: 4,
+            MML: 4,
+          };
     } catch (e) {
       return {
         IMFL: 4,
         BEER: 6,
         WINE: 4,
-        MML: 4
+        MML: 4,
       };
     }
   });
 
   React.useEffect(() => {
-    localStorage.setItem('indent_thresholdDays', JSON.stringify(thresholdDays));
+    localStorage.setItem("indent_thresholdDays", JSON.stringify(thresholdDays));
   }, [thresholdDays]);
 
   const [daysDivisor, setDaysDivisor] = useState(() => {
     try {
-      const saved = localStorage.getItem('indent_daysDivisor');
+      const saved = localStorage.getItem("indent_daysDivisor");
       return saved ? JSON.parse(saved) : 30;
     } catch (e) {
       return 30;
@@ -395,45 +499,45 @@ const Indent = () => {
 
   const [periodType, setPeriodType] = useState(() => {
     try {
-      const saved = localStorage.getItem('indent_daysDivisor');
+      const saved = localStorage.getItem("indent_daysDivisor");
       const val = saved ? JSON.parse(saved) : 30;
-      if (val === 7) return 'weekly';
-      if (val === 30) return 'monthly';
-      return 'custom';
+      if (val === 7) return "weekly";
+      if (val === 30) return "monthly";
+      return "custom";
     } catch (e) {
-      return 'monthly';
+      return "monthly";
     }
   });
 
   const [customDays, setCustomDays] = useState(() => {
     try {
-      const saved = localStorage.getItem('indent_daysDivisor');
+      const saved = localStorage.getItem("indent_daysDivisor");
       const val = saved ? JSON.parse(saved) : 30;
-      return (val !== 7 && val !== 30) ? val : 30;
+      return val !== 7 && val !== 30 ? val : 30;
     } catch (e) {
       return 30;
     }
   });
 
   React.useEffect(() => {
-    localStorage.setItem('indent_daysDivisor', JSON.stringify(daysDivisor));
+    localStorage.setItem("indent_daysDivisor", JSON.stringify(daysDivisor));
   }, [daysDivisor]);
 
   const handlePeriodTypeChange = (newType) => {
     setPeriodType(newType);
-    if (newType === 'weekly') {
+    if (newType === "weekly") {
       setDaysDivisor(7);
-    } else if (newType === 'monthly') {
+    } else if (newType === "monthly") {
       setDaysDivisor(30);
-    } else if (newType === 'custom') {
+    } else if (newType === "custom") {
       const validCustom = Math.max(1, Math.min(1000, Number(customDays) || 1));
       setDaysDivisor(validCustom);
     }
   };
 
   const handleCustomDaysChange = (rawVal) => {
-    if (rawVal === '') {
-      setCustomDays('');
+    if (rawVal === "") {
+      setCustomDays("");
       return;
     }
     let num = parseInt(rawVal, 10);
@@ -454,7 +558,7 @@ const Indent = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedShop, setSelectedShop] = useState(() => {
     try {
-      const saved = sessionStorage.getItem('indent_selectedShop');
+      const saved = sessionStorage.getItem("indent_selectedShop");
       return saved || "";
     } catch (e) {
       return "";
@@ -463,9 +567,9 @@ const Indent = () => {
 
   useEffect(() => {
     if (selectedShop) {
-      sessionStorage.setItem('indent_selectedShop', selectedShop);
+      sessionStorage.setItem("indent_selectedShop", selectedShop);
     } else {
-      sessionStorage.removeItem('indent_selectedShop');
+      sessionStorage.removeItem("indent_selectedShop");
     }
   }, [selectedShop]);
 
@@ -484,11 +588,11 @@ const Indent = () => {
   // Calculate statistics
   const getStatistics = () => {
     const totalItems = tableData.length;
-    const activeItems = tableData.filter(item => {
+    const activeItems = tableData.filter((item) => {
       const calcs = calculateRow(item);
       return parseFloat(calcs.orderQty) >= 3.0;
     }).length;
-    const excludedItems = tableData.filter(item => {
+    const excludedItems = tableData.filter((item) => {
       const calcs = calculateRow(item);
       return parseFloat(calcs.orderQty) < 3.0;
     }).length;
@@ -499,13 +603,26 @@ const Indent = () => {
   const processRows = (allRows) => {
     if (allRows.length < 2) return;
 
-    const knownKeywords = ['party name', 'brand name', 'liquor type', 'size', 'mls', 'ml', 'item', 'name'];
+    const knownKeywords = [
+      "party name",
+      "brand name",
+      "liquor type",
+      "size",
+      "mls",
+      "ml",
+      "item",
+      "name",
+    ];
     let headerRowIdx = -1;
     let headers = [];
 
     for (let i = 0; i < Math.min(15, allRows.length); i++) {
-      const row = allRows[i].map(c => String(c ?? '').toLowerCase().trim());
-      if (row.some(h => knownKeywords.some(k => h.includes(k)))) {
+      const row = allRows[i].map((c) =>
+        String(c ?? "")
+          .toLowerCase()
+          .trim(),
+      );
+      if (row.some((h) => knownKeywords.some((k) => h.includes(k)))) {
         headerRowIdx = i;
         headers = row;
         break;
@@ -513,50 +630,121 @@ const Indent = () => {
     }
     if (headerRowIdx === -1) {
       headerRowIdx = 0;
-      headers = allRows[0].map(c => String(c ?? '').toLowerCase().trim());
+      headers = allRows[0].map((c) =>
+        String(c ?? "")
+          .toLowerCase()
+          .trim(),
+      );
     }
 
     const getIndex = (exact, partial) => {
-      let idx = headers.findIndex(h => exact.some(p => h === p));
+      let idx = headers.findIndex((h) => exact.some((p) => h === p));
       if (idx !== -1) return idx;
-      return headers.findIndex(h => partial.some(p => h.includes(p)));
+      return headers.findIndex((h) => partial.some((p) => h.includes(p)));
     };
 
-    const companyNameIdx = getIndex(['company name'], ['company name', 'company', 'distributor', 'mfg']);
-    const partyNameIdx = getIndex(['party name'], ['party name', 'party', 'shop', 'store']);
-    const itemNameIdx = getIndex(['item name'], ['item name', 'item', 'product', 'particulars', 'description']);
-    const brandNameIdx = getIndex(['brand name'], ['brand name', 'brand']);
-    const mlsIdx = getIndex(['size (mls)', 'size (mis)', 'size(mls)', 'size(mis)', 'size (ml)', 'size(ml)', 'mls', 'ml', 'size', 'volume'], ['size (ml)', 'size(ml)', 'size (mls)', 'size (mis)', 'mls', 'ml', 'volume']);
-    const liquorTypeIdx = getIndex(['liquor type'], ['liquor type', 'liquor', 'type', 'category']);
-    const qtyOutIdx = getIndex(['quantity out', 'qty out', 'qty out (bottles)'], ['quantity out', 'qty out', 'opening stock']);
-    const closingQtyIdx = getIndex(['closing stock in bottle', 'closing qty', 'closing quantity', 'closing stock (bottles)'],
-      ['closing stock in bottle', 'closing qty', 'closing', 'balance']);
-    const bcsIdx = getIndex(['bpc', 'b/cs', 'bcs', 'bottles per case', 'pack size'], ['bpc', 'b/cs', 'bcs', 'b cs', 'bottles per case', 'per case', 'pack size']);
+    const companyNameIdx = getIndex(
+      ["company name"],
+      ["company name", "company", "distributor", "mfg"],
+    );
+    const partyNameIdx = getIndex(
+      ["party name"],
+      ["party name", "party", "shop", "store"],
+    );
+    const itemNameIdx = getIndex(
+      ["item name"],
+      ["item name", "item", "product", "particulars", "description"],
+    );
+    const brandNameIdx = getIndex(["brand name"], ["brand name", "brand"]);
+    const mlsIdx = getIndex(
+      [
+        "size (mls)",
+        "size (mis)",
+        "size(mls)",
+        "size(mis)",
+        "size (ml)",
+        "size(ml)",
+        "mls",
+        "ml",
+        "size",
+        "volume",
+      ],
+      [
+        "size (ml)",
+        "size(ml)",
+        "size (mls)",
+        "size (mis)",
+        "mls",
+        "ml",
+        "volume",
+      ],
+    );
+    const liquorTypeIdx = getIndex(
+      ["liquor type"],
+      ["liquor type", "liquor", "type", "category"],
+    );
+    const qtyOutIdx = getIndex(
+      ["quantity out", "qty out", "qty out (bottles)"],
+      ["quantity out", "qty out", "opening stock"],
+    );
+    const closingQtyIdx = getIndex(
+      [
+        "closing stock in bottle",
+        "closing qty",
+        "closing quantity",
+        "closing stock (bottles)",
+      ],
+      ["closing stock in bottle", "closing qty", "closing", "balance"],
+    );
+    const bcsIdx = getIndex(
+      ["bpc", "b/cs", "bcs", "bottles per case", "pack size"],
+      [
+        "bpc",
+        "b/cs",
+        "bcs",
+        "b cs",
+        "bottles per case",
+        "per case",
+        "pack size",
+      ],
+    );
 
-    const fPartyName = partyNameIdx !== -1 ? partyNameIdx : (headers.length > 4 ? 4 : -1);
+    const fPartyName =
+      partyNameIdx !== -1 ? partyNameIdx : headers.length > 4 ? 4 : -1;
     const fCompanyName = companyNameIdx !== -1 ? companyNameIdx : -1;
-    const fItemName = itemNameIdx !== -1 ? itemNameIdx : (brandNameIdx !== -1 ? brandNameIdx : (headers.length > 6 ? 6 : 0));
+    const fItemName =
+      itemNameIdx !== -1
+        ? itemNameIdx
+        : brandNameIdx !== -1
+          ? brandNameIdx
+          : headers.length > 6
+            ? 6
+            : 0;
     const fBrandName = brandNameIdx !== -1 ? brandNameIdx : fItemName;
-    const fMls = mlsIdx !== -1 ? mlsIdx : (headers.length > 9 ? 9 : -1);
-    const fLiquorType = liquorTypeIdx !== -1 ? liquorTypeIdx : (headers.length > 11 ? 11 : -1);
+    const fMls = mlsIdx !== -1 ? mlsIdx : headers.length > 9 ? 9 : -1;
+    const fLiquorType =
+      liquorTypeIdx !== -1 ? liquorTypeIdx : headers.length > 11 ? 11 : -1;
 
     const records = [];
     let duplicateCount = 0;
 
     for (let i = headerRowIdx + 1; i < allRows.length; i++) {
-      const row = allRows[i].map(c => String(c ?? '').trim());
-      const itemVal = fItemName !== -1 ? row[fItemName] : '';
-      const brandVal = fBrandName !== -1 ? row[fBrandName] : '';
+      const row = allRows[i].map((c) => String(c ?? "").trim());
+      const itemVal = fItemName !== -1 ? row[fItemName] : "";
+      const brandVal = fBrandName !== -1 ? row[fBrandName] : "";
       if (!itemVal && !brandVal) continue;
 
       const newRecord = {
         itemName: itemVal || brandVal,
         brandName: brandVal || itemVal,
-        companyName: fCompanyName !== -1 ? (row[fCompanyName] || '') : '',
-        partyName: fPartyName !== -1 ? (row[fPartyName] || '') : '',
-        mls: fMls !== -1 ? (row[fMls] || '') : '',
-        liquorType: fLiquorType !== -1 ? (row[fLiquorType] || '') : '',
-        qtyOut: qtyOutIdx !== -1 && row[qtyOutIdx] ? parseFloat(row[qtyOutIdx]) : null,
+        companyName: fCompanyName !== -1 ? row[fCompanyName] || "" : "",
+        partyName: fPartyName !== -1 ? row[fPartyName] || "" : "",
+        mls: fMls !== -1 ? row[fMls] || "" : "",
+        liquorType: fLiquorType !== -1 ? row[fLiquorType] || "" : "",
+        qtyOut:
+          qtyOutIdx !== -1 && row[qtyOutIdx]
+            ? parseFloat(row[qtyOutIdx])
+            : null,
         closingQty: (() => {
           if (closingQtyIdx === -1 || !row[closingQtyIdx]) return null;
           const parsed = parseFloat(row[closingQtyIdx]);
@@ -566,16 +754,17 @@ const Indent = () => {
         bcs: bcsIdx !== -1 && row[bcsIdx] ? parseFloat(row[bcsIdx]) : null,
       };
 
-      const isDuplicate = records.some(r => 
-        r.itemName.toLowerCase() === newRecord.itemName.toLowerCase() &&
-        r.brandName.toLowerCase() === newRecord.brandName.toLowerCase() &&
-        r.companyName.toLowerCase() === newRecord.companyName.toLowerCase() &&
-        r.partyName.toLowerCase() === newRecord.partyName.toLowerCase() &&
-        r.mls.toLowerCase() === newRecord.mls.toLowerCase() &&
-        r.liquorType.toLowerCase() === newRecord.liquorType.toLowerCase() &&
-        Object.is(r.qtyOut, newRecord.qtyOut) &&
-        Object.is(r.closingQty, newRecord.closingQty) &&
-        Object.is(r.bcs, newRecord.bcs)
+      const isDuplicate = records.some(
+        (r) =>
+          r.itemName.toLowerCase() === newRecord.itemName.toLowerCase() &&
+          r.brandName.toLowerCase() === newRecord.brandName.toLowerCase() &&
+          r.companyName.toLowerCase() === newRecord.companyName.toLowerCase() &&
+          r.partyName.toLowerCase() === newRecord.partyName.toLowerCase() &&
+          r.mls.toLowerCase() === newRecord.mls.toLowerCase() &&
+          r.liquorType.toLowerCase() === newRecord.liquorType.toLowerCase() &&
+          Object.is(r.qtyOut, newRecord.qtyOut) &&
+          Object.is(r.closingQty, newRecord.closingQty) &&
+          Object.is(r.bcs, newRecord.bcs),
       );
 
       if (isDuplicate) {
@@ -585,14 +774,18 @@ const Indent = () => {
       }
     }
 
-    const targetShop = selectedShop || (records.length > 0 ? records[0].partyName : '');
+    const targetShop =
+      selectedShop || (records.length > 0 ? records[0].partyName : "");
     if (targetShop && hasExistingSubmissionForShop(targetShop)) {
       setIsProcessing(false);
       setShowModal(false);
       setUploadStep(1);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = "";
       addToast("Clear Previous Shop Indent", "error");
-      showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${targetShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
+      showAlert(
+        "Clear Previous Shop Indent",
+        `An indent submission already exists for ${targetShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`,
+      );
       return;
     }
 
@@ -619,7 +812,7 @@ const Indent = () => {
     setIsProcessing(false);
     setShowModal(false);
     setUploadStep(1);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = "";
 
     setDuplicateCount(duplicateCount);
     addToast("File loaded successfully.", "success");
@@ -630,9 +823,12 @@ const Indent = () => {
     if (!file) return;
 
     if (selectedShop && hasExistingSubmissionForShop(selectedShop)) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = "";
       addToast("Clear Previous Shop Indent", "error");
-      showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
+      showAlert(
+        "Clear Previous Shop Indent",
+        `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`,
+      );
       return;
     }
 
@@ -643,20 +839,36 @@ const Indent = () => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: "array" });
 
-        const targetKeywords = ['party name', 'brand name', 'liquor type', 'size', 'mls', 'ml'];
+        const targetKeywords = [
+          "party name",
+          "brand name",
+          "liquor type",
+          "size",
+          "mls",
+          "ml",
+        ];
 
         let bestRows = null;
         let bestScore = -1;
 
         for (const sheetName of workbook.SheetNames) {
           const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+          const rows = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            defval: "",
+          });
 
           for (let i = 0; i < Math.min(15, rows.length); i++) {
-            const row = rows[i].map(c => String(c ?? '').toLowerCase().trim());
-            const score = targetKeywords.filter(kw => row.some(h => h.includes(kw))).length;
+            const row = rows[i].map((c) =>
+              String(c ?? "")
+                .toLowerCase()
+                .trim(),
+            );
+            const score = targetKeywords.filter((kw) =>
+              row.some((h) => h.includes(kw)),
+            ).length;
             if (score > bestScore) {
               bestScore = score;
               bestRows = rows;
@@ -664,33 +876,43 @@ const Indent = () => {
           }
         }
 
-        processRows(bestRows ?? XLSX.utils.sheet_to_json(
-          workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: '' }
-        ));
+        processRows(
+          bestRows ??
+            XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {
+              header: 1,
+              defval: "",
+            }),
+        );
       };
       reader.readAsArrayBuffer(file);
     }, 150);
   };
 
   const handleThresholdChange = (type, value) => {
-    setThresholdDays(prev => ({ ...prev, [type]: parseFloat(value) || 0 }));
+    setThresholdDays((prev) => ({ ...prev, [type]: parseFloat(value) || 0 }));
   };
 
   const handleInlineChange = (id, field, value) => {
-    setTableData(prevData => prevData.map(item => {
-      if (item.id === id) {
-        let parsedValue = value;
-        if (field === 'qtyOut' || field === 'closingQty' || field === 'bcs') {
-          parsedValue = value === "" ? null : parseFloat(value);
+    setTableData((prevData) =>
+      prevData.map((item) => {
+        if (item.id === id) {
+          let parsedValue = value;
+          if (field === "qtyOut" || field === "closingQty" || field === "bcs") {
+            parsedValue = value === "" ? null : parseFloat(value);
+          }
+          return { ...item, [field]: parsedValue };
         }
-        return { ...item, [field]: parsedValue };
-      }
-      return item;
-    }));
+        return item;
+      }),
+    );
   };
 
   const calculateRow = (row) => {
-    const hasData = row.qtyOut !== null && row.bcs !== null && row.closingQty !== null && row.bcs !== 0;
+    const hasData =
+      row.qtyOut !== null &&
+      row.bcs !== null &&
+      row.closingQty !== null &&
+      row.bcs !== 0;
 
     let lastMonthSale = 0;
     let perDaySaleLastMonth = 0;
@@ -709,25 +931,72 @@ const Indent = () => {
       };
 
       lastMonthSale = getActive(row.lastMonthSale, row.qtyOut / row.bcs);
-      perDaySaleLastMonth = getActive(row.perDaySaleLastMonth, (row.qtyOut / daysDivisor) / row.bcs);
+      perDaySaleLastMonth = getActive(
+        row.perDaySaleLastMonth,
+        row.qtyOut / daysDivisor / row.bcs,
+      );
       const typeKey = (row.liquorType || "").trim().toUpperCase();
-      const matchedKey = typeKey ? Object.keys(thresholdDays).find(
-        key => typeKey.includes(key) || key.includes(typeKey)
-      ) : null;
+      const matchedKey = typeKey
+        ? Object.keys(thresholdDays).find(
+            (key) => typeKey.includes(key) || key.includes(typeKey),
+          )
+        : null;
       const multiplier = matchedKey ? thresholdDays[matchedKey] : 6;
-      thresholdSale = getActive(row.thresholdSale, perDaySaleLastMonth * multiplier);
-      boxClosingQty = getActive(row.boxClosingQty, Math.max(0, row.closingQty) / row.bcs);
+      thresholdSale = getActive(
+        row.thresholdSale,
+        perDaySaleLastMonth * multiplier,
+      );
+      boxClosingQty = getActive(
+        row.boxClosingQty,
+        Math.max(0, row.closingQty) / row.bcs,
+      );
       orderBox = getActive(row.orderBox, thresholdSale - boxClosingQty);
       orderQty = getActive(row.orderQty, orderBox * row.bcs);
     }
 
     return {
-      lastMonthSale: hasData ? (row.lastMonthSale !== undefined && row.lastMonthSale !== null && row.lastMonthSale !== "" ? row.lastMonthSale : lastMonthSale.toFixed(2)) : "",
-      perDaySaleLastMonth: hasData ? (row.perDaySaleLastMonth !== undefined && row.perDaySaleLastMonth !== null && row.perDaySaleLastMonth !== "" ? row.perDaySaleLastMonth : perDaySaleLastMonth.toFixed(2)) : "",
-      thresholdSale: hasData ? (row.thresholdSale !== undefined && row.thresholdSale !== null && row.thresholdSale !== "" ? row.thresholdSale : thresholdSale.toFixed(2)) : "",
-      boxClosingQty: hasData ? (row.boxClosingQty !== undefined && row.boxClosingQty !== null && row.boxClosingQty !== "" ? row.boxClosingQty : boxClosingQty.toFixed(2)) : "",
-      orderBox: hasData ? (row.orderBox !== undefined && row.orderBox !== null && row.orderBox !== "" ? row.orderBox : orderBox.toFixed(2)) : "",
-      orderQty: hasData ? (row.orderQty !== undefined && row.orderQty !== null && row.orderQty !== "" ? row.orderQty : orderQty.toFixed(2)) : ""
+      lastMonthSale: hasData
+        ? row.lastMonthSale !== undefined &&
+          row.lastMonthSale !== null &&
+          row.lastMonthSale !== ""
+          ? row.lastMonthSale
+          : lastMonthSale.toFixed(2)
+        : "",
+      perDaySaleLastMonth: hasData
+        ? row.perDaySaleLastMonth !== undefined &&
+          row.perDaySaleLastMonth !== null &&
+          row.perDaySaleLastMonth !== ""
+          ? row.perDaySaleLastMonth
+          : perDaySaleLastMonth.toFixed(2)
+        : "",
+      thresholdSale: hasData
+        ? row.thresholdSale !== undefined &&
+          row.thresholdSale !== null &&
+          row.thresholdSale !== ""
+          ? row.thresholdSale
+          : thresholdSale.toFixed(2)
+        : "",
+      boxClosingQty: hasData
+        ? row.boxClosingQty !== undefined &&
+          row.boxClosingQty !== null &&
+          row.boxClosingQty !== ""
+          ? row.boxClosingQty
+          : boxClosingQty.toFixed(2)
+        : "",
+      orderBox: hasData
+        ? row.orderBox !== undefined &&
+          row.orderBox !== null &&
+          row.orderBox !== ""
+          ? row.orderBox
+          : orderBox.toFixed(2)
+        : "",
+      orderQty: hasData
+        ? row.orderQty !== undefined &&
+          row.orderQty !== null &&
+          row.orderQty !== ""
+          ? row.orderQty
+          : orderQty.toFixed(2)
+        : "",
     };
   };
 
@@ -741,11 +1010,11 @@ const Indent = () => {
 
       while (hasMore) {
         const { data, error } = await supabase
-          .from('purchase_indent_items')
-          .select('*')
-          .eq('indent_id', history.id)
-          .eq('is_excluded', false)
-          .order('id', { ascending: true })
+          .from("purchase_indent_items")
+          .select("*")
+          .eq("indent_id", history.id)
+          .eq("is_excluded", false)
+          .order("id", { ascending: true })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;
@@ -767,10 +1036,10 @@ const Indent = () => {
 
       while (approvedHasMore) {
         const { data, error } = await supabase
-          .from('purchase_approved_indent_items')
-          .select('*')
-          .eq('indent_id', history.id)
-          .order('id', { ascending: true })
+          .from("purchase_approved_indent_items")
+          .select("*")
+          .eq("indent_id", history.id)
+          .order("id", { ascending: true })
           .range(approvedPage * pageSize, (approvedPage + 1) * pageSize - 1);
 
         if (error) throw error;
@@ -788,11 +1057,11 @@ const Indent = () => {
       // Combine both lists, mapping approved items for UI compatibility
       const combined = [
         ...allItems,
-        ...allApprovedItems.map(item => ({
+        ...allApprovedItems.map((item) => ({
           ...item,
-          approval_status: 'approved',
-          is_excluded: false
-        }))
+          approval_status: "approved",
+          is_excluded: false,
+        })),
       ];
       setSelectedSubmissionItems(combined);
     } catch (error) {
@@ -805,26 +1074,27 @@ const Indent = () => {
     setConfirmModal({
       isOpen: true,
       title: "Delete Entire Indent?",
-      message: "Are you sure you want to delete this entire indent? This action will permanently delete all records of this indent and its items across all pipeline steps.",
-      onConfirm: () => performDeleteIndent(indentId)
+      message:
+        "Are you sure you want to delete this entire indent? This action will permanently delete all records of this indent and its items across all pipeline steps.",
+      onConfirm: () => performDeleteIndent(indentId),
     });
   };
 
   const performDeleteIndent = async (indentId) => {
-    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
     setIsProcessing(true);
     try {
       let poIndentIds = [];
 
       // 1. Fetch unique_indent_id & party_indent_id from purchase_approved_indent_items
       const { data: approvedItems, error: appErr } = await supabase
-        .from('purchase_approved_indent_items')
-        .select('unique_indent_id, party_indent_id')
-        .eq('indent_id', indentId);
+        .from("purchase_approved_indent_items")
+        .select("unique_indent_id, party_indent_id")
+        .eq("indent_id", indentId);
 
       if (appErr) throw appErr;
       if (approvedItems && approvedItems.length > 0) {
-        approvedItems.forEach(item => {
+        approvedItems.forEach((item) => {
           if (item.unique_indent_id) poIndentIds.push(item.unique_indent_id);
           if (item.party_indent_id) poIndentIds.push(item.party_indent_id);
         });
@@ -832,13 +1102,13 @@ const Indent = () => {
 
       // 2. Fetch party_indent_id from purchase_indent_items
       const { data: pendingItems, error: pendErr } = await supabase
-        .from('purchase_indent_items')
-        .select('party_indent_id')
-        .eq('indent_id', indentId);
+        .from("purchase_indent_items")
+        .select("party_indent_id")
+        .eq("indent_id", indentId);
 
       if (pendErr) throw pendErr;
       if (pendingItems && pendingItems.length > 0) {
-        pendingItems.forEach(item => {
+        pendingItems.forEach((item) => {
           if (item.party_indent_id) poIndentIds.push(item.party_indent_id);
         });
       }
@@ -850,26 +1120,29 @@ const Indent = () => {
 
       // 5. Delete approved indent items
       const { error: delApprovedError } = await supabase
-        .from('purchase_approved_indent_items')
+        .from("purchase_approved_indent_items")
         .delete()
-        .eq('indent_id', indentId);
+        .eq("indent_id", indentId);
       if (delApprovedError) throw delApprovedError;
 
       // 6. Delete pending indent items
       const { error: delItemsError } = await supabase
-        .from('purchase_indent_items')
+        .from("purchase_indent_items")
         .delete()
-        .eq('indent_id', indentId);
+        .eq("indent_id", indentId);
       if (delItemsError) throw delItemsError;
 
       // 7. Delete parent indent record
       const { error: delIndentError } = await supabase
-        .from('purchase_indents')
+        .from("purchase_indents")
         .delete()
-        .eq('id', indentId);
+        .eq("id", indentId);
       if (delIndentError) throw delIndentError;
 
-      addToast("Successfully deleted indent and associated pipeline records.", "success");
+      addToast(
+        "Successfully deleted indent and associated pipeline records.",
+        "success",
+      );
       fetchSubmittedHistory();
       if (selectedSubmission?.id === indentId) setSelectedSubmission(null);
     } catch (error) {
@@ -884,31 +1157,32 @@ const Indent = () => {
     setConfirmModal({
       isOpen: true,
       title: "Delete Specific Item?",
-      message: "Are you sure you want to delete this specific item? This action will permanently remove the item from this indent and update or delete any associated Purchase Order.",
-      onConfirm: () => performDeleteItem(itemId, indentId)
+      message:
+        "Are you sure you want to delete this specific item? This action will permanently remove the item from this indent and update or delete any associated Purchase Order.",
+      onConfirm: () => performDeleteItem(itemId, indentId),
     });
   };
 
   const performDeleteItem = async (itemId, indentId) => {
-    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
     setIsProcessing(true);
     try {
       let itemData = null;
       let isApprovedItem = false;
 
       const { data: pendingItem, error: pendingError } = await supabase
-        .from('purchase_indent_items')
-        .select('*')
-        .eq('id', itemId)
+        .from("purchase_indent_items")
+        .select("*")
+        .eq("id", itemId)
         .maybeSingle();
 
       if (pendingItem) {
         itemData = pendingItem;
       } else {
         const { data: approvedItem, error: approvedError } = await supabase
-          .from('purchase_approved_indent_items')
-          .select('*')
-          .eq('id', itemId)
+          .from("purchase_approved_indent_items")
+          .select("*")
+          .eq("id", itemId)
           .maybeSingle();
         if (approvedItem) {
           itemData = approvedItem;
@@ -926,29 +1200,33 @@ const Indent = () => {
       if (uniqueIndentId && vendorName) {
         const cleanVendorName = vendorName.split("::")[0].trim();
         const { data: poData, error: poError } = await supabase
-          .from('purchase_purchase_orders')
-          .select('*')
-          .eq('indent_id', uniqueIndentId)
-          .or(`vendor_name.eq."${vendorName}",vendor_name.ilike."${cleanVendorName}%"`);
+          .from("purchase_purchase_orders")
+          .select("*")
+          .eq("indent_id", uniqueIndentId)
+          .or(
+            `vendor_name.eq."${vendorName}",vendor_name.ilike."${cleanVendorName}%"`,
+          );
 
         if (!poError && poData && poData.length > 0) {
           const po = poData[0];
 
           // Check other approved items for this vendor
           const { data: otherItems } = await supabase
-            .from('purchase_approved_indent_items')
-            .select('id')
-            .eq('unique_indent_id', uniqueIndentId)
-            .eq('party_name', vendorName);
+            .from("purchase_approved_indent_items")
+            .select("id")
+            .eq("unique_indent_id", uniqueIndentId)
+            .eq("party_name", vendorName);
 
-          const remaining = (otherItems || []).filter(i => i.id !== itemId);
+          const remaining = (otherItems || []).filter((i) => i.id !== itemId);
 
           const updatedReceivedItems = { ...(po.received_items || {}) };
           delete updatedReceivedItems[itemId];
 
-          const orderBox = itemData.order_box !== null ? parseFloat(itemData.order_box) : 0;
-          const orderQty = itemData.order_qty !== null ? parseFloat(itemData.order_qty) : 0;
-          const qtyType = orderBox >= 0.90 ? "Box" : "Bottles";
+          const orderBox =
+            itemData.order_box !== null ? parseFloat(itemData.order_box) : 0;
+          const orderQty =
+            itemData.order_qty !== null ? parseFloat(itemData.order_qty) : 0;
+          const qtyType = orderBox >= 0.9 ? "Box" : "Bottles";
 
           let newTotalQty = po.total_order_qty || 0;
           let newTotalBox = po.total_order_box || 0;
@@ -960,39 +1238,39 @@ const Indent = () => {
           }
 
           const { error: updPoError } = await supabase
-            .from('purchase_purchase_orders')
+            .from("purchase_purchase_orders")
             .update({
               received_items: updatedReceivedItems,
               total_order_qty: newTotalQty,
-              total_order_box: newTotalBox
+              total_order_box: newTotalBox,
             })
-            .eq('id', po.id);
+            .eq("id", po.id);
           if (updPoError) throw updPoError;
         }
       }
 
       if (isApprovedItem) {
         const { error: delItemError } = await supabase
-          .from('purchase_approved_indent_items')
+          .from("purchase_approved_indent_items")
           .delete()
-          .eq('id', itemId);
+          .eq("id", itemId);
         if (delItemError) throw delItemError;
       } else {
         const { error: delItemError } = await supabase
-          .from('purchase_indent_items')
+          .from("purchase_indent_items")
           .delete()
-          .eq('id', itemId);
+          .eq("id", itemId);
         if (delItemError) throw delItemError;
       }
 
       // Strictly delete from purchase_dashboard if deleted before PO generated
       if (itemData && itemData.item_name) {
         await supabase
-          .from('purchase_dashboard')
+          .from("purchase_dashboard")
           .delete()
-          .eq('indent_id', indentId)
-          .eq('item_name', itemData.item_name)
-          .is('po_id', null);
+          .eq("indent_id", indentId)
+          .eq("item_name", itemData.item_name)
+          .is("po_id", null);
       }
 
       addToast("Successfully deleted item from indent.", "success");
@@ -1005,11 +1283,11 @@ const Indent = () => {
 
         while (hasMore) {
           const { data: refreshedItems, error: refError } = await supabase
-            .from('purchase_indent_items')
-            .select('*')
-            .eq('indent_id', indentId)
-            .eq('is_excluded', false)
-            .order('id', { ascending: true })
+            .from("purchase_indent_items")
+            .select("*")
+            .eq("indent_id", indentId)
+            .eq("is_excluded", false)
+            .order("id", { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
 
           if (refError) throw refError;
@@ -1030,10 +1308,10 @@ const Indent = () => {
 
         while (approvedHasMore) {
           const { data: refreshedItems, error: refError } = await supabase
-            .from('purchase_approved_indent_items')
-            .select('*')
-            .eq('indent_id', indentId)
-            .order('id', { ascending: true })
+            .from("purchase_approved_indent_items")
+            .select("*")
+            .eq("indent_id", indentId)
+            .order("id", { ascending: true })
             .range(approvedPage * pageSize, (approvedPage + 1) * pageSize - 1);
 
           if (refError) throw refError;
@@ -1050,11 +1328,11 @@ const Indent = () => {
 
         const combined = [
           ...remainingPending,
-          ...remainingApproved.map(item => ({
+          ...remainingApproved.map((item) => ({
             ...item,
-            approval_status: 'approved',
-            is_excluded: false
-          }))
+            approval_status: "approved",
+            is_excluded: false,
+          })),
         ];
         setSelectedSubmissionItems(combined);
       }
@@ -1070,7 +1348,10 @@ const Indent = () => {
 
   const handleIndentSubmit = async () => {
     if (!selectedShop || selectedShop.trim() === "") {
-      addToast("Shop name is required. Please select a shop before submitting.", "error");
+      addToast(
+        "Shop name is required. Please select a shop before submitting.",
+        "error",
+      );
       return;
     }
     setIsProcessing(true);
@@ -1091,7 +1372,10 @@ const Indent = () => {
       });
 
       if (activeItems.length === 0) {
-        addToast("No valid data to submit. Only items with 'Order in Qty' >= 3.0 are allowed.", "error");
+        addToast(
+          "No valid data to submit. Only items with 'Order in Qty' >= 3.0 are allowed.",
+          "error",
+        );
         setIsProcessing(false);
         return;
       }
@@ -1106,10 +1390,10 @@ const Indent = () => {
 
       if (!maxIdError && maxIdData && maxIdData.length > 0) {
         let maxIdx = 0;
-        maxIdData.forEach(row => {
-          if (row.party_indent_id && typeof row.party_indent_id === 'string') {
-            const parts = row.party_indent_id.split('-');
-            if (parts.length >= 3 && parts[0] === 'IN') {
+        maxIdData.forEach((row) => {
+          if (row.party_indent_id && typeof row.party_indent_id === "string") {
+            const parts = row.party_indent_id.split("-");
+            if (parts.length >= 3 && parts[0] === "IN") {
               const idx = parseInt(parts[1], 10);
               if (!isNaN(idx) && idx > maxIdx) {
                 maxIdx = idx;
@@ -1121,8 +1405,8 @@ const Indent = () => {
       }
 
       const headerPayload = {
-        shop_name: selectedShop || 'UNKNOWN',
-        status: 'Pending'
+        shop_name: selectedShop || "UNKNOWN",
+        status: "Pending",
       };
 
       const { data: headerData, error: headerError } = await supabase
@@ -1131,121 +1415,146 @@ const Indent = () => {
         .select()
         .single();
 
-        if (headerError) throw headerError;
-        createdIndentId = headerData.id;
-        const indentId = headerData.id;
+      if (headerError) throw headerError;
+      createdIndentId = headerData.id;
+      const indentId = headerData.id;
 
-        // Fetch active item names in lifecycle for this shop (Shop Name + Item Name matching)
-        const activeLifecycleItemNames = await getInLifecycleItemNames(selectedShop || 'UNKNOWN');
+      // Fetch active item names in lifecycle for this shop (Shop Name + Item Name matching)
+      const activeLifecycleItemNames = await getInLifecycleItemNames(
+        selectedShop || "UNKNOWN",
+      );
 
-        const partyMap = new Map();
-        const itemsPayload = [];
+      const partyMap = new Map();
+      const itemsPayload = [];
 
-        activeItems.forEach(({ item, calcs }) => {
-          const partyName = item.partyName || 'UNKNOWN';
-          if (!partyMap.has(partyName)) {
-            partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
-          }
-          const partyInfo = partyMap.get(partyName);
-          const currentCount = partyInfo.count++;
-          const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
-          const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
-
-          itemsPayload.push({
-            indent_id: indentId,
-            party_indent_id: partyIndentId,
-            item_name: item.itemName,
-            fix_per_day_avg_sale: item.avgSale,
-            qty_out: item.qtyOut,
-            closing_qty: item.closingQty,
-            brand_name: item.brandName,
-            company_name: item.companyName || '',
-            bcs: item.bcs,
-            mls: item.mls,
-            liquor_type: item.liquorType,
-            party_name: item.partyName,
-            last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
-            per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
-            threshold_sale: parseFloat(calcs.thresholdSale) || 0,
-            closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
-            order_box: parseFloat(calcs.orderBox) || 0,
-            order_qty: parseFloat(calcs.orderQty) || 0,
-            is_excluded: false,
-            exclusion_reason: null,
-            already_in_lifecycle: isAlreadyInLifecycle
-          });
-        });
-
-        excludedItems.forEach(({ item, calcs }) => {
-          const partyName = item.partyName || 'UNKNOWN';
-          if (!partyMap.has(partyName)) {
-            partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
-          }
-          const partyInfo = partyMap.get(partyName);
-          const currentCount = partyInfo.count++;
-          const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, '0')}`;
-          const isAlreadyInLifecycle = item.itemName ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase()) : false;
-
-          itemsPayload.push({
-            indent_id: indentId,
-            party_indent_id: partyIndentId,
-            item_name: item.itemName,
-            fix_per_day_avg_sale: item.avgSale,
-            qty_out: item.qtyOut,
-            closing_qty: item.closingQty,
-            brand_name: item.brandName,
-            company_name: item.companyName || '',
-            bcs: item.bcs,
-            mls: item.mls,
-            liquor_type: item.liquorType,
-            party_name: item.partyName,
-            last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
-            per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
-            threshold_sale: parseFloat(calcs.thresholdSale) || 0,
-            closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
-            order_box: parseFloat(calcs.orderBox) || 0,
-            order_qty: parseFloat(calcs.orderQty) || 0,
-            is_excluded: true,
-            exclusion_reason: parseFloat(calcs.orderQty) < 0 ? "negative_order_qty" : "low_order_qty",
-            already_in_lifecycle: isAlreadyInLifecycle
-          });
-        });
-
-        const { error: itemsError } = await supabase
-          .from("purchase_indent_items")
-          .insert(itemsPayload);
-
-        if (itemsError) throw itemsError;
-
-        // Sync initial items to purchase_dashboard with strict atomicity
-        const currentUser = useAuthStore.getState().currentUser;
-        const indentEmpCode = currentUser?.employee_id || currentUser?.emp_code || currentUser?.user_name || currentUser?.name || "Indent Team";
-
-        await dashboardSyncService.syncIndentCreated({
-          indentId,
-          shopName: selectedShop || 'UNKNOWN',
-          itemsPayload,
-          empCode: indentEmpCode,
-        });
-
-        addToast(`Successfully submitted ${itemsPayload.length} records to Supabase!`, "success");
-        setTableData([]);
-        setDuplicateCount(0);
-        setSelectedShop("");
-        sessionStorage.removeItem('indent_tableData');
-        sessionStorage.removeItem('indent_duplicateCount');
-        sessionStorage.removeItem('indent_selectedShop');
-        fetchSubmittedHistory();
-      } catch (error) {
-        if (createdIndentId) {
-          console.warn("[Rollback] Cleaning up partial indent creation:", createdIndentId);
-          await dashboardSyncService.rollbackIndentCreated(createdIndentId);
+      activeItems.forEach(({ item, calcs }) => {
+        const partyName = item.partyName || "UNKNOWN";
+        if (!partyMap.has(partyName)) {
+          partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
         }
-        console.error("Error submitting indent data:", error);
-        addToast("Submission Restricted: " + (error.message || "Failed to sync audit data. No indent was created. Your data has been preserved. Please try again."), "error");
-      } finally {
-        setIsProcessing(false);
+        const partyInfo = partyMap.get(partyName);
+        const currentCount = partyInfo.count++;
+        const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, "0")}`;
+        const isAlreadyInLifecycle = item.itemName
+          ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase())
+          : false;
+
+        itemsPayload.push({
+          indent_id: indentId,
+          party_indent_id: partyIndentId,
+          item_name: item.itemName,
+          fix_per_day_avg_sale: item.avgSale,
+          qty_out: item.qtyOut,
+          closing_qty: item.closingQty,
+          brand_name: item.brandName,
+          company_name: item.companyName || "",
+          bcs: item.bcs,
+          mls: item.mls,
+          liquor_type: item.liquorType,
+          party_name: item.partyName,
+          last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
+          per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
+          threshold_sale: parseFloat(calcs.thresholdSale) || 0,
+          closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
+          order_box: parseFloat(calcs.orderBox) || 0,
+          order_qty: parseFloat(calcs.orderQty) || 0,
+          is_excluded: false,
+          exclusion_reason: null,
+          already_in_lifecycle: isAlreadyInLifecycle,
+        });
+      });
+
+      excludedItems.forEach(({ item, calcs }) => {
+        const partyName = item.partyName || "UNKNOWN";
+        if (!partyMap.has(partyName)) {
+          partyMap.set(partyName, { index: nextPartyIndex++, count: 1 });
+        }
+        const partyInfo = partyMap.get(partyName);
+        const currentCount = partyInfo.count++;
+        const partyIndentId = `IN-${partyInfo.index}-${currentCount.toString().padStart(2, "0")}`;
+        const isAlreadyInLifecycle = item.itemName
+          ? activeLifecycleItemNames.has(item.itemName.trim().toLowerCase())
+          : false;
+
+        itemsPayload.push({
+          indent_id: indentId,
+          party_indent_id: partyIndentId,
+          item_name: item.itemName,
+          fix_per_day_avg_sale: item.avgSale,
+          qty_out: item.qtyOut,
+          closing_qty: item.closingQty,
+          brand_name: item.brandName,
+          company_name: item.companyName || "",
+          bcs: item.bcs,
+          mls: item.mls,
+          liquor_type: item.liquorType,
+          party_name: item.partyName,
+          last_month_sale_box: parseFloat(calcs.lastMonthSale) || 0,
+          per_day_sale_last_month: parseFloat(calcs.perDaySaleLastMonth) || 0,
+          threshold_sale: parseFloat(calcs.thresholdSale) || 0,
+          closing_qty_box: parseFloat(calcs.boxClosingQty) || 0,
+          order_box: parseFloat(calcs.orderBox) || 0,
+          order_qty: parseFloat(calcs.orderQty) || 0,
+          is_excluded: true,
+          exclusion_reason:
+            parseFloat(calcs.orderQty) < 0
+              ? "negative_order_qty"
+              : "low_order_qty",
+          already_in_lifecycle: isAlreadyInLifecycle,
+        });
+      });
+
+      const { error: itemsError } = await supabase
+        .from("purchase_indent_items")
+        .insert(itemsPayload);
+
+      if (itemsError) throw itemsError;
+
+      // Sync initial items to purchase_dashboard with strict atomicity
+      const currentUser = useAuthStore.getState().currentUser;
+      const indentEmpCode =
+        currentUser?.employee_id ||
+        currentUser?.emp_code ||
+        currentUser?.user_name ||
+        currentUser?.name ||
+        "Indent Team";
+
+      await dashboardSyncService.syncIndentCreated({
+        indentId,
+        shopName: selectedShop || "UNKNOWN",
+        itemsPayload,
+        empCode: indentEmpCode,
+      });
+
+      addToast(
+        `Successfully submitted ${itemsPayload.length} records to Supabase!`,
+        "success",
+      );
+      setTableData([]);
+      setDuplicateCount(0);
+      setSelectedShop("");
+      sessionStorage.removeItem("indent_tableData");
+      sessionStorage.removeItem("indent_duplicateCount");
+      sessionStorage.removeItem("indent_selectedShop");
+      fetchSubmittedHistory();
+    } catch (error) {
+      if (createdIndentId) {
+        console.warn(
+          "[Rollback] Cleaning up partial indent creation:",
+          createdIndentId,
+        );
+        await dashboardSyncService.rollbackIndentCreated(createdIndentId);
       }
+      console.error("Error submitting indent data:", error);
+      addToast(
+        "Submission Restricted: " +
+          (error.message ||
+            "Failed to sync audit data. No indent was created. Your data has been preserved. Please try again."),
+        "error",
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const stats = getStatistics();
@@ -1256,7 +1565,6 @@ const Indent = () => {
 
       {/* Page Shell */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-[#0f172a] to-[#1e293b] bg-clip-text text-transparent tracking-tight">
@@ -1270,17 +1578,40 @@ const Indent = () => {
         {/* Compact Stats Pills - Only when data exists */}
         {tableData.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
-            <StatPill label="Items" value={stats.totalItems} icon={Database} color="border-blue-200 text-blue-600" />
-            <StatPill label="Active" value={stats.activeItems} icon={TrendingUp} color="border-green-200 text-green-600" />
-            <StatPill label="Excluded" value={stats.excludedItems} icon={TrendingDown} color="border-red-200 text-red-600" />
+            <StatPill
+              label="Items"
+              value={stats.totalItems}
+              icon={Database}
+              color="border-blue-200 text-blue-600"
+            />
+            <StatPill
+              label="Active"
+              value={stats.activeItems}
+              icon={TrendingUp}
+              color="border-green-200 text-green-600"
+            />
+            <StatPill
+              label="Excluded"
+              value={stats.excludedItems}
+              icon={TrendingDown}
+              color="border-red-200 text-red-600"
+            />
             {duplicateCount > 0 && (
-              <StatPill label="Duplicates Removed" value={duplicateCount} icon={AlertTriangle} color="border-amber-200 text-amber-600" />
+              <StatPill
+                label="Duplicates Removed"
+                value={duplicateCount}
+                icon={AlertTriangle}
+                color="border-amber-200 text-amber-600"
+              />
             )}
-            <StatPill label="Shop" value={selectedShop || 'Not Selected'} icon={Package} color="border-purple-200 text-purple-600" />
+            <StatPill
+              label="Shop"
+              value={selectedShop || "Not Selected"}
+              icon={Package}
+              color="border-purple-200 text-purple-600"
+            />
           </div>
         )}
-
-
 
         {/* Upload Button Area */}
         <div className="mb-6">
@@ -1311,9 +1642,9 @@ const Indent = () => {
                   setTableData([]);
                   setDuplicateCount(0);
                   setSelectedShop("");
-                  sessionStorage.removeItem('indent_tableData');
-                  sessionStorage.removeItem('indent_duplicateCount');
-                  sessionStorage.removeItem('indent_selectedShop');
+                  sessionStorage.removeItem("indent_tableData");
+                  sessionStorage.removeItem("indent_duplicateCount");
+                  sessionStorage.removeItem("indent_selectedShop");
                   addToast("Data cleared successfully", "success");
                 }}
                 className="flex items-center gap-2 bg-white border border-[#e2e8f0] hover:bg-[#fef2f2] hover:border-[#fecaca] text-[#ef4444] px-4 py-2 rounded-lg font-semibold transition-all text-sm"
@@ -1333,29 +1664,43 @@ const Indent = () => {
           >
             <Settings2 size={16} />
             Calculation Settings
-            <ChevronDown size={14} className={`transition-transform duration-200 ${showSettings ? 'rotate-180' : ''}`} />
+            <ChevronDown
+              size={14}
+              className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`}
+            />
           </button>
 
           {showSettings && (
             <div className="mt-4 p-4 bg-[#f8fafc] rounded-lg border border-[#e2e8f0]">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 {Object.entries(thresholdDays).map(([type, days]) => (
-                  <div key={type} className="bg-white border border-[#e2e8f0] rounded-lg p-2">
-                    <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">{type}</div>
+                  <div
+                    key={type}
+                    className="bg-white border border-[#e2e8f0] rounded-lg p-2"
+                  >
+                    <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">
+                      {type}
+                    </div>
                     <input
                       type="number"
                       value={days}
-                      onChange={(e) => handleThresholdChange(type, e.target.value)}
+                      onChange={(e) =>
+                        handleThresholdChange(type, e.target.value)
+                      }
                       className="w-full text-lg font-bold text-[#0f172a] border border-[#e2e8f0] rounded px-2 py-1 outline-none focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5]"
-                      style={{ MozAppearance: 'textfield' }}
+                      style={{ MozAppearance: "textfield" }}
                     />
-                    <div className="text-[9px] text-[#64748b] mt-1">Days threshold</div>
+                    <div className="text-[9px] text-[#64748b] mt-1">
+                      Days threshold
+                    </div>
                   </div>
                 ))}
               </div>
 
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-medium text-[#475569]">Calculation Period:</span>
+                <span className="text-xs font-medium text-[#475569]">
+                  Calculation Period:
+                </span>
                 <select
                   value={periodType}
                   onChange={(e) => handlePeriodTypeChange(e.target.value)}
@@ -1366,7 +1711,7 @@ const Indent = () => {
                   <option value="custom">Custom</option>
                 </select>
 
-                {periodType === 'custom' && (
+                {periodType === "custom" && (
                   <div className="flex items-center gap-1.5 bg-white border border-[#cbd5e1] rounded-md px-2 py-1 focus-within:border-[#4f46e5]">
                     <input
                       type="number"
@@ -1378,7 +1723,9 @@ const Indent = () => {
                       placeholder="1 - 1000"
                       className="w-20 text-xs font-bold text-[#0f172a] outline-none"
                     />
-                    <span className="text-[11px] font-semibold text-[#64748b]">Days</span>
+                    <span className="text-[11px] font-semibold text-[#64748b]">
+                      Days
+                    </span>
                   </div>
                 )}
               </div>
@@ -1410,49 +1757,98 @@ const Indent = () => {
                 <table className="w-full border-collapse text-[11px] table-auto">
                   <thead className="sticky top-0 z-30">
                     <tr className="text-white text-[10px] font-bold tracking-wider uppercase">
-                      <th colSpan={tableData[0]?.partyIndentId ? "2" : "1"} className="bg-slate-600 border border-slate-700 px-3 py-1.5 text-center rounded-tl-lg">
+                      <th
+                        colSpan={tableData[0]?.partyIndentId ? "2" : "1"}
+                        className="bg-slate-600 border border-slate-700 px-3 py-1.5 text-center rounded-tl-lg"
+                      >
                         Item Master File
                       </th>
-                      <th colSpan="8" className="bg-emerald-600 border border-emerald-700 px-3 py-1.5 text-center">
+                      <th
+                        colSpan="8"
+                        className="bg-emerald-600 border border-emerald-700 px-3 py-1.5 text-center"
+                      >
                         Excel File Data
                       </th>
-                      <th colSpan="6" className="bg-indigo-600 border border-indigo-700 px-3 py-1.5 text-center rounded-tr-lg">
+                      <th
+                        colSpan="6"
+                        className="bg-indigo-600 border border-indigo-700 px-3 py-1.5 text-center rounded-tr-lg"
+                      >
                         Calculations
                       </th>
                     </tr>
                     <tr className="bg-slate-50 border-b border-[#e2e8f0] text-[#475569] text-left">
                       {tableData[0]?.partyIndentId && (
-                        <th className="bg-slate-50 border border-white px-3 py-2 text-center font-semibold min-w-[80px]">Indent ID</th>
+                        <th className="bg-slate-50 border border-white px-3 py-2 text-center font-semibold min-w-[80px]">
+                          Indent ID
+                        </th>
                       )}
-                      <th className="sticky left-0 bg-slate-50 border border-white z-20 px-3 py-2 text-left font-semibold min-w-[280px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Item Name</th>
+                      <th className="sticky left-0 bg-slate-50 border border-white z-20 px-3 py-2 text-left font-semibold min-w-[280px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                        Item Name
+                      </th>
 
-                      <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[100px]">Qty Out</th>
-                      <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[100px]">Closing Qty</th>
-                      <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">Brand Name</th>
-                      <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">Company Name</th>
-                      <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[95px]">B/Cs</th>
-                      <th className="bg-[#f8fafc] border border-white px-3 py-2 text-center font-semibold min-w-[80px]">Mls</th>
-                      <th className="bg-[#f8fafc] border border-white px-3 py-2 text-center font-semibold min-w-[110px]">Liquor Type</th>
-                      <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">Party Name</th>
+                      <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[100px]">
+                        Qty Out
+                      </th>
+                      <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[100px]">
+                        Closing Qty
+                      </th>
+                      <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">
+                        Brand Name
+                      </th>
+                      <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">
+                        Company Name
+                      </th>
+                      <th className="bg-[#f0fdf4] border border-white px-3 py-2 text-right font-semibold min-w-[95px]">
+                        B/Cs
+                      </th>
+                      <th className="bg-[#f8fafc] border border-white px-3 py-2 text-center font-semibold min-w-[80px]">
+                        Mls
+                      </th>
+                      <th className="bg-[#f8fafc] border border-white px-3 py-2 text-center font-semibold min-w-[110px]">
+                        Liquor Type
+                      </th>
+                      <th className="bg-[#f8fafc] border border-white px-3 py-2 font-semibold min-w-[150px]">
+                        Party Name
+                      </th>
 
-                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">Last Month</th>
-                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">Per Day Sale</th>
-                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">Threshold</th>
-                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">Closing Box</th>
-                      <th className="bg-indigo-100 border border-white px-3 py-2 text-right font-bold text-[#4338ca] min-w-[115px]">Order In Box</th>
-                      <th className="bg-indigo-100 border border-white px-3 py-2 text-right font-bold text-[#4338ca] min-w-[115px]">Order In Qty</th>
+                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">
+                        Last Month
+                      </th>
+                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">
+                        Per Day Sale
+                      </th>
+                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">
+                        Threshold
+                      </th>
+                      <th className="bg-indigo-50 border border-white px-3 py-2 text-right font-semibold min-w-[115px]">
+                        Closing Box
+                      </th>
+                      <th className="bg-indigo-100 border border-white px-3 py-2 text-right font-bold text-[#4338ca] min-w-[115px]">
+                        Order In Box
+                      </th>
+                      <th className="bg-indigo-100 border border-white px-3 py-2 text-right font-bold text-[#4338ca] min-w-[115px]">
+                        Order In Qty
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {tableData.map((item, index) => {
                       const calcs = calculateRow(item);
-                      const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+                      const rowBg =
+                        index % 2 === 0 ? "bg-white" : "bg-slate-50";
                       return (
-                        <tr key={item.id} className={`${rowBg} hover:bg-indigo-50/30 transition-colors border-b border-[#f1f5f9] text-[11px]`}>
+                        <tr
+                          key={item.id}
+                          className={`${rowBg} hover:bg-indigo-50/30 transition-colors border-b border-[#f1f5f9] text-[11px]`}
+                        >
                           {tableData[0]?.partyIndentId && (
-                            <td className="border-r border-[#e2e8f0] px-3 py-2 text-center font-medium text-[#475569]">{item.partyIndentId}</td>
+                            <td className="border-r border-[#e2e8f0] px-3 py-2 text-center font-medium text-[#475569]">
+                              {item.partyIndentId}
+                            </td>
                           )}
-                          <td className={`sticky left-0 ${rowBg} z-10 px-3 py-2 font-semibold text-[#1e293b] border-r border-[#e2e8f0] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]`}>
+                          <td
+                            className={`sticky left-0 ${rowBg} z-10 px-3 py-2 font-semibold text-[#1e293b] border-r border-[#e2e8f0] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]`}
+                          >
                             {item.itemName}
                           </td>
 
@@ -1463,20 +1859,38 @@ const Indent = () => {
                           <td className="border-r border-[#e2e8f0] px-3 py-2 text-right text-[#475569] font-medium">
                             {item.closingQty !== null ? item.closingQty : "—"}
                           </td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">{item.brandName || "—"}</td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">{item.companyName || "—"}</td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">
+                            {item.brandName || "—"}
+                          </td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">
+                            {item.companyName || "—"}
+                          </td>
                           <td className="border-r border-[#e2e8f0] px-3 py-2 text-right text-[#475569] font-medium">
                             {item.bcs !== null ? item.bcs : "—"}
                           </td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-center text-[#475569]">{item.mls || "—"}</td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-center text-[#475569]">{item.liquorType || "—"}</td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">{item.partyName || "—"}</td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-center text-[#475569]">
+                            {item.mls || "—"}
+                          </td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-center text-[#475569]">
+                            {item.liquorType || "—"}
+                          </td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-[#475569]">
+                            {item.partyName || "—"}
+                          </td>
 
                           {/* Calculations Display */}
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">{calcs.lastMonthSale || "—"}</td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">{calcs.perDaySaleLastMonth || "—"}</td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">{calcs.thresholdSale || "—"}</td>
-                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">{calcs.boxClosingQty || "—"}</td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">
+                            {calcs.lastMonthSale || "—"}
+                          </td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">
+                            {calcs.perDaySaleLastMonth || "—"}
+                          </td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">
+                            {calcs.thresholdSale || "—"}
+                          </td>
+                          <td className="border-r border-[#e2e8f0] px-3 py-2 text-right font-medium text-indigo-950 bg-indigo-50/10">
+                            {calcs.boxClosingQty || "—"}
+                          </td>
 
                           {/* Non-sticky calculation editable inputs */}
                           <td className="bg-indigo-50 hover:bg-indigo-100/90 px-1 py-1 text-right border-r border-[#cbd5e1]">
@@ -1484,7 +1898,13 @@ const Indent = () => {
                               type="number"
                               step="any"
                               value={calcs.orderBox}
-                              onChange={(e) => handleInlineChange(item.id, 'orderBox', e.target.value)}
+                              onChange={(e) =>
+                                handleInlineChange(
+                                  item.id,
+                                  "orderBox",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full text-right font-bold text-[#4338ca] px-1.5 py-1 border border-transparent hover:border-indigo-300 rounded focus:border-[#4f46e5] focus:bg-white outline-none bg-transparent transition-all"
                               placeholder="-"
                             />
@@ -1494,7 +1914,13 @@ const Indent = () => {
                               type="number"
                               step="any"
                               value={calcs.orderQty}
-                              onChange={(e) => handleInlineChange(item.id, 'orderQty', e.target.value)}
+                              onChange={(e) =>
+                                handleInlineChange(
+                                  item.id,
+                                  "orderQty",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full text-right font-bold text-[#4338ca] px-1.5 py-1 border border-transparent hover:border-indigo-300 rounded focus:border-[#4f46e5] focus:bg-white outline-none bg-transparent transition-all"
                               placeholder="-"
                             />
@@ -1513,21 +1939,28 @@ const Indent = () => {
             onClick={() => {
               if (!isLoading) setShowModal(true);
             }}
-            className={`flex flex-col items-center justify-center py-8 px-4 bg-gradient-to-b from-[#f8fafc] to-white border-2 border-dashed border-[#cbd5e1] hover:border-[#4f46e5] rounded-lg transition-all duration-300 cursor-pointer ${isLoading ? 'cursor-default opacity-50' : 'hover:shadow-md'
-              }`}
+            className={`flex flex-col items-center justify-center py-8 px-4 bg-gradient-to-b from-[#f8fafc] to-white border-2 border-dashed border-[#cbd5e1] hover:border-[#4f46e5] rounded-lg transition-all duration-300 cursor-pointer ${
+              isLoading ? "cursor-default opacity-50" : "hover:shadow-md"
+            }`}
           >
             {isLoading ? (
               <div className="flex items-center gap-3">
                 <Loader2 className="animate-spin w-5 h-5 text-[#4f46e5]" />
-                <p className="text-xs font-medium text-[#64748b]">Loading master database reference...</p>
+                <p className="text-xs font-medium text-[#64748b]">
+                  Loading master database reference...
+                </p>
               </div>
             ) : (
               <div className="flex flex-col items-center text-center">
                 <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center mb-2">
                   <Upload className="w-5 h-5 text-[#4f46e5]" />
                 </div>
-                <p className="text-sm font-semibold text-[#0f172a] mb-1">No Data Available</p>
-                <p className="text-xs text-[#64748b]">Upload your Indent CSV or Excel file to get started</p>
+                <p className="text-sm font-semibold text-[#0f172a] mb-1">
+                  No Data Available
+                </p>
+                <p className="text-xs text-[#64748b]">
+                  Upload your Indent CSV or Excel file to get started
+                </p>
               </div>
             )}
           </div>
@@ -1560,28 +1993,68 @@ const Indent = () => {
               <table className="w-full text-sm">
                 <thead className="bg-[#f8fafc] border-b border-[#e2e8f0]">
                   <tr>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b]">Shop</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b]">Date & Time</th>
-                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">Items</th>
-                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">Excluded</th>
-                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">Status</th>
-                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">Actions</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b]">
+                      Shop
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b]">
+                      Date & Time
+                    </th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">
+                      Items
+                    </th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">
+                      Excluded
+                    </th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">
+                      Status
+                    </th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-[#64748b]">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {submittedHistory.map((history) => (
-                    <tr key={history.id} className="border-b border-[#f1f5f9] hover:bg-[#faf9ff] transition-colors">
-                      <td className="py-3 px-4 font-medium text-[#0f172a]">{history.shop_name}</td>
-                      <td className="py-3 px-4 text-[#64748b] text-xs">
-                        {new Date(history.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })} at{' '}
-                        {new Date(history.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    <tr
+                      key={history.id}
+                      className="border-b border-[#f1f5f9] hover:bg-[#faf9ff] transition-colors"
+                    >
+                      <td className="py-3 px-4 font-medium text-[#0f172a]">
+                        {history.shop_name}
                       </td>
-                      <td className="py-3 px-4 text-center font-medium">{history.itemCount}</td>
-                      <td className="py-3 px-4 text-center text-[#ef4444]">{history.excludedCount || 0}</td>
+                      <td className="py-3 px-4 text-[#64748b] text-xs">
+                        {new Date(history.created_at).toLocaleDateString(
+                          undefined,
+                          { day: "2-digit", month: "short" },
+                        )}{" "}
+                        at{" "}
+                        {new Date(history.created_at).toLocaleTimeString(
+                          undefined,
+                          { hour: "2-digit", minute: "2-digit", hour12: true },
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center font-medium">
+                        {history.itemCount}
+                      </td>
+                      <td className="py-3 px-4 text-center text-[#ef4444]">
+                        {history.excludedCount || 0}
+                      </td>
                       <td className="py-3 px-4 text-center">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-[#faf9ff]">
-                          {history.status === 'Pending' ? <Clock size={10} className="text-[#d97706]" /> : <CheckCircle size={10} className="text-[#16a34a]" />}
-                          <span className={history.status === 'Pending' ? 'text-[#d97706]' : 'text-[#16a34a]'}>{history.status}</span>
+                          {history.status === "Pending" ? (
+                            <Clock size={10} className="text-[#d97706]" />
+                          ) : (
+                            <CheckCircle size={10} className="text-[#16a34a]" />
+                          )}
+                          <span
+                            className={
+                              history.status === "Pending"
+                                ? "text-[#d97706]"
+                                : "text-[#16a34a]"
+                            }
+                          >
+                            {history.status}
+                          </span>
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -1641,8 +2114,12 @@ const Indent = () => {
 
               {/* Step Indicator */}
               <div className="flex items-center gap-2 mb-5">
-                <div className={`flex-1 h-1 rounded-full transition-all ${uploadStep >= 1 ? 'bg-[#4f46e5]' : 'bg-[#e2e8f0]'}`} />
-                <div className={`flex-1 h-1 rounded-full transition-all ${uploadStep >= 2 ? 'bg-[#4f46e5]' : 'bg-[#e2e8f0]'}`} />
+                <div
+                  className={`flex-1 h-1 rounded-full transition-all ${uploadStep >= 1 ? "bg-[#4f46e5]" : "bg-[#e2e8f0]"}`}
+                />
+                <div
+                  className={`flex-1 h-1 rounded-full transition-all ${uploadStep >= 2 ? "bg-[#4f46e5]" : "bg-[#e2e8f0]"}`}
+                />
               </div>
 
               {uploadStep === 1 ? (
@@ -1652,34 +2129,51 @@ const Indent = () => {
                     onChange={(e) => setSelectedShop(e.target.value)}
                     className="w-full p-2.5 rounded-lg border border-[#e2e8f0] text-sm outline-none focus:border-[#4f46e5] focus:ring-2 focus:ring-[#4f46e5]/20 transition-all mb-4"
                   >
-                    <option value="" disabled>Select Shop...</option>
-                    {shops.map(shop => (
-                      <option key={shop} value={shop}>{shop}</option>
+                    <option value="" disabled>
+                      Select Shop...
+                    </option>
+                    {shops.map((shop) => (
+                      <option key={shop} value={shop}>
+                        {shop}
+                      </option>
                     ))}
                   </select>
 
-                  {selectedShop && hasExistingSubmissionForShop(selectedShop) && (
-                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium flex items-start gap-2">
-                      <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                      <span>An indent submission already exists for <strong>{selectedShop}</strong>. Please delete it from Recent Indent Submissions before importing Excel/CSV again.</span>
-                    </div>
-                  )}
+                  {selectedShop &&
+                    hasExistingSubmissionForShop(selectedShop) && (
+                      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium flex items-start gap-2">
+                        <AlertTriangle
+                          size={16}
+                          className="text-amber-600 shrink-0 mt-0.5"
+                        />
+                        <span>
+                          An indent submission already exists for{" "}
+                          <strong>{selectedShop}</strong>. Please delete it from
+                          Recent Indent Submissions before importing Excel/CSV
+                          again.
+                        </span>
+                      </div>
+                    )}
 
                   <button
                     onClick={() => {
                       if (!selectedShop) return;
                       if (hasExistingSubmissionForShop(selectedShop)) {
                         addToast("Clear Previous Shop Indent", "error");
-                        showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
+                        showAlert(
+                          "Clear Previous Shop Indent",
+                          `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`,
+                        );
                         return;
                       }
                       setUploadStep(2);
                     }}
                     disabled={!selectedShop}
-                    className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all ${selectedShop
-                        ? 'bg-[#4f46e5] text-white hover:bg-[#4338ca]'
-                        : 'bg-[#e2e8f0] text-[#94a3b8] cursor-not-allowed'
-                      }`}
+                    className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all ${
+                      selectedShop
+                        ? "bg-[#4f46e5] text-white hover:bg-[#4338ca]"
+                        : "bg-[#e2e8f0] text-[#94a3b8] cursor-not-allowed"
+                    }`}
                   >
                     Next: Upload File
                   </button>
@@ -1699,9 +2193,15 @@ const Indent = () => {
                     onDrop={(e) => {
                       e.preventDefault();
                       setIsDragging(false);
-                      if (selectedShop && hasExistingSubmissionForShop(selectedShop)) {
+                      if (
+                        selectedShop &&
+                        hasExistingSubmissionForShop(selectedShop)
+                      ) {
                         addToast("Clear Previous Shop Indent", "error");
-                        showAlert("Clear Previous Shop Indent", `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`);
+                        showAlert(
+                          "Clear Previous Shop Indent",
+                          `An indent submission already exists for ${selectedShop}. Please delete it from Recent Indent Submissions before importing Excel/CSV again.`,
+                        );
                         return;
                       }
                       const file = e.dataTransfer.files[0];
@@ -1709,13 +2209,21 @@ const Indent = () => {
                         handleFileUpload({ target: { files: [file] } });
                       }
                     }}
-                    className={`flex flex-col items-center justify-center p-6 rounded-lg cursor-pointer transition-all duration-200 ${isDragging
-                        ? 'bg-[#f0fdf4] border-2 border-[#22c55e] border-dashed'
-                        : 'bg-[#f8fafc] border-2 border-dashed border-[#cbd5e1] hover:border-[#4f46e5]'
-                      }`}
+                    className={`flex flex-col items-center justify-center p-6 rounded-lg cursor-pointer transition-all duration-200 ${
+                      isDragging
+                        ? "bg-[#f0fdf4] border-2 border-[#22c55e] border-dashed"
+                        : "bg-[#f8fafc] border-2 border-dashed border-[#cbd5e1] hover:border-[#4f46e5]"
+                    }`}
                   >
-                    <div className={`p-2 rounded-full mb-2 ${isDragging ? 'bg-[#dcfce7]' : 'bg-[#e2e8f0]'}`}>
-                      <Upload size={20} className={isDragging ? 'text-[#16a34a]' : 'text-[#64748b]'} />
+                    <div
+                      className={`p-2 rounded-full mb-2 ${isDragging ? "bg-[#dcfce7]" : "bg-[#e2e8f0]"}`}
+                    >
+                      <Upload
+                        size={20}
+                        className={
+                          isDragging ? "text-[#16a34a]" : "text-[#64748b]"
+                        }
+                      />
                     </div>
                     <p className="font-medium text-[#0f172a] text-sm text-center">
                       Click to Upload Excel / CSV
@@ -1766,11 +2274,17 @@ const Indent = () => {
               <div className="w-12 h-12 bg-[#fee2e2] rounded-full flex items-center justify-center mx-auto mb-3">
                 <AlertTriangle size={24} className="text-[#ef4444]" />
               </div>
-              <h3 className="text-lg font-bold text-[#0f172a] mb-2">{confirmModal.title}</h3>
-              <p className="text-[#64748b] text-sm leading-relaxed mb-5">{confirmModal.message}</p>
+              <h3 className="text-lg font-bold text-[#0f172a] mb-2">
+                {confirmModal.title}
+              </h3>
+              <p className="text-[#64748b] text-sm leading-relaxed mb-5">
+                {confirmModal.message}
+              </p>
               <div className="flex gap-3">
                 <button
-                  onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                  onClick={() =>
+                    setConfirmModal((prev) => ({ ...prev, isOpen: false }))
+                  }
                   className="flex-1 px-3 py-2 rounded-lg border border-[#e2e8f0] bg-white text-[#475569] hover:bg-[#f8fafc] font-medium text-sm"
                 >
                   Cancel
@@ -1786,7 +2300,7 @@ const Indent = () => {
           </div>
         </div>
       )}
-      
+
       {/* Alert Pop-up Modal */}
       {alertDialog.isOpen && (
         <div className="fixed inset-0 bg-[#0f172a]/60 backdrop-blur-md flex justify-center items-center z-[9999] p-4">
@@ -1794,13 +2308,15 @@ const Indent = () => {
             <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200">
               <AlertTriangle size={28} className="text-amber-600" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">{alertDialog.title}</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              {alertDialog.title}
+            </h3>
             <p className="text-slate-600 text-sm leading-relaxed mb-6 font-medium">
               {alertDialog.message}
             </p>
             <button
               onClick={() => {
-                setAlertDialog(prev => ({ ...prev, isOpen: false }));
+                setAlertDialog((prev) => ({ ...prev, isOpen: false }));
                 setShowModal(false);
               }}
               className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md transition-all active:scale-[0.98]"
@@ -1816,11 +2332,25 @@ const Indent = () => {
         <div className="sticky bottom-0 z-40 bg-white border-t border-[#e2e8f0] shadow-lg -mx-4 md:-mx-6 lg:-mx-8 -mb-6 mt-8">
           <div className="px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-4 flex-wrap">
-              <span className="text-sm text-[#64748b]">Items: <strong className="text-[#0f172a]">{stats.totalItems}</strong></span>
-              <span className="text-sm text-[#64748b]">Active: <strong className="text-[#10b981]">{stats.activeItems}</strong></span>
-              <span className="text-sm text-[#64748b]">Excluded: <strong className="text-[#ef4444]">{stats.excludedItems}</strong></span>
+              <span className="text-sm text-[#64748b]">
+                Items:{" "}
+                <strong className="text-[#0f172a]">{stats.totalItems}</strong>
+              </span>
+              <span className="text-sm text-[#64748b]">
+                Active:{" "}
+                <strong className="text-[#10b981]">{stats.activeItems}</strong>
+              </span>
+              <span className="text-sm text-[#64748b]">
+                Excluded:{" "}
+                <strong className="text-[#ef4444]">
+                  {stats.excludedItems}
+                </strong>
+              </span>
               {duplicateCount > 0 && (
-                <span className="text-sm text-[#64748b]">Duplicates Removed: <strong className="text-[#d97706]">{duplicateCount}</strong></span>
+                <span className="text-sm text-[#64748b]">
+                  Duplicates Removed:{" "}
+                  <strong className="text-[#d97706]">{duplicateCount}</strong>
+                </span>
               )}
             </div>
             <button
@@ -1839,8 +2369,12 @@ const Indent = () => {
         <div className="fixed inset-0 bg-white/90 backdrop-blur-sm flex flex-col justify-center items-center z-[9999] transition-all duration-300 ease-in-out animate-fade-in">
           <div className="bg-white rounded-xl p-6 shadow-xl text-center max-w-sm mx-4 transform scale-100 transition-transform duration-300">
             <Loader2 className="animate-spin w-10 h-10 text-[#4f46e5] mx-auto mb-3" />
-            <h3 className="text-base font-bold text-[#0f172a] mb-1">Processing File Data...</h3>
-            <p className="text-xs text-[#64748b]">Please wait while we prepare the indents.</p>
+            <h3 className="text-base font-bold text-[#0f172a] mb-1">
+              Processing File Data...
+            </h3>
+            <p className="text-xs text-[#64748b]">
+              Please wait while we prepare the indents.
+            </p>
           </div>
         </div>
       )}

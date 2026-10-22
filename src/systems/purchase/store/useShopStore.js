@@ -49,25 +49,31 @@ const useShopStore = create((set, get) => ({
     set({ loading: true });
     try {
       const { data, error } = await supabase
-        .from('shop')
-        .select('id, shop_name, full_name, gstin, contact, email, address')
-        .order('shop_name', { ascending: true });
+        .from("shop")
+        .select("id, shop_name, full_name, gstin, contact, email, address")
+        .order("shop_name", { ascending: true });
 
       if (!error && data) {
-        const shopNames = data.map(s => s.shop_name).filter(Boolean);
+        const shopNames = data.map((s) => s.shop_name).filter(Boolean);
         const saved = getSavedShop();
         const current = get().selectedShop;
 
         let activeShop = "All";
         if (saved && (saved === "All" || shopNames.includes(saved))) {
           activeShop = saved;
-        } else if (current && (current === "All" || shopNames.includes(current))) {
+        } else if (
+          current &&
+          (current === "All" || shopNames.includes(current))
+        ) {
           activeShop = current;
         }
 
         try {
           localStorage.setItem("globalShopsList", JSON.stringify(shopNames));
-          localStorage.setItem("globalShopsDetails", JSON.stringify(data || []));
+          localStorage.setItem(
+            "globalShopsDetails",
+            JSON.stringify(data || []),
+          );
           localStorage.setItem("globalSelectedShop", activeShop);
         } catch (e) {
           // ignore
@@ -77,7 +83,7 @@ const useShopStore = create((set, get) => ({
           shops: shopNames,
           shopsDetails: data || [],
           loading: false,
-          selectedShop: activeShop
+          selectedShop: activeShop,
         });
       } else {
         set({ loading: false });
@@ -92,12 +98,21 @@ const useShopStore = create((set, get) => ({
     if (!shopName || shopName === "All") return null;
     const details = get().shopsDetails || [];
     const target = String(shopName).trim().toUpperCase();
-    return details.find(s => {
-      const sn = String(s.shop_name || "").trim().toUpperCase();
-      const fn = String(s.full_name || "").trim().toUpperCase();
-      return (sn && (sn === target || target.includes(sn) || sn.includes(target))) ||
-             (fn && (fn === target || target.includes(fn) || fn.includes(target)));
-    }) || null;
+    return (
+      details.find((s) => {
+        const sn = String(s.shop_name || "")
+          .trim()
+          .toUpperCase();
+        const fn = String(s.full_name || "")
+          .trim()
+          .toUpperCase();
+        return (
+          (sn &&
+            (sn === target || target.includes(sn) || sn.includes(target))) ||
+          (fn && (fn === target || target.includes(fn) || fn.includes(target)))
+        );
+      }) || null
+    );
   },
 
   getShopFullName: (shopName) => {

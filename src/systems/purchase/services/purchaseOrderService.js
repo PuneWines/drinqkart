@@ -254,7 +254,10 @@ const ALLOWED_PO_COLUMNS = [
   'first_brand_name',
   'receiver_pdf_url',
   'po_items',
-  'district'
+  'district',
+  'area',
+  'vendor_phone',
+  'vendor_id'
 ];
 
 const sanitizePoPayload = (data) => {
@@ -274,16 +277,27 @@ export const insertPurchaseOrder = async (poData) => {
     .insert([payload])
     .select();
 
-  // Graceful fallback if 'company_scope' or 'district' columns are not yet migrated in PostgreSQL (PGRST204)
-  if (error && (error.code === 'PGRST204' || error.message?.includes('district') || error.message?.includes('company_scope'))) {
+  // Graceful fallback if 'area', 'vendor_phone', 'district', or 'company_scope' columns are not yet migrated in PostgreSQL (PGRST204)
+  if (error && (error.code === 'PGRST204' || error.message?.includes('area') || error.message?.includes('vendor_phone') || error.message?.includes('district') || error.message?.includes('company_scope'))) {
     console.warn("purchase_purchase_orders table fallback retry:", error.message);
     const fallbackPayload = { ...payload };
-    delete fallbackPayload.district;
-    delete fallbackPayload.company_scope;
-    const retry = await supabase
+    delete fallbackPayload.area;
+    delete fallbackPayload.vendor_phone;
+
+    let retry = await supabase
       .from('purchase_purchase_orders')
       .insert([fallbackPayload])
       .select();
+
+    if (retry.error && (retry.error.code === 'PGRST204' || retry.error.message?.includes('district') || retry.error.message?.includes('company_scope'))) {
+      delete fallbackPayload.district;
+      delete fallbackPayload.company_scope;
+      retry = await supabase
+        .from('purchase_purchase_orders')
+        .insert([fallbackPayload])
+        .select();
+    }
+
     if (retry.error) throw retry.error;
     return retry.data;
   }

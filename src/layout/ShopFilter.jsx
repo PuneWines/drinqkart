@@ -9,8 +9,11 @@ const ShopFilter = ({ isCollapsed = false }) => {
 
   // Show shop filter for admin users (or if role is admin / masteradmin / unspecified admin)
   const userRole = (user?.role || "").toLowerCase().trim();
-  const userName = (user?.user_name || user?.username || "").toLowerCase().trim();
-  const isAdmin = !userRole || userRole === "admin" || userName === "masteradmin";
+  const userName = (user?.user_name || user?.username || "")
+    .toLowerCase()
+    .trim();
+  const isAdmin =
+    !userRole || userRole === "admin" || userName === "masteradmin";
 
   if (!isAdmin) return null;
 
@@ -48,7 +51,8 @@ const ShopFilter = ({ isCollapsed = false }) => {
             // Cycle shop on click when sidebar is collapsed
             const allOptionList = ["All", ...shops];
             const currentIndex = allOptionList.indexOf(selectedShop);
-            const nextShop = allOptionList[(currentIndex + 1) % allOptionList.length];
+            const nextShop =
+              allOptionList[(currentIndex + 1) % allOptionList.length];
             setSelectedShop(nextShop);
           }}
           className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer relative"
@@ -76,10 +80,11 @@ const ShopFilter = ({ isCollapsed = false }) => {
         <button
           type="button"
           onClick={() => setSelectedShop("All")}
-          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer text-center truncate border ${selectedShop === "All"
-            ? "bg-[#2563eb] border-[#2563eb] text-white font-bold shadow-xs"
-            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-            }`}
+          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer text-center truncate border ${
+            selectedShop === "All"
+              ? "bg-[#2563eb] border-[#2563eb] text-white font-bold shadow-xs"
+              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+          }`}
         >
           All Shops
         </button>
@@ -93,10 +98,11 @@ const ShopFilter = ({ isCollapsed = false }) => {
               type="button"
               onClick={() => setSelectedShop(shop)}
               title={shop}
-              className={`px-2.5 py-1.5 rounded-2xl  text-xs font-semibold transition-all duration-150 cursor-pointer text-center truncate border ${isSelected
-                ? "bg-[#2563eb] border-[#2563eb] text-white font-bold shadow-xs "
-                : getUnselectedStyle(shop)
-                }`}
+              className={`px-2.5 py-1.5 rounded-2xl  text-xs font-semibold transition-all duration-150 cursor-pointer text-center truncate border ${
+                isSelected
+                  ? "bg-[#2563eb] border-[#2563eb] text-white font-bold shadow-xs "
+                  : getUnselectedStyle(shop)
+              }`}
             >
               {getShopLabel(shop)}
             </button>

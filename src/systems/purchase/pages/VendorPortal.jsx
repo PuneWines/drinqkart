@@ -76,6 +76,7 @@ const VendorPortal = () => {
   const [vendorData, setVendorData] = useState(null);
   const [authorizedContact, setAuthorizedContact] = useState(null);
   const [authorizedDistrict, setAuthorizedDistrict] = useState(null);
+  const [authorizedArea, setAuthorizedArea] = useState(null);
   const [phoneInput, setPhoneInput] = useState("");
   const [phoneAuthError, setPhoneAuthError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
@@ -118,6 +119,7 @@ const VendorPortal = () => {
         isDirect: !isCompanyScoped,
         phone: last10,
         district: matchedContact.district,
+        area: matchedContact.area || "",
         name: matchedContact.name || ""
       };
       try {
@@ -127,6 +129,7 @@ const VendorPortal = () => {
       } catch (err) {}
       setAuthorizedContact(authInfo);
       setAuthorizedDistrict(matchedContact.district);
+      setAuthorizedArea(matchedContact.area || null);
 
       // Immediately fetch latest POs so pending items appear without requiring a refresh
       setIsVerifying(true);
@@ -150,6 +153,7 @@ const VendorPortal = () => {
           isDirect: !isCompanyScoped,
           phone: last10,
           district: null,
+          area: "",
           name: vendorData?.contact_name || vendorData?.contact_person || ""
         };
         try {
@@ -159,6 +163,7 @@ const VendorPortal = () => {
         } catch (err) {}
         setAuthorizedContact(authInfo);
         setAuthorizedDistrict(null);
+        setAuthorizedArea(null);
 
         setIsVerifying(true);
         try {
@@ -181,6 +186,7 @@ const VendorPortal = () => {
     }
     setAuthorizedContact(null);
     setAuthorizedDistrict(null);
+    setAuthorizedArea(null);
     setPhoneInput("");
     setPhoneAuthError("");
   };
@@ -212,16 +218,70 @@ const VendorPortal = () => {
   // Active Tab: pending | history
   const [activeTab, setActiveTab] = useState("pending");
 
-  // Filter PO list strictly by authorized district for company-scoped vendors (no legacy fallback)
+  // Filter PO list strictly by authorized district AND area/contact number for company-scoped vendors
   const districtFilteredPoList = useMemo(() => {
     if (!authorizedDistrict) return poList;
     const authDistLower = (authorizedDistrict || "").trim().toLowerCase();
+    const authAreaLower = (authorizedArea || "").trim().toLowerCase();
+    const authPhoneClean = (authorizedContact?.phone || "").replace(/\D/g, "").slice(-10);
 
     return poList.filter(po => {
+      // 1. Strict District Check
       if (!po.district || !po.district.trim()) return false;
-      return po.district.trim().toLowerCase() === authDistLower;
+      if (po.district.trim().toLowerCase() !== authDistLower) return false;
+
+      // Extract items to read area & contact phone metadata
+      let items = [];
+      if (Array.isArray(po.po_items)) {
+        items = po.po_items;
+      } else if (typeof po.po_items === "string") {
+        try {
+          const parsed = JSON.parse(po.po_items);
+          if (Array.isArray(parsed)) items = parsed;
+        } catch (e) {}
+      }
+
+      // 2. Identify assigned area & phone for this PO
+      const poArea = (
+        po.area ||
+        items[0]?.vendor_area ||
+        items[0]?.area ||
+        items.find(it => it && (it.vendor_area || it.area))?.vendor_area ||
+        items.find(it => it && (it.vendor_area || it.area))?.area ||
+        ""
+      ).trim().toLowerCase();
+
+      const rawPoPhone = (
+        po.vendor_phone ||
+        items[0]?.vendor_phone ||
+        items[0]?.vendor_contact ||
+        items.find(it => it && (it.vendor_phone || it.vendor_contact))?.vendor_phone ||
+        items.find(it => it && (it.vendor_phone || it.vendor_contact))?.vendor_contact ||
+        ""
+      );
+      const poPhoneClean = String(rawPoPhone).replace(/\D/g, "").slice(-10);
+
+      // 3. Strict Phone Matching (if PO has a recorded phone)
+      if (poPhoneClean && authPhoneClean) {
+        if (poPhoneClean !== authPhoneClean) {
+          return false;
+        }
+      }
+
+      // 4. Strict Area Matching (if PO has a recorded area)
+      if (poArea) {
+        if (authAreaLower) {
+          if (poArea !== authAreaLower) {
+            return false;
+          }
+        } else if (poPhoneClean && authPhoneClean && poPhoneClean !== authPhoneClean) {
+          return false;
+        }
+      }
+
+      return true;
     });
-  }, [poList, authorizedDistrict]);
+  }, [poList, authorizedDistrict, authorizedArea, authorizedContact]);
 
   // Memoized filter for pending purchase orders
   const pendingPoList = useMemo(() => {
@@ -326,20 +386,42 @@ const VendorPortal = () => {
           if (parsed) {
             const contacts = enrichedVendor.district_contacts || [];
             if (contacts.length > 0) {
-              const matched = contacts.find(c => {
-                const cPh = (c.phone || c.contact || c.contact_number || "").replace(/\D/g, "").slice(-10);
-                return (parsed.phone && cPh === parsed.phone) || 
-                       (parsed.district && (c.district || "").toLowerCase() === parsed.district.toLowerCase());
-              });
+              let matched = null;
+              // 1. Strictly match by phone if phone is present in saved session
+              if (parsed.phone) {
+                const parsedLast10 = String(parsed.phone).replace(/\D/g, "").slice(-10);
+                matched = contacts.find(c => {
+                  const cPh = (c.phone || c.contact || c.contact_number || "").replace(/\D/g, "").slice(-10);
+                  return cPh && cPh === parsedLast10;
+                });
+              }
+              // 2. If no phone in session or not matched by phone, fallback to district AND area if area is present
+              if (!matched && parsed.district && !parsed.phone) {
+                matched = contacts.find(c => {
+                  const distMatches = (c.district || "").trim().toLowerCase() === parsed.district.trim().toLowerCase();
+                  if (parsed.area) {
+                    return distMatches && (c.area || "").trim().toLowerCase() === parsed.area.trim().toLowerCase();
+                  }
+                  return distMatches;
+                });
+              }
+
               if (matched && matched.district) {
-                setAuthorizedContact({ ...parsed, district: matched.district, name: matched.name || parsed.name });
+                setAuthorizedContact({
+                  ...parsed,
+                  district: matched.district,
+                  area: matched.area || parsed.area || "",
+                  name: matched.name || parsed.name || ""
+                });
                 setAuthorizedDistrict(matched.district);
+                setAuthorizedArea(matched.area || parsed.area || null);
               } else {
                 sessionStorage.removeItem(`drinqkart_vendor_auth_${vendorRow.id}`);
               }
             } else {
               setAuthorizedContact(parsed);
               setAuthorizedDistrict(null);
+              setAuthorizedArea(null);
             }
           }
         }
@@ -1000,11 +1082,16 @@ const VendorPortal = () => {
               </span>
             )}
             {authorizedDistrict ? (
-              <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
-                <MapPin size={13} />
+              <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 flex-wrap">
+                <MapPin size={13} className="shrink-0 text-emerald-400" />
                 <span>District: {authorizedDistrict}</span>
+                {(authorizedContact?.area || authorizedArea) && (
+                  <span className="bg-emerald-800/90 text-emerald-100 border border-emerald-500/40 px-2 py-0.5 rounded-full text-[11px] font-semibold">
+                    Area: {authorizedContact?.area || authorizedArea}
+                  </span>
+                )}
                 {authorizedContact?.name && (
-                  <span className="opacity-80 text-[11px]">({authorizedContact.name})</span>
+                  <span className="opacity-90 text-[11px] font-medium">({authorizedContact.name})</span>
                 )}
                 <button
                   type="button"
@@ -1016,9 +1103,17 @@ const VendorPortal = () => {
                 </button>
               </span>
             ) : authorizedContact?.phone ? (
-              <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
-                <Phone size={13} />
+              <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 flex-wrap">
+                <Phone size={13} className="shrink-0 text-emerald-400" />
                 <span>Verified: +91 {authorizedContact.phone}</span>
+                {(authorizedContact?.area || authorizedArea) && (
+                  <span className="bg-emerald-800/90 text-emerald-100 border border-emerald-500/40 px-2 py-0.5 rounded-full text-[11px] font-semibold">
+                    Area: {authorizedContact?.area || authorizedArea}
+                  </span>
+                )}
+                {authorizedContact?.name && (
+                  <span className="opacity-90 text-[11px] font-medium">({authorizedContact.name})</span>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -1169,6 +1264,22 @@ const VendorPortal = () => {
               };
               const shopName = getShopName();
 
+              const getPoArea = () => {
+                let list = po.po_items;
+                if (typeof list === "string") {
+                  try {
+                    list = JSON.parse(list);
+                  } catch (e) {
+                    list = null;
+                  }
+                }
+                const firstWithArea = Array.isArray(list)
+                  ? list.find(it => it && (it.vendor_area || it.area))
+                  : null;
+                return po.area || firstWithArea?.vendor_area || firstWithArea?.area || "";
+              };
+              const poAreaTag = getPoArea();
+
               return (
                 <div key={po.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
                    
@@ -1192,6 +1303,11 @@ const VendorPortal = () => {
                       {(po.company_scope || po.filtered_company_name || companyName) && (
                         <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-lg text-xs font-bold">
                           {po.company_scope || po.filtered_company_name || companyName}
+                        </span>
+                      )}
+                      {poAreaTag && (
+                        <span className="bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1 rounded-lg text-xs font-bold">
+                          Area: {poAreaTag}
                         </span>
                       )}
                     </div>

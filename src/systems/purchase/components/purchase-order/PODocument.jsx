@@ -15,25 +15,25 @@ const TERMS = [
   "Delivery should be strictly done within 5 days from the date of purchase order.",
 ];
 
-const PODocument = ({ 
-  id, 
-  copyType, 
-  isReceiver, 
-  partyName, 
-  items = [], 
-  poNumber, 
-  poDate, 
-  dbParties = [], 
-  onPartyChange, 
-  vendorDetails, 
-  companyInfo, 
-  companyTerms, 
-  transporters = [], 
-  receivers = [], 
-  selectedTransporter, 
-  setSelectedTransporter, 
-  selectedReceiver, 
-  setSelectedReceiver, 
+const PODocument = ({
+  id,
+  copyType,
+  isReceiver,
+  partyName,
+  items = [],
+  poNumber,
+  poDate,
+  dbParties = [],
+  onPartyChange,
+  vendorDetails,
+  companyInfo,
+  companyTerms,
+  transporters = [],
+  receivers = [],
+  selectedTransporter,
+  setSelectedTransporter,
+  selectedReceiver,
+  setSelectedReceiver,
   shippingError,
   companyScope,
   filteredCompanyName,
@@ -41,16 +41,25 @@ const PODocument = ({
   cleanVendorName,
   availableDistricts = [],
   selectedDistrict = "",
-  onDistrictChange
+  onDistrictChange,
+  availableAreas = [],
+  selectedArea = "",
+  onAreaChange,
 }) => {
-  const isTransporterNotRequired = companyInfo?.requires_transporter !== undefined
-    ? !companyInfo.requires_transporter
-    : items.some(
-        item => item.shopName?.toUpperCase() === "KUNAL" || item.shop_name?.toUpperCase() === "KUNAL"
-      );
+  const isTransporterNotRequired =
+    companyInfo?.requires_transporter !== undefined
+      ? !companyInfo.requires_transporter
+      : items.some(
+          (item) =>
+            item.shopName?.toUpperCase() === "KUNAL" ||
+            item.shop_name?.toUpperCase() === "KUNAL",
+        );
 
   return (
-    <div className="po-document" id={id || `po-${poNumber.replace(/\//g, "-")}`}>
+    <div
+      className="po-document"
+      id={id || `po-${poNumber.replace(/\//g, "-")}`}
+    >
       <POHeader
         companyInfo={companyInfo}
         poNumber={poNumber}
@@ -71,6 +80,9 @@ const PODocument = ({
           availableDistricts={availableDistricts}
           selectedDistrict={selectedDistrict}
           onDistrictChange={onDistrictChange}
+          availableAreas={availableAreas}
+          selectedArea={selectedArea}
+          onAreaChange={onAreaChange}
         />
         <POShipToBox companyInfo={companyInfo} />
       </div>
@@ -82,10 +94,7 @@ const PODocument = ({
       />
 
       <div className="po-footer-section">
-        <POTerms
-          companyTerms={companyTerms}
-          defaultTerms={TERMS}
-        />
+        <POTerms companyTerms={companyTerms} defaultTerms={TERMS} />
         <POSignature companyInfo={companyInfo} />
       </div>
 

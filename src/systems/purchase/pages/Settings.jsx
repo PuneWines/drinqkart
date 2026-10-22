@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import useAuthStore from "../store/useAuthStore";
 import useVendorStore from "../store/useVendorStore";
 import useCompanyStore from "../store/useCompanyStore";
@@ -19,6 +19,9 @@ import {
   Loader2,
   X,
   MapPin,
+  Phone,
+  User,
+  Mail,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import districtService from "../services/districtService";
@@ -45,6 +48,10 @@ const Settings = ({ readOnly = false }) => {
   const [districtSearchQuery, setDistrictSearchQuery] = useState("");
   const [availableParties, setAvailableParties] = useState([]);
   const [vendorPartyCompanyMap, setVendorPartyCompanyMap] = useState({});
+  const [hoverDistrictPreview, setHoverDistrictPreview] = useState(null);
+  const hoverDistrictTimerRef = useRef(null);
+  const hoverDistrictPreviewRef = useRef(null);
+  hoverDistrictPreviewRef.current = hoverDistrictPreview;
 
   // User Form State
   const [showForm, setShowForm] = useState(false);
@@ -62,7 +69,7 @@ const Settings = ({ readOnly = false }) => {
   const [showVendorForm, setShowVendorForm] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
   const [isVendorSubmitting, setIsVendorSubmitting] = useState(false);
-  const [isCustomCompany, setIsCustomCompany] = useState(false);
+  const [isCustomParty, setIsCustomParty] = useState(false);
   const [vendorFormData, setVendorFormData] = useState({
     party_name: "",
     address: "",
@@ -126,6 +133,20 @@ const Settings = ({ readOnly = false }) => {
     fetchTransporters();
     fetchReceivers();
   }, [fetchUsers, fetchVendors, fetchCompanySettings]);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (
+        hoverDistrictPreview &&
+        !e.target.closest(".district-popover-container") &&
+        !e.target.closest(".district-badge-trigger")
+      ) {
+        setHoverDistrictPreview(null);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [hoverDistrictPreview]);
 
   const fetchDistricts = async () => {
     const data = await districtService.getDistricts();
@@ -282,6 +303,17 @@ const Settings = ({ readOnly = false }) => {
     vendorFormData.company_name,
   ]);
 
+  const allAvailableParties = useMemo(() => {
+    const partySet = new Set(availableParties);
+    (vendors || []).forEach((v) => {
+      if (v.party_name && v.party_name.trim()) partySet.add(v.party_name.trim());
+    });
+    if (vendorFormData.party_name && vendorFormData.party_name.trim()) {
+      partySet.add(vendorFormData.party_name.trim());
+    }
+    return Array.from(partySet).sort((a, b) => a.localeCompare(b));
+  }, [availableParties, vendors, vendorFormData.party_name]);
+
   const allPermissions = [
     { key: "dashboard", label: "Dashboard" },
     { key: "indent", label: "Indent" },
@@ -366,9 +398,38 @@ const Settings = ({ readOnly = false }) => {
   };
 
   // --- VENDOR HANDLERS ---
+  const getDistrictAreas = (distOrName) => {
+    if (!distOrName) return [];
+    const dObj =
+      typeof distOrName === "object"
+        ? distOrName
+        : districts.find(
+            (d) =>
+              (d.name || "").trim().toLowerCase() ===
+              String(distOrName).trim().toLowerCase(),
+          );
+    const distName =
+      dObj?.name || (typeof distOrName === "string" ? distOrName : "");
+    let dAreas = (dObj?.areas || [])
+      .map((a) => (typeof a === "string" ? a : a?.name || "").trim())
+      .filter(Boolean);
+    if (dAreas.length === 0 && distName) {
+      const assignedCompNames = companies
+        .filter(
+          (c) =>
+            (c.district || "").trim().toLowerCase() ===
+            distName.trim().toLowerCase(),
+        )
+        .map((c) => (c.name || "").trim())
+        .filter(Boolean);
+      dAreas = [...new Set(assignedCompNames)];
+    }
+    return dAreas;
+  };
+
   const handleEditVendor = (vendor) => {
     setEditingVendor(vendor.id);
-    setIsCustomCompany(false);
+    setIsCustomParty(false);
 
     let contacts = [];
     if (Array.isArray(vendor.district_contacts)) {
@@ -398,11 +459,53 @@ const Settings = ({ readOnly = false }) => {
       contacts = [
         {
           district: "",
+          area: "",
           phone: vendor.contact_number || vendor.contact || "",
           name: vendor.contact_name || "",
           email: vendor.email || "",
         },
       ];
+    }
+
+    // Normalize contacts: match district case-insensitively to canonical district name in districts
+    const normalizedContacts = (Array.isArray(contacts) ? contacts : []).map((dc) => {
+      if (!dc) return { district: "", area: "", phone: "", name: "", email: "" };
+      const matchedDist = districts.find(
+        (d) => (d.name || "").trim().toLowerCase() === (dc.district || "").trim().toLowerCase()
+      );
+      const canonicalDistrictName = matchedDist ? matchedDist.name : (dc.district || "");
+      let rawArea = (dc.area || "").trim();
+      if (
+        rawArea.toLowerCase() === "all areas / direct" ||
+        rawArea.toLowerCase() === "all areas" ||
+        rawArea.toLowerCase() === "direct"
+      ) {
+        rawArea = "";
+      }
+      if (!rawArea && canonicalDistrictName) {
+        const dAreas = getDistrictAreas(canonicalDistrictName);
+        if (dAreas.length === 1) {
+          rawArea = dAreas[0];
+        }
+      }
+      return {
+        district: canonicalDistrictName,
+        area: rawArea,
+        phone: dc.phone || dc.contact_number || dc.contact || "",
+        name: dc.name || dc.contact_name || dc.person_name || "",
+        email: dc.email || "",
+      };
+    });
+
+    let terms = [];
+    if (Array.isArray(vendor.terms)) {
+      terms = vendor.terms;
+    } else if (typeof vendor.terms === "string") {
+      try {
+        terms = JSON.parse(vendor.terms);
+      } catch {
+        terms = [];
+      }
     }
 
     setVendorFormData({
@@ -412,19 +515,21 @@ const Settings = ({ readOnly = false }) => {
       contact_name: vendor.contact_name || "",
       contact_number: vendor.contact_number || vendor.contact || "",
       email: vendor.email || "",
-      terms: vendor.terms || [],
+      terms: Array.isArray(terms) ? terms : [],
       company_name: vendor.company_name || "",
-      district_contacts: Array.isArray(contacts) ? contacts : [],
+      district_contacts: normalizedContacts,
     });
     setShowVendorForm(true);
   };
 
   const handleAddNewVendor = () => {
     setEditingVendor(null);
-    setIsCustomCompany(false);
+    setIsCustomParty(false);
     const firstDist = districts.length > 0 ? districts[0].name : "";
+    const firstDistAreas = firstDist ? getDistrictAreas(firstDist) : [];
+    const firstArea = firstDistAreas.length === 1 ? firstDistAreas[0] : "";
     setVendorFormData({
-      party_name: availableParties.length > 0 ? availableParties[0] : "",
+      party_name: allAvailableParties.length > 0 ? allAvailableParties[0] : "",
       address: "",
       gstin: "",
       contact_name: "",
@@ -432,23 +537,63 @@ const Settings = ({ readOnly = false }) => {
       email: "",
       terms: [],
       company_name: "",
-      district_contacts: firstDist ? [{ district: firstDist, phone: "", name: "", email: "" }] : [],
+      district_contacts: firstDist
+        ? [{ district: firstDist, area: firstArea, phone: "", name: "", email: "" }]
+        : [],
     });
     setShowVendorForm(true);
   };
 
   const handleVendorAddDistrictContact = () => {
-    const selectedDistricts = (vendorFormData.district_contacts || [])
-      .map((dc) => dc.district)
-      .filter(Boolean);
-    const firstAvailable =
-      districts.find((d) => !selectedDistricts.includes(d.name))?.name || "";
+    const currentContacts = vendorFormData.district_contacts || [];
+
+    // Find the first district that has at least one unassigned area
+    const availableDistrict = districts.find((d) => {
+      const dAreas = getDistrictAreas(d);
+      const rowsWithD = currentContacts.filter(
+        (item) =>
+          (item.district || "").trim().toLowerCase() ===
+          (d.name || "").trim().toLowerCase(),
+      );
+      const takenAreas = rowsWithD
+        .map((item) => (item.area || "").trim().toLowerCase())
+        .filter(Boolean);
+      return dAreas.some((a) => !takenAreas.includes(a.toLowerCase()));
+    });
+
+    const defaultDistrict = availableDistrict
+      ? availableDistrict.name
+      : districts[0]?.name || "";
+
+    let defaultArea = "";
+    if (availableDistrict) {
+      const dAreas = getDistrictAreas(availableDistrict);
+      const rowsWithD = currentContacts.filter(
+        (item) =>
+          (item.district || "").trim().toLowerCase() ===
+          (availableDistrict.name || "").trim().toLowerCase(),
+      );
+      const takenAreas = rowsWithD
+        .map((item) => (item.area || "").trim().toLowerCase())
+        .filter(Boolean);
+      const nextArea = dAreas.find((a) => !takenAreas.includes(a.toLowerCase()));
+      if (nextArea) defaultArea = nextArea;
+    } else if (defaultDistrict) {
+      const dAreas = getDistrictAreas(defaultDistrict);
+      if (dAreas.length > 0) defaultArea = dAreas[0];
+    }
 
     setVendorFormData((prev) => ({
       ...prev,
       district_contacts: [
         ...(prev.district_contacts || []),
-        { district: firstAvailable, phone: "", name: "", email: "" },
+        {
+          district: defaultDistrict,
+          area: defaultArea,
+          phone: "",
+          name: "",
+          email: "",
+        },
       ],
     }));
   };
@@ -478,17 +623,56 @@ const Settings = ({ readOnly = false }) => {
 
     const validDistrictContacts = (
       vendorFormData.district_contacts || []
-    ).filter((dc) => dc && (dc.district || dc.phone || dc.name || dc.email));
+    ).filter((dc) => dc && (dc.district || dc.phone || dc.name || dc.email || dc.area));
 
     if (validDistrictContacts.length === 0) {
-      alert("Please add at least one District Contact with a District and Contact Number.");
+      alert("Please add at least one District Contact with a District, Area, and Contact Number.");
       return;
     }
 
-    const incompleteContact = validDistrictContacts.find(dc => !dc.district || !dc.phone);
+    const incompleteContact = validDistrictContacts.find(
+      (dc) =>
+        !dc.district ||
+        !dc.district.trim() ||
+        !dc.phone ||
+        !dc.phone.trim() ||
+        !dc.area ||
+        !dc.area.trim() ||
+        dc.area.trim().toLowerCase() === "all areas / direct" ||
+        dc.area.trim().toLowerCase() === "all areas" ||
+        dc.area.trim().toLowerCase() === "direct"
+    );
+
     if (incompleteContact) {
-      alert("Please provide both District and Contact Number for each district contact.");
+      if (!incompleteContact.district || !incompleteContact.district.trim()) {
+        alert("Please select a District for each district contact.");
+      } else if (
+        !incompleteContact.area ||
+        !incompleteContact.area.trim() ||
+        incompleteContact.area.trim().toLowerCase() === "all areas / direct" ||
+        incompleteContact.area.trim().toLowerCase() === "all areas" ||
+        incompleteContact.area.trim().toLowerCase() === "direct"
+      ) {
+        alert(
+          `Please select an Area for District "${incompleteContact.district}". Form cannot be submitted without an assigned Area.`,
+        );
+      } else {
+        alert("Please provide a Contact Number for each district contact.");
+      }
       return;
+    }
+
+    // Check for duplicate (district + area) entries
+    const seenDistrictAreas = new Set();
+    for (const dc of validDistrictContacts) {
+      const distKey = `${(dc.district || "").trim().toLowerCase()}::${(dc.area || "").trim().toLowerCase()}`;
+      if (seenDistrictAreas.has(distKey)) {
+        alert(
+          `Duplicate contact entry: District "${dc.district}" with Area "${dc.area}" is assigned more than once.`,
+        );
+        return;
+      }
+      seenDistrictAreas.add(distKey);
     }
 
     setIsVendorSubmitting(true);
@@ -529,6 +713,279 @@ const Settings = ({ readOnly = false }) => {
         alert(`Error deleting vendor: ${res.error}`);
       }
     }
+  };
+
+  // --- VENDOR DISTRICT CONTACTS HELPER & HOVER PREVIEW ---
+  const getVendorDistrictContactsList = (vendor) => {
+    if (!vendor) return [];
+    let contacts = vendor.district_contacts;
+    if (typeof contacts === "string") {
+      try {
+        contacts = JSON.parse(contacts);
+      } catch (e) {
+        contacts = [];
+      }
+    }
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+      try {
+        const cached = localStorage.getItem(
+          `drinqkart_vendor_district_contacts_${vendor.id}`,
+        );
+        if (cached) contacts = JSON.parse(cached);
+      } catch (e) {}
+    }
+    return Array.isArray(contacts) ? contacts : [];
+  };
+
+  const groupVendorContactsByDistrict = (vendor) => {
+    const list = getVendorDistrictContactsList(vendor);
+    const districtMap = new Map();
+
+    list.forEach((item) => {
+      const rawDistrict = (item.district || "").trim();
+      if (!rawDistrict) return;
+      const key = rawDistrict.toLowerCase();
+      if (!districtMap.has(key)) {
+        districtMap.set(key, {
+          districtName: rawDistrict.toUpperCase(),
+          items: [],
+        });
+      }
+      districtMap.get(key).items.push(item);
+    });
+
+    return Array.from(districtMap.values());
+  };
+
+  const handleCloseDistrictHover = () => {
+    if (hoverDistrictPreviewRef.current?.isPinned) return;
+    if (hoverDistrictTimerRef.current) {
+      clearTimeout(hoverDistrictTimerRef.current);
+    }
+    hoverDistrictTimerRef.current = setTimeout(() => {
+      if (!hoverDistrictPreviewRef.current?.isPinned) {
+        setHoverDistrictPreview(null);
+      }
+    }, 1200);
+  };
+
+  const handleOpenDistrictHover = (e, group, vendor, isPinned = false) => {
+    if (hoverDistrictTimerRef.current) {
+      clearTimeout(hoverDistrictTimerRef.current);
+      hoverDistrictTimerRef.current = null;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const vendorUniqueKey = `${vendor.id || ""}_${vendor.company_name || "direct"}`;
+    setHoverDistrictPreview({
+      district: group.districtName,
+      vendorId: vendor.id,
+      vendorUniqueKey,
+      vendorName: vendor.party_name || vendor.name || "Vendor",
+      companyName: vendor.company_name || "",
+      items: group.items,
+      groups: [group],
+      activeDistrictIndex: 0,
+      isPinned: Boolean(isPinned),
+      rect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      },
+    });
+  };
+
+  const handleToggleDistrictHover = (e, group, vendor) => {
+    if (hoverDistrictTimerRef.current) {
+      clearTimeout(hoverDistrictTimerRef.current);
+      hoverDistrictTimerRef.current = null;
+    }
+    const vendorUniqueKey = `${vendor.id || ""}_${vendor.company_name || "direct"}`;
+    if (
+      hoverDistrictPreview &&
+      hoverDistrictPreview.district?.toLowerCase() ===
+        group.districtName.toLowerCase() &&
+      (hoverDistrictPreview.vendorUniqueKey
+        ? hoverDistrictPreview.vendorUniqueKey === vendorUniqueKey
+        : hoverDistrictPreview.vendorId === vendor.id)
+    ) {
+      if (hoverDistrictPreview.isPinned) {
+        setHoverDistrictPreview(null);
+      } else {
+        setHoverDistrictPreview((prev) => ({ ...prev, isPinned: true }));
+      }
+    } else {
+      handleOpenDistrictHover(e, group, vendor, true);
+    }
+  };
+
+  const handleOpenMultiDistrictHover = (e, groups, vendor, initialDistrictIndex = 0, isPinned = false) => {
+    if (hoverDistrictTimerRef.current) {
+      clearTimeout(hoverDistrictTimerRef.current);
+      hoverDistrictTimerRef.current = null;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const vendorUniqueKey = `${vendor.id || ""}_${vendor.company_name || "direct"}`;
+    const activeIdx = Math.max(0, Math.min(initialDistrictIndex, groups.length - 1));
+    const activeGrp = groups[activeIdx] || groups[0];
+
+    setHoverDistrictPreview({
+      district: activeGrp.districtName,
+      vendorId: vendor.id,
+      vendorUniqueKey,
+      vendorName: vendor.party_name || vendor.name || "Vendor",
+      companyName: vendor.company_name || "",
+      groups,
+      activeDistrictIndex: activeIdx,
+      items: activeGrp.items,
+      isPinned: Boolean(isPinned),
+      rect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      },
+    });
+  };
+
+  const handleToggleMultiDistrictHover = (e, groups, vendor) => {
+    if (hoverDistrictTimerRef.current) {
+      clearTimeout(hoverDistrictTimerRef.current);
+      hoverDistrictTimerRef.current = null;
+    }
+    const vendorUniqueKey = `${vendor.id || ""}_${vendor.company_name || "direct"}`;
+    if (
+      hoverDistrictPreview &&
+      (hoverDistrictPreview.vendorUniqueKey
+        ? hoverDistrictPreview.vendorUniqueKey === vendorUniqueKey
+        : hoverDistrictPreview.vendorId === vendor.id)
+    ) {
+      if (hoverDistrictPreview.isPinned) {
+        setHoverDistrictPreview(null);
+      } else {
+        setHoverDistrictPreview((prev) => ({ ...prev, isPinned: true }));
+      }
+    } else {
+      handleOpenMultiDistrictHover(e, groups, vendor, 0, true);
+    }
+  };
+
+  const handleSelectHoverDistrict = (idx) => {
+    if (hoverDistrictTimerRef.current) {
+      clearTimeout(hoverDistrictTimerRef.current);
+      hoverDistrictTimerRef.current = null;
+    }
+    setHoverDistrictPreview((prev) => {
+      if (!prev || !prev.groups || !prev.groups[idx]) return prev;
+      const grp = prev.groups[idx];
+      return {
+        ...prev,
+        activeDistrictIndex: idx,
+        district: grp.districtName,
+        items: grp.items,
+      };
+    });
+  };
+
+  const renderVendorDistrictContactBadges = (vendor) => {
+    const grouped = groupVendorContactsByDistrict(vendor);
+
+    if (grouped.length > 0) {
+      const vendorUniqueKey = `${vendor.id || ""}_${vendor.company_name || "direct"}`;
+      const isHovered =
+        hoverDistrictPreview &&
+        (hoverDistrictPreview.vendorUniqueKey
+          ? hoverDistrictPreview.vendorUniqueKey === vendorUniqueKey
+          : hoverDistrictPreview.vendorId === vendor.id);
+
+      // If vendor has 2 or more districts: show compact "X Districts" mention
+      if (grouped.length > 1) {
+        return (
+          <div className="inline-block">
+            <div
+              onMouseEnter={(e) => handleOpenMultiDistrictHover(e, grouped, vendor, 0)}
+              onMouseLeave={handleCloseDistrictHover}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleMultiDistrictHover(e, grouped, vendor);
+              }}
+              className={`district-badge-trigger group inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all duration-150 cursor-pointer shadow-sm select-none ${
+                isHovered
+                  ? "bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-200"
+                  : "bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 border-indigo-200 hover:border-indigo-300"
+              }`}
+              title={`Click or hover to preview ${grouped.length} districts and their area contacts`}
+            >
+              <MapPin
+                size={12}
+                className={
+                  isHovered
+                    ? "text-white shrink-0 animate-pulse"
+                    : "text-indigo-600 shrink-0"
+                }
+              />
+              <span className="font-bold tracking-tight">
+                {grouped.length} Districts
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // If vendor has 1 district: show that district badge directly
+      const group = grouped[0];
+      const count = group.items.length;
+      return (
+        <div className="inline-block">
+          <div
+            key={group.districtName}
+            onMouseEnter={(e) => handleOpenDistrictHover(e, group, vendor)}
+            onMouseLeave={handleCloseDistrictHover}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleDistrictHover(e, group, vendor);
+            }}
+            className={`district-badge-trigger group inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all duration-150 cursor-pointer shadow-sm select-none ${
+              isHovered
+                ? "bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-200"
+                : "bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 border-indigo-200 hover:border-indigo-300"
+            }`}
+            title={`Click or hover to preview area contacts for ${group.districtName}`}
+          >
+            <MapPin
+              size={12}
+              className={
+                isHovered
+                  ? "text-white shrink-0 animate-pulse"
+                  : "text-indigo-600 shrink-0"
+              }
+            />
+            <span className="font-bold tracking-tight">
+              {group.districtName}
+            </span>
+            <span
+              className={`inline-flex items-center px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
+                isHovered
+                  ? "bg-white/20 text-white"
+                  : "bg-indigo-200/80 text-indigo-950"
+              }`}
+            >
+              {count} {count === 1 ? "area" : "areas"}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="font-semibold text-slate-800 text-xs">
+        {vendor.contact_number || vendor.contact || "—"}
+      </div>
+    );
   };
 
   // --- COMPANY SETTINGS HANDLERS ---
@@ -725,27 +1182,72 @@ const Settings = ({ readOnly = false }) => {
   // --- DISTRICT HANDLERS ---
   const handleAddNewDistrict = () => {
     setEditingDistrict(null);
-    setDistrictFormData({ name: "" });
+    setDistrictFormData({ name: "", areas: [] });
     setShowDistrictForm(true);
   };
 
   const handleEditDistrict = (dist) => {
     setEditingDistrict(dist.id);
-    setDistrictFormData({ name: dist.name || "" });
+    setDistrictFormData({
+      name: dist.name || "",
+      areas: Array.isArray(dist.areas) ? dist.areas : []
+    });
     setShowDistrictForm(true);
+  };
+
+  const handleDistrictAddArea = () => {
+    setDistrictFormData((prev) => ({
+      ...prev,
+      areas: [
+        ...(prev.areas || []),
+        {
+          id: `area_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          name: "",
+        },
+      ],
+    }));
+  };
+
+  const handleDistrictRemoveArea = (index) => {
+    setDistrictFormData((prev) => ({
+      ...prev,
+      areas: (prev.areas || []).filter((_, idx) => idx !== index),
+    }));
+  };
+
+  const handleDistrictUpdateArea = (index, value) => {
+    setDistrictFormData((prev) => {
+      const updated = [...(prev.areas || [])];
+      const curr = typeof updated[index] === "string" ? { name: updated[index] } : updated[index];
+      updated[index] = { ...curr, name: value };
+      return { ...prev, areas: updated };
+    });
   };
 
   const handleDistrictSubmit = async (e) => {
     e.preventDefault();
     setIsDistrictSubmitting(true);
+    
+    // Clean and validate areas (only district and area name)
+    const cleanAreas = (districtFormData.areas || [])
+      .map((a) => {
+        const name = (typeof a === "string" ? a : a?.name || "").trim();
+        return {
+          id: a?.id || `area_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          name,
+        };
+      })
+      .filter((a) => a.name.length > 0);
+
     let res;
     if (editingDistrict) {
       res = await districtService.updateDistrict(
         editingDistrict,
         districtFormData.name,
+        cleanAreas
       );
     } else {
-      res = await districtService.createDistrict(districtFormData.name);
+      res = await districtService.createDistrict(districtFormData.name, cleanAreas);
     }
     setIsDistrictSubmitting(false);
 
@@ -994,28 +1496,56 @@ const Settings = ({ readOnly = false }) => {
                     <form onSubmit={handleVendorSubmit} className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700">
-                            Party / Vendor Name *
-                          </label>
-                          <select
-                            value={vendorFormData.party_name}
-                            onChange={(e) =>
-                              setVendorFormData({
-                                ...vendorFormData,
-                                party_name: e.target.value,
-                              })
-                            }
-                            required
-                            disabled={isVendorSubmitting}
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                          >
-                            <option value="">Select a Party Name</option>
-                            {availableParties.map((party, idx) => (
-                              <option key={idx} value={party}>
-                                {party}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex justify-between items-center">
+                            <label className="text-xs font-bold text-slate-700">
+                              Party / Vendor Name *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setIsCustomParty(!isCustomParty)}
+                              className="text-[11px] text-indigo-600 hover:text-indigo-700 hover:underline font-bold cursor-pointer"
+                            >
+                              {isCustomParty
+                                ? "← Choose from List"
+                                : "+ Enter Custom Party"}
+                            </button>
+                          </div>
+                          {isCustomParty ? (
+                            <input
+                              type="text"
+                              placeholder="Type party / vendor name..."
+                              value={vendorFormData.party_name || ""}
+                              onChange={(e) =>
+                                setVendorFormData({
+                                  ...vendorFormData,
+                                  party_name: e.target.value,
+                                })
+                              }
+                              required
+                              disabled={isVendorSubmitting}
+                              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                            />
+                          ) : (
+                            <select
+                              value={vendorFormData.party_name || ""}
+                              onChange={(e) =>
+                                setVendorFormData({
+                                  ...vendorFormData,
+                                  party_name: e.target.value,
+                                })
+                              }
+                              required
+                              disabled={isVendorSubmitting}
+                              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium cursor-pointer"
+                            >
+                              <option value="">Select a Party Name</option>
+                              {allAvailableParties.map((party, idx) => (
+                                <option key={idx} value={party}>
+                                  {party}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-700">
@@ -1041,72 +1571,50 @@ const Settings = ({ readOnly = false }) => {
                           <label className="text-xs font-bold text-slate-700">
                             Company Scope (Optional)
                           </label>
-                          <div className="flex items-center gap-2">
+                          {vendorFormData.company_name && (
                             <button
                               type="button"
                               onClick={() =>
-                                setIsCustomCompany(!isCustomCompany)
-                              }
-                              className="text-[11px] text-indigo-600 hover:text-indigo-700 hover:underline font-bold cursor-pointer"
-                            >
-                              {isCustomCompany
-                                ? "← Choose from List"
-                                : "+ Enter Custom"}
-                            </button>
-                            {vendorFormData.company_name && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setVendorFormData({
-                                    ...vendorFormData,
-                                    company_name: "",
-                                  })
-                                }
-                                className="text-[11px] text-slate-400 hover:text-slate-600 hover:underline font-medium cursor-pointer"
-                              >
-                                Reset to Direct
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {isCustomCompany ? (
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              placeholder="Type company or brand name (e.g. BUDWEISER...)"
-                              value={vendorFormData.company_name || ""}
-                              onChange={(e) =>
                                 setVendorFormData({
                                   ...vendorFormData,
-                                  company_name: e.target.value,
+                                  company_name: "",
                                 })
                               }
-                              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                            />
-                          </div>
-                        ) : (
-                          <select
-                            value={vendorFormData.company_name || ""}
-                            onChange={(e) =>
-                              setVendorFormData({
-                                ...vendorFormData,
-                                company_name: e.target.value,
-                              })
-                            }
-                            disabled={isVendorSubmitting}
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium cursor-pointer"
-                          >
-                            <option value="">
-                              Direct / All (No Company Filter)
-                            </option>
-                            {availableCompaniesForVendor.map((comp) => (
-                              <option key={comp} value={comp}>
-                                {comp}
+                              className="text-[11px] text-slate-400 hover:text-slate-600 hover:underline font-medium cursor-pointer"
+                            >
+                              Reset to Direct
+                            </button>
+                          )}
+                        </div>
+
+                        <select
+                          value={vendorFormData.company_name || ""}
+                          onChange={(e) =>
+                            setVendorFormData({
+                              ...vendorFormData,
+                              company_name: e.target.value,
+                            })
+                          }
+                          disabled={isVendorSubmitting}
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium cursor-pointer"
+                        >
+                          <option value="">
+                            Direct / All (No Company Filter)
+                          </option>
+                          {vendorFormData.company_name &&
+                            !availableCompaniesForVendor.includes(
+                              vendorFormData.company_name,
+                            ) && (
+                              <option value={vendorFormData.company_name}>
+                                {vendorFormData.company_name}
                               </option>
-                            ))}
-                          </select>
-                        )}
+                            )}
+                          {availableCompaniesForVendor.map((comp) => (
+                            <option key={comp} value={comp}>
+                              {comp}
+                            </option>
+                          ))}
+                        </select>
 
                         <p className="text-[11px] text-slate-500">
                           {vendorFormData.company_name
@@ -1141,17 +1649,24 @@ const Settings = ({ readOnly = false }) => {
                               onClick={handleVendorAddDistrictContact}
                               disabled={
                                 isVendorSubmitting ||
-                                (districts.length > 0 &&
-                                  (vendorFormData.district_contacts?.length ||
-                                    0) >= districts.length)
+                                districts.length === 0 ||
+                                (vendorFormData.district_contacts?.length || 0) >=
+                                  districts.reduce((acc, d) => {
+                                    const dAreas = getDistrictAreas(d);
+                                    return acc + Math.max(1, dAreas.length);
+                                  }, 0)
                               }
                               className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-slate-100 text-indigo-700 rounded border border-indigo-200 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               title={
-                                districts.length > 0 &&
-                                (vendorFormData.district_contacts?.length ||
-                                  0) >= districts.length
-                                  ? "All available districts have been assigned"
-                                  : "Add contact for another district"
+                                districts.length === 0
+                                  ? "No districts configured"
+                                  : (vendorFormData.district_contacts?.length || 0) >=
+                                    districts.reduce((acc, d) => {
+                                      const dAreas = getDistrictAreas(d);
+                                      return acc + Math.max(1, dAreas.length);
+                                    }, 0)
+                                  ? "All available districts and areas have been assigned"
+                                  : "Add contact for another district or area"
                               }
                             >
                               <Plus size={12} /> Add District Contact
@@ -1178,26 +1693,39 @@ const Settings = ({ readOnly = false }) => {
                             <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                               {vendorFormData.district_contacts.map(
                                 (dc, index) => {
-                                  // Exclude districts selected in other divs
-                                  const otherSelectedDistricts = (
-                                    vendorFormData.district_contacts || []
-                                  )
-                                    .filter((_, idx) => idx !== index)
-                                    .map((item) => item.district)
-                                    .filter(Boolean);
+                                  const currentMatchedDist = districts.find(
+                                    (d) =>
+                                      (d.name || "").trim().toLowerCase() ===
+                                      (dc.district || "").trim().toLowerCase()
+                                  );
+                                  const canonicalDistrict = currentMatchedDist ? currentMatchedDist.name : (dc.district || "");
+                                  const distAreas = getDistrictAreas(canonicalDistrict);
 
-                                  const availableDistrictsForRow =
-                                    districts.filter(
-                                      (d) =>
-                                        !otherSelectedDistricts.includes(
-                                          d.name,
-                                        ),
+                                  // Only show areas that have not been selected by an earlier row (or belong to this row)
+                                  const availableDistAreas = distAreas.filter((aName) => {
+                                    const firstIndexWithArea = (vendorFormData.district_contacts || []).findIndex(
+                                      (item) =>
+                                        (item.district || "").trim().toLowerCase() === (dc.district || "").trim().toLowerCase() &&
+                                        (item.area || "").trim().toLowerCase() === aName.toLowerCase()
                                     );
+                                    return firstIndexWithArea === -1 || firstIndexWithArea === index;
+                                  });
+
+                                  // Detect if this row is an exact duplicate of an earlier card
+                                  const isDuplicateEntry = (vendorFormData.district_contacts || []).some(
+                                    (item, idx) =>
+                                      idx < index &&
+                                      (item.district || "").trim().toLowerCase() === (dc.district || "").trim().toLowerCase() &&
+                                      (item.area || "").trim().toLowerCase() === (dc.area || "").trim().toLowerCase() &&
+                                      (dc.area || "").trim() !== ""
+                                  );
 
                                   return (
                                     <div
                                       key={index}
-                                      className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2.5 relative group hover:border-slate-300 transition-all"
+                                      className={`p-3 bg-white rounded-xl border shadow-xs space-y-2.5 relative group transition-all ${
+                                        isDuplicateEntry ? "border-rose-300 bg-rose-50/20" : "border-slate-200 hover:border-slate-300"
+                                      }`}
                                     >
                                       <div className="flex justify-between items-center">
                                         <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
@@ -1206,7 +1734,7 @@ const Settings = ({ readOnly = false }) => {
                                           </span>
                                           District Contact{" "}
                                           {dc.district
-                                            ? `(${dc.district})`
+                                            ? `(${dc.district}${dc.area ? ` - ${dc.area}` : ""})`
                                             : ""}
                                         </span>
                                         <button
@@ -1224,44 +1752,135 @@ const Settings = ({ readOnly = false }) => {
                                         </button>
                                       </div>
 
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                                         {/* 1st field: District dropdown */}
                                         <div className="space-y-1">
                                           <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
                                             1. District *
                                           </label>
                                           <select
-                                            value={dc.district || ""}
-                                            onChange={(e) =>
+                                            value={canonicalDistrict}
+                                            required
+                                            onChange={(e) => {
+                                              const newDist = e.target.value;
                                               handleVendorUpdateDistrictContact(
                                                 index,
                                                 "district",
-                                                e.target.value,
-                                              )
-                                            }
+                                                newDist,
+                                              );
+                                              // Auto-assign first available area for this newly selected district
+                                              const newDistAreas = getDistrictAreas(newDist);
+                                              const otherRowsWithNewD = (vendorFormData.district_contacts || []).filter(
+                                                (item, idx) =>
+                                                  idx !== index &&
+                                                  (item.district || "").trim().toLowerCase() === newDist.trim().toLowerCase()
+                                              );
+                                              const otherTaken = otherRowsWithNewD.map(item => (item.area || "").trim().toLowerCase());
+                                              const firstAvailable = newDistAreas.find(a => !otherTaken.includes(a.toLowerCase())) || "";
+                                              handleVendorUpdateDistrictContact(
+                                                index,
+                                                "area",
+                                                firstAvailable,
+                                              );
+                                            }}
                                             disabled={isVendorSubmitting}
                                             className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium cursor-pointer"
                                           >
                                             <option value="">
                                               Select District
                                             </option>
-                                            {availableDistrictsForRow.map(
-                                              (d) => (
+                                            {canonicalDistrict &&
+                                              !districts.some(
+                                                (d) =>
+                                                  (d.name || "").trim().toLowerCase() ===
+                                                  canonicalDistrict.trim().toLowerCase(),
+                                              ) && (
+                                                <option value={canonicalDistrict}>
+                                                  {canonicalDistrict}
+                                                </option>
+                                              )}
+                                            {districts.map((d) => {
+                                              const dAreas = getDistrictAreas(d);
+                                              const otherRowsWithD = (vendorFormData.district_contacts || []).filter(
+                                                (item, idx) =>
+                                                  idx !== index &&
+                                                  (item.district || "").trim().toLowerCase() === (d.name || "").trim().toLowerCase()
+                                              );
+                                              const otherTakenAreas = otherRowsWithD
+                                                .map((item) => (item.area || "").trim().toLowerCase())
+                                                .filter(Boolean);
+                                              const isCurrentDist = canonicalDistrict.trim().toLowerCase() === (d.name || "").trim().toLowerCase();
+                                              const hasRemainingAreas = dAreas.length > 0 && dAreas.some((a) => !otherTakenAreas.includes(a.toLowerCase()));
+                                              const isExhausted = !isCurrentDist && (dAreas.length > 0 ? !hasRemainingAreas : false);
+
+                                              return (
                                                 <option
                                                   key={d.id || d.name}
                                                   value={d.name}
+                                                  disabled={isExhausted}
                                                 >
-                                                  {d.name}
+                                                  {d.name} {isExhausted ? "(All areas assigned)" : ""}
                                                 </option>
-                                              ),
+                                              );
+                                            })}
+                                          </select>
+                                        </div>
+
+                                        {/* 2nd field: Area dropdown (under that district only, mandatory) */}
+                                        <div className="space-y-1">
+                                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                            2. Area *
+                                          </label>
+                                          <select
+                                            value={dc.area || ""}
+                                            required
+                                            onChange={(e) =>
+                                              handleVendorUpdateDistrictContact(
+                                                index,
+                                                "area",
+                                                e.target.value,
+                                              )
+                                            }
+                                            disabled={isVendorSubmitting || !dc.district}
+                                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 ${
+                                              !dc.area ? "border-amber-300 bg-amber-50/20" : "border-slate-200"
+                                            }`}
+                                          >
+                                            {!dc.district ? (
+                                              <option value="">
+                                                Select District first
+                                              </option>
+                                            ) : distAreas.length === 0 ? (
+                                              <option value="" disabled>
+                                                No areas configured for this district
+                                              </option>
+                                            ) : (
+                                              <>
+                                                <option value="">
+                                                  Select Area *
+                                                </option>
+                                                {availableDistAreas.map((aName) => (
+                                                  <option
+                                                    key={aName}
+                                                    value={aName}
+                                                  >
+                                                    {aName}
+                                                  </option>
+                                                ))}
+                                                {availableDistAreas.length === 0 && (
+                                                  <option value="" disabled>
+                                                    All areas for this district assigned
+                                                  </option>
+                                                )}
+                                              </>
                                             )}
                                           </select>
                                         </div>
 
-                                        {/* 2nd field: Input field for its number for that vendor number */}
+                                        {/* 3rd field: Contact Number */}
                                         <div className="space-y-1">
                                           <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                            2. Contact Number *
+                                            3. Phone *
                                           </label>
                                           <input
                                             type="text"
@@ -1279,10 +1898,10 @@ const Settings = ({ readOnly = false }) => {
                                           />
                                         </div>
 
-                                        {/* 3rd field: Contact person name */}
+                                        {/* 4th field: Contact Name */}
                                         <div className="space-y-1">
                                           <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                            3. Contact Name
+                                            4. Person Name
                                           </label>
                                           <input
                                             type="text"
@@ -1300,14 +1919,14 @@ const Settings = ({ readOnly = false }) => {
                                           />
                                         </div>
 
-                                        {/* 4th field: Email */}
+                                        {/* 5th field: Email */}
                                         <div className="space-y-1">
                                           <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                            4. Email Address
+                                            5. Email
                                           </label>
                                           <input
                                             type="email"
-                                            placeholder="e.g. pune@supplier.com"
+                                            placeholder="e.g. rep@dist.com"
                                             value={dc.email || ""}
                                             onChange={(e) =>
                                               handleVendorUpdateDistrictContact(
@@ -1321,6 +1940,15 @@ const Settings = ({ readOnly = false }) => {
                                           />
                                         </div>
                                       </div>
+
+                                      {isDuplicateEntry && (
+                                        <div className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded px-2.5 py-1 mt-1 flex items-center gap-1.5">
+                                          <span>⚠️</span>
+                                          <span>
+                                            Duplicate contact entry: This area is already assigned in another contact card above. Please select a different area or district.
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 },
@@ -1496,31 +2124,7 @@ const Settings = ({ readOnly = false }) => {
                             )}
                           </td>
                           <td className="px-6 py-4 text-slate-600 font-medium">
-                            {Array.isArray(vendor.district_contacts) &&
-                            vendor.district_contacts.length > 0 ? (
-                              <div className="flex flex-wrap gap-1 max-w-xs">
-                                {vendor.district_contacts.map((dc, idx) => (
-                                  <span
-                                    key={idx}
-                                    title={`${dc.district}: ${dc.phone || "No phone"}${dc.name ? ` (${dc.name})` : ""}${dc.email ? ` • ${dc.email}` : ""}`}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold bg-indigo-50 text-indigo-700 rounded border border-indigo-100"
-                                  >
-                                    <MapPin
-                                      size={9}
-                                      className="text-indigo-500 shrink-0"
-                                    />
-                                    <span className="font-bold text-slate-800">
-                                      {dc.district}:
-                                    </span>{" "}
-                                    {dc.phone || "—"}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="font-semibold text-slate-800">
-                                {vendor.contact_number || vendor.contact || "—"}
-                              </div>
-                            )}
+                            {renderVendorDistrictContactBadges(vendor)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
                             {vendor.email || "—"}
@@ -2052,7 +2656,7 @@ const Settings = ({ readOnly = false }) => {
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. Pune, Akole , Ahilyanagar..."
+                          placeholder="e.g. Raipur, Pune, Raigad, Akole..."
                           value={districtFormData.name}
                           onChange={(e) =>
                             setDistrictFormData({
@@ -2067,6 +2671,84 @@ const Settings = ({ readOnly = false }) => {
                         />
                       </div>
 
+                      {/* District Areas Management Section */}
+                      <div className="space-y-2 pt-3 border-t border-slate-100">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              District Areas
+                              {districtFormData.areas?.length > 0 && (
+                                <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">
+                                  {districtFormData.areas.length}
+                                </span>
+                              )}
+                            </label>
+                            <p className="text-[11px] text-slate-500">
+                              Define multiple areas under this district (e.g. Saddu, Pandri, Wagholi).
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleDistrictAddArea}
+                            disabled={isDistrictSubmitting}
+                            className="px-2.5 py-1 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-md border border-indigo-200 transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus size={13} /> Add Area
+                          </button>
+                        </div>
+
+                        {(!districtFormData.areas || districtFormData.areas.length === 0) ? (
+                          <div className="text-center py-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+                            <p className="text-xs text-slate-500 font-medium">No areas added yet for this district.</p>
+                            <button
+                              type="button"
+                              onClick={handleDistrictAddArea}
+                              className="mt-1.5 text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
+                            >
+                              + Add First Area
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {districtFormData.areas.map((area, aIdx) => {
+                              const aName = typeof area === "string" ? area : (area.name || "");
+                              return (
+                                <div
+                                  key={area.id || aIdx}
+                                  className="p-2 bg-slate-50 rounded-lg border border-slate-200 flex items-center gap-2.5 shadow-2xs"
+                                >
+                                  <span className="w-5 h-5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] text-slate-500 font-bold shrink-0">
+                                    {aIdx + 1}
+                                  </span>
+                                  <div className="flex-1">
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. Saddu, Pandri, Wagholi..."
+                                      value={aName}
+                                      onChange={(e) =>
+                                        handleDistrictUpdateArea(aIdx, e.target.value)
+                                      }
+                                      required
+                                      disabled={isDistrictSubmitting}
+                                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDistrictRemoveArea(aIdx)}
+                                    disabled={isDistrictSubmitting}
+                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                                    title="Remove this area"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex gap-2.5 pt-2 border-t border-slate-100">
                         <button
                           type="submit"
@@ -2076,7 +2758,7 @@ const Settings = ({ readOnly = false }) => {
                           {isDistrictSubmitting
                             ? "Saving..."
                             : editingDistrict
-                              ? "Update District"
+                              ? "Update District & Areas"
                               : "Create District"}
                         </button>
                         <button
@@ -2105,7 +2787,7 @@ const Settings = ({ readOnly = false }) => {
                           District Name
                         </th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                          Assigned Companies
+                          Areas
                         </th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
                           Actions
@@ -2135,23 +2817,46 @@ const Settings = ({ readOnly = false }) => {
                                 {dist.name}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              {assignedCompanies.length > 0 ? (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {assignedCompanies.map((c) => (
-                                    <span
-                                      key={c.id}
-                                      className="px-2.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 rounded-md"
-                                    >
-                                      {c.name}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 text-xs italic">
-                                  No company assigned yet
-                                </span>
-                              )}
+                            <td className="px-6 py-4">
+                              {(() => {
+                                const areasList = (Array.isArray(dist.areas) ? dist.areas : [])
+                                  .map((a) => (typeof a === "string" ? a : a?.name || "").trim())
+                                  .filter(Boolean);
+                                if (areasList.length > 0) {
+                                  return (
+                                    <div className="flex flex-wrap gap-1.5 items-center">
+                                      {areasList.map((aName, aIdx) => (
+                                        <span
+                                          key={aIdx}
+                                          className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md"
+                                        >
+                                          <MapPin size={10} className="text-indigo-500" />
+                                          {aName}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                                if (assignedCompanies.length > 0) {
+                                  return (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {assignedCompanies.map((c) => (
+                                        <span
+                                          key={c.id}
+                                          className="px-2.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 rounded-md"
+                                        >
+                                          {c.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <span className="text-slate-400 text-xs italic">
+                                    No areas defined
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap flex gap-2">
                               <button
@@ -2731,24 +3436,24 @@ const Settings = ({ readOnly = false }) => {
                   </span>
                   Supplier / Vendor Portals
                 </h3>
-                <div className="overflow-hidden border border-slate-150 rounded-xl">
+                <div className="overflow-hidden border border-slate-200 rounded-xl">
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm text-left">
-                      <thead className="bg-slate-50/70">
+                    <table className="w-full divide-y divide-slate-200 text-sm text-left">
+                      <thead className="bg-slate-50/80">
                         <tr>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Vendor Name
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Company Name
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Contact Number
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Permanent Portal URL
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
                             Actions
                           </th>
                         </tr>
@@ -2765,16 +3470,19 @@ const Settings = ({ readOnly = false }) => {
                           return (
                             <tr
                               key={v.id}
-                              className="hover:bg-slate-50/30 transition-colors"
+                              className="hover:bg-slate-50/40 transition-colors"
                             >
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <strong className="text-slate-950 font-bold">
+                              <td className="px-4 py-3">
+                                <strong
+                                  className="text-slate-950 font-bold block truncate max-w-[200px]"
+                                  title={v.party_name}
+                                >
                                   {v.party_name}
                                 </strong>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-3 whitespace-nowrap">
                                 {v.company_name ? (
-                                  <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
                                     {v.company_name}
                                   </span>
                                 ) : (
@@ -2783,68 +3491,23 @@ const Settings = ({ readOnly = false }) => {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 text-slate-600 font-medium">
-                                {(() => {
-                                  let contacts = v.district_contacts;
-                                  if (typeof contacts === "string") {
-                                    try {
-                                      contacts = JSON.parse(contacts);
-                                    } catch (e) {
-                                      contacts = [];
-                                    }
-                                  }
-                                  if (
-                                    !Array.isArray(contacts) ||
-                                    contacts.length === 0
-                                  ) {
-                                    try {
-                                      const cached = localStorage.getItem(
-                                        `drinqkart_vendor_district_contacts_${v.id}`,
-                                      );
-                                      if (cached) contacts = JSON.parse(cached);
-                                    } catch (e) {}
-                                  }
-                                  const list = Array.isArray(contacts)
-                                    ? contacts
-                                    : [];
-
-                                  if (list.length > 0) {
-                                    return (
-                                      <div className="flex flex-wrap gap-1 max-w-xs">
-                                        {list.map((dc, idx) => (
-                                          <span
-                                            key={idx}
-                                            title={`${dc.district}: ${dc.phone || dc.contact || "No phone"}${dc.name ? ` (${dc.name})` : ""}${dc.email ? ` • ${dc.email}` : ""}`}
-                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold bg-indigo-50 text-indigo-700 rounded border border-indigo-100"
-                                          >
-                                            <MapPin
-                                              size={9}
-                                              className="text-indigo-500 shrink-0"
-                                            />
-                                            <span className="font-bold text-slate-800">
-                                              {dc.district}:
-                                            </span>{" "}
-                                            {dc.phone || dc.contact || "—"}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    );
-                                  }
-                                  return (
-                                    <div className="font-semibold text-slate-800">
-                                      {v.contact_number || v.contact || "—"}
-                                    </div>
-                                  );
-                                })()}
+                              <td className="px-4 py-3 text-slate-600 font-medium">
+                                {renderVendorDistrictContactBadges(v)}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap max-w-xs md:max-w-sm truncate">
-                                <code className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded text-xs font-mono text-indigo-700 break-all select-all">
-                                  {link}
-                                </code>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center max-w-[200px]">
+                                  <code
+                                    title={link}
+                                    className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                                  >
+                                    {link.replace(/^https?:\/\/[^/]+/, "") ||
+                                      link}
+                                  </code>
+                                </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-3 whitespace-nowrap text-right">
                                 <button
-                                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+                                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
                                   onClick={() => {
                                     navigator.clipboard.writeText(link);
                                     alert(
@@ -2852,7 +3515,7 @@ const Settings = ({ readOnly = false }) => {
                                     );
                                   }}
                                 >
-                                  <Copy size={13} /> Copy Link
+                                  <Copy size={12} /> Copy Link
                                 </button>
                               </td>
                             </tr>
@@ -2862,7 +3525,7 @@ const Settings = ({ readOnly = false }) => {
                           <tr>
                             <td
                               colSpan="5"
-                              className="px-6 py-8 text-center text-slate-500 font-medium italic"
+                              className="px-4 py-8 text-center text-slate-500 font-medium italic"
                             >
                               No matching vendors found.
                             </td>
@@ -2882,21 +3545,21 @@ const Settings = ({ readOnly = false }) => {
                   </span>
                   Transporter / Logistics Portals
                 </h3>
-                <div className="overflow-hidden border border-slate-150 rounded-xl">
+                <div className="overflow-hidden border border-slate-200 rounded-xl">
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm text-left">
-                      <thead className="bg-slate-50/70">
+                    <table className="w-full divide-y divide-slate-200 text-sm text-left">
+                      <thead className="bg-slate-50/80">
                         <tr>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Transporter Name
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Contact Number
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Permanent Portal URL
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
                             Actions
                           </th>
                         </tr>
@@ -2913,24 +3576,33 @@ const Settings = ({ readOnly = false }) => {
                           return (
                             <tr
                               key={t.id}
-                              className="hover:bg-slate-50/30 transition-colors"
+                              className="hover:bg-slate-50/40 transition-colors"
                             >
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <strong className="text-slate-950 font-bold">
+                              <td className="px-4 py-3">
+                                <strong
+                                  className="text-slate-950 font-bold block truncate max-w-[240px]"
+                                  title={t.name}
+                                >
                                   {t.name}
                                 </strong>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-semibold">
+                              <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold font-mono text-xs">
                                 {t.contact_number || "—"}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap max-w-xs md:max-w-sm truncate">
-                                <code className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded text-xs font-mono text-indigo-700 break-all select-all">
-                                  {link}
-                                </code>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center max-w-[240px]">
+                                  <code
+                                    title={link}
+                                    className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                                  >
+                                    {link.replace(/^https?:\/\/[^/]+/, "") ||
+                                      link}
+                                  </code>
+                                </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-3 whitespace-nowrap text-right">
                                 <button
-                                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+                                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
                                   onClick={() => {
                                     navigator.clipboard.writeText(link);
                                     alert(
@@ -2938,7 +3610,7 @@ const Settings = ({ readOnly = false }) => {
                                     );
                                   }}
                                 >
-                                  <Copy size={13} /> Copy Link
+                                  <Copy size={12} /> Copy Link
                                 </button>
                               </td>
                             </tr>
@@ -2948,7 +3620,7 @@ const Settings = ({ readOnly = false }) => {
                           <tr>
                             <td
                               colSpan="4"
-                              className="px-6 py-8 text-center text-slate-500 font-medium italic"
+                              className="px-4 py-8 text-center text-slate-500 font-medium italic"
                             >
                               No matching transporters found.
                             </td>
@@ -2968,21 +3640,21 @@ const Settings = ({ readOnly = false }) => {
                   </span>
                   Receiver / Site Portals
                 </h3>
-                <div className="overflow-hidden border border-slate-150 rounded-xl">
+                <div className="overflow-hidden border border-slate-200 rounded-xl">
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm text-left">
-                      <thead className="bg-slate-50/70">
+                    <table className="w-full divide-y divide-slate-200 text-sm text-left">
+                      <thead className="bg-slate-50/80">
                         <tr>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Receiver Name
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Contact Number
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Permanent Portal URL
                           </th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
                             Actions
                           </th>
                         </tr>
@@ -2999,24 +3671,33 @@ const Settings = ({ readOnly = false }) => {
                           return (
                             <tr
                               key={r.id}
-                              className="hover:bg-slate-50/30 transition-colors"
+                              className="hover:bg-slate-50/40 transition-colors"
                             >
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <strong className="text-slate-950 font-bold">
+                              <td className="px-4 py-3">
+                                <strong
+                                  className="text-slate-950 font-bold block truncate max-w-[240px]"
+                                  title={r.name}
+                                >
                                   {r.name}
                                 </strong>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-semibold">
+                              <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold font-mono text-xs">
                                 {r.contact_number || "—"}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap max-w-xs md:max-w-sm truncate">
-                                <code className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded text-xs font-mono text-indigo-700 break-all select-all">
-                                  {link}
-                                </code>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center max-w-[240px]">
+                                  <code
+                                    title={link}
+                                    className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                                  >
+                                    {link.replace(/^https?:\/\/[^/]+/, "") ||
+                                      link}
+                                  </code>
+                                </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-3 whitespace-nowrap text-right">
                                 <button
-                                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+                                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
                                   onClick={() => {
                                     navigator.clipboard.writeText(link);
                                     alert(
@@ -3024,7 +3705,7 @@ const Settings = ({ readOnly = false }) => {
                                     );
                                   }}
                                 >
-                                  <Copy size={13} /> Copy Link
+                                  <Copy size={12} /> Copy Link
                                 </button>
                               </td>
                             </tr>
@@ -3034,7 +3715,7 @@ const Settings = ({ readOnly = false }) => {
                           <tr>
                             <td
                               colSpan="4"
-                              className="px-6 py-8 text-center text-slate-500 font-medium italic"
+                              className="px-4 py-8 text-center text-slate-500 font-medium italic"
                             >
                               No matching receivers found.
                             </td>
@@ -3049,6 +3730,227 @@ const Settings = ({ readOnly = false }) => {
           )}
         </div>
       </div>
+
+      {/* Floating District Area Contacts Preview Popover */}
+      {hoverDistrictPreview && (
+        <div
+          style={(() => {
+            if (!hoverDistrictPreview?.rect) return {};
+            const { top, bottom, left } = hoverDistrictPreview.rect;
+            const modalWidth = 360;
+            const modalEstimatedHeight = 280;
+
+            let adjustedLeft = left;
+            if (adjustedLeft + modalWidth > window.innerWidth - 16) {
+              adjustedLeft = Math.max(16, window.innerWidth - modalWidth - 16);
+            }
+
+            const fitsBelow =
+              bottom + modalEstimatedHeight < window.innerHeight - 16;
+            if (fitsBelow) {
+              return {
+                position: "fixed",
+                top: `${bottom + 4}px`,
+                left: `${adjustedLeft}px`,
+                width: `${modalWidth}px`,
+                zIndex: 9999,
+              };
+            } else {
+              return {
+                position: "fixed",
+                bottom: `${window.innerHeight - top + 4}px`,
+                left: `${adjustedLeft}px`,
+                width: `${modalWidth}px`,
+                zIndex: 9999,
+              };
+            }
+          })()}
+          onMouseEnter={() => {
+            if (hoverDistrictTimerRef.current) {
+              clearTimeout(hoverDistrictTimerRef.current);
+              hoverDistrictTimerRef.current = null;
+            }
+          }}
+          onMouseLeave={handleCloseDistrictHover}
+          onClick={(e) => e.stopPropagation()}
+          className="district-popover-container bg-white rounded-xl shadow-2xl border border-indigo-100 overflow-hidden ring-1 ring-slate-900/10 animate-in fade-in zoom-in-95 duration-150 select-none before:absolute before:-bottom-3 before:left-0 before:right-0 before:h-3 before:content-[''] after:absolute after:-top-3 after:left-0 after:right-0 after:h-3 after:content-['']"
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                  <MapPin size={15} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm tracking-wide text-white uppercase">
+                      {hoverDistrictPreview.groups && hoverDistrictPreview.groups.length > 1
+                        ? `${hoverDistrictPreview.groups.length} Districts`
+                        : hoverDistrictPreview.district}
+                    </span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-indigo-500/30 text-indigo-200 border border-indigo-400/20">
+                      {hoverDistrictPreview.items.length}{" "}
+                      {hoverDistrictPreview.items.length === 1
+                        ? "Area"
+                        : "Areas"}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-300 font-medium truncate max-w-[210px]">
+                    {hoverDistrictPreview.vendorName}
+                    {hoverDistrictPreview.companyName && (
+                      <span className="text-slate-400">
+                        {" "}
+                        • {hoverDistrictPreview.companyName}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHoverDistrictPreview(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Multi-District Selector (Hover over any district to show its areas) */}
+          {hoverDistrictPreview.groups && hoverDistrictPreview.groups.length > 1 && (
+            <div className="bg-slate-100/90 border-b border-slate-200 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider px-0.5">
+                <span>Districts ({hoverDistrictPreview.groups.length}):</span>
+                <span className="text-indigo-600 font-semibold normal-case">
+                  Hover to switch district
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {hoverDistrictPreview.groups.map((grp, idx) => {
+                  const isActive = (hoverDistrictPreview.activeDistrictIndex ?? 0) === idx;
+                  return (
+                    <button
+                      key={grp.districtName}
+                      type="button"
+                      onMouseEnter={() => handleSelectHoverDistrict(idx)}
+                      onClick={() => handleSelectHoverDistrict(idx)}
+                      className={`flex items-center justify-between px-2.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-left shadow-xs ${
+                        isActive
+                          ? "bg-indigo-600 text-white ring-2 ring-indigo-400 shadow-sm"
+                          : "bg-white text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 hover:border-indigo-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <MapPin
+                          size={12}
+                          className={isActive ? "text-white" : "text-indigo-600"}
+                        />
+                        <span className="truncate uppercase">{grp.districtName}</span>
+                      </div>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ml-1 ${
+                          isActive
+                            ? "bg-white/20 text-white"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {grp.items.length} {grp.items.length === 1 ? "area" : "areas"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Active District Header Banner */}
+          <div className="px-3 py-1.5 bg-slate-50 flex items-center justify-between border-b border-slate-200/60">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                {hoverDistrictPreview.district} District Areas
+              </span>
+            </div>
+            <span className="text-[10px] font-semibold text-slate-500">
+              {hoverDistrictPreview.items.length}{" "}
+              {hoverDistrictPreview.items.length === 1 ? "contact" : "contacts"}
+            </span>
+          </div>
+
+          {/* Area List */}
+          <div className="p-3 max-h-72 overflow-y-auto space-y-2 bg-slate-50/60">
+            {hoverDistrictPreview.items.map((item, idx) => (
+              <div
+                key={idx}
+                className="bg-white rounded-lg p-2.5 border border-slate-200/80 shadow-xs hover:border-indigo-200 transition-all"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                    {item.area || `${item.district || hoverDistrictPreview.district} (Direct / All Areas)`}
+                  </span>
+                  {item.name && (
+                    <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 truncate max-w-[140px]" title={item.name}>
+                      <User size={11} className="text-slate-400 shrink-0" />
+                      <span className="truncate">{item.name}</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 mt-1 bg-slate-50 p-1.5 rounded border border-slate-100">
+                  <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-800">
+                    <Phone size={12} className="text-indigo-600 shrink-0" />
+                    <span>{item.phone || item.contact || "No phone"}</span>
+                  </div>
+                  {(item.phone || item.contact) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const num = item.phone || item.contact;
+                        navigator.clipboard.writeText(num);
+                        setCopiedContactPhone(num);
+                        setTimeout(() => setCopiedContactPhone(null), 1800);
+                      }}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded border transition-all cursor-pointer ${
+                        copiedContactPhone === (item.phone || item.contact)
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                          : "bg-white text-slate-600 hover:text-indigo-600 border-slate-200 hover:border-indigo-200"
+                      }`}
+                    >
+                      {copiedContactPhone ===
+                      (item.phone || item.contact) ? (
+                        <>
+                          <Check size={10} className="text-emerald-600" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={10} />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {item.email && (
+                  <div className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-1.5 px-0.5 truncate">
+                    <Mail size={11} className="text-slate-400 shrink-0" />
+                    <span className="truncate">{item.email}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div className="px-3 py-1.5 bg-slate-100/70 border-t border-slate-200/60 text-[10px] text-slate-500 flex items-center justify-between">
+            <span>District Area Directory</span>
+            <span className="font-semibold text-indigo-600">DRINQKART</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

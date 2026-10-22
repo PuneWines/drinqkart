@@ -280,107 +280,117 @@ export const dashboardSyncService = {
     const cleanIndentId = currentIndentId ? currentIndentId.split("::")[0].trim() : null;
     const now = new Date().toISOString();
 
-    for (const item of itemsForActiveParty) {
-      const itemTitle = (item.itemName || item.item_name || "").trim();
-      if (!itemTitle) continue;
+    // 1. Batch fetch all existing dashboard rows for this indent in a single roundtrip
+    const existingRowMap = new Map();
+    if (cleanIndentId) {
+      const { data: matchedRows, error: matchErr } = await supabase
+        .from("purchase_dashboard")
+        .select("id, item_name")
+        .eq("indent_id", cleanIndentId);
 
-      let existingRow = null;
-      if (cleanIndentId) {
-        const { data: matchedRows, error: matchErr } = await supabase
-          .from("purchase_dashboard")
-          .select("id")
-          .eq("indent_id", cleanIndentId)
-          .eq("item_name", itemTitle)
-          .limit(1);
-
-        if (matchErr) {
-          throw new Error(`Failed to lookup item in dashboard: ${matchErr.message}`);
-        }
-        if (matchedRows && matchedRows.length > 0) {
-          existingRow = matchedRows[0];
-        }
+      if (matchErr) {
+        throw new Error(`Failed to lookup items in dashboard: ${matchErr.message}`);
       }
-
-      if (existingRow) {
-        const { error: updErr } = await supabase
-          .from("purchase_dashboard")
-          .update({
-            po_id: insertedPoId,
-            po_number: freshPoNumber,
-            po_box: item.poBox != null ? parseFloat(item.poBox) : null,
-            po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
-            po_action: item.isDirectAdded ? "Direct Added in PO" : "PO Generated",
-            po_emp_code: currentEmpCode,
-            po_generated_at: now,
-            trader_status: "Pending",
-            transporter_status: "Pending",
-            receiver_status: "Pending",
-            is_deleted: false,
-            updated_at: now,
-          })
-          .eq("id", existingRow.id);
-
-        if (updErr) {
-          throw new Error(`Failed to update PO record in dashboard: ${updErr.message}`);
+      (matchedRows || []).forEach((row) => {
+        if (row.item_name) {
+          existingRowMap.set(row.item_name.trim().toLowerCase(), row);
         }
-      } else {
-        // Direct added item at PO stage
-        const { error: insErr } = await supabase
-          .from("purchase_dashboard")
-          .insert({
-            indent_id: cleanIndentId || `PO-${freshPoNumber}`,
-            shop_name: currentShopName || "Default",
-            company_name: item.companyName || item.company_name || null,
-            party_name: activeParty || "UNKNOWN",
-            item_name: itemTitle,
-            order_box: 0,
-            order_qty: 0,
-            approved_box: item.approvedBox != null ? parseFloat(item.approvedBox) : 0,
-            approved_qty: item.approvedQty != null ? parseFloat(item.approvedQty) : 0,
-            po_id: insertedPoId,
-            po_number: freshPoNumber,
-            po_box: item.poBox != null ? parseFloat(item.poBox) : null,
-            po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
-            po_action: "Direct Added in PO",
-            po_emp_code: currentEmpCode,
-            po_generated_at: now,
-            trader_status: "Pending",
-            transporter_status: "Pending",
-            receiver_status: "Pending",
-            is_deleted: false,
-            indent_created_at: now,
-            updated_at: now,
-          });
-
-        if (insErr) {
-          throw new Error(`Failed to insert Direct Added PO item to dashboard: ${insErr.message}`);
-        }
-      }
+      });
     }
 
-    // Mark items removed/excluded at PO stage as po_action = 'delete'
+    // 2. Concurrently update or insert all items for this PO
+    await Promise.all(
+      itemsForActiveParty.map(async (item) => {
+        const itemTitle = (item.itemName || item.item_name || "").trim();
+        if (!itemTitle) return;
+
+        const existingRow = cleanIndentId
+          ? existingRowMap.get(itemTitle.toLowerCase())
+          : null;
+
+        if (existingRow) {
+          const { error: updErr } = await supabase
+            .from("purchase_dashboard")
+            .update({
+              po_id: insertedPoId,
+              po_number: freshPoNumber,
+              po_box: item.poBox != null ? parseFloat(item.poBox) : null,
+              po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
+              po_action: item.isDirectAdded ? "Direct Added in PO" : "PO Generated",
+              po_emp_code: currentEmpCode,
+              po_generated_at: now,
+              trader_status: "Pending",
+              transporter_status: "Pending",
+              receiver_status: "Pending",
+              is_deleted: false,
+              updated_at: now,
+            })
+            .eq("id", existingRow.id);
+
+          if (updErr) {
+            throw new Error(`Failed to update PO record in dashboard: ${updErr.message}`);
+          }
+        } else {
+          // Direct added item at PO stage
+          const { error: insErr } = await supabase
+            .from("purchase_dashboard")
+            .insert({
+              indent_id: cleanIndentId || `PO-${freshPoNumber}`,
+              shop_name: currentShopName || "Default",
+              company_name: item.companyName || item.company_name || null,
+              party_name: activeParty || "UNKNOWN",
+              item_name: itemTitle,
+              order_box: 0,
+              order_qty: 0,
+              approved_box: item.approvedBox != null ? parseFloat(item.approvedBox) : 0,
+              approved_qty: item.approvedQty != null ? parseFloat(item.approvedQty) : 0,
+              po_id: insertedPoId,
+              po_number: freshPoNumber,
+              po_box: item.poBox != null ? parseFloat(item.poBox) : null,
+              po_qty: item.poQty != null ? parseFloat(item.poQty) : null,
+              po_action: "Direct Added in PO",
+              po_emp_code: currentEmpCode,
+              po_generated_at: now,
+              trader_status: "Pending",
+              transporter_status: "Pending",
+              receiver_status: "Pending",
+              is_deleted: false,
+              indent_created_at: now,
+              updated_at: now,
+            });
+
+          if (insErr) {
+            throw new Error(`Failed to insert Direct Added PO item to dashboard: ${insErr.message}`);
+          }
+        }
+      }),
+    );
+
+    // 3. Concurrently mark items removed/excluded at PO stage as po_action = 'delete'
     if (removedItemIds && removedItemIds.size > 0 && cleanIndentId) {
       const removedItemsList = (filteredApprovedItems || []).filter((i) =>
         removedItemIds.has(i.id)
       );
-      for (const remItem of removedItemsList) {
-        const remTitle = (remItem.item_name || remItem.itemName || "").trim();
-        if (remTitle) {
-          const { error: remErr } = await supabase
-            .from("purchase_dashboard")
-            .update({
-              po_action: "delete",
-              po_emp_code: currentEmpCode,
-              updated_at: now,
-            })
-            .eq("indent_id", cleanIndentId)
-            .eq("item_name", remTitle);
+      await Promise.all(
+        removedItemsList.map(async (remItem) => {
+          const remTitle = (remItem.item_name || remItem.itemName || "").trim();
+          if (remTitle) {
+            const { error: remErr } = await supabase
+              .from("purchase_dashboard")
+              .update({
+                po_action: "delete",
+                po_emp_code: currentEmpCode,
+                updated_at: now,
+              })
+              .eq("indent_id", cleanIndentId)
+              .eq("item_name", remTitle);
 
-          if (remErr) {
-            throw new Error(`Failed to mark dropped item in dashboard: ${remErr.message}`);
+            if (remErr) {
+              throw new Error(`Failed to mark dropped item in dashboard: ${remErr.message}`);
+            }
           }
-        }
-      }
+        }),
+      );
     }
   },
 
