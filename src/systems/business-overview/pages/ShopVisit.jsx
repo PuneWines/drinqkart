@@ -96,6 +96,32 @@ const CHECKLIST_DATA = [
     ]
   },
 ];
+
+const CHECKLIST_STORAGE_KEY = 'drinqkart_shop_visit_checklist_items_v1';
+
+export const getDynamicChecklistData = () => {
+  try {
+    const local = localStorage.getItem(CHECKLIST_STORAGE_KEY);
+    if (local) {
+      const flat = JSON.parse(local);
+      if (Array.isArray(flat) && flat.length > 0) {
+        const groupsMap = {};
+        flat
+          .filter((it) => it.is_active !== false)
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+          .forEach((it) => {
+            const grp = it.group_name || 'General';
+            if (!groupsMap[grp]) groupsMap[grp] = { group: grp, items: [] };
+            groupsMap[grp].items.push({ id: it.id, icon: it.icon || '📋', label: it.label });
+          });
+        const grouped = Object.values(groupsMap);
+        if (grouped.length > 0) return grouped;
+      }
+    }
+  } catch (_) {}
+  return CHECKLIST_DATA;
+};
+
 const TOTAL = CHECKLIST_DATA.reduce((n, g) => n + g.items.length, 0);
 const STATUS = {
   ok: { label: 'OK', color: '#1a9e5c', bg: '#e5f7ee', border: '#1a9e5c' },
@@ -184,7 +210,7 @@ const parseVisitChecks = (visit) => {
   return res;
 };
 
-const generateReportSummaryText = (visit, checks = {}) => {
+const generateReportSummaryText = (visit, checks = {}, activeChecklist = null) => {
   const shop = visit?.shop_name || 'Shop Visit';
   const vDate = visit?.visit_date ? fmtDate(visit.visit_date) : '-';
   const visitor = visit?.visitor_name || '-';
@@ -212,8 +238,11 @@ const generateReportSummaryText = (visit, checks = {}) => {
     L.push('');
   }
 
+  const listToUse = activeChecklist || getDynamicChecklistData();
+  const totalCount = listToUse.reduce((n, g) => n + g.items.length, 0);
+
   let done = 0, bad = 0, miss = 0;
-  CHECKLIST_DATA.forEach(g => {
+  listToUse.forEach(g => {
     L.push(`*${g.group}*`);
     g.items.forEach(it => {
       const s = checks[it.id];
@@ -225,7 +254,7 @@ const generateReportSummaryText = (visit, checks = {}) => {
     L.push('');
   });
 
-  L.push(`Summary: ${done}/${TOTAL} checked, ${bad} not ok, ${miss} missing.`);
+  L.push(`Summary: ${done}/${totalCount} checked, ${bad} not ok, ${miss} missing.`);
   return L.join('\n');
 };
 
@@ -535,7 +564,10 @@ function SignatureField({ label, value, onChange }) {
   );
 }
 
-function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose, onSaved }) {
+function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose, onSaved, activeChecklist = null }) {
+  const currentChecklist = activeChecklist || getDynamicChecklistData();
+  const totalItemsCount = currentChecklist.reduce((n, g) => n + g.items.length, 0);
+
   const [date, setDate] = useState(() => initialVisit?.visit_date ? initialVisit.visit_date.slice(0, 10) : todayISO());
   const [visitor, setVisitor] = useState(() => initialVisit?.visitor_name || '');
   const [shop, setShop] = useState(() => initialVisit?.shop_name || (defaultShop && defaultShop !== 'ALL' ? defaultShop : ''));
@@ -568,27 +600,16 @@ function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose,
   const ok = Object.values(checks).filter(v => v === 'ok').length;
   const bad = Object.values(checks).filter(v => v === 'bad').length;
   const miss = Object.values(checks).filter(v => v === 'miss').length;
-  const pct = Math.round(done / TOTAL * 100);
+  const pct = totalItemsCount ? Math.round(done / totalItemsCount * 100) : 0;
   const hero = shop ? (shops.find(s => s.shop_name === shop)?.full_name || shop) : 'Select shop to begin';
   const tog = (id, val) => setChecks(p => ({ ...p, [id]: p[id] === val ? null : val }));
 
   const report = () => {
-    const L = [`🏪 *Shop Visit Report*`, `Shop: ${hero}`, `Date: ${fmtDate(date)}`, `Visitor: ${visitor || '?'}`, `Handover: ${handover || '-'}  |  Takeover: ${takeover || '-'}`, ''];
-    if (remark) {
-      L.push(`*Remark:* ${remark}`);
-      L.push('');
-    }
-    if (manager1Name || manager2Name) {
-      L.push(`*Managers:* M1: ${manager1Name || '-'} | M2: ${manager2Name || '-'}`);
-      L.push('');
-    }
-    CHECKLIST_DATA.forEach(g => {
-      L.push(`*${g.group}*`);
-      g.items.forEach(it => { const s = checks[it.id]; L.push(`${s === 'ok' ? '✅' : s === 'bad' ? '❌' : s === 'miss' ? '⚠️' : '⬜'} ${it.icon} ${it.label} — ${s ? STATUS[s].label : 'Not checked'}`); });
-      L.push('');
-    });
-    L.push(`Summary: ${done}/${TOTAL} checked, ${bad} not ok, ${miss} missing.`);
-    return L.join('\n');
+    return generateReportSummaryText(
+      { shop_name: hero, visit_date: date, visitor_name: visitor, handover_by: handover, takeover_by: takeover, remark, manager1_name: manager1Name, manager2_name: manager2Name },
+      checks,
+      currentChecklist
+    );
   };
 
   const share = async () => {
@@ -709,7 +730,7 @@ function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose,
             </div>
           </div>
           <p style={{ fontSize: 12, color: '#64748b', margin: '0 4px 14px' }}>Tap status — items turn <b style={{ color: '#1a9e5c' }}>green</b>, <b style={{ color: '#d64545' }}>red</b>, or <b style={{ color: '#c98a1c' }}>amber</b>.</p>
-          {CHECKLIST_DATA.map(grp => {
+          {currentChecklist.map(grp => {
             const dg = grp.items.filter(it => checks[it.id]).length;
             const co = coll[grp.group];
             return (
@@ -813,7 +834,7 @@ function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose,
           <div style={{ height: 4 }} />
         </div>
         <div style={{ background: '#fff', borderTop: '1px solid #e2e8f0', padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
-          <MultiSegmentPie ok={ok} bad={bad} miss={miss} total={TOTAL} />
+          <MultiSegmentPie ok={ok} bad={bad} miss={miss} total={totalItemsCount} />
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={share} style={{ flex: 1, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#334155', borderRadius: 11, padding: 13, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}><Share2 size={15} /> Share report</button>
             <button onClick={save} disabled={saving} style={{ flex: 1, background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)', color: '#fff', border: 'none', borderRadius: 11, padding: 13, fontSize: 14.5, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.7 : 1, fontFamily: 'inherit' }}>
@@ -827,7 +848,8 @@ function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose,
   );
 }
 
-function ViewModal({ visit, onClose, onEdit, onSaved }) {
+function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null }) {
+  const currentChecklist = activeChecklist || getDynamicChecklistData();
   const scrollRef = useRef(null);
   const [filter, setFilter] = useState('all'); // 'all' | 'issues' | 'ok'
   const [copied, setCopied] = useState(false);
@@ -865,7 +887,7 @@ function ViewModal({ visit, onClose, onEdit, onSaved }) {
 
   const handleCopy = async () => {
     try {
-      const textToCopy = rt || generateReportSummaryText(visit, checks);
+      const textToCopy = rt || generateReportSummaryText(visit, checks, currentChecklist);
       await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       toast.success('Report copied to clipboard!');
@@ -875,8 +897,8 @@ function ViewModal({ visit, onClose, onEdit, onSaved }) {
     }
   };
 
-  // Group items by category from CHECKLIST_DATA
-  const groupedData = CHECKLIST_DATA.map(group => {
+  // Group items by category from currentChecklist
+  const groupedData = currentChecklist.map(group => {
     const items = group.items.map(it => {
       const statusKey = checks ? checks[it.id] : null;
       const statusObj = statusKey ? STATUS[statusKey] : null;
@@ -1459,6 +1481,32 @@ export default function ShopVisit() {
   const [viewRow, setViewRow] = useState(null);
   const [search, setSearch] = useState('');
   const [shopFilt, setShopFilt] = useState('ALL');
+  const [checklistConfig, setChecklistConfig] = useState(() => getDynamicChecklistData());
+
+  useEffect(() => {
+    supabase
+      .from('shop_visit_checklist_items')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          localStorage.setItem(CHECKLIST_STORAGE_KEY, JSON.stringify(data));
+          const groupsMap = {};
+          data
+            .filter((it) => it.is_active !== false)
+            .forEach((it) => {
+              const grp = it.group_name || 'General';
+              if (!groupsMap[grp]) groupsMap[grp] = { group: grp, items: [] };
+              groupsMap[grp].items.push({ id: it.id, icon: it.icon || '📋', label: it.label });
+            });
+          const grouped = Object.values(groupsMap);
+          if (grouped.length > 0) {
+            setChecklistConfig(grouped);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => { supabase.from('shop').select('shop_name,full_name').order('shop_name').then(({ data }) => { if (data) setShops(data); }); }, []);
 
@@ -1616,6 +1664,7 @@ export default function ShopVisit() {
           shops={shops}
           defaultShop={shopFilt}
           initialVisit={editRow}
+          activeChecklist={checklistConfig}
           onClose={() => {
             setShowModal(false);
             setEditRow(null);
@@ -1626,6 +1675,7 @@ export default function ShopVisit() {
       {viewRow && (
         <ViewModal
           visit={viewRow}
+          activeChecklist={checklistConfig}
           onClose={() => setViewRow(null)}
           onEdit={(v) => {
             setViewRow(null);

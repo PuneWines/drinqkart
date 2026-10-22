@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import SchemeDiscussions from './pages/SchemeDiscussions';
 import CustomerFeedback from './pages/CustomerFeedback';
 import AssignedComplaints from './pages/AssignedComplaints';
 import ComplaintResolution from './pages/ComplaintResolution';
@@ -16,7 +17,8 @@ function BusinessOverviewApp({ onCollapseSidebar }) {
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
         <main className="flex-1 overflow-auto min-w-0">
           <Routes>
-            <Route path="" element={<Navigate to="feedback/customer" replace />} />
+            <Route path="" element={<Navigate to="scheme-discussions" replace />} />
+            <Route path="scheme-discussions" element={<SchemeDiscussions />} />
             <Route path="feedback" element={<Navigate to="feedback/customer" replace />} />
             <Route path="feedback/customer" element={<CustomerFeedback />} />
             <Route path="feedback/assigned" element={<AssignedComplaints />} />

@@ -101,6 +101,7 @@ export const systems = [
       { label: 'Trader', to: '/systems/purchase/trader-verification' },
       { label: 'Transporter', to: '/systems/purchase/transporter-verification' },
       { label: 'Receiving', to: '/systems/purchase/receiving' },
+      { label: 'Settings', to: '/systems/purchase/settings' },
     ]
   },
   {
@@ -113,7 +114,8 @@ export const systems = [
       { label: 'Shop', to: '/systems/master-setting/Shop' },
       { label: 'Counter', to: '/systems/master-setting/Counter' },
       { label: 'Expenses', to: '/systems/master-setting/Expenses' },
-      { label: 'Purchase Settings', to: '/systems/master-setting/purchase-settings' },
+      { label: 'Shop Visit Checklist', to: '/systems/master-setting/shop-visit' },
+      { label: 'Scheme Master', to: '/systems/master-setting/scheme-master' },
     ]
   },
   {
@@ -131,6 +133,7 @@ export const systems = [
     base: '/systems/business-overview',
     icon: BarChart3,
     subtabs: [
+      { label: 'Scheme Discussions', to: '/systems/business-overview/scheme-discussions' },
       {
         label: 'Feedback',
         to: '/systems/business-overview/feedback/customer',
@@ -310,8 +313,19 @@ export const getVisibleSystems = (user) => {
         if (sub.label === 'Expenses') {
           labelsToCheck.push('Expenses', 'Expense Categories');
         }
+        if (sub.label === 'Shop Visit Checklist') {
+          labelsToCheck.push('Shop Visit Checklist', 'Shop Visit', 'shop-visit', 'Master Setting');
+        }
+        if (sub.label === 'Scheme Master') {
+          labelsToCheck.push('Scheme Master', 'Scheme Discussions', 'Scheme Parties', 'Master Setting');
+        }
         if (sub.label === 'User & System Access') {
           labelsToCheck.push('User & System Access', 'Master Setting', 'User Access');
+        }
+      }
+      if (systemId === 'business-overview') {
+        if (sub.label === 'Scheme Discussions') {
+          labelsToCheck.push('Scheme Discussions', 'Scheme Discussion', 'scheme-discussions', 'scheme_discussions', 'Business overview');
         }
       }
       if (systemId === 'sale-analytics' || systemId === 'sale_analytics') {

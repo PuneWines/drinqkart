@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -27,9 +27,10 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import JoiningCompany from "../systems/hr/pages/JoiningCompany";
-import PurchaseSettings from "../systems/purchase/pages/Settings";
 import CounterManagement from "./CounterManagement";
 import ExpensesManagement from "./ExpensesManagement";
+import ShopVisitSettings from "./ShopVisitSettings";
+import SchemeMasterSettings from "./SchemeMasterSettings";
 
 // Systems and standard page modules in Drinqkart Master App
 const AVAILABLE_SYSTEMS = [
@@ -160,7 +161,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: "BUSINESS OVERVIEW MODULES",
-        pages: ["Trader Invoices", "Shop Visit"],
+        pages: ["Scheme Discussions", "Trader Invoices", "Shop Visit"],
       },
       {
         title: "FEEDBACK MODULE",
@@ -198,7 +199,8 @@ const AVAILABLE_SYSTEMS = [
           "Shop",
           "Counter",
           "Expenses",
-          "Purchase Settings",
+          "Shop Visit Checklist",
+          "Scheme Master",
         ],
       },
     ],
@@ -1467,19 +1469,36 @@ export default function MasterSetting() {
 
   const location = useLocation();
 
-  const purchaseSettingsPerm =
-    getMasterSettingPagePermission("Purchase Settings");
   const shopPerm = getMasterSettingPagePermission("Shop");
   const counterPerm = getMasterSettingPagePermission("Counter");
   const expensesPerm = getMasterSettingPagePermission("Expenses");
+  const shopVisitChecklistPerm = getMasterSettingPagePermission("Shop Visit Checklist");
+  const schemeMasterPerm = getMasterSettingPagePermission("Scheme Master");
 
-  // Sub-route: Purchase Settings
+  // Sub-route: Shop Visit Checklist Settings
+  if (
+    location.pathname.includes("/shop-visit-checklist") ||
+    location.pathname.includes("/shop-visit-settings") ||
+    location.pathname.toLowerCase().includes("/shop-visit")
+  ) {
+    return <ShopVisitSettings readOnly={shopVisitChecklistPerm === "view"} />;
+  }
+
+  // Sub-route: Scheme Master (Traders, Companies, Brands)
+  if (
+    location.pathname.includes("/scheme-master") ||
+    location.pathname.includes("/scheme-parties") ||
+    location.pathname.includes("/scheme-setting")
+  ) {
+    return <SchemeMasterSettings readOnly={schemeMasterPerm === "view"} />;
+  }
+
+  // Redirect legacy purchase-settings link to Purchase system
   if (
     location.pathname.includes("/purchase-settings") ||
-    location.pathname.includes("/purchase-setting") ||
-    location.pathname.endsWith("/settings")
+    location.pathname.includes("/purchase-setting")
   ) {
-    return <PurchaseSettings readOnly={purchaseSettingsPerm === "view"} />;
+    return <Navigate to="/systems/purchase/settings" replace />;
   }
 
   // Sub-route: Shop (Joining Company)
