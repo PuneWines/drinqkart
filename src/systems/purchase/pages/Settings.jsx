@@ -49,6 +49,7 @@ const Settings = ({ readOnly = false }) => {
   const [availableParties, setAvailableParties] = useState([]);
   const [vendorPartyCompanyMap, setVendorPartyCompanyMap] = useState({});
   const [hoverDistrictPreview, setHoverDistrictPreview] = useState(null);
+  const [copiedContactPhone, setCopiedContactPhone] = useState(null);
   const hoverDistrictTimerRef = useRef(null);
   const hoverDistrictPreviewRef = useRef(null);
   hoverDistrictPreviewRef.current = hoverDistrictPreview;
