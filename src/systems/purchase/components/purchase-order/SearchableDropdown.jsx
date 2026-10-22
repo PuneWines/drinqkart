@@ -142,7 +142,36 @@ const SearchableDropdown = ({ options = [], value, onChange, placeholder = "Sele
             )}
           </div>
         )}
-        <ChevronDown size={16} color="#64748b" style={{ marginLeft: '8px', minWidth: '16px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px', flexShrink: 0 }}>
+          {selectedParts && selectedParts.vendorName && onDeleteOption && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const matched = safeOptions.find(o => getOptionValue(o) === value) || value;
+                onDeleteOption(matched);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ef4444',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Remove vendor from selection"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+          <ChevronDown size={16} color="#64748b" style={{ minWidth: '16px' }} />
+        </div>
       </div>
 
       {isOpen && (

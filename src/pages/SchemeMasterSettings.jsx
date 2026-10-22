@@ -15,40 +15,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-// Default Fallback Lists
-export const DEFAULT_SCHEME_TRADERS = [
-  'GAYATRI ENTERPRISES',
-  'WINE ENTERPRISES PVT LTD',
-  'MILLINNIUM SPIRITS PVT LTD',
-  'VINTAGE SPIRITS',
-  'K.S.N. IRANI & CO.',
-  'MML SPIRITS PRIVATE LIMITED',
-  'VC TRADERS',
-];
-
-export const DEFAULT_SCHEME_COMPANIES = [
-  'SEAGRAM/PERNOD RICARD',
-  'BACARDI',
-  'RADICO KHAITAN',
-  'ACE BEVERAGEZ',
-  'MONICA ALCO BEV',
-  'MEHER DISTILLERIES',
-  '12TH MAN BREWING',
-  'Comte de Grasse',
-];
-
-export const DEFAULT_SCHEME_BRANDS = [
-  { name: 'Royal Stag', company: 'SEAGRAM/PERNOD RICARD' },
-  { name: 'Blenders Pride', company: 'SEAGRAM/PERNOD RICARD' },
-  { name: 'Jameson', company: 'SEAGRAM/PERNOD RICARD' },
-  { name: "Ballantine's", company: 'SEAGRAM/PERNOD RICARD' },
-  { name: 'Chivas Regal', company: 'SEAGRAM/PERNOD RICARD' },
-  { name: 'Bacardi Carta Blanca', company: 'BACARDI' },
-  { name: 'Magic Moments', company: 'RADICO KHAITAN' },
-  { name: 'Corona', company: '12TH MAN BREWING' },
-  { name: 'Budweiser', company: '12TH MAN BREWING' },
-];
-
 export const SCHEME_TRADERS_KEY = 'drinqkart_scheme_traders_v1';
 export const SCHEME_COMPANIES_KEY = 'drinqkart_scheme_companies_v1';
 export const SCHEME_BRANDS_KEY = 'drinqkart_scheme_brands_v1';
@@ -63,11 +29,10 @@ export default function SchemeMasterSettings({ readOnly = false }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [alert, setAlert] = useState(null);
 
-  // Form State
+  // Form State - only Name is needed for all entries!
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formName, setFormName] = useState('');
-  const [formCompany, setFormCompany] = useState('');
 
   useEffect(() => {
     fetchAll();
@@ -81,93 +46,80 @@ export default function SchemeMasterSettings({ readOnly = false }) {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Traders
-      let tList = [];
+      // 1. Fetch Traders from database
       try {
         const { data, error } = await supabase
           .from('scheme_traders')
-          .select('*')
+          .select('id, name')
           .order('name', { ascending: true });
-        if (!error && data && data.length > 0) {
-          tList = data;
+        if (!error && Array.isArray(data)) {
+          setTraders(data);
+          localStorage.setItem(SCHEME_TRADERS_KEY, JSON.stringify(data));
+        } else {
+          const cached = localStorage.getItem(SCHEME_TRADERS_KEY);
+          if (cached) {
+            try {
+              setTraders(JSON.parse(cached));
+            } catch (_) {
+              setTraders([]);
+            }
+          } else {
+            setTraders([]);
+          }
         }
-      } catch (_) {}
-
-      if (tList.length === 0) {
-        const cached = localStorage.getItem(SCHEME_TRADERS_KEY);
-        if (cached) {
-          try {
-            tList = JSON.parse(cached);
-          } catch (_) {}
-        }
-        if (tList.length === 0) {
-          tList = DEFAULT_SCHEME_TRADERS.map((name, i) => ({
-            id: `t_${i + 1}`,
-            name,
-          }));
-        }
+      } catch (_) {
+        setTraders([]);
       }
-      setTraders(tList);
-      localStorage.setItem(SCHEME_TRADERS_KEY, JSON.stringify(tList));
 
-      // 2. Fetch Companies
-      let cList = [];
+      // 2. Fetch Companies from database
       try {
         const { data, error } = await supabase
           .from('scheme_companies')
-          .select('*')
+          .select('id, name')
           .order('name', { ascending: true });
-        if (!error && data && data.length > 0) {
-          cList = data;
+        if (!error && Array.isArray(data)) {
+          setCompanies(data);
+          localStorage.setItem(SCHEME_COMPANIES_KEY, JSON.stringify(data));
+        } else {
+          const cached = localStorage.getItem(SCHEME_COMPANIES_KEY);
+          if (cached) {
+            try {
+              setCompanies(JSON.parse(cached));
+            } catch (_) {
+              setCompanies([]);
+            }
+          } else {
+            setCompanies([]);
+          }
         }
-      } catch (_) {}
-
-      if (cList.length === 0) {
-        const cached = localStorage.getItem(SCHEME_COMPANIES_KEY);
-        if (cached) {
-          try {
-            cList = JSON.parse(cached);
-          } catch (_) {}
-        }
-        if (cList.length === 0) {
-          cList = DEFAULT_SCHEME_COMPANIES.map((name, i) => ({
-            id: `c_${i + 1}`,
-            name,
-          }));
-        }
+      } catch (_) {
+        setCompanies([]);
       }
-      setCompanies(cList);
-      localStorage.setItem(SCHEME_COMPANIES_KEY, JSON.stringify(cList));
 
-      // 3. Fetch Brands
-      let bList = [];
+      // 3. Fetch Brands from database
       try {
         const { data, error } = await supabase
           .from('scheme_brands')
-          .select('*')
+          .select('id, name')
           .order('name', { ascending: true });
-        if (!error && data && data.length > 0) {
-          bList = data;
+        if (!error && Array.isArray(data)) {
+          setBrands(data);
+          localStorage.setItem(SCHEME_BRANDS_KEY, JSON.stringify(data));
+        } else {
+          const cached = localStorage.getItem(SCHEME_BRANDS_KEY);
+          if (cached) {
+            try {
+              setBrands(JSON.parse(cached));
+            } catch (_) {
+              setBrands([]);
+            }
+          } else {
+            setBrands([]);
+          }
         }
-      } catch (_) {}
-
-      if (bList.length === 0) {
-        const cached = localStorage.getItem(SCHEME_BRANDS_KEY);
-        if (cached) {
-          try {
-            bList = JSON.parse(cached);
-          } catch (_) {}
-        }
-        if (bList.length === 0) {
-          bList = DEFAULT_SCHEME_BRANDS.map((item, i) => ({
-            id: `b_${i + 1}`,
-            name: item.name,
-            company_name: item.company,
-          }));
-        }
+      } catch (_) {
+        setBrands([]);
       }
-      setBrands(bList);
-      localStorage.setItem(SCHEME_BRANDS_KEY, JSON.stringify(bList));
     } catch (err) {
       console.warn('Error loading scheme master:', err);
     } finally {
@@ -178,14 +130,12 @@ export default function SchemeMasterSettings({ readOnly = false }) {
   const openAddModal = () => {
     setEditingItem(null);
     setFormName('');
-    setFormCompany(companies[0]?.name || '');
     setIsModalOpen(true);
   };
 
   const openEditModal = (item) => {
     setEditingItem(item);
     setFormName(item.name || '');
-    setFormCompany(item.company_name || '');
     setIsModalOpen(true);
   };
 
@@ -196,110 +146,79 @@ export default function SchemeMasterSettings({ readOnly = false }) {
 
     setSaving(true);
     try {
-      if (activeTab === 'traders') {
-        const table = 'scheme_traders';
-        if (editingItem) {
-          const updated = traders.map((t) =>
-            t.id === editingItem.id ? { ...t, name: trimmedName } : t
-          );
-          setTraders(updated);
-          localStorage.setItem(SCHEME_TRADERS_KEY, JSON.stringify(updated));
-          try {
-            await supabase
-              .from(table)
-              .update({ name: trimmedName, updated_at: new Date().toISOString() })
-              .eq('id', editingItem.id);
-          } catch (_) {}
-          showAlert('success', `Trader "${trimmedName}" updated.`);
-        } else {
-          if (traders.some((t) => t.name.toLowerCase() === trimmedName.toLowerCase())) {
-            throw new Error(`Trader "${trimmedName}" already exists.`);
-          }
-          const newItem = {
-            id: `t_${Date.now()}`,
-            name: trimmedName,
-          };
-          const updated = [...traders, newItem].sort((a, b) => a.name.localeCompare(b.name));
-          setTraders(updated);
-          localStorage.setItem(SCHEME_TRADERS_KEY, JSON.stringify(updated));
-          try {
-            await supabase.from(table).insert([{ name: trimmedName }]);
-          } catch (_) {}
-          showAlert('success', `Trader "${trimmedName}" added.`);
+      const currentItems =
+        activeTab === 'traders'
+          ? traders
+          : activeTab === 'companies'
+          ? companies
+          : brands;
+      const setItems =
+        activeTab === 'traders'
+          ? setTraders
+          : activeTab === 'companies'
+          ? setCompanies
+          : setBrands;
+      const storageKey =
+        activeTab === 'traders'
+          ? SCHEME_TRADERS_KEY
+          : activeTab === 'companies'
+          ? SCHEME_COMPANIES_KEY
+          : SCHEME_BRANDS_KEY;
+      const tableName =
+        activeTab === 'traders'
+          ? 'scheme_traders'
+          : activeTab === 'companies'
+          ? 'scheme_companies'
+          : 'scheme_brands';
+      const entityLabel =
+        activeTab === 'traders'
+          ? 'Trader'
+          : activeTab === 'companies'
+          ? 'Company'
+          : 'Brand';
+
+      if (editingItem) {
+        // Update existing item
+        const updated = currentItems.map((item) =>
+          item.id === editingItem.id ? { ...item, name: trimmedName } : item
+        );
+        setItems(updated);
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        try {
+          await supabase
+            .from(tableName)
+            .update({ name: trimmedName, updated_at: new Date().toISOString() })
+            .eq('id', editingItem.id);
+        } catch (_) {}
+        showAlert('success', `${entityLabel} "${trimmedName}" updated.`);
+      } else {
+        // Add new item
+        if (currentItems.some((item) => item.name.toLowerCase() === trimmedName.toLowerCase())) {
+          throw new Error(`${entityLabel} "${trimmedName}" already exists.`);
         }
-      } else if (activeTab === 'companies') {
-        const table = 'scheme_companies';
-        if (editingItem) {
-          const updated = companies.map((c) =>
-            c.id === editingItem.id ? { ...c, name: trimmedName } : c
-          );
-          setCompanies(updated);
-          localStorage.setItem(SCHEME_COMPANIES_KEY, JSON.stringify(updated));
-          try {
-            await supabase
-              .from(table)
-              .update({ name: trimmedName, updated_at: new Date().toISOString() })
-              .eq('id', editingItem.id);
-          } catch (_) {}
-          showAlert('success', `Company "${trimmedName}" updated.`);
-        } else {
-          if (companies.some((c) => c.name.toLowerCase() === trimmedName.toLowerCase())) {
-            throw new Error(`Company "${trimmedName}" already exists.`);
+        let createdId = `${activeTab[0]}_${Date.now()}`;
+        try {
+          const { data: inserted, error: insertErr } = await supabase
+            .from(tableName)
+            .insert([{ name: trimmedName }])
+            .select('id, name')
+            .single();
+          if (!insertErr && inserted?.id) {
+            createdId = inserted.id;
           }
-          const newItem = {
-            id: `c_${Date.now()}`,
-            name: trimmedName,
-          };
-          const updated = [...companies, newItem].sort((a, b) => a.name.localeCompare(b.name));
-          setCompanies(updated);
-          localStorage.setItem(SCHEME_COMPANIES_KEY, JSON.stringify(updated));
-          try {
-            await supabase.from(table).insert([{ name: trimmedName }]);
-          } catch (_) {}
-          showAlert('success', `Company "${trimmedName}" added.`);
-        }
-      } else if (activeTab === 'brands') {
-        const table = 'scheme_brands';
-        const finalCompany = formCompany.trim() || null;
-        if (editingItem) {
-          const updated = brands.map((b) =>
-            b.id === editingItem.id
-              ? { ...b, name: trimmedName, company_name: finalCompany }
-              : b
-          );
-          setBrands(updated);
-          localStorage.setItem(SCHEME_BRANDS_KEY, JSON.stringify(updated));
-          try {
-            await supabase
-              .from(table)
-              .update({
-                name: trimmedName,
-                company_name: finalCompany,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', editingItem.id);
-          } catch (_) {}
-          showAlert('success', `Brand "${trimmedName}" updated.`);
-        } else {
-          if (brands.some((b) => b.name.toLowerCase() === trimmedName.toLowerCase())) {
-            throw new Error(`Brand "${trimmedName}" already exists.`);
-          }
-          const newItem = {
-            id: `b_${Date.now()}`,
-            name: trimmedName,
-            company_name: finalCompany,
-          };
-          const updated = [...brands, newItem].sort((a, b) => a.name.localeCompare(b.name));
-          setBrands(updated);
-          localStorage.setItem(SCHEME_BRANDS_KEY, JSON.stringify(updated));
-          try {
-            await supabase
-              .from(table)
-              .insert([{ name: trimmedName, company_name: finalCompany }]);
-          } catch (_) {}
-          showAlert('success', `Brand "${trimmedName}" added.`);
-        }
+        } catch (_) {}
+        const newItem = {
+          id: createdId,
+          name: trimmedName,
+        };
+        const updated = [...currentItems, newItem].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        );
+        setItems(updated);
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        showAlert('success', `${entityLabel} "${trimmedName}" added.`);
       }
+
       setIsModalOpen(false);
     } catch (err) {
       showAlert('error', err.message);
@@ -309,7 +228,13 @@ export default function SchemeMasterSettings({ readOnly = false }) {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`Are you sure you want to delete "${item.name}"?`)) return;
+    const entityLabel =
+      activeTab === 'traders'
+        ? 'Trader'
+        : activeTab === 'companies'
+        ? 'Company'
+        : 'Brand';
+    if (!window.confirm(`Are you sure you want to delete ${entityLabel.toLowerCase()} "${item.name}"?`)) return;
 
     try {
       if (activeTab === 'traders') {
@@ -318,21 +243,33 @@ export default function SchemeMasterSettings({ readOnly = false }) {
         localStorage.setItem(SCHEME_TRADERS_KEY, JSON.stringify(updated));
         try {
           await supabase.from('scheme_traders').delete().eq('id', item.id);
-        } catch (_) {}
+        } catch (_) {
+          try {
+            await supabase.from('scheme_traders').delete().eq('name', item.name);
+          } catch (_) {}
+        }
       } else if (activeTab === 'companies') {
         const updated = companies.filter((c) => c.id !== item.id);
         setCompanies(updated);
         localStorage.setItem(SCHEME_COMPANIES_KEY, JSON.stringify(updated));
         try {
           await supabase.from('scheme_companies').delete().eq('id', item.id);
-        } catch (_) {}
+        } catch (_) {
+          try {
+            await supabase.from('scheme_companies').delete().eq('name', item.name);
+          } catch (_) {}
+        }
       } else if (activeTab === 'brands') {
         const updated = brands.filter((b) => b.id !== item.id);
         setBrands(updated);
         localStorage.setItem(SCHEME_BRANDS_KEY, JSON.stringify(updated));
         try {
           await supabase.from('scheme_brands').delete().eq('id', item.id);
-        } catch (_) {}
+        } catch (_) {
+          try {
+            await supabase.from('scheme_brands').delete().eq('name', item.name);
+          } catch (_) {}
+        }
       }
       showAlert('success', `"${item.name}" deleted successfully.`);
     } catch (err) {
@@ -349,11 +286,7 @@ export default function SchemeMasterSettings({ readOnly = false }) {
 
     if (!searchTerm.trim()) return list;
     const q = searchTerm.toLowerCase();
-    return list.filter(
-      (item) =>
-        item.name.toLowerCase().includes(q) ||
-        (item.company_name && item.company_name.toLowerCase().includes(q))
-    );
+    return list.filter((item) => item.name.toLowerCase().includes(q));
   }, [activeTab, traders, companies, brands, searchTerm]);
 
   return (
@@ -428,7 +361,7 @@ export default function SchemeMasterSettings({ readOnly = false }) {
           }}
           className={`px-4 py-2 text-xs md:text-sm font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'traders'
-              ? 'bg-[#1A1A1A] text-[#C9A84C] shadow-xs'
+              ? 'bg-charcoal text-[#C9A84C] shadow-xs'
               : 'text-slate-600 hover:bg-slate-200/60'
           }`}
         >
@@ -444,7 +377,7 @@ export default function SchemeMasterSettings({ readOnly = false }) {
           }}
           className={`px-4 py-2 text-xs md:text-sm font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'companies'
-              ? 'bg-[#1A1A1A] text-[#C9A84C] shadow-xs'
+              ? 'bg-charcoal text-[#C9A84C] shadow-xs'
               : 'text-slate-600 hover:bg-slate-200/60'
           }`}
         >
@@ -460,7 +393,7 @@ export default function SchemeMasterSettings({ readOnly = false }) {
           }}
           className={`px-4 py-2 text-xs md:text-sm font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'brands'
-              ? 'bg-[#1A1A1A] text-[#C9A84C] shadow-xs'
+              ? 'bg-charcoal text-[#C9A84C] shadow-xs'
               : 'text-slate-600 hover:bg-slate-200/60'
           }`}
         >
@@ -505,10 +438,11 @@ export default function SchemeMasterSettings({ readOnly = false }) {
           <table className="w-full text-left border-collapse text-xs md:text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[11px] font-bold">
-                <th className="py-3 px-4">#</th>
-                <th className="py-3 px-4">Name</th>
-                {activeTab === 'brands' && <th className="py-3 px-4">Associated Company</th>}
-                {!readOnly && <th className="py-3 px-4 text-right">Actions</th>}
+                <th className="py-3 px-4 w-16">#</th>
+                <th className="py-3 px-4">
+                  {activeTab === 'traders' ? 'Trader Name' : activeTab === 'companies' ? 'Company Name' : 'Brand Name'}
+                </th>
+                {!readOnly && <th className="py-3 px-4 text-right w-28">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -523,17 +457,6 @@ export default function SchemeMasterSettings({ readOnly = false }) {
                       <span>{item.name}</span>
                     </div>
                   </td>
-                  {activeTab === 'brands' && (
-                    <td className="py-3 px-4 text-slate-600">
-                      {item.company_name ? (
-                        <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-medium">
-                          {item.company_name}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 italic">None</span>
-                      )}
-                    </td>
-                  )}
                   {!readOnly && (
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -563,13 +486,15 @@ export default function SchemeMasterSettings({ readOnly = false }) {
         </div>
       )}
 
-      {/* Add / Edit Modal */}
+      {/* Add / Edit Modal - Clean & uniform for all 3 entities */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-scale-up space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold font-serif text-slate-900">
-                {editingItem ? `Edit ${activeTab.slice(0, -1)}` : `New ${activeTab.slice(0, -1)}`}
+                {editingItem
+                  ? `Edit ${activeTab === 'traders' ? 'Trader' : activeTab === 'companies' ? 'Company' : 'Brand'}`
+                  : `New ${activeTab === 'traders' ? 'Trader' : activeTab === 'companies' ? 'Company' : 'Brand'}`}
               </h3>
               <button
                 type="button"
@@ -593,32 +518,13 @@ export default function SchemeMasterSettings({ readOnly = false }) {
                 <input
                   type="text"
                   required
+                  autoFocus
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder={`Enter ${activeTab.slice(0, -1)} name...`}
+                  placeholder={`Enter ${activeTab === 'traders' ? 'trader' : activeTab === 'companies' ? 'company' : 'brand'} name...`}
                   className="w-full text-xs md:text-sm border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:bg-white outline-none focus:border-[#C9A84C]"
                 />
               </div>
-
-              {activeTab === 'brands' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Associated Company (Optional)
-                  </label>
-                  <select
-                    value={formCompany}
-                    onChange={(e) => setFormCompany(e.target.value)}
-                    className="w-full text-xs md:text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-800 outline-none focus:border-[#C9A84C]"
-                  >
-                    <option value="">-- None / Standalone Brand --</option>
-                    {companies.map((c) => (
-                      <option key={c.id || c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <button

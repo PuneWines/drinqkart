@@ -893,8 +893,8 @@ const PurchaseOrder = () => {
     let targetCompany = "";
 
     if (typeof vendorOption === "object" && vendorOption !== null) {
-      targetParty = (vendorOption.partyName || vendorOption.label || "").trim();
-      targetCompany = (vendorOption.companyName || "").trim();
+      targetParty = (vendorOption.partyName || vendorOption.vendorName || vendorOption.label || "").trim();
+      targetCompany = (vendorOption.companyScope || vendorOption.filteredCompanyName || vendorOption.companyName || "").trim();
       if (!targetParty && vendorOption.key) {
         if (vendorOption.key.includes("::")) {
           const parts = vendorOption.key.split("::");
@@ -914,20 +914,37 @@ const PurchaseOrder = () => {
       }
     }
 
+    if (targetParty.includes("(") && targetParty.endsWith(")")) {
+      const match = targetParty.match(/^(.*?)\s*\((.*?)\)$/);
+      if (match) {
+        targetParty = match[1].trim();
+        if (!targetCompany) targetCompany = match[2].trim();
+      }
+    }
+
     if (!targetParty) {
       addToast("Invalid vendor option selected for deletion.", "warning");
       return;
     }
 
-    // Strictly match both party_name AND company_scope / company_name (if company is specified)
+    const isCompanyScoped = Boolean(targetCompany);
+    const targetPartyLower = targetParty.toLowerCase();
+    const targetCompanyLower = targetCompany.toLowerCase();
+
+    // Match items belonging to this party and company scope
     const itemsToExclude = filteredApprovedItems.filter(item => {
-      const pMatch = (item.party_name || "").trim().toLowerCase() === targetParty.toLowerCase();
+      const pMatch = (item.party_name || "").trim().toLowerCase() === targetPartyLower;
       if (!pMatch) return false;
-      const itemComp = (item.company_scope || item.filtered_company_name || item.company_name || "").trim().toLowerCase();
-      if (targetCompany) {
-        return itemComp === targetCompany.toLowerCase();
+
+      const itemScope = (item.company_scope || item.filtered_company_name || "").trim().toLowerCase();
+
+      if (isCompanyScoped) {
+        const itemCompName = (item.company_name || "").trim().toLowerCase();
+        return itemScope === targetCompanyLower || itemCompName === targetCompanyLower;
       }
-      return !itemComp;
+
+      // If no company scope was specified, match items that have no specific company scope
+      return !itemScope;
     });
 
     const displayLabel = targetCompany ? `${targetParty} (${targetCompany})` : targetParty;
@@ -937,7 +954,8 @@ const PurchaseOrder = () => {
       return;
     }
 
-    const confirmMsg = `Are you sure you want to delete "${displayLabel}" from available PO selection?\n\nThis will exclude only the ${itemsToExclude.length} approved item(s) belonging to "${displayLabel}" under shop "${selectedShop}".`;
+    const shopLabel = selectedShop && selectedShop !== "All" ? `under shop "${selectedShop}"` : "across all shops";
+    const confirmMsg = `Are you sure you want to delete "${displayLabel}" from available PO selection?\n\nThis will exclude ${itemsToExclude.length} approved item(s) belonging to "${displayLabel}" ${shopLabel}.`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
@@ -946,6 +964,8 @@ const PurchaseOrder = () => {
 
       // Sync with purchase_dashboard so audit metrics stay accurate
       const itemNames = itemsToExclude.map(i => (i.item_name || i.itemName || "").trim()).filter(Boolean);
+      const uniqueShops = [...new Set(itemsToExclude.map(i => i.shop_name).filter(Boolean))];
+
       if (itemNames.length > 0) {
         try {
           let q = supabase
@@ -963,8 +983,8 @@ const PurchaseOrder = () => {
           if (targetCompany) {
             q = q.eq("company_name", targetCompany);
           }
-          if (selectedShop && selectedShop !== "All") {
-            q = q.eq("shop_name", selectedShop);
+          if (uniqueShops.length > 0) {
+            q = q.in("shop_name", uniqueShops);
           }
           await q;
         } catch (dashErr) {
@@ -977,8 +997,8 @@ const PurchaseOrder = () => {
       // Check if current activeParty matches this specific (party, company) pair
       const currentActivePartyName = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
       const currentActiveCompany = activeParty.includes("::") ? activeParty.split("::")[1].trim() : "";
-      const isCurrentOptionDeleted = (currentActivePartyName.toLowerCase() === targetParty.toLowerCase()) &&
-        (targetCompany ? currentActiveCompany.toLowerCase() === targetCompany.toLowerCase() : !currentActiveCompany);
+      const isCurrentOptionDeleted = (currentActivePartyName.toLowerCase() === targetPartyLower) &&
+        (isCompanyScoped ? currentActiveCompany.toLowerCase() === targetCompanyLower : !currentActiveCompany);
 
       if (isCurrentOptionDeleted) {
         setActiveParty("");

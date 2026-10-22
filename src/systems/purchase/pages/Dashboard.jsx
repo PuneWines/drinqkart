@@ -22,7 +22,10 @@ import {
   AlertCircle,
   RotateCcw,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  X,
+  Activity,
+  Filter
 } from "lucide-react";
 import "../styles/Dashboard.css";
 
@@ -260,8 +263,8 @@ const Dashboard = () => {
 
   // Party-specific company filter state: { [partyName]: selectedCompany }
   const [partyCompanyFilters, setPartyCompanyFilters] = useState({});
-  // Party collapse state: { [partyName]: boolean }
-  const [collapsedParties, setCollapsedParties] = useState({});
+  // Party expansion state: default is COLLAPSED (not always open!)
+  const [expandedParties, setExpandedParties] = useState({});
 
   const handlePartyCompanyFilterChange = (partyName, comp) => {
     setPartyCompanyFilters(prev => ({
@@ -270,23 +273,23 @@ const Dashboard = () => {
     }));
   };
 
-  const togglePartyCollapse = (partyName) => {
-    setCollapsedParties(prev => ({
+  const togglePartyExpand = (partyName) => {
+    setExpandedParties(prev => ({
       ...prev,
       [partyName]: !prev[partyName]
     }));
   };
 
-  const expandAllParties = () => {
-    setCollapsedParties({});
-  };
-
-  const collapseAllParties = (partyNames) => {
+  const expandAllParties = (partyNames) => {
     const all = {};
     partyNames.forEach(name => {
       all[name] = true;
     });
-    setCollapsedParties(all);
+    setExpandedParties(all);
+  };
+
+  const collapseAllParties = () => {
+    setExpandedParties({});
   };
 
   // 1. Base Filtered dataset (Shop, Company, Party, Timeframe, Search)
@@ -961,101 +964,163 @@ const Dashboard = () => {
   return (
     <div className="w-full max-w-[1750px] mx-auto px-3 sm:px-4 md:px-6 py-4 font-sans space-y-4">
       
+      {/* ── Top Dashboard Header ──────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg md:text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
+                <Activity size={18} />
+              </span>
+              Purchase Audit & Lifecycle Monitor
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Live Sync Active
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Realtime audit tracking across Store Indent, Management Approval, Purchase Order & Verified Receiving.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+            <Building2 size={13} className="text-slate-400" />
+            <span>{filterShop === "All" ? "All Shops Active" : filterShop}</span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            disabled={isRefetching}
+            className={`p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl transition-all cursor-pointer ${
+              isRefetching ? "animate-spin" : ""
+            }`}
+            title="Refresh dashboard data"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
+      </div>
+
       {/* ── Metric Summary Cards ──────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Total Items */}
         <div 
           onClick={() => handleStatusChange("All")}
-          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-indigo-300 ${
-            filterStatus === "All" ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-slate-200"
+          className={`p-3.5 bg-linear-to-b from-white to-slate-50/50 rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
+            filterStatus === "All"
+              ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/20"
+              : "border-slate-200 hover:border-indigo-300"
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>Total Items</span>
-            <Layers size={15} className="text-indigo-500" />
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Layers size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-800 mt-1">{metrics.total}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Matching active filters</div>
+          <div className="text-2xl font-bold font-mono text-slate-900 mt-1">{metrics.total}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Matching active filters</div>
         </div>
 
         {/* Order Generated (Pending Approval) */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "PendingApproval" ? "All" : "PendingApproval")}
-          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-blue-300 ${
-            filterStatus === "PendingApproval" ? "border-blue-500 ring-2 ring-blue-500/10" : "border-slate-200"
+          className={`p-3.5 bg-linear-to-b from-white to-blue-50/20 rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
+            filterStatus === "PendingApproval"
+              ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/30"
+              : "border-slate-200 hover:border-blue-300"
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>Order Generated</span>
-            <Clock size={15} className="text-blue-500" />
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Clock size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-blue-700 mt-1">{metrics.pendingApproval}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Pending approval stage</div>
+          <div className="text-2xl font-bold font-mono text-blue-700 mt-1">{metrics.pendingApproval}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Pending approval stage</div>
         </div>
 
         {/* Approved (Ready for PO) */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "ApprovedReady" ? "All" : "ApprovedReady")}
-          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-emerald-300 ${
-            filterStatus === "ApprovedReady" ? "border-emerald-500 ring-2 ring-emerald-500/10" : "border-slate-200"
+          className={`p-3.5 bg-linear-to-b from-white to-emerald-50/20 rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
+            filterStatus === "ApprovedReady"
+              ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/30"
+              : "border-slate-200 hover:border-emerald-300"
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>Approved</span>
-            <CheckCircle2 size={15} className="text-emerald-500" />
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-700 mt-1">{metrics.approvedReady}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Approved & ready for PO</div>
+          <div className="text-2xl font-bold font-mono text-emerald-700 mt-1">{metrics.approvedReady}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Approved & ready for PO</div>
         </div>
 
         {/* PO Completed */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "Completed" ? "All" : "Completed")}
-          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-indigo-300 ${
-            filterStatus === "Completed" ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-slate-200"
+          className={`p-3.5 bg-linear-to-b from-white to-indigo-50/20 rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
+            filterStatus === "Completed"
+              ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/30"
+              : "border-slate-200 hover:border-indigo-300"
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>PO Completed</span>
-            <PackageCheck size={15} className="text-indigo-600" />
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <PackageCheck size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-indigo-700 mt-1">{metrics.completed}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Active & ordered in PO</div>
+          <div className="text-2xl font-bold font-mono text-indigo-700 mt-1">{metrics.completed}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Active & ordered in PO</div>
         </div>
 
         {/* Modified / Dropped */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "Modified" ? "All" : "Modified")}
-          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-amber-300 ${
-            filterStatus === "Modified" ? "border-amber-500 ring-2 ring-amber-500/10" : "border-slate-200"
+          className={`p-3.5 bg-linear-to-b from-white to-amber-50/20 rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
+            filterStatus === "Modified"
+              ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30"
+              : "border-slate-200 hover:border-amber-300"
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>Modified Qty</span>
-            <FileEdit size={15} className="text-amber-500" />
+            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <FileEdit size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-amber-700 mt-1">{metrics.modified}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Quantities updated</div>
+          <div className="text-2xl font-bold font-mono text-amber-700 mt-1">{metrics.modified}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Quantities updated</div>
         </div>
 
         {/* Rejected / Deleted */}
         <div 
           onClick={() => handleStatusChange(filterStatus === "RejectedApproval" ? "All" : "RejectedApproval")}
-          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-xs hover:border-rose-300 ${
-            filterStatus === "RejectedApproval" ? "border-rose-500 ring-2 ring-rose-500/10" : "border-slate-200"
+          className={`p-3.5 bg-linear-to-b from-white to-rose-50/20 rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
+            filterStatus === "RejectedApproval"
+              ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/30"
+              : "border-slate-200 hover:border-rose-300"
           }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
             <span>Rejected / Deleted</span>
-            <XCircle size={15} className="text-rose-500" />
+            <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+              <XCircle size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-rose-700 mt-1">{metrics.rejected}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Rejected or deleted items</div>
+          <div className="text-2xl font-bold font-mono text-rose-700 mt-1">{metrics.rejected}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Rejected or deleted items</div>
         </div>
       </div>
 
       {/* ── Sleek Compact Control Bar ─────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3.5 flex flex-wrap items-center justify-between gap-3">
         
         {/* Left: Quick Search */}
         <div className="flex-1 min-w-64 max-w-md relative">
@@ -1065,15 +1130,24 @@ const Dashboard = () => {
             placeholder="Search items, indent, PO#, party, company, employee..."
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all font-medium"
+            className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all font-medium"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         {/* Middle: Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Shop */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-            <Building2 size={13} className="text-slate-400" />
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 hover:border-slate-300 transition-all">
+            <Building2 size={13} className="text-slate-400 shrink-0" />
             <select
               value={filterShop}
               onChange={(e) => handleShopChange(e.target.value)}
@@ -1086,7 +1160,7 @@ const Dashboard = () => {
           </div>
 
           {/* Party (First) */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-44">
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 max-w-44 hover:border-slate-300 transition-all">
             <User size={13} className="text-slate-400 shrink-0" />
             <select
               value={filterParty}
@@ -1100,7 +1174,7 @@ const Dashboard = () => {
           </div>
 
           {/* Company (Second - filtered by selected Party) */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-44">
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 max-w-44 hover:border-slate-300 transition-all">
             <Briefcase size={13} className="text-slate-400 shrink-0" />
             <select
               value={filterCompany}
@@ -1118,7 +1192,8 @@ const Dashboard = () => {
           </div>
 
           {/* Status */}
-          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 hover:border-slate-300 transition-all">
+            <Layers size={13} className="text-slate-400 shrink-0" />
             <select
               value={filterStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
@@ -1136,8 +1211,8 @@ const Dashboard = () => {
           </div>
 
           {/* Timeframe */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-            <Calendar size={13} className="text-slate-400" />
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 hover:border-slate-300 transition-all">
+            <Calendar size={13} className="text-slate-400 shrink-0" />
             <select
               value={filterTimeframe}
               onChange={(e) => handleTimeframeChange(e.target.value)}
@@ -1156,7 +1231,7 @@ const Dashboard = () => {
           {hasActiveFilters && (
             <button
               onClick={resetAllFilters}
-              className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
               title="Reset all filters to show all records"
             >
               <RotateCcw size={12} />
@@ -1164,28 +1239,17 @@ const Dashboard = () => {
             </button>
           )}
 
-          <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-md">
+          <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-3 py-1.5 rounded-xl font-mono">
             {filteredData.length} records
           </span>
 
           <button
             onClick={exportToCSV}
-            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
             title="Download CSV"
           >
             <Download size={13} />
             <span>CSV</span>
-          </button>
-
-          <button
-            onClick={() => refetch()}
-            disabled={isRefetching}
-            className={`p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all cursor-pointer ${
-              isRefetching ? "animate-spin" : ""
-            }`}
-            title="Refresh"
-          >
-            <RefreshCw size={14} />
           </button>
         </div>
       </div>
@@ -1198,29 +1262,31 @@ const Dashboard = () => {
             Parties ({partyGroups.length})
           </span>
           <span className="text-xs text-slate-400 hidden sm:inline">
-            • Each party has a dedicated container with company filtering
+            • Click any party to view audit trail (collapsed by default)
           </span>
         </div>
         {partyGroups.length > 0 && (
           <div className="flex items-center gap-2">
             <button
-              onClick={expandAllParties}
-              className="text-[11px] font-semibold text-slate-600 hover:text-indigo-600 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              onClick={() => expandAllParties(partyGroups.map(p => p.partyName))}
+              className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              Expand All
+              <ChevronDown size={13} />
+              <span>Expand All</span>
             </button>
             <button
-              onClick={() => collapseAllParties(partyGroups.map(p => p.partyName))}
-              className="text-[11px] font-semibold text-slate-600 hover:text-indigo-600 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              onClick={collapseAllParties}
+              className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              Collapse All
+              <ChevronUp size={13} />
+              <span>Collapse All</span>
             </button>
           </div>
         )}
       </div>
 
       {partyGroups.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-12 text-center">
           <div className="max-w-md mx-auto space-y-3">
             <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
               <Search size={22} />
@@ -1236,7 +1302,7 @@ const Dashboard = () => {
             {hasActiveFilters && (
               <button
                 onClick={resetAllFilters}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
               >
                 <RotateCcw size={14} />
                 <span>Reset All Filters</span>
@@ -1245,37 +1311,48 @@ const Dashboard = () => {
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {partyGroups.map((group) => {
-            const isCollapsed = Boolean(collapsedParties[group.partyName]);
+            // Default is COLLAPSED (so it does NOT always open!)
+            // Auto-expand only if the user specifically filtered down to a single party
+            const isExpanded = (partyGroups.length === 1 && filterParty !== "All")
+              ? (expandedParties[group.partyName] !== false)
+              : Boolean(expandedParties[group.partyName]);
+            const isCollapsed = !isExpanded;
 
             return (
               <div
                 key={group.partyName}
-                className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-200 hover:border-slate-300"
+                className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden ${
+                  isExpanded
+                    ? "border-indigo-300 ring-2 ring-indigo-500/10 shadow-md"
+                    : "border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-xs"
+                }`}
               >
                 {/* ── Party Header Bar ─────────────────────────────── */}
                 <div
-                  onClick={() => togglePartyCollapse(group.partyName)}
-                  className={`p-3.5 bg-gradient-to-r from-slate-50 via-white to-slate-50/80 ${
-                    isCollapsed ? "" : "border-b border-slate-200"
-                  } flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-100/80 transition-colors`}
-                  title={isCollapsed ? `Click to open ${group.partyName}` : `Click to close ${group.partyName}`}
+                  onClick={() => togglePartyExpand(group.partyName)}
+                  className={`p-3.5 ${
+                    isExpanded
+                      ? "bg-gradient-to-r from-indigo-50/40 via-white to-slate-50/60 border-b border-indigo-100"
+                      : "bg-white hover:bg-slate-50/80"
+                  } flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none transition-colors`}
+                  title={isCollapsed ? `Click to expand ${group.partyName}` : `Click to collapse ${group.partyName}`}
                 >
                   
                   {/* Left: Party Identity & Metadata */}
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-indigo-600 to-indigo-700 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
                       {group.partyName.slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-slate-900 text-sm">{group.partyName}</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-slate-900 text-sm md:text-base">{group.partyName}</h3>
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
                           {group.displayedRows.length}{group.displayedRows.length !== group.totalItemsCount ? ` / ${group.totalItemsCount}` : ""} items
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {group.uniqueShops.map(s => (
                           <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200/60">
                             {s}
@@ -1291,10 +1368,10 @@ const Dashboard = () => {
                     {/* Dedicated Company Dropdown for this Party */}
                     <div 
                       onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1 shadow-2xs hover:border-indigo-400 transition-colors cursor-default"
+                      className="flex items-center gap-1.5 bg-slate-50 border border-slate-300/80 rounded-xl px-2.5 py-1 hover:bg-white hover:border-indigo-400 transition-colors cursor-default"
                     >
                       <Briefcase size={13} className="text-indigo-600 shrink-0" />
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Company:</span>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Company:</span>
                       <select
                         value={group.activePartyCompany}
                         onChange={(e) => handlePartyCompanyFilterChange(group.partyName, e.target.value)}
@@ -1315,29 +1392,36 @@ const Dashboard = () => {
                     </div>
 
                     {/* Quick Stage Status Counts */}
-                    <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold">
-                      <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60" title="Order Generated">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold flex-wrap">
+                      <span className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/60" title="Order Generated">
                         Ord: {group.ordCount}
                       </span>
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60" title="Approved">
+                      <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60" title="Approved">
                         App: {group.appCount}
                       </span>
-                      <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60" title="In PO">
+                      <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200/60" title="In PO">
                         PO: {group.poCount}
                       </span>
                       {group.rejCount > 0 && (
-                        <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/60 font-bold" title="Rejected or Deleted">
+                        <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200/60 font-bold" title="Rejected or Deleted">
                           Rej: {group.rejCount}
                         </span>
                       )}
                     </div>
 
+                    {/* Quick Box Summary Preview */}
+                    <div className="hidden md:flex items-center text-xs font-bold text-slate-700 bg-slate-100/70 border border-slate-200 px-2.5 py-1 rounded-xl">
+                      <span>Order: {group.totalOrderBox.toFixed(2)} Bx</span>
+                    </div>
+
                     {/* Collapse / Expand Toggle Icon */}
                     <div
-                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 rounded-lg transition-colors shrink-0"
-                      title={isCollapsed ? "Expand Party Div" : "Collapse Party Div"}
+                      className={`p-1.5 rounded-xl transition-all shrink-0 ${
+                        isExpanded ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      }`}
+                      title={isCollapsed ? "Click to expand" : "Click to collapse"}
                     >
-                      {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </div>
                   </div>
                 </div>

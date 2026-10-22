@@ -22,37 +22,6 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 
-/* ================= DEFAULT FALLBACK LISTS ================= */
-const DEFAULT_TRADERS = [
-  "GAYATRI ENTERPRISES",
-  "WINE ENTERPRISES PVT LTD",
-  "MILLINNIUM SPIRITS PVT LTD",
-  "VINTAGE SPIRITS",
-  "K.S.N. IRANI & CO.",
-  "MML SPIRITS PRIVATE LIMITED",
-  "VC TRADERS",
-];
-const DEFAULT_COMPANIES = [
-  "SEAGRAM/PERNOD RICARD",
-  "BACARDI",
-  "RADICO KHAITAN",
-  "ACE BEVERAGEZ",
-  "MONICA ALCO BEV",
-  "MEHER DISTILLERIES",
-  "12TH MAN BREWING",
-];
-const DEFAULT_BRANDS = [
-  "Royal Stag",
-  "Blenders Pride",
-  "Bacardi Carta Blanca",
-  "Magic Moments",
-  "Jameson",
-  "Ballantine's",
-  "Chivas Regal",
-  "Corona",
-  "Budweiser",
-];
-
 const cleanList = (arr) => {
   const seen = new Set();
   return (arr || [])
@@ -1565,9 +1534,30 @@ function exportCSV(rows) {
 export default function SchemeDiscussions() {
   const [records, setRecords] = useState(() => loadJSON("sd_records", []));
   const [stores, setStores] = useState(() => loadJSON("sd_stores", []));
-  const [traders, setTraders] = useState(DEFAULT_TRADERS);
-  const [companies, setCompanies] = useState(DEFAULT_COMPANIES);
-  const [brands, setBrands] = useState(DEFAULT_BRANDS);
+  const [traders, setTraders] = useState(() => {
+    try {
+      const cached = localStorage.getItem("drinqkart_scheme_traders_v1");
+      return cached ? cleanList(JSON.parse(cached).map((x) => (typeof x === "object" ? x.name : x))) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [companies, setCompanies] = useState(() => {
+    try {
+      const cached = localStorage.getItem("drinqkart_scheme_companies_v1");
+      return cached ? cleanList(JSON.parse(cached).map((x) => (typeof x === "object" ? x.name : x))) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [brands, setBrands] = useState(() => {
+    try {
+      const cached = localStorage.getItem("drinqkart_scheme_brands_v1");
+      return cached ? cleanList(JSON.parse(cached).map((x) => (typeof x === "object" ? x.name : x))) : [];
+    } catch (_) {
+      return [];
+    }
+  });
   const [q, setQ] = useState("");
   const [activeType, setActiveType] = useState("");
   const [activeStatus, setActiveStatus] = useState("");
@@ -1617,68 +1607,39 @@ export default function SchemeDiscussions() {
         }
       } catch (e) {}
 
-      // 2. Fetch traders from scheme_traders (with fallback to localStorage & gift_stock_trader_pairs)
+      // 2. Fetch traders from scheme_traders
       try {
-        const { data: traderData } = await supabase
+        const { data: traderData, error: tErr } = await supabase
           .from("scheme_traders")
-          .select("name");
-        if (alive && traderData && traderData.length > 0) {
+          .select("name")
+          .order("name", { ascending: true });
+        if (alive && !tErr && traderData) {
           const names = cleanList(traderData.map((t) => t.name));
-          setTraders((prev) => cleanList([...names, ...prev]));
-        } else {
-          const cached = localStorage.getItem("drinqkart_scheme_traders_v1");
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            const allNames = parsed.map((x) => x.name);
-            if (allNames.length > 0) setTraders((prev) => cleanList([...allNames, ...prev]));
-          }
+          setTraders(names);
         }
       } catch (e) {}
 
       // 3. Fetch companies from scheme_companies
       try {
-        const { data: companyData } = await supabase
+        const { data: companyData, error: cErr } = await supabase
           .from("scheme_companies")
-          .select("name");
-        if (alive && companyData && companyData.length > 0) {
+          .select("name")
+          .order("name", { ascending: true });
+        if (alive && !cErr && companyData) {
           const names = cleanList(companyData.map((c) => c.name));
-          setCompanies((prev) => cleanList([...names, ...prev]));
-        } else {
-          const cached = localStorage.getItem("drinqkart_scheme_companies_v1");
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            const allNames = parsed.map((x) => x.name);
-            if (allNames.length > 0) setCompanies((prev) => cleanList([...allNames, ...prev]));
-          }
+          setCompanies(names);
         }
       } catch (e) {}
 
       // 4. Fetch brands from scheme_brands
       try {
-        const { data: brandData } = await supabase
+        const { data: brandData, error: bErr } = await supabase
           .from("scheme_brands")
-          .select("name");
-        if (alive && brandData && brandData.length > 0) {
+          .select("name")
+          .order("name", { ascending: true });
+        if (alive && !bErr && brandData) {
           const names = cleanList(brandData.map((b) => b.name));
-          setBrands((prev) => cleanList([...names, ...prev]));
-        } else {
-          const cached = localStorage.getItem("drinqkart_scheme_brands_v1");
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            const allNames = parsed.map((x) => x.name);
-            if (allNames.length > 0) setBrands((prev) => cleanList([...allNames, ...prev]));
-          }
-        }
-      } catch (e) {}
-
-      // 5. Complement traders and companies from gift_stock_trader_pairs
-      try {
-        const { data: pairData } = await supabase.from("gift_stock_trader_pairs").select("trader, company");
-        if (alive && pairData && pairData.length > 0) {
-          const dbTraders = cleanList(pairData.map((p) => p.trader));
-          const dbCompanies = cleanList(pairData.map((p) => p.company));
-          setTraders((prev) => cleanList([...dbTraders, ...prev]));
-          setCompanies((prev) => cleanList([...dbCompanies, ...prev]));
+          setBrands(names);
         }
       } catch (e) {}
 
