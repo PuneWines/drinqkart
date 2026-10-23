@@ -113,14 +113,14 @@ const Sparkline = ({
   onHoverIndex,
   onLeave,
   width = 280,
-  height = 70,
+  height = 80,
   padding = 4,
 }) => {
   const svgRef = React.useRef(null);
 
   if (!points || points.length === 0) {
     return (
-      <div className="h-16 sm:h-[70px] flex items-center justify-center text-[10px] text-slate-400">
+      <div className="h-19 sm:h-20.5 flex items-center justify-center text-[10px] text-slate-400">
         No data
       </div>
     );
@@ -177,14 +177,14 @@ const Sparkline = ({
 
   return (
     <div
-      className="relative w-full flex justify-center py-1 cursor-crosshair touch-none select-none min-h-[70px]"
+      className="relative w-full flex justify-center py-1 cursor-crosshair touch-none select-none min-h-19 sm:min-h-20.5"
       onMouseMove={handlePointerMove}
       onMouseLeave={onLeave}
     >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-16 sm:h-[70px] overflow-visible"
+        className="w-full h-19 sm:h-20.5 overflow-visible"
       >
         <defs>
           <linearGradient
@@ -205,8 +205,10 @@ const Sparkline = ({
           y="0"
           width={width}
           height={height}
-          fill="transparent"
+          fill="#000000"
+          opacity="0"
           pointerEvents="all"
+          className="cursor-crosshair"
         />
 
         {/* Subtle filled area */}
@@ -404,7 +406,7 @@ const MonthlySalesCard = ({
 
   return (
     <div
-      className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 pb-2.5 border-2 transition-colors duration-150 cursor-pointer min-h-[148px] sm:min-h-[155px] flex flex-col items-center justify-between group/card ${
+      className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 pb-2.5 border-2 transition-colors duration-150 cursor-pointer min-h-40 sm:min-h-42 flex flex-col items-center justify-between group/card ${
         isHovered
           ? "border-sky-500 shadow-md bg-sky-50/40"
           : activeLiquorType && liquorSalesAmount > 0
@@ -448,7 +450,7 @@ const MonthlySalesCard = ({
         </div>
       </div>
 
-      <div className="w-full flex justify-center mt-1.5 grow items-end">
+      <div className="w-full flex justify-center mt-2 grow items-end">
         <Sparkline
           points={item.sparkline}
           hoveredIndex={hoveredIdx}
