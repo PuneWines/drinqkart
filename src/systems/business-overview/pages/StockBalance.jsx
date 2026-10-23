@@ -47,7 +47,8 @@ export function getDefaultDateRange() {
   const lastDay = new Date(endYear, endMonth + 1, 0).getDate();
   const end = `${endYear}-${String(endMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  const startDateObj = new Date(endYear, endMonth - 5, 1);
+  // Last 4 months duration up to current month
+  const startDateObj = new Date(endYear, endMonth - 3, 1);
   const startYear = startDateObj.getFullYear();
   const startMonth = startDateObj.getMonth() + 1;
   const start = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;

@@ -112,15 +112,15 @@ const Sparkline = ({
   hoveredIndex = null,
   onHoverIndex,
   onLeave,
-  width = 160,
-  height = 46,
-  padding = 6,
+  width = 240,
+  height = 48,
+  padding = 4,
 }) => {
   const svgRef = React.useRef(null);
 
   if (!points || points.length === 0) {
     return (
-      <div className="h-11 flex items-center justify-center text-[10px] text-slate-400">
+      <div className="h-12 flex items-center justify-center text-[10px] text-slate-400">
         No data
       </div>
     );
@@ -153,7 +153,7 @@ const Sparkline = ({
 
   const areaData =
     coords.length > 0
-      ? `${pathData} L ${coords[coords.length - 1].x},${height - 2} L ${coords[0].x},${height - 2} Z`
+      ? `${pathData} L ${coords[coords.length - 1].x},${height - 1} L ${coords[0].x},${height - 1} Z`
       : "";
 
   const maxPt = coords[maxIdx];
@@ -177,14 +177,14 @@ const Sparkline = ({
 
   return (
     <div
-      className="relative w-full flex justify-center py-0.5 cursor-crosshair touch-none select-none"
+      className="relative w-full flex justify-center py-0 cursor-crosshair touch-none select-none"
       onMouseMove={handlePointerMove}
       onMouseLeave={onLeave}
     >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full max-w-[165px] h-11 overflow-visible"
+        className="w-full h-12 overflow-visible"
       >
         <defs>
           <linearGradient
@@ -194,7 +194,7 @@ const Sparkline = ({
             x2="0"
             y2="1"
           >
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.25" />
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.28" />
             <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
           </linearGradient>
         </defs>
@@ -217,7 +217,7 @@ const Sparkline = ({
           <circle
             cx={maxPt.x}
             cy={maxPt.y}
-            r="4"
+            r="3.5"
             fill="#15803d"
             stroke="#ffffff"
             strokeWidth="1.5"
@@ -230,7 +230,7 @@ const Sparkline = ({
           <circle
             cx={minPt.x}
             cy={minPt.y}
-            r="4"
+            r="3.5"
             fill="#dc2626"
             stroke="#ffffff"
             strokeWidth="1.5"
@@ -238,47 +238,59 @@ const Sparkline = ({
           />
         )}
 
-        {/* INTERACTIVE PERPENDICULAR LINE & ACTIVE DOT */}
+        {/* INTERACTIVE PERPENDICULAR LINE & ACTIVE DOT WITH SMOOTH TRANSITION */}
         {activePt && (
-          <g className="transition-all duration-75">
+          <g
+            style={{
+              transform: `translate3d(${activePt.x}px, 0, 0)`,
+              transition: "transform 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              willChange: "transform",
+            }}
+          >
             {/* Soft vertical guideline glow */}
             <line
-              x1={activePt.x}
-              y1={1}
-              x2={activePt.x}
-              y2={height - 1}
+              x1={0}
+              y1={0}
+              x2={0}
+              y2={height}
               stroke="#0284c7"
               strokeWidth="5"
               opacity="0.18"
             />
             {/* Crisp vertical perpendicular line */}
             <line
-              x1={activePt.x}
-              y1={1}
-              x2={activePt.x}
-              y2={height - 1}
+              x1={0}
+              y1={0}
+              x2={0}
+              y2={height}
               stroke="#0284c7"
               strokeWidth="1.5"
               strokeDasharray="2 2"
             />
             {/* Perpendicular base tick */}
-            <circle cx={activePt.x} cy={height - 2} r="2" fill="#0284c7" />
+            <circle cx={0} cy={height - 2} r="2" fill="#0284c7" />
             {/* Point glow halo */}
             <circle
-              cx={activePt.x}
+              cx={0}
               cy={activePt.y}
-              r="7.5"
+              r="7"
               fill="#38bdf8"
               opacity="0.35"
+              style={{
+                transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              }}
             />
             {/* Point active marker */}
             <circle
-              cx={activePt.x}
+              cx={0}
               cy={activePt.y}
-              r="4.5"
+              r="4"
               fill="#0284c7"
               stroke="#ffffff"
               strokeWidth="2"
+              style={{
+                transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              }}
             />
           </g>
         )}
@@ -382,9 +394,9 @@ const MonthlySalesCard = ({
 
   return (
     <div
-      className={`bg-[#f8fcff] rounded-2xl p-3 border-2 transition-all duration-200 cursor-pointer min-h-28 flex flex-col items-center justify-between group/card ${
+      className={`bg-[#f8fcff] rounded-2xl p-2.5 sm:p-3 pb-2 border-2 transition-colors duration-150 cursor-pointer min-h-30 flex flex-col items-center justify-between group/card ${
         isHovered
-          ? "border-sky-500 shadow-md ring-2 ring-sky-300/40 bg-sky-50/40"
+          ? "border-sky-500 shadow-md bg-sky-50/40"
           : activeLiquorType && liquorSalesAmount > 0
             ? "border-indigo-300/90 shadow-xs"
             : "border-[#b8ddf8] shadow-xs hover:shadow-md hover:border-indigo-400"
@@ -393,9 +405,10 @@ const MonthlySalesCard = ({
       onMouseMove={onMoveTooltip}
       onMouseLeave={handleLeave}
     >
-      <div className="text-center w-full flex flex-col items-center">
+      <div className="text-center w-full flex flex-col items-center select-none">
         <p
-          className={`text-lg sm:text-xl font-black tracking-tight leading-tight transition-colors duration-150 ${
+          style={{ fontVariantNumeric: "tabular-nums" }}
+          className={`text-lg sm:text-xl font-black tracking-tight leading-none tabular-nums transition-colors duration-150 ${
             isHovered
               ? "text-indigo-600"
               : "text-[#0284c7] group-hover/card:text-indigo-600"
@@ -404,22 +417,28 @@ const MonthlySalesCard = ({
           {displayAmount}
         </p>
 
-        <div className="flex items-center justify-center gap-1.5 mt-0.5 flex-wrap">
-          <p className="text-xs font-bold text-indigo-800">{item.label}</p>
-          {isHovered && (
-            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300 shadow-2xs">
+        {/* Stable, zero-layout-shift fixed height header row */}
+        <div className="h-5 flex items-center justify-center gap-1.5 mt-1 w-full overflow-hidden">
+          <span className="text-xs font-bold text-indigo-800 shrink-0">
+            {item.label}
+          </span>
+          {isHovered ? (
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300 leading-none shrink-0 shadow-2xs">
               Day {dayNumber}
             </span>
-          )}
-          {activeLiquorType && liquorSalesAmount !== null && !isHovered && (
-            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-2xs">
+          ) : activeLiquorType && liquorSalesAmount !== null ? (
+            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 leading-none shrink-0 shadow-2xs">
               {activeLiquorType}: {formatCurrency(liquorSalesAmount)}
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold text-slate-400 leading-none shrink-0">
+              Sales
             </span>
           )}
         </div>
       </div>
 
-      <div className="w-full flex justify-center mt-1.5">
+      <div className="w-full flex justify-center mt-1">
         <Sparkline
           points={item.sparkline}
           hoveredIndex={hoveredIdx}
@@ -468,8 +487,12 @@ const ChartTooltip = ({ tooltip }) => {
 
   return (
     <div
-      className="fixed z-50 pointer-events-none transition-transform duration-75 ease-out select-none"
-      style={{ left: `${left}px`, top: `${top}px` }}
+      className="fixed top-0 left-0 z-50 pointer-events-none select-none"
+      style={{
+        transform: `translate3d(${left}px, ${top}px, 0)`,
+        transition: "transform 75ms cubic-bezier(0.2, 0, 0.2, 1)",
+        willChange: "transform",
+      }}
     >
       <div className="bg-slate-900/95 backdrop-blur-md text-white rounded-xl p-2 px-2.5 shadow-2xl border border-slate-700/80 text-xs min-w-40 max-w-56">
         {tooltip.title && (
@@ -1708,7 +1731,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
       document.removeEventListener("click", handleClickOutside, true);
   }, [clickedLiquorType, hideTooltip]);
 
-  // Dynamic date range helper: last 6 months up to current month (e.g. May 1 to Oct 31)
+  // Dynamic date range helper: last 4 months up to current month (e.g. Jul 1 to Oct 31)
   const getDefaultDateRange = useCallback(() => {
     const now = new Date();
     const endYear = now.getFullYear();
@@ -1716,7 +1739,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     const lastDay = new Date(endYear, endMonth + 1, 0).getDate();
     const end = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-    const startDateObj = new Date(endYear, endMonth - 5, 1);
+    // 4 months duration: current month and preceding 3 months
+    const startDateObj = new Date(endYear, endMonth - 3, 1);
     const startYear = startDateObj.getFullYear();
     const startMonth = startDateObj.getMonth() + 1;
     const start = `${startYear}-${String(startMonth).padStart(2, "0")}-01`;
@@ -1724,12 +1748,72 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     return { start, end };
   }, []);
 
-  // Filter States — default to last 6 months to current month, fully customizable by user
+  // Filter States — default to last 4 months to current month, strictly capped to 4 months max duration
   const [selectedStore, setSelectedStore] = useState("All");
   const [selectedLiquorType, setSelectedLiquorType] = useState("All");
   const [selectedSubhead, setSelectedSubhead] = useState("All");
   const [startDate, setStartDate] = useState(() => getDefaultDateRange().start);
   const [endDate, setEndDate] = useState(() => getDefaultDateRange().end);
+
+  // Helper: Get maximum allowable end date for 4 months total duration from startDate
+  const getMaxAllowedEndDate = useCallback((startStr) => {
+    if (!startStr) return "";
+    const [sYear, sMonth] = startStr.split("-").map(Number);
+    // 4 months duration = start month + 3 months
+    const maxEndObj = new Date(sYear, sMonth - 1 + 4, 0);
+    const y = maxEndObj.getFullYear();
+    const m = String(maxEndObj.getMonth() + 1).padStart(2, "0");
+    const d = String(maxEndObj.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const maxAllowedEndDate = useMemo(() => {
+    return getMaxAllowedEndDate(startDate);
+  }, [startDate, getMaxAllowedEndDate]);
+
+  // Handler for Start Date changes (with 4 months max duration & auto-select next 3 months)
+  const handleStartDateChange = useCallback(
+    (newStart) => {
+      if (!newStart) {
+        setStartDate("");
+        return;
+      }
+      setStartDate(newStart);
+
+      const maxEnd = getMaxAllowedEndDate(newStart);
+
+      // If endDate is empty, or less than newStart, or exceeds 4 months duration:
+      // auto-select its next 3 months (end of 4th month)
+      if (!endDate || endDate < newStart || endDate > maxEnd) {
+        setEndDate(maxEnd);
+      }
+    },
+    [endDate, getMaxAllowedEndDate],
+  );
+
+  // Handler for End Date changes (prevents end date < start date, caps at max 4 months)
+  const handleEndDateChange = useCallback(
+    (newEnd) => {
+      if (!newEnd) {
+        setEndDate("");
+        return;
+      }
+      // Don't allow end date less than start date
+      if (startDate && newEnd < startDate) {
+        setEndDate(startDate);
+        return;
+      }
+      if (startDate) {
+        const maxEnd = getMaxAllowedEndDate(startDate);
+        if (newEnd > maxEnd) {
+          setEndDate(maxEnd);
+          return;
+        }
+      }
+      setEndDate(newEnd);
+    },
+    [startDate, getMaxAllowedEndDate],
+  );
 
   // Individual Metric Filters for all 4 Divs on Sales Tab ('amount' | 'cases')
   const [card1Metric, setCard1Metric] = useState("amount");
@@ -2370,9 +2454,10 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
             setSelectedSubhead={setSelectedSubhead}
             subheadOptions={subheadOptions}
             startDate={startDate}
-            setStartDate={setStartDate}
+            setStartDate={handleStartDateChange}
             endDate={endDate}
-            setEndDate={setEndDate}
+            setEndDate={handleEndDateChange}
+            maxAllowedEndDate={maxAllowedEndDate}
             formatIndianDate={formatIndianDate}
           />
         )}
@@ -2479,7 +2564,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
           {/* ========================================================= */}
           {activeTab === "Overview" && (
             <>
-              <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {computed.monthlySalesCards.map((item, idx) => (
                   <MonthlySalesCard
                     key={item.key || idx}
@@ -3882,9 +3967,9 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
             <GroupWiseStoreWiseSale
               liveRecords={records}
               startDate={startDate}
-              setStartDate={setStartDate}
+              setStartDate={handleStartDateChange}
               endDate={endDate}
-              setEndDate={setEndDate}
+              setEndDate={handleEndDateChange}
             />
           )}
 
@@ -3895,9 +3980,9 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
             <BrandWiseSale
               liveRecords={records}
               startDate={startDate}
-              setStartDate={setStartDate}
+              setStartDate={handleStartDateChange}
               endDate={endDate}
-              setEndDate={setEndDate}
+              setEndDate={handleEndDateChange}
             />
           )}
 
@@ -3908,9 +3993,9 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
             <SaleExplorationTab
               liveRecords={records}
               startDate={startDate}
-              setStartDate={setStartDate}
+              setStartDate={handleStartDateChange}
               endDate={endDate}
-              setEndDate={setEndDate}
+              setEndDate={handleEndDateChange}
             />
           )}
         </main>

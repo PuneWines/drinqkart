@@ -22,6 +22,7 @@ export const DashboardFilterSidebar = ({
   setStartDate,
   endDate = "",
   setEndDate,
+  maxAllowedEndDate = "",
   formatIndianDate = (d) => d,
 }) => {
   return (
@@ -155,9 +156,14 @@ export const DashboardFilterSidebar = ({
 
       {/* Filter 4: Start Date */}
       <div className="bg-[#edf6fe] rounded-2xl p-3 border-2 border-[#badbf4] flex flex-col shadow-xs hover:border-indigo-400 transition-all">
-        <label className="text-[11px] font-black text-indigo-950 uppercase tracking-wider mb-1.5">
-          Start Date
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-[11px] font-black text-indigo-950 uppercase tracking-wider">
+            Start Date
+          </label>
+          <span className="text-[9px] font-bold text-indigo-600 bg-indigo-100/80 px-2 py-0.5 rounded-md border border-indigo-200/50">
+            Max 4 Months
+          </span>
+        </div>
         <div className="relative bg-white/95 rounded-xl border border-[#badbf4] hover:border-indigo-400 focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-200/60 shadow-2xs transition-all flex items-center justify-between">
           <input
             type="date"
@@ -171,13 +177,22 @@ export const DashboardFilterSidebar = ({
 
       {/* Filter 5: End Date */}
       <div className="bg-[#edf6fe] rounded-2xl p-3 border-2 border-[#badbf4] flex flex-col shadow-xs hover:border-indigo-400 transition-all">
-        <label className="text-[11px] font-black text-indigo-950 uppercase tracking-wider mb-1.5">
-          End Date
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-[11px] font-black text-indigo-950 uppercase tracking-wider">
+            End Date
+          </label>
+          {startDate && (
+            <span className="text-[9px] font-bold text-slate-500">
+              Min: {startDate.substring(5)}
+            </span>
+          )}
+        </div>
         <div className="relative bg-white/95 rounded-xl border border-[#badbf4] hover:border-indigo-400 focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-200/60 shadow-2xs transition-all flex items-center justify-between">
           <input
             type="date"
             value={endDate}
+            min={startDate || undefined}
+            max={maxAllowedEndDate || undefined}
             onChange={(e) => setEndDate && setEndDate(e.target.value)}
             className="w-full bg-transparent py-2 pl-3 pr-6 text-xs font-bold text-slate-800 outline-none cursor-pointer"
           />
