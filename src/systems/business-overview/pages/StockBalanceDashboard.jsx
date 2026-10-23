@@ -112,15 +112,15 @@ const Sparkline = ({
   hoveredIndex = null,
   onHoverIndex,
   onLeave,
-  width = 240,
-  height = 48,
+  width = 280,
+  height = 70,
   padding = 4,
 }) => {
   const svgRef = React.useRef(null);
 
   if (!points || points.length === 0) {
     return (
-      <div className="h-12 flex items-center justify-center text-[10px] text-slate-400">
+      <div className="h-16 sm:h-[70px] flex items-center justify-center text-[10px] text-slate-400">
         No data
       </div>
     );
@@ -177,14 +177,14 @@ const Sparkline = ({
 
   return (
     <div
-      className="relative w-full flex justify-center py-0 cursor-crosshair touch-none select-none"
+      className="relative w-full flex justify-center py-1 cursor-crosshair touch-none select-none min-h-[70px]"
       onMouseMove={handlePointerMove}
       onMouseLeave={onLeave}
     >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-12 overflow-visible"
+        className="w-full h-16 sm:h-[70px] overflow-visible"
       >
         <defs>
           <linearGradient
@@ -194,10 +194,20 @@ const Sparkline = ({
             x2="0"
             y2="1"
           >
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.28" />
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
             <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
           </linearGradient>
         </defs>
+
+        {/* Full-coverage transparent hover capture rect */}
+        <rect
+          x="0"
+          y="0"
+          width={width}
+          height={height}
+          fill="transparent"
+          pointerEvents="all"
+        />
 
         {/* Subtle filled area */}
         {areaData && <path d={areaData} fill={`url(#spark-grad-${gradId})`} />}
@@ -207,7 +217,7 @@ const Sparkline = ({
           d={pathData}
           fill="none"
           stroke="#38bdf8"
-          strokeWidth="2.5"
+          strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -217,7 +227,7 @@ const Sparkline = ({
           <circle
             cx={maxPt.x}
             cy={maxPt.y}
-            r="3.5"
+            r="4"
             fill="#15803d"
             stroke="#ffffff"
             strokeWidth="1.5"
@@ -230,7 +240,7 @@ const Sparkline = ({
           <circle
             cx={minPt.x}
             cy={minPt.y}
-            r="3.5"
+            r="4"
             fill="#dc2626"
             stroke="#ffffff"
             strokeWidth="1.5"
@@ -254,8 +264,8 @@ const Sparkline = ({
               x2={0}
               y2={height}
               stroke="#0284c7"
-              strokeWidth="5"
-              opacity="0.18"
+              strokeWidth="6"
+              opacity="0.2"
             />
             {/* Crisp vertical perpendicular line */}
             <line
@@ -268,12 +278,12 @@ const Sparkline = ({
               strokeDasharray="2 2"
             />
             {/* Perpendicular base tick */}
-            <circle cx={0} cy={height - 2} r="2" fill="#0284c7" />
+            <circle cx={0} cy={height - 2} r="2.5" fill="#0284c7" />
             {/* Point glow halo */}
             <circle
               cx={0}
               cy={activePt.y}
-              r="7"
+              r="8"
               fill="#38bdf8"
               opacity="0.35"
               style={{
@@ -284,7 +294,7 @@ const Sparkline = ({
             <circle
               cx={0}
               cy={activePt.y}
-              r="4"
+              r="4.5"
               fill="#0284c7"
               stroke="#ffffff"
               strokeWidth="2"
@@ -394,7 +404,7 @@ const MonthlySalesCard = ({
 
   return (
     <div
-      className={`bg-[#f8fcff] rounded-2xl p-2.5 sm:p-3 pb-2 border-2 transition-colors duration-150 cursor-pointer min-h-30 flex flex-col items-center justify-between group/card ${
+      className={`bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 pb-2.5 border-2 transition-colors duration-150 cursor-pointer min-h-[148px] sm:min-h-[155px] flex flex-col items-center justify-between group/card ${
         isHovered
           ? "border-sky-500 shadow-md bg-sky-50/40"
           : activeLiquorType && liquorSalesAmount > 0
@@ -408,7 +418,7 @@ const MonthlySalesCard = ({
       <div className="text-center w-full flex flex-col items-center select-none">
         <p
           style={{ fontVariantNumeric: "tabular-nums" }}
-          className={`text-lg sm:text-xl font-black tracking-tight leading-none tabular-nums transition-colors duration-150 ${
+          className={`text-xl sm:text-2xl font-black tracking-tight leading-none tabular-nums transition-colors duration-150 ${
             isHovered
               ? "text-indigo-600"
               : "text-[#0284c7] group-hover/card:text-indigo-600"
@@ -438,7 +448,7 @@ const MonthlySalesCard = ({
         </div>
       </div>
 
-      <div className="w-full flex justify-center mt-1">
+      <div className="w-full flex justify-center mt-1.5 grow items-end">
         <Sparkline
           points={item.sparkline}
           hoveredIndex={hoveredIdx}
