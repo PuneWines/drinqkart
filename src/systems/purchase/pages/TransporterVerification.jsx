@@ -11,7 +11,7 @@ const TransporterVerification = () => {
   const [data, setData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
-  const { selectedShop } = useShopStore();
+  const { selectedShop, assignedShops, isShopAdmin } = useShopStore();
   const { companies, fetchCompanies } = useCompanyStore();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -25,10 +25,23 @@ const TransporterVerification = () => {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const { data: poData, error } = await supabase
-        .from("purchase_purchase_orders")
-        .select("*")
-        .order("created_at", { ascending: false });
+      try {
+        const { assignedShops: currAssigned, isShopAdmin: currIsAdmin } = useShopStore.getState();
+        let query = supabase
+          .from("purchase_purchase_orders")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!currIsAdmin) {
+          if (!currAssigned || currAssigned.length === 0) {
+            setData([]);
+            setIsLoading(false);
+            return;
+          }
+          query = query.in("shop_name", currAssigned);
+        }
+
+        const { data: poData, error } = await query;
 
       if (poData) {
         // Fetch indents, indent_items, and approved_indent_items to resolve shop_name
@@ -52,7 +65,7 @@ const TransporterVerification = () => {
           return acc;
         }, {});
 
-        const formatted = poData.map(item => {
+        let formatted = poData.map(item => {
           let shopName = item.shop_name || null;
           if (!shopName) {
             const parentIndentId = itemMap[item.indent_id];
@@ -91,14 +104,32 @@ const TransporterVerification = () => {
             })
           };
         });
+
+        if (!isShopAdmin) {
+          if (!assignedShops || assignedShops.length === 0) {
+            formatted = [];
+          } else {
+            formatted = formatted.filter((item) =>
+              item.shop_name &&
+              assignedShops.some(
+                (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+              ),
+            );
+          }
+        }
+
         setData(formatted);
       } else if (error) {
         console.error("Error fetching POs:", error);
       }
+    } catch (err) {
+      console.error("Error in TransporterVerification fetchData:", err);
+    } finally {
       setIsLoading(false);
-    };
-    fetchData();
-  }, []);
+    }
+  };
+  fetchData();
+}, []);
 
   const columns = useMemo(() => {
     const baseColumns = [
@@ -218,8 +249,20 @@ const TransporterVerification = () => {
 
   const filteredData = useMemo(() => {
     let result = data.filter(item => !isTransporterSkippedForOrder(item, companies));
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      result = result.filter(
+        (item) =>
+          item.shop_name &&
+          assignedShops.some(
+            (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+          ),
+      );
+    }
     if (selectedShop !== "All") {
-      result = result.filter(item => item.shop_name === selectedShop);
+      result = result.filter(
+        (item) => (item.shop_name || "").toLowerCase() === selectedShop.toLowerCase(),
+      );
     }
 
     if (startDate) {

@@ -35,7 +35,7 @@ const Approval = () => {
       return "pending";
     }
   });
-  const { selectedShop } = useShopStore();
+  const { selectedShop, assignedShops, isShopAdmin } = useShopStore();
   const { companies, fetchCompanies } = useCompanyStore();
 
   useEffect(() => {
@@ -446,8 +446,36 @@ const Approval = () => {
 
   const { data: approvalsDataResponse, isLoading: isApprovalsQueryLoading } =
     useQuery({
-      queryKey: ["approvalsData", selectedShop],
+      queryKey: [
+        "approvalsData",
+        selectedShop,
+        isShopAdmin,
+        (assignedShops || []).join(","),
+      ],
       queryFn: async () => {
+        // Enforce user shop scoping:
+        // If user is not admin and has assigned shops, they can NEVER see unassigned shops
+        const isRestricted =
+          !isShopAdmin && Array.isArray(assignedShops) && assignedShops.length > 0;
+
+        if (!isShopAdmin && (!assignedShops || assignedShops.length === 0)) {
+          // Non-admin user with no shop assigned -> return empty data safely
+          return {
+            rawIndentItems: [],
+            rawApprovedIndentItems: [],
+            rawRejectedIndentItems: [],
+          };
+        }
+
+        const effectiveShop = selectedShop;
+        const useSingleShopFilter =
+          effectiveShop &&
+          effectiveShop !== "All" &&
+          (!isRestricted ||
+            assignedShops.some(
+              (s) => s.toLowerCase() === effectiveShop.toLowerCase(),
+            ));
+
         const pageSize = 1000;
         const totalPages = 10; // covers up to 10,000 pending items in parallel
 
@@ -455,61 +483,62 @@ const Approval = () => {
         const indentPageQueries = Array.from(
           { length: totalPages },
           (_, page) => {
-            if (selectedShop !== "All") {
-              return supabase
-                .from("purchase_indent_items")
+            let q = supabase
+              .from("purchase_indent_items")
+              .or("approval_status.eq.pending,approval_status.is.null")
+              .order("created_at", { ascending: false })
+              .order("id", { ascending: true })
+              .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            if (useSingleShopFilter) {
+              return q
                 .select("*, purchase_indents!inner(shop_name)")
-                .eq("purchase_indents.shop_name", selectedShop)
-                .or("approval_status.eq.pending,approval_status.is.null")
-                .order("created_at", { ascending: false })
-                .order("id", { ascending: true })
-                .range(page * pageSize, (page + 1) * pageSize - 1);
+                .eq("purchase_indents.shop_name", effectiveShop);
+            } else if (isRestricted) {
+              return q
+                .select("*, purchase_indents!inner(shop_name)")
+                .in("purchase_indents.shop_name", assignedShops);
             } else {
-              return supabase
-                .from("purchase_indent_items")
-                .select("*, purchase_indents(shop_name)")
-                .or("approval_status.eq.pending,approval_status.is.null")
-                .order("created_at", { ascending: false })
-                .order("id", { ascending: true })
-                .range(page * pageSize, (page + 1) * pageSize - 1);
+              return q.select("*, purchase_indents(shop_name)");
             }
           },
         );
 
         // 2. Fetch approved indent items (history)
-        let approvedQuery;
-        if (selectedShop !== "All") {
-          approvedQuery = supabase
-            .from("purchase_approved_indent_items")
+        let approvedQuery = supabase
+          .from("purchase_approved_indent_items")
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if (useSingleShopFilter) {
+          approvedQuery = approvedQuery
             .select("*, purchase_indents!inner(shop_name)")
-            .eq("purchase_indents.shop_name", selectedShop)
-            .order("created_at", { ascending: false })
-            .limit(500);
+            .eq("purchase_indents.shop_name", effectiveShop);
+        } else if (isRestricted) {
+          approvedQuery = approvedQuery
+            .select("*, purchase_indents!inner(shop_name)")
+            .in("purchase_indents.shop_name", assignedShops);
         } else {
-          approvedQuery = supabase
-            .from("purchase_approved_indent_items")
-            .select("*, purchase_indents(shop_name)")
-            .order("created_at", { ascending: false })
-            .limit(500);
+          approvedQuery = approvedQuery.select("*, purchase_indents(shop_name)");
         }
 
         // 3. Fetch rejected indent items (history)
-        let rejectedQuery;
-        if (selectedShop !== "All") {
-          rejectedQuery = supabase
-            .from("purchase_indent_items")
+        let rejectedQuery = supabase
+          .from("purchase_indent_items")
+          .eq("approval_status", "rejected")
+          .order("updated_at", { ascending: false })
+          .limit(500);
+
+        if (useSingleShopFilter) {
+          rejectedQuery = rejectedQuery
             .select("*, purchase_indents!inner(shop_name)")
-            .eq("purchase_indents.shop_name", selectedShop)
-            .eq("approval_status", "rejected")
-            .order("updated_at", { ascending: false })
-            .limit(500);
+            .eq("purchase_indents.shop_name", effectiveShop);
+        } else if (isRestricted) {
+          rejectedQuery = rejectedQuery
+            .select("*, purchase_indents!inner(shop_name)")
+            .in("purchase_indents.shop_name", assignedShops);
         } else {
-          rejectedQuery = supabase
-            .from("purchase_indent_items")
-            .select("*, purchase_indents(shop_name)")
-            .eq("approval_status", "rejected")
-            .order("updated_at", { ascending: false })
-            .limit(500);
+          rejectedQuery = rejectedQuery.select("*, purchase_indents(shop_name)");
         }
 
         const [approvedResult, rejectedResult, ...indentResults] =
@@ -552,12 +581,25 @@ const Approval = () => {
         rawApproved.map((i) => i.original_item_id).filter(Boolean),
       );
 
-      // Filter out any items from rawIndentItems that are already in rawApproved
+      // Filter out any items from rawIndentItems that are already in rawApproved or outside assigned shops
       const enrichedIndentItems = (approvalsDataResponse.rawIndentItems || [])
         .filter((item) => {
           if (approvedOriginalIds.has(item.id)) return false;
           const key = `${item.indent_id}::${item.party_indent_id}::${(item.item_name || "").trim().toLowerCase()}`;
           if (approvedKeys.has(key)) return false;
+
+          // Defense-in-depth: enforce assigned shops filter in memory
+          if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+            const itemShop = item.purchase_indents?.shop_name || item.shop_name;
+            if (
+              !itemShop ||
+              !assignedShops.some(
+                (as) => as.toLowerCase() === itemShop.toLowerCase(),
+              )
+            ) {
+              return false;
+            }
+          }
           return true;
         })
         .map((item) => ({
@@ -567,19 +609,49 @@ const Approval = () => {
 
       const rawRejected = approvalsDataResponse.rawRejectedIndentItems || [];
 
-      const enrichedApprovedItems = rawApproved.map((item) => ({
-        ...item,
-        approval_status: "approved",
-        is_excluded: false,
-        shop_name: item.purchase_indents?.shop_name || "Unknown",
-      }));
+      const enrichedApprovedItems = rawApproved
+        .filter((item) => {
+          if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+            const itemShop = item.purchase_indents?.shop_name || item.shop_name;
+            if (
+              !itemShop ||
+              !assignedShops.some(
+                (as) => as.toLowerCase() === itemShop.toLowerCase(),
+              )
+            ) {
+              return false;
+            }
+          }
+          return true;
+        })
+        .map((item) => ({
+          ...item,
+          approval_status: "approved",
+          is_excluded: false,
+          shop_name: item.purchase_indents?.shop_name || "Unknown",
+        }));
 
-      const enrichedRejectedItems = rawRejected.map((item) => ({
-        ...item,
-        approval_status: "rejected",
-        is_excluded: false,
-        shop_name: item.purchase_indents?.shop_name || "Unknown",
-      }));
+      const enrichedRejectedItems = rawRejected
+        .filter((item) => {
+          if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+            const itemShop = item.purchase_indents?.shop_name || item.shop_name;
+            if (
+              !itemShop ||
+              !assignedShops.some(
+                (as) => as.toLowerCase() === itemShop.toLowerCase(),
+              )
+            ) {
+              return false;
+            }
+          }
+          return true;
+        })
+        .map((item) => ({
+          ...item,
+          approval_status: "rejected",
+          is_excluded: false,
+          shop_name: item.purchase_indents?.shop_name || "Unknown",
+        }));
 
       const enrichedHistoryItems = [
         ...enrichedApprovedItems,

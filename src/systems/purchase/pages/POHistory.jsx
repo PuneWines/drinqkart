@@ -75,7 +75,7 @@ const SkeletonRows = ({ count = 8 }) =>
 
 /* ── Main Component ──────────────────────────────────────────── */
 const POHistory = () => {
-  const { selectedShop } = useShopStore();
+  const { selectedShop, assignedShops, isShopAdmin } = useShopStore();
   const { companies, fetchCompanies } = useCompanyStore();
   const queryClient = useQueryClient();
 
@@ -134,9 +134,22 @@ const POHistory = () => {
   /* ── Unique vendor list for filter dropdown ───────────────── */
   /* ── Filtered by Global Shop Selector ────────────────────── */
   const shopFilteredOrders = useMemo(() => {
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      if (selectedShop && selectedShop !== "All") {
+        return orders.filter((o) => (o.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+      }
+      return orders.filter(
+        (o) =>
+          o.shop_name &&
+          assignedShops.some(
+            (s) => s.toLowerCase() === o.shop_name.toLowerCase(),
+          ),
+      );
+    }
     if (!selectedShop || selectedShop === "All") return orders;
-    return orders.filter((o) => o.shop_name === selectedShop);
-  }, [orders, selectedShop]);
+    return orders.filter((o) => (o.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+  }, [orders, selectedShop, isShopAdmin, assignedShops]);
 
   /* ── Unique vendor list for filter dropdown ───────────────── */
   const vendorOptions = useMemo(() => {

@@ -9,74 +9,106 @@ const TraderVerification = () => {
   const [data, setData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
-  const { selectedShop } = useShopStore();
+  const { selectedShop, assignedShops, isShopAdmin } = useShopStore();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const { data: poData, error } = await supabase
-        .from("purchase_purchase_orders")
-        .select("*")
-        .order("created_at", { ascending: false });
+      try {
+        const { assignedShops: currAssigned, isShopAdmin: currIsAdmin } = useShopStore.getState();
+        let query = supabase
+          .from("purchase_purchase_orders")
+          .select("*")
+          .order("created_at", { ascending: false });
 
-      if (poData) {
-        // Collect all unique indent_ids from the POs
-        const uniqueIndentIds = [...new Set(poData.map(po => po.indent_id).filter(Boolean))];
-
-        // Fetch only the indent_items and approved_indent_items rows that match these unique_indent_ids
-        let items = [];
-        if (uniqueIndentIds.length > 0) {
-          const [resItems, resApproved] = await Promise.all([
-            supabase.from("purchase_indent_items").select("indent_id, party_indent_id").in("party_indent_id", uniqueIndentIds),
-            supabase.from("purchase_approved_indent_items").select("indent_id, unique_indent_id").in("unique_indent_id", uniqueIndentIds)
-          ]);
-          items = [...(resItems.data || []), ...(resApproved.data || [])];
-        }
-
-        // Build map: unique_indent_id/party_indent_id (text) → indent_id (UUID)
-        const itemMap = (items || []).reduce((acc, item) => {
-          const key = item.unique_indent_id || item.party_indent_id;
-          if (key && item.indent_id) {
-            acc[key] = item.indent_id;
+        if (!currIsAdmin) {
+          if (!currAssigned || currAssigned.length === 0) {
+            setData([]);
+            setIsLoading(false);
+            return;
           }
-          return acc;
-        }, {});
-
-        // Collect the parent indent UUIDs we actually need
-        const parentIndentIds = [...new Set(Object.values(itemMap))];
-
-        // Fetch only the indents we need
-        const { data: indents } = parentIndentIds.length > 0
-          ? await supabase
-              .from("purchase_indents")
-              .select("id, shop_name")
-              .in("id", parentIndentIds)
-          : { data: [] };
-
-        const indentMap = (indents || []).reduce((acc, ind) => {
-          acc[ind.id] = ind.shop_name;
-          return acc;
-        }, {});
-
-        // Fetch item counts per PO from both approved_indent_items and indent_items
-        const poIds = poData.map(po => po.id).filter(Boolean);
-        const itemCountMap = {};
-        if (poIds.length > 0) {
-          const [resApproved, resIndent] = await Promise.all([
-            supabase.from("purchase_approved_indent_items").select("po_id").in("po_id", poIds).neq("po_status", "excluded"),
-            supabase.from("purchase_indent_items").select("po_id").in("po_id", poIds).neq("po_status", "excluded")
-          ]);
-          const allPoItems = [...(resApproved.data || []), ...(resIndent.data || [])];
-          allPoItems.forEach(row => {
-            if (row.po_id) {
-              itemCountMap[row.po_id] = (itemCountMap[row.po_id] || 0) + 1;
-            }
-          });
+          query = query.in("shop_name", currAssigned);
         }
 
-        const formatted = poData.map(item => {
+        const { data: poData, error } = await query;
+
+        if (poData) {
+          const chunk = (arr, size = 40) => {
+            const res = [];
+            for (let i = 0; i < arr.length; i += size) res.push(arr.slice(i, i + size));
+            return res;
+          };
+
+          // Collect all unique indent_ids from the POs
+          const uniqueIndentIds = [...new Set(poData.map(po => po.indent_id).filter(Boolean))];
+
+          // Fetch only the indent_items and approved_indent_items rows that match these unique_indent_ids
+          let items = [];
+          if (uniqueIndentIds.length > 0) {
+            const itemPromises = [];
+            chunk(uniqueIndentIds).forEach(batch => {
+              itemPromises.push(supabase.from("purchase_indent_items").select("indent_id, party_indent_id").in("party_indent_id", batch));
+              itemPromises.push(supabase.from("purchase_approved_indent_items").select("indent_id, unique_indent_id").in("unique_indent_id", batch));
+            });
+            const itemResults = await Promise.all(itemPromises);
+            itemResults.forEach(res => {
+              if (res.data) items.push(...res.data);
+            });
+          }
+
+          // Build map: unique_indent_id/party_indent_id (text) → indent_id (UUID)
+          const itemMap = (items || []).reduce((acc, item) => {
+            const key = item.unique_indent_id || item.party_indent_id;
+            if (key && item.indent_id) {
+              acc[key] = item.indent_id;
+            }
+            return acc;
+          }, {});
+
+          // Collect the parent indent UUIDs we actually need
+          const parentIndentIds = [...new Set(Object.values(itemMap))];
+
+          // Fetch only the indents we need
+          const indents = [];
+          if (parentIndentIds.length > 0) {
+            const indentPromises = chunk(parentIndentIds).map(batch =>
+              supabase.from("purchase_indents").select("id, shop_name").in("id", batch)
+            );
+            const indentResults = await Promise.all(indentPromises);
+            indentResults.forEach(res => {
+              if (res.data) indents.push(...res.data);
+            });
+          }
+
+          const indentMap = indents.reduce((acc, ind) => {
+            acc[ind.id] = ind.shop_name;
+            return acc;
+          }, {});
+
+          // Fetch item counts per PO from both approved_indent_items and indent_items
+          const poIds = poData.map(po => po.id).filter(Boolean);
+          const itemCountMap = {};
+          if (poIds.length > 0) {
+            const countPromises = [];
+            chunk(poIds).forEach(batch => {
+              countPromises.push(supabase.from("purchase_approved_indent_items").select("po_id").in("po_id", batch).neq("po_status", "excluded"));
+              countPromises.push(supabase.from("purchase_indent_items").select("po_id").in("po_id", batch).neq("po_status", "excluded"));
+            });
+            const countResults = await Promise.all(countPromises);
+            countResults.forEach(res => {
+              if (res.data) {
+                res.data.forEach(row => {
+                  if (row.po_id) {
+                    itemCountMap[row.po_id] = (itemCountMap[row.po_id] || 0) + 1;
+                  }
+                });
+              }
+            });
+          }
+
+        let formatted = poData.map(item => {
           let totalReceivedQty = 0;
           if (item.received_items && typeof item.received_items === 'object') {
             totalReceivedQty = Object.values(item.received_items).reduce((sum, currentItem) => sum + (Number(currentItem.receivedQty) || 0), 0);
@@ -111,14 +143,32 @@ const TraderVerification = () => {
             total_items: Array.isArray(item.po_items) && item.po_items.length > 0 ? item.po_items.length : (itemCountMap[item.id] || 0)
           };
         });
+
+        if (!isShopAdmin) {
+          if (!assignedShops || assignedShops.length === 0) {
+            formatted = [];
+          } else {
+            formatted = formatted.filter((item) =>
+              item.shop_name &&
+              assignedShops.some(
+                (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+              ),
+            );
+          }
+        }
+
         setData(formatted);
       } else if (error) {
         console.error("Error fetching POs:", error);
       }
+    } catch (err) {
+      console.error("Error in TraderVerification fetchData:", err);
+    } finally {
       setIsLoading(false);
-    };
-    fetchData();
-  }, []);
+    }
+  };
+  fetchData();
+}, []);
 
   const columns = useMemo(() => {
     const baseColumns = [
@@ -262,8 +312,20 @@ const TraderVerification = () => {
 
   const filteredData = useMemo(() => {
     let result = data;
-    if (selectedShop !== "All") {
-      result = result.filter(item => item.shop_name === selectedShop);
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      result = result.filter(
+        (item) =>
+          item.shop_name &&
+          assignedShops.some(
+            (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+          ),
+      );
+    }
+    if (selectedShop && selectedShop !== "All") {
+      result = result.filter(
+        (item) => (item.shop_name || "").toLowerCase() === selectedShop.toLowerCase(),
+      );
     }
 
     if (startDate) {

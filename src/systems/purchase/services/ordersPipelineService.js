@@ -7,6 +7,8 @@ export const fetchPipelineOrders = async ({
   limit = 20,
   offset = 0,
   shop = "All",
+  assignedShops = [],
+  isShopAdmin = true,
   status = "All",
   search = "",
   sortBy = "date-desc",
@@ -16,7 +18,14 @@ export const fetchPipelineOrders = async ({
   let query = supabase.from("purchase_purchase_orders").select("*");
 
   // Apply shop filter
-  if (shop && shop !== "All") {
+  if (!isShopAdmin) {
+    if (!assignedShops || assignedShops.length === 0) return [];
+    if (shop && shop !== "All") {
+      query = query.eq("shop_name", shop);
+    } else {
+      query = query.in("shop_name", assignedShops);
+    }
+  } else if (shop && shop !== "All") {
     query = query.eq("shop_name", shop);
   }
 
@@ -83,7 +92,15 @@ export const fetchPipelineOrders = async ({
   if (poError && hasSearchQuery) {
     const q = `%${search.trim()}%`;
     let retryQuery = supabase.from("purchase_purchase_orders").select("*");
-    if (shop && shop !== "All") retryQuery = retryQuery.eq("shop_name", shop);
+    if (!isShopAdmin) {
+      if (shop && shop !== "All") {
+        retryQuery = retryQuery.eq("shop_name", shop);
+      } else if (assignedShops && assignedShops.length > 0) {
+        retryQuery = retryQuery.in("shop_name", assignedShops);
+      }
+    } else if (shop && shop !== "All") {
+      retryQuery = retryQuery.eq("shop_name", shop);
+    }
     retryQuery = retryQuery.or(
       `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q},company_name.ilike.${q},filtered_company_name.ilike.${q}`
     );
@@ -232,18 +249,40 @@ export const fetchPipelineOrders = async ({
     });
   }
 
+  if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+    mapped = mapped.filter((po) =>
+      po.shop_name &&
+      assignedShops.some(
+        (as) => as.toLowerCase() === po.shop_name.toLowerCase(),
+      ),
+    );
+  }
+
   return mapped;
 };
 
 /**
  * Fetch a lightweight list of PO statuses for generating global KPI cards.
  */
-export const fetchPipelineStats = async ({ shop = "All", startDate = "", endDate = "" }) => {
+export const fetchPipelineStats = async ({
+  shop = "All",
+  assignedShops = [],
+  isShopAdmin = true,
+  startDate = "",
+  endDate = "",
+}) => {
   let query = supabase
     .from("purchase_purchase_orders")
     .select("trader_status, transporter_status, receiver_status, trader_item_statuses, shop_name");
 
-  if (shop && shop !== "All") {
+  if (!isShopAdmin) {
+    if (!assignedShops || assignedShops.length === 0) return [];
+    if (shop && shop !== "All") {
+      query = query.eq("shop_name", shop);
+    } else {
+      query = query.in("shop_name", assignedShops);
+    }
+  } else if (shop && shop !== "All") {
     query = query.eq("shop_name", shop);
   }
 
@@ -259,5 +298,15 @@ export const fetchPipelineStats = async ({ shop = "All", startDate = "", endDate
 
   const { data, error } = await query;
   if (error) throw error;
-  return data || [];
+  let stats = data || [];
+  if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+    stats = stats.filter(
+      (item) =>
+        item.shop_name &&
+        assignedShops.some(
+          (as) => as.toLowerCase() === item.shop_name.toLowerCase(),
+        ),
+    );
+  }
+  return stats;
 };

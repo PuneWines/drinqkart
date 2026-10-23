@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 
 const OrdersPipeline = () => {
-  const { selectedShop } = useShopStore();
+  const { selectedShop, assignedShops, isShopAdmin } = useShopStore();
   const { companies, fetchCompanies } = useCompanyStore();
 
   useEffect(() => {
@@ -85,8 +85,22 @@ const OrdersPipeline = () => {
     refetch: refetchStats,
     error: statsError,
   } = useQuery({
-    queryKey: ["pipelineStats", selectedShop, startDate, endDate],
-    queryFn: () => fetchPipelineStats({ shop: selectedShop, startDate, endDate }),
+    queryKey: [
+      "pipelineStats",
+      selectedShop,
+      isShopAdmin,
+      (assignedShops || []).join(","),
+      startDate,
+      endDate,
+    ],
+    queryFn: () =>
+      fetchPipelineStats({
+        shop: selectedShop,
+        assignedShops,
+        isShopAdmin,
+        startDate,
+        endDate,
+      }),
     staleTime: Infinity,
   });
 
@@ -101,12 +115,24 @@ const OrdersPipeline = () => {
     refetch: refetchOrders,
     error: ordersError,
   } = useInfiniteQuery({
-    queryKey: ["pipelineOrders", selectedShop, statusFilter, debouncedSearch, sortBy, startDate, endDate],
+    queryKey: [
+      "pipelineOrders",
+      selectedShop,
+      isShopAdmin,
+      (assignedShops || []).join(","),
+      statusFilter,
+      debouncedSearch,
+      sortBy,
+      startDate,
+      endDate,
+    ],
     queryFn: ({ pageParam = 0 }) =>
       fetchPipelineOrders({
         limit: LIMIT,
         offset: pageParam,
         shop: selectedShop,
+        assignedShops,
+        isShopAdmin,
         status: statusFilter,
         search: debouncedSearch,
         sortBy: sortBy,
@@ -122,8 +148,19 @@ const OrdersPipeline = () => {
 
   // Extract flat list of orders
   const orders = useMemo(() => {
-    return ordersData?.pages.flatMap((page) => page) || [];
-  }, [ordersData]);
+    let list = ordersData?.pages.flatMap((page) => page) || [];
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      list = list.filter(
+        (po) =>
+          po.shop_name &&
+          assignedShops.some(
+            (as) => as.toLowerCase() === po.shop_name.toLowerCase(),
+          ),
+      );
+    }
+    return list;
+  }, [ordersData, isShopAdmin, assignedShops]);
 
   // Derived loading and refresh states
   const isLoading = isLoadingStats || isLoadingOrders;
@@ -161,6 +198,8 @@ const OrdersPipeline = () => {
         limit: 10000,
         offset: 0,
         shop: selectedShop,
+        assignedShops,
+        isShopAdmin,
         status: statusFilter,
         search: debouncedSearch,
         sortBy: sortBy,

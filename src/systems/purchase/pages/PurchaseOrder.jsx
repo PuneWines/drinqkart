@@ -66,7 +66,7 @@ import { today } from "../utils/poHelpers";
 const PurchaseOrder = () => {
   const { companies, companySettings, fetchCompanySettings } =
     useCompanyStore();
-  const { selectedShop, getShopFullName, getShopRecord } = useShopStore();
+  const { selectedShop, assignedShops, isShopAdmin, getShopFullName, getShopRecord } = useShopStore();
   const [selectedCompanyId, setSelectedCompanyId] = useState("none");
   const [approvedItems, setApprovedItems] = useState([]);
   const [vendorsList, setVendorsList] = useState([]);
@@ -282,7 +282,7 @@ const PurchaseOrder = () => {
       );
 
       const existingPos = pageDataResponse.poData || [];
-      const filteredIndentData = enrichedIndentData.filter((item) => {
+      let filteredIndentData = enrichedIndentData.filter((item) => {
         if (item.po_status === "ordered") return false;
         if (!item.unique_indent_id || !item.party_name) return true;
 
@@ -325,10 +325,33 @@ const PurchaseOrder = () => {
         return !hasPo;
       });
 
+      if (!isShopAdmin) {
+        if (!assignedShops || assignedShops.length === 0) {
+          filteredIndentData = [];
+        } else {
+          filteredIndentData = filteredIndentData.filter((i) =>
+            assignedShops.some(
+              (as) => as.toLowerCase() === (i.shop_name || "").toLowerCase(),
+            ),
+          );
+        }
+      }
+
       setApprovedItems(filteredIndentData);
 
       // Process database held items from pageDataResponse
-      const dbHeldItems = pageDataResponse.heldIndentData || [];
+      let dbHeldItems = pageDataResponse.heldIndentData || [];
+      if (!isShopAdmin) {
+        if (!assignedShops || assignedShops.length === 0) {
+          dbHeldItems = [];
+        } else {
+          dbHeldItems = dbHeldItems.filter((i) =>
+            assignedShops.some(
+              (as) => as.toLowerCase() === (i.shop_name || "").toLowerCase(),
+            ),
+          );
+        }
+      }
       const dbHeldItemIds = new Set(dbHeldItems.map((i) => i.id));
 
       setHeldItemIds((prev) => {
@@ -444,9 +467,52 @@ const PurchaseOrder = () => {
   }, []);
 
   const filteredApprovedItems = useMemo(() => {
-    if (selectedShop === "All") return approvedItems;
-    return approvedItems.filter((item) => item.shop_name === selectedShop);
-  }, [approvedItems, selectedShop]);
+    let items = approvedItems;
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      items = items.filter((item) =>
+        assignedShops.some(
+          (as) => as.toLowerCase() === (item.shop_name || "").toLowerCase(),
+        ),
+      );
+    }
+    if (selectedShop && selectedShop !== "All") {
+      return items.filter(
+        (item) => (item.shop_name || "").toLowerCase() === selectedShop.toLowerCase(),
+      );
+    }
+    return items;
+  }, [approvedItems, selectedShop, assignedShops, isShopAdmin]);
+
+  const filteredHeldPOs = useMemo(() => {
+    return heldPOs.filter((batch) => {
+      const batchShop =
+        batch.shopName ||
+        batch.shop_name ||
+        (batch.items && batch.items[0]?.shopName) ||
+        (batch.items && batch.items[0]?.shop_name) ||
+        "";
+      if (!isShopAdmin) {
+        if (!assignedShops || assignedShops.length === 0) return false;
+        return assignedShops.some(
+          (as) =>
+            batchShop &&
+            (as.toLowerCase() === batchShop.toLowerCase() ||
+              batchShop.toLowerCase().includes(as.toLowerCase()) ||
+              as.toLowerCase().includes(batchShop.toLowerCase())),
+        );
+      }
+      if (selectedShop && selectedShop !== "All") {
+        return (
+          batchShop &&
+          (batchShop.toLowerCase() === selectedShop.toLowerCase() ||
+            batchShop.toLowerCase().includes(selectedShop.toLowerCase()) ||
+            selectedShop.toLowerCase().includes(batchShop.toLowerCase()))
+        );
+      }
+      return true;
+    });
+  }, [heldPOs, selectedShop, assignedShops, isShopAdmin]);
 
   const dbParties = useMemo(() => {
     if (poMode === "manual") {
@@ -2405,9 +2471,9 @@ const PurchaseOrder = () => {
               className={poMode === "hold" ? "text-amber-600" : ""}
             />
             Hold PO{" "}
-            {heldPOs.length > 0 && (
+            {filteredHeldPOs.length > 0 && (
               <span className="ml-0.5 px-1.5 py-0.2 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full">
-                {heldPOs.length}
+                {filteredHeldPOs.length}
               </span>
             )}
           </button>
@@ -2436,7 +2502,7 @@ const PurchaseOrder = () => {
                   Held Purchase Orders & Items
                 </h2>
                 <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">
-                  {heldPOs.length} Batches
+                  {filteredHeldPOs.length} Batches
                 </span>
               </div>
               <p className="text-xs text-slate-500">
@@ -2445,7 +2511,7 @@ const PurchaseOrder = () => {
               </p>
             </div>
 
-            {heldPOs.length === 0 ? (
+            {filteredHeldPOs.length === 0 ? (
               <div
                 className="po-empty"
                 style={{ border: "none", boxShadow: "none", padding: "40px 0" }}
@@ -2460,7 +2526,7 @@ const PurchaseOrder = () => {
                 </p>
               </div>
             ) : (
-              heldPOs.map((batch) => {
+              filteredHeldPOs.map((batch) => {
                 const scope = batch.companyScope || batch.companyName;
                 return (
                   <div

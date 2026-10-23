@@ -25,7 +25,7 @@ const Receiving = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
   const [searchQuery, setSearchQuery] = useState("");
-  const { selectedShop } = useShopStore();
+  const { selectedShop, assignedShops, isShopAdmin } = useShopStore();
 
   const [editingQtys, setEditingQtys] = useState({});
   const [editingRemarks, setEditingRemarks] = useState({});
@@ -58,7 +58,7 @@ const Receiving = () => {
           return acc;
         }, {});
 
-        const enrichedPoData = poData.map(po => {
+        let enrichedPoData = poData.map(po => {
           let shopName = po.shop_name || null;
           if (!shopName) {
             const parentIndentId = itemMap[po.indent_id];
@@ -67,16 +67,41 @@ const Receiving = () => {
           return { ...po, shop_name: shopName };
         });
 
+        if (!isShopAdmin) {
+          if (!assignedShops || assignedShops.length === 0) {
+            enrichedPoData = [];
+          } else {
+            enrichedPoData = enrichedPoData.filter((po) =>
+              po.shop_name &&
+              assignedShops.some(
+                (s) => s.toLowerCase() === po.shop_name.toLowerCase(),
+              ),
+            );
+          }
+        }
+
         setData(enrichedPoData);
 
-        const poIds = poData.map(po => po.id).filter(Boolean);
-        const indentIds = poData.map(po => po.indent_id).filter(Boolean);
+        const activeTargetPOs = (!isShopAdmin && assignedShops && assignedShops.length > 0)
+          ? enrichedPoData
+          : poData;
+        const poIds = activeTargetPOs.map(po => po.id).filter(Boolean);
+        const indentIds = activeTargetPOs.map(po => po.indent_id).filter(Boolean);
+
+        const chunk = (arr, size = 40) => {
+          const res = [];
+          for (let i = 0; i < arr.length; i += size) res.push(arr.slice(i, i + size));
+          return res;
+        };
+
         const promises = [];
-        if (poIds.length > 0) {
-          promises.push(supabase.from("purchase_approved_indent_items").select("*").in("po_id", poIds).neq("po_status", "excluded"));
-          promises.push(supabase.from("purchase_indent_items").select("*").in("po_id", poIds).neq("po_status", "excluded"));
-        }
-        if (indentIds.length > 0) promises.push(supabase.from("purchase_approved_indent_items").select("*").in("unique_indent_id", indentIds).neq("po_status", "excluded"));
+        chunk(poIds).forEach(batch => {
+          promises.push(supabase.from("purchase_approved_indent_items").select("*").in("po_id", batch).neq("po_status", "excluded"));
+          promises.push(supabase.from("purchase_indent_items").select("*").in("po_id", batch).neq("po_status", "excluded"));
+        });
+        chunk(indentIds).forEach(batch => {
+          promises.push(supabase.from("purchase_approved_indent_items").select("*").in("unique_indent_id", batch).neq("po_status", "excluded"));
+        });
 
         const results = await Promise.all(promises);
         const allItemsMap = new Map();
@@ -185,7 +210,24 @@ const Receiving = () => {
     }
   };
 
-  const shopFilteredData = useMemo(() => selectedShop === "All" ? data : data.filter(po => po.shop_name === selectedShop), [data, selectedShop]);
+  const shopFilteredData = useMemo(() => {
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      if (selectedShop && selectedShop !== "All") {
+        return data.filter((po) => (po.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+      }
+      return data.filter(
+        (po) =>
+          po.shop_name &&
+          assignedShops.some(
+            (s) => s.toLowerCase() === po.shop_name.toLowerCase(),
+          ),
+      );
+    }
+    return selectedShop === "All"
+      ? data
+      : data.filter((po) => (po.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+  }, [data, selectedShop, isShopAdmin, assignedShops]);
 
   const poRecords = useMemo(() => {
     return shopFilteredData.map(po => {

@@ -30,7 +30,14 @@ import {
 import "../styles/Dashboard.css";
 
 const Dashboard = () => {
-  const { selectedShop: globalShop, setSelectedShop, shops: storeShops, fetchShops } = useShopStore();
+  const {
+    selectedShop: globalShop,
+    setSelectedShop,
+    shops: storeShops,
+    fetchShops,
+    assignedShops,
+    isShopAdmin,
+  } = useShopStore();
 
   // Load store data on mount
   useEffect(() => {
@@ -39,6 +46,14 @@ const Dashboard = () => {
 
   // Filter States with persistent localStorage memory
   const [filterShop, setFilterShop] = useState(() => {
+    const { isAdmin, assignedShops: initialAssigned } = useShopStore.getState();
+    if (!isAdmin && initialAssigned && initialAssigned.length > 0) {
+      const saved = localStorage.getItem("purchase_dashboard_filter_shop");
+      if (saved && initialAssigned.some(s => s.toLowerCase() === saved.toLowerCase())) {
+        return saved;
+      }
+      return initialAssigned[0];
+    }
     return localStorage.getItem("purchase_dashboard_filter_shop") || globalShop || "All";
   });
   const [filterCompany, setFilterCompany] = useState(() => {
@@ -116,9 +131,13 @@ const Dashboard = () => {
   );
 
   const resetAllFilters = () => {
-    setFilterShop("All");
-    localStorage.setItem("purchase_dashboard_filter_shop", "All");
-    if (setSelectedShop) setSelectedShop("All");
+    const defaultShop =
+      !isShopAdmin && assignedShops && assignedShops.length > 0
+        ? assignedShops[0]
+        : "All";
+    setFilterShop(defaultShop);
+    localStorage.setItem("purchase_dashboard_filter_shop", defaultShop);
+    if (setSelectedShop) setSelectedShop(defaultShop);
 
     setFilterCompany("All");
     localStorage.setItem("purchase_dashboard_filter_company", "All");
@@ -140,12 +159,24 @@ const Dashboard = () => {
 
   // Sync with global sidebar shop if user explicitly changes shop in sidebar
   useEffect(() => {
-    if (globalShop && globalShop !== filterShop) {
-      setFilterShop(globalShop);
-      localStorage.setItem("purchase_dashboard_filter_shop", globalShop);
-      setCurrentPage(1);
+    if (globalShop) {
+      if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+        const allowedShop =
+          assignedShops.find(
+            (s) => s.toLowerCase() === globalShop.toLowerCase(),
+          ) || assignedShops[0];
+        if (allowedShop !== filterShop) {
+          setFilterShop(allowedShop);
+          localStorage.setItem("purchase_dashboard_filter_shop", allowedShop);
+          setCurrentPage(1);
+        }
+      } else if (globalShop !== filterShop) {
+        setFilterShop(globalShop);
+        localStorage.setItem("purchase_dashboard_filter_shop", globalShop);
+        setCurrentPage(1);
+      }
     }
-  }, [globalShop]);
+  }, [globalShop, isShopAdmin, assignedShops]);
 
   // Fetch audit records from purchase_dashboard
   const {
@@ -154,16 +185,32 @@ const Dashboard = () => {
     isRefetching,
     refetch
   } = useQuery({
-    queryKey: ["purchaseDashboardLogs"],
+    queryKey: ["purchaseDashboardLogs", isShopAdmin, (assignedShops || []).join(",")],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("purchase_dashboard")
         .select("*")
         .order("indent_created_at", { ascending: false })
         .limit(5000);
 
+      if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+        query = query.in("shop_name", assignedShops);
+      } else if (!isShopAdmin && (!assignedShops || assignedShops.length === 0)) {
+        return [];
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      const logs = data || [];
+      let logs = data || [];
+      if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+        logs = logs.filter(
+          (row) =>
+            row.shop_name &&
+            assignedShops.some(
+              (s) => s.toLowerCase() === row.shop_name.toLowerCase(),
+            ),
+        );
+      }
 
       // Fetch live statuses from purchase_purchase_orders for any active POs
       const poIds = Array.from(new Set(logs.map(r => r.po_id).filter(Boolean)));
@@ -201,13 +248,17 @@ const Dashboard = () => {
 
   // Extract Unique Shops for dropdown
   const availableShops = useMemo(() => {
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      return [...assignedShops];
+    }
     const set = new Set(["All"]);
     (storeShops || []).forEach(s => set.add(s));
     dashboardLogs.forEach(row => {
       if (row.shop_name) set.add(row.shop_name);
     });
     return Array.from(set);
-  }, [dashboardLogs, storeShops]);
+  }, [dashboardLogs, storeShops, isShopAdmin, assignedShops]);
 
   // Extract Unique Parties for dropdown (filtered by selected shop)
   const availableParties = useMemo(() => {
@@ -299,6 +350,18 @@ const Dashboard = () => {
     // Only indents completely deleted at draft/indent stage are omitted.
     // Items rejected or deleted at approval or PO stage MUST BE DISPLAYED in the audit trail!
     result = result.filter(row => !(row.is_deleted && row.deletion_stage === "indent"));
+
+    // 0. Defense-in-depth: Shop authorization check for non-admins
+    if (!isShopAdmin) {
+      if (!assignedShops || assignedShops.length === 0) return [];
+      result = result.filter(
+        (row) =>
+          row.shop_name &&
+          assignedShops.some(
+            (s) => s.toLowerCase() === row.shop_name.toLowerCase(),
+          ),
+      );
+    }
 
     // 1. Shop Filter
     if (filterShop && filterShop !== "All") {

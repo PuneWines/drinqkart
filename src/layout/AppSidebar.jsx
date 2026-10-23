@@ -268,7 +268,13 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                   })}
                 </>
               ) : (
-                (displayedMobileSystem?.subtabs || []).map((sub, index) => {
+                <>
+                  {displayedMobileSystem?.id === 'purchase' && (
+                    <div className="shrink-0 mb-2">
+                      <ShopFilter isCollapsed={false} />
+                    </div>
+                  )}
+                  {(displayedMobileSystem?.subtabs || []).map((sub, index) => {
                 if (sub.type === 'header') {
                   return (
                     <div
@@ -357,7 +363,8 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                     <span className="truncate">{sub.label}</span>
                   </Link>
                 );
-              })
+              })}
+              </>
               )}
             </div>
 

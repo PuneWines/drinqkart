@@ -295,6 +295,7 @@ const Indent = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const { toasts, addToast, removeToast } = useToast();
+  const { shops, fetchShops, assignedShops, isShopAdmin } = useShopStore();
   const [submittedHistory, setSubmittedHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [submissionItems, setSubmissionItems] = useState({});
@@ -339,7 +340,23 @@ const Indent = () => {
   const fetchSubmittedHistory = async () => {
     setIsLoadingHistory(true);
     try {
-      const { data: indents, error } = await supabase
+      const { assignedShops: currentAssigned, isShopAdmin: currentIsAdmin } =
+        useShopStore.getState();
+      const isRestricted =
+        !currentIsAdmin &&
+        Array.isArray(currentAssigned) &&
+        currentAssigned.length > 0;
+
+      if (
+        !currentIsAdmin &&
+        (!currentAssigned || currentAssigned.length === 0)
+      ) {
+        setSubmittedHistory([]);
+        setIsLoadingHistory(false);
+        return;
+      }
+
+      let query = supabase
         .from("purchase_indents")
         .select(
           `
@@ -350,6 +367,12 @@ const Indent = () => {
         `,
         )
         .order("created_at", { ascending: false });
+
+      if (isRestricted) {
+        query = query.in("shop_name", currentAssigned);
+      }
+
+      const { data: indents, error } = await query;
 
       if (error) {
         addToast("Error fetching history: " + error.message, "error");
@@ -431,14 +454,26 @@ const Indent = () => {
         return acc;
       }, {});
 
-      const historyData = indents.map((row) => {
-        const items = itemsByIndent[row.id] || [];
-        return {
-          ...row,
-          itemCount: items.filter((i) => !i.is_excluded).length,
-          excludedCount: items.filter((i) => i.is_excluded).length,
-        };
-      });
+      const historyData = indents
+        .filter((row) => {
+          if (isRestricted) {
+            return (
+              row.shop_name &&
+              currentAssigned.some(
+                (as) => as.toLowerCase() === row.shop_name.toLowerCase(),
+              )
+            );
+          }
+          return true;
+        })
+        .map((row) => {
+          const items = itemsByIndent[row.id] || [];
+          return {
+            ...row,
+            itemCount: items.filter((i) => !i.is_excluded).length,
+            excludedCount: items.filter((i) => i.is_excluded).length,
+          };
+        });
       setSubmittedHistory(historyData);
     } catch (error) {
       console.error("Error fetching history:", error);
@@ -449,7 +484,7 @@ const Indent = () => {
 
   useEffect(() => {
     fetchSubmittedHistory();
-  }, []);
+  }, [assignedShops, isShopAdmin]);
 
   const hasExistingSubmissionForShop = (shopName) => {
     if (!shopName) return false;
@@ -577,11 +612,19 @@ const Indent = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStep, setUploadStep] = useState(1); // 1: Select Shop, 2: Upload File
 
-  const { shops, fetchShops } = useShopStore();
-
   useEffect(() => {
     fetchShops();
   }, [fetchShops]);
+
+  useEffect(() => {
+    if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+      if (!selectedShop || !assignedShops.includes(selectedShop)) {
+        setSelectedShop(assignedShops[0]);
+      }
+    } else if (shops && shops.length === 1 && (!selectedShop || !shops.includes(selectedShop))) {
+      setSelectedShop(shops[0]);
+    }
+  }, [shops, selectedShop, assignedShops, isShopAdmin]);
 
   const fileInputRef = useRef(null);
 
