@@ -1708,35 +1708,28 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
       document.removeEventListener("click", handleClickOutside, true);
   }, [clickedLiquorType, hideTooltip]);
 
-  // Dynamic current month date range helper
-  const getCurrentMonthRange = useCallback(() => {
+  // Dynamic date range helper: last 6 months up to current month (e.g. May 1 to Oct 31)
+  const getDefaultDateRange = useCallback(() => {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-    return {
-      start: `${y}-${m}-01`,
-      end: `${y}-${m}-${String(lastDay).padStart(2, "0")}`,
-    };
+    const endYear = now.getFullYear();
+    const endMonth = now.getMonth(); // 0-based
+    const lastDay = new Date(endYear, endMonth + 1, 0).getDate();
+    const end = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    const startDateObj = new Date(endYear, endMonth - 5, 1);
+    const startYear = startDateObj.getFullYear();
+    const startMonth = startDateObj.getMonth() + 1;
+    const start = `${startYear}-${String(startMonth).padStart(2, "0")}-01`;
+
+    return { start, end };
   }, []);
 
-  // Filter States — strictly default to current month, fully customizable by user
+  // Filter States — default to last 6 months to current month, fully customizable by user
   const [selectedStore, setSelectedStore] = useState("All");
   const [selectedLiquorType, setSelectedLiquorType] = useState("All");
   const [selectedSubhead, setSelectedSubhead] = useState("All");
-  const [startDate, setStartDate] = useState(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}-01`;
-  });
-  const [endDate, setEndDate] = useState(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-    return `${y}-${m}-${String(lastDay).padStart(2, "0")}`;
-  });
+  const [startDate, setStartDate] = useState(() => getDefaultDateRange().start);
+  const [endDate, setEndDate] = useState(() => getDefaultDateRange().end);
 
   // Individual Metric Filters for all 4 Divs on Sales Tab ('amount' | 'cases')
   const [card1Metric, setCard1Metric] = useState("amount");
@@ -1791,51 +1784,68 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
   }, []);
 
   // 2. Fetch real data from stock_balance strictly based on filters
-  // (columns are aliased to the field names the aggregations below use)
+  // Fetches ALL active records across stores in parallel without hitting PostgREST 1000 row limits or 57014 timeouts
   const fetchRealStockData = useCallback(async () => {
     setLoading(true);
     try {
+      const fields =
+        "date:snapshot_date, shop_id:store_name, liquor_type, subhead, item_name:item_description, quantity_out:qty_out, quantity_in:qty_in, closing_qty, mrp_rate:mrp_bottle_rate, purchase_rate:purchase_bottle_rate, b_cs:bottles_per_case, type1, type2, type5, brand_name, company_name, party_name";
+
       const batchSize = 1000;
-      const numBatches = 8;
-      const promises = [];
+      const knownShops = ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "KUNAL ULWE", "MADHURA", "OFFICE", "TLS"];
+      const distinctStores = storeOptions.filter((s) => s !== "All");
+      const storesToFetch =
+        selectedStore !== "All"
+          ? [selectedStore]
+          : distinctStores.length > 0
+            ? distinctStores
+            : knownShops;
 
-      for (let i = 0; i < numBatches; i++) {
-        let q = supabase
-          .from("stock_balance")
-          .select(
-            "date:snapshot_date, shop_id:store_name, liquor_type, subhead, item_name:item_description, quantity_out:qty_out, quantity_in:qty_in, closing_qty, mrp_rate:mrp_bottle_rate, purchase_rate:purchase_bottle_rate, b_cs:bottles_per_case, type1, type2, type5, brand_name, company_name, party_name",
-          );
+      const fetchStoreRows = async (store) => {
+        let storeRows = [];
+        let page = 0;
+        const maxPages = 50; // up to 50,000 rows per store
 
-        if (selectedStore !== "All") {
-          q = q.eq("store_name", selectedStore);
-        }
-        if (selectedLiquorType !== "All") {
-          q = q.ilike("liquor_type", `%${selectedLiquorType}%`);
-        }
-        if (selectedSubhead !== "All") {
-          q = q.ilike("subhead", `%${selectedSubhead}%`);
-        }
-        if (startDate) {
-          q = q.gte("snapshot_date", startDate);
-        }
-        if (endDate) {
-          q = q.lte("snapshot_date", endDate);
-        }
+        while (page < maxPages) {
+          let q = supabase
+            .from("stock_balance")
+            .select(fields)
+            .eq("store_name", store)
+            .or("qty_out.gt.0,qty_in.gt.0");
 
-        // Stable order so the parallel page ranges don't overlap or skip rows
-        q = q
-          .order("snapshot_date", { ascending: true })
-          .order("store_name", { ascending: true })
-          .order("item_id", { ascending: true });
+          if (selectedLiquorType !== "All") {
+            q = q.ilike("liquor_type", `%${selectedLiquorType}%`);
+          }
+          if (selectedSubhead !== "All") {
+            q = q.ilike("subhead", `%${selectedSubhead}%`);
+          }
+          if (startDate) {
+            q = q.gte("snapshot_date", startDate);
+          }
+          if (endDate) {
+            q = q.lte("snapshot_date", endDate);
+          }
 
-        promises.push(q.range(i * batchSize, (i + 1) * batchSize - 1));
-      }
+          q = q
+            .order("snapshot_date", { ascending: true })
+            .order("item_id", { ascending: true })
+            .range(page * batchSize, (page + 1) * batchSize - 1);
 
-      const results = await Promise.all(promises);
-      const rows = [];
-      results.forEach((res) => {
-        if (res.data) rows.push(...res.data);
-      });
+          const { data, error } = await q;
+          if (error) {
+            console.warn(`Error fetching stock_balance for store ${store}:`, error.message);
+            break;
+          }
+          if (!data || data.length === 0) break;
+          storeRows.push(...data);
+          if (data.length < batchSize) break;
+          page++;
+        }
+        return storeRows;
+      };
+
+      const results = await Promise.all(storesToFetch.map((s) => fetchStoreRows(s)));
+      const rows = results.flat();
 
       setRecords(rows);
 
@@ -1860,23 +1870,24 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
       setLiquorTypeOptions(["All", ...Array.from(dynamicLiquorTypes).sort()]);
     } catch (err) {
       console.error("Error fetching real stock data:", err);
+      setRecords([]);
     } finally {
       setLoading(false);
     }
-  }, [selectedStore, selectedLiquorType, selectedSubhead, startDate, endDate]);
+  }, [selectedStore, storeOptions, selectedLiquorType, selectedSubhead, startDate, endDate]);
 
   useEffect(() => {
     fetchRealStockData();
   }, [fetchRealStockData]);
 
-  // Reset filters (resets date filter strictly back to current month)
+  // Reset filters (resets date filter strictly back to last 6 months to current month)
   const handleResetFilters = () => {
     setSelectedStore("All");
     setSelectedLiquorType("All");
     setSelectedSubhead("All");
-    const curRange = getCurrentMonthRange();
-    setStartDate(curRange.start);
-    setEndDate(curRange.end);
+    const defRange = getDefaultDateRange();
+    setStartDate(defRange.start);
+    setEndDate(defRange.end);
     setClickedLiquorType(null);
     setHoveredLiquorRow(null);
     setCard1Metric("amount");

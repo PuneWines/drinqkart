@@ -39,17 +39,33 @@ const DEFAULT_SHOPS = [
   'BALAJI', 'FRIENDS', 'KUNAL KHARGHAR', 'KUNAL ULWE', 'MADHURA', 'OFFICE', 'TLS'
 ];
 
+// Default date range: last 6 months to current month (e.g. May 1 to Oct 31)
+export function getDefaultDateRange() {
+  const now = new Date();
+  const endYear = now.getFullYear();
+  const endMonth = now.getMonth();
+  const lastDay = new Date(endYear, endMonth + 1, 0).getDate();
+  const end = `${endYear}-${String(endMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const startDateObj = new Date(endYear, endMonth - 5, 1);
+  const startYear = startDateObj.getFullYear();
+  const startMonth = startDateObj.getMonth() + 1;
+  const start = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
+
+  return { start, end };
+}
+
 export default function StockBalance() {
   const navigate = useNavigate();
   const [stockRecords, setStockRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [shops, setShops] = useState([]);
   
-  // Search & Filter States
+  // Search & Filter States (default to last 6 months to current month)
   const [search, setSearch] = useState('');
   const [shopFilter, setShopFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => getDefaultDateRange().start);
+  const [endDate, setEndDate] = useState(() => getDefaultDateRange().end);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Pagination States
@@ -127,8 +143,10 @@ export default function StockBalance() {
       }
 
       if (debouncedSearch) {
-        const v = quoteFilterValue(`%${debouncedSearch}%`);
-        query = query.or(`item_description.ilike.${v},item_id.ilike.${v},brand_name.ilike.${v},subhead.ilike.${v},party_name.ilike.${v},company_name.ilike.${v}`);
+        const cleanSearch = debouncedSearch.replace(/[,()]/g, ' ').trim();
+        if (cleanSearch) {
+          query = query.or(`item_description.ilike.%${cleanSearch}%,item_id.ilike.%${cleanSearch}%,brand_name.ilike.%${cleanSearch}%,subhead.ilike.%${cleanSearch}%,party_name.ilike.%${cleanSearch}%,company_name.ilike.%${cleanSearch}%`);
+        }
       }
 
       // Unique ordering so rows never repeat or go missing between pages
@@ -469,12 +487,29 @@ export default function StockBalance() {
               />
             </div>
             {(startDate || endDate) && (
-              <button
-                onClick={() => { setStartDate(''); setEndDate(''); setPage(1); }}
-                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
-              >
-                Clear Dates
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const def = getDefaultDateRange();
+                    setStartDate(def.start);
+                    setEndDate(def.end);
+                    setPage(1);
+                  }}
+                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
+                  title="Reset to last 6 months to current month"
+                >
+                  Reset (6M)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setStartDate(''); setEndDate(''); setPage(1); }}
+                  className="text-[11px] text-slate-500 hover:text-slate-700 font-semibold px-1.5 py-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                  title="Clear dates"
+                >
+                  Clear
+                </button>
+              </div>
             )}
 
             {/* Select Button in Filter Toolbar */}
