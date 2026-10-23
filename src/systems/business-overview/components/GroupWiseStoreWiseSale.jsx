@@ -281,6 +281,7 @@ export default function GroupWiseStoreWiseSale({
   setStartDate,
   endDate,
   setEndDate,
+  loading = false,
 }) {
   // Always map directly from live database records
   const data = useMemo(() => mapLiveRecordsToGroupSchema(liveRecords), [liveRecords]);
@@ -552,9 +553,13 @@ export default function GroupWiseStoreWiseSale({
             <TrendingUp className="w-4 h-4 text-indigo-600" /> Total Sales Amount
           </span>
           <div className="mt-1">
-            <span className="text-lg sm:text-2xl font-black text-indigo-950">
-              ₹ {nfCurrency.format(pivotResults.totalAmt)}
-            </span>
+            {loading ? (
+              <div className="h-7 w-28 bg-slate-300/80 rounded-md animate-pulse my-0.5" />
+            ) : (
+              <span className="text-lg sm:text-2xl font-black text-indigo-950">
+                ₹ {nfCurrency.format(pivotResults.totalAmt)}
+              </span>
+            )}
           </div>
         </div>
 
@@ -563,9 +568,13 @@ export default function GroupWiseStoreWiseSale({
             <BarChart3 className="w-4 h-4 text-blue-600" /> Total Cases Sold
           </span>
           <div className="mt-1">
-            <span className="text-lg sm:text-2xl font-black text-blue-950">
-              {nfCase.format(pivotResults.totalCs)} <span className="text-xs font-bold text-slate-500">Cases</span>
-            </span>
+            {loading ? (
+              <div className="h-7 w-24 bg-slate-300/80 rounded-md animate-pulse my-0.5" />
+            ) : (
+              <span className="text-lg sm:text-2xl font-black text-blue-950">
+                {nfCase.format(pivotResults.totalCs)} <span className="text-xs font-bold text-slate-500">Cases</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -574,9 +583,13 @@ export default function GroupWiseStoreWiseSale({
             <Layers className="w-4 h-4 text-emerald-600" /> Total Bottles / Qty
           </span>
           <div className="mt-1">
-            <span className="text-lg sm:text-2xl font-black text-emerald-950">
-              {nfQty.format(pivotResults.totalQty)} <span className="text-xs font-bold text-slate-500">Units</span>
-            </span>
+            {loading ? (
+              <div className="h-7 w-24 bg-slate-300/80 rounded-md animate-pulse my-0.5" />
+            ) : (
+              <span className="text-lg sm:text-2xl font-black text-emerald-950">
+                {nfQty.format(pivotResults.totalQty)} <span className="text-xs font-bold text-slate-500">Units</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -585,12 +598,16 @@ export default function GroupWiseStoreWiseSale({
             <Store className="w-4 h-4 text-purple-600" /> Active Stores & Rows
           </span>
           <div className="mt-1">
-            <span className="text-lg sm:text-2xl font-black text-purple-950">
-              {pivotResults.activeStoresCount}{" "}
-              <span className="text-xs font-bold text-slate-500">Stores</span> /{" "}
-              {pivotResults.filteredCount.toLocaleString()}{" "}
-              <span className="text-xs font-bold text-slate-500">Rows</span>
-            </span>
+            {loading ? (
+              <div className="h-7 w-32 bg-slate-300/80 rounded-md animate-pulse my-0.5" />
+            ) : (
+              <span className="text-lg sm:text-2xl font-black text-purple-950">
+                {pivotResults.activeStoresCount}{" "}
+                <span className="text-xs font-bold text-slate-500">Stores</span> /{" "}
+                {pivotResults.filteredCount.toLocaleString()}{" "}
+                <span className="text-xs font-bold text-slate-500">Rows</span>
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -680,7 +697,89 @@ export default function GroupWiseStoreWiseSale({
       {/* ========================================================= */}
       {/* SINGLE UNIFIED PIVOT TABLE WITH SCROLL */}
       {/* ========================================================= */}
-      {pivotResults.rows.length === 0 || pivotResults.filteredCount === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-2xl border-2 border-[#b8ddf8] shadow-xs overflow-hidden flex flex-col animate-pulse">
+          {/* Card Header Skeleton */}
+          <div className="bg-[#f0f7ff] border-b-2 border-[#b8ddf8] px-4 py-3 sm:px-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+              <div className="h-4.5 w-64 bg-slate-200 rounded-md" />
+            </div>
+            <div className="h-5 w-20 bg-indigo-100 rounded-full" />
+          </div>
+
+          {/* Table Scroll Wrapper */}
+          <div className="overflow-x-auto overflow-y-auto max-h-[72vh] custom-scrollbar border border-slate-100">
+            <table className="w-full text-xs text-left border-collapse min-w-175">
+              <thead>
+                <tr className="bg-[#180e5b] text-white font-bold sticky top-0 z-30 select-none">
+                  <th className="py-3 px-4 text-left font-black tracking-wide border-r border-indigo-900/60 min-w-55 sticky left-0 z-40 bg-[#180e5b]">
+                    <div className="h-4 w-28 bg-white/30 rounded" />
+                  </th>
+                  {(pivotResults.stores.length > 0
+                    ? pivotResults.stores
+                    : ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"]
+                  ).map((store) => (
+                    <th
+                      key={store}
+                      className="py-3 px-3.5 text-right font-black border-r border-indigo-900/60 min-w-27.5"
+                    >
+                      <div className="h-4 w-16 bg-white/30 rounded ml-auto" />
+                    </th>
+                  ))}
+                  <th className="py-3 px-4 text-right font-black bg-[#120a44] min-w-32.5">
+                    <div className="h-4 w-20 bg-white/30 rounded ml-auto" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {Array.from({ length: 9 }).map((_, rIdx) => (
+                  <tr key={`gw-skel-${rIdx}`}>
+                    <td className="py-2.5 px-4 border-r border-slate-200 sticky left-0 bg-white">
+                      <div className="h-4 bg-slate-200 rounded-md w-36" />
+                    </td>
+                    {(pivotResults.stores.length > 0
+                      ? pivotResults.stores
+                      : ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"]
+                    ).map((s, cIdx) => (
+                      <td
+                        key={`c-${cIdx}`}
+                        className="py-2.5 px-2.5 text-right border-r border-slate-100"
+                      >
+                        <div className="h-4 bg-slate-200 rounded-md w-16 ml-auto" />
+                      </td>
+                    ))}
+                    <td className="py-2.5 px-3 text-right bg-indigo-50/40 border-r border-indigo-100/50">
+                      <div className="h-4 bg-indigo-200 rounded-md w-20 ml-auto" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-[#eef4ff] border-t-2 border-indigo-300 font-black">
+                  <td className="py-3 px-4 border-r border-indigo-300 sticky left-0 bg-[#eef4ff]">
+                    <div className="h-4 bg-indigo-300/60 rounded-md w-16" />
+                  </td>
+                  {(pivotResults.stores.length > 0
+                    ? pivotResults.stores
+                    : ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"]
+                  ).map((s, cIdx) => (
+                    <td
+                      key={`tf-${cIdx}`}
+                      className="py-3 px-2.5 text-right border-r border-indigo-200"
+                    >
+                      <div className="h-4 bg-indigo-300/60 rounded-md w-16 ml-auto" />
+                    </td>
+                  ))}
+                  <td className="py-3 px-3 text-right bg-[#dbeafe] border-r border-indigo-300/60">
+                    <div className="h-4 bg-indigo-300 rounded-md w-20 ml-auto" />
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      ) : pivotResults.rows.length === 0 || pivotResults.filteredCount === 0 ? (
         <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-2">
           <Info className="w-8 h-8 text-amber-600" />
           <p className="font-bold text-amber-900 text-sm">
@@ -788,51 +887,82 @@ export default function GroupWiseStoreWiseSale({
 
               {/* Table Body */}
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {pivotResults.rows.map((row, rIdx) => (
-                  <tr
-                    key={row.label || rIdx}
-                    className="hover:bg-indigo-50/50 transition-colors group"
-                  >
-                    {/* Group Label (Sticky on horizontal scroll) */}
-                    <td
-                      className="py-2.5 px-4 font-bold text-slate-900 border-r border-slate-200 group-hover:text-indigo-900 truncate max-w-[280px] sticky left-0 z-10 bg-white group-hover:bg-indigo-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]"
-                      title={row.label}
-                    >
-                      {row.label}
-                    </td>
-
-                    {/* Store Columns */}
-                    {pivotResults.stores.map((store) =>
-                      pivotResults.kpis.map((kpi) => {
-                        const val = row.storeValues[store]?.[kpi] || 0;
-                        return (
-                          <td
-                            key={`${store}-${kpi}`}
-                            className="py-2.5 px-2.5 text-right tabular-nums border-r border-slate-100"
-                          >
-                            {val > 0 ? (
-                              <span className="font-semibold text-slate-800">
-                                {formatKpiValue(val, kpi)}
-                              </span>
-                            ) : (
-                              <span className="text-slate-300 font-light">-</span>
-                            )}
-                          </td>
-                        );
-                      })
-                    )}
-
-                    {/* Row Totals */}
-                    {pivotResults.kpis.map((kpi) => (
-                      <td
-                        key={`total-${kpi}`}
-                        className="py-2.5 px-3 text-right font-black tabular-nums bg-indigo-50/40 text-indigo-950 group-hover:bg-indigo-100/50 border-r border-indigo-100/50"
-                      >
-                        {formatKpiTotal(row.rowTotals[kpi], kpi)}
+                {loading ? (
+                  Array.from({ length: 8 }).map((_, rIdx) => (
+                    <tr key={`skel-row-${rIdx}`} className="animate-pulse">
+                      <td className="py-2.5 px-4 border-r border-slate-200 sticky left-0 z-10 bg-white">
+                        <div className="h-4 bg-slate-200 rounded-md w-36" />
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                      {Array.from({
+                        length: Math.max(
+                          pivotResults.stores.length * pivotResults.kpis.length,
+                          3,
+                        ),
+                      }).map((_, cIdx) => (
+                        <td
+                          key={`skel-c-${cIdx}`}
+                          className="py-2.5 px-2.5 text-right border-r border-slate-100"
+                        >
+                          <div className="h-4 bg-slate-200 rounded-md w-16 ml-auto" />
+                        </td>
+                      ))}
+                      {pivotResults.kpis.map((kpi, kIdx) => (
+                        <td
+                          key={`skel-tot-${kIdx}`}
+                          className="py-2.5 px-3 text-right bg-indigo-50/40 border-r border-indigo-100/50"
+                        >
+                          <div className="h-4 bg-indigo-200 rounded-md w-20 ml-auto" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (
+                  pivotResults.rows.map((row, rIdx) => (
+                    <tr
+                      key={row.label || rIdx}
+                      className="hover:bg-indigo-50/50 transition-colors group"
+                    >
+                      {/* Group Label (Sticky on horizontal scroll) */}
+                      <td
+                        className="py-2.5 px-4 font-bold text-slate-900 border-r border-slate-200 group-hover:text-indigo-900 truncate max-w-[280px] sticky left-0 z-10 bg-white group-hover:bg-indigo-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]"
+                        title={row.label}
+                      >
+                        {row.label}
+                      </td>
+
+                      {/* Store Columns */}
+                      {pivotResults.stores.map((store) =>
+                        pivotResults.kpis.map((kpi) => {
+                          const val = row.storeValues[store]?.[kpi] || 0;
+                          return (
+                            <td
+                              key={`${store}-${kpi}`}
+                              className="py-2.5 px-2.5 text-right tabular-nums border-r border-slate-100"
+                            >
+                              {val > 0 ? (
+                                <span className="font-semibold text-slate-800">
+                                  {formatKpiValue(val, kpi)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 font-light">-</span>
+                              )}
+                            </td>
+                          );
+                        })
+                      )}
+
+                      {/* Row Totals */}
+                      {pivotResults.kpis.map((kpi) => (
+                        <td
+                          key={`total-${kpi}`}
+                          className="py-2.5 px-3 text-right font-black tabular-nums bg-indigo-50/40 text-indigo-950 group-hover:bg-indigo-100/50 border-r border-indigo-100/50"
+                        >
+                          {formatKpiTotal(row.rowTotals[kpi], kpi)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
               </tbody>
 
               {/* Grand Total Footer */}

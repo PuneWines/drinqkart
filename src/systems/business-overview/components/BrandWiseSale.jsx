@@ -119,6 +119,7 @@ export default function BrandWiseSale({
   setStartDate,
   endDate,
   setEndDate,
+  loading = false,
 }) {
   // 1. Dynamic stores list extracted from live records
   const availableStores = useMemo(() => {
@@ -150,6 +151,17 @@ export default function BrandWiseSale({
     if (selectedStores.size === 0) return availableStores;
     return availableStores.filter((s) => selectedStores.has(s));
   }, [availableStores, selectedStores]);
+
+  const skeletonStores = useMemo(
+    () => ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"],
+    [],
+  );
+
+  const displayStores = useMemo(() => {
+    if (activeStores.length > 0) return activeStores;
+    if (loading) return skeletonStores;
+    return [];
+  }, [activeStores, loading, skeletonStores]);
 
   const activeSegments = useMemo(() => {
     if (selectedSegments.size === 0) return SEGS;
@@ -467,7 +479,11 @@ export default function BrandWiseSale({
             className="flex-1 min-w-[200px] text-sm sm:text-[15px] py-2 px-3 border border-[#dde2ea] rounded-lg bg-white text-[#1b2230] outline-none focus:border-[#1f6feb]"
           />
           <span className="text-[#6a7488] text-xs whitespace-nowrap font-medium">
-            {rowKeys.length} {searchBy.toLowerCase()} rows
+            {loading ? (
+              <span className="inline-block w-24 h-3 bg-slate-200 rounded animate-pulse" />
+            ) : (
+              `${rowKeys.length} ${searchBy.toLowerCase()} rows`
+            )}
           </span>
         </div>
       </div>
@@ -475,7 +491,7 @@ export default function BrandWiseSale({
       {/* Table Card matching exact UI spec */}
       <div className="bg-white border border-[#dde2ea] rounded-xl p-3.5 shadow-xs">
         <div className="overflow-auto max-h-[70vh] border border-[#dde2ea] rounded-lg relative custom-scrollbar">
-          {rowKeys.length === 0 ? (
+          {!loading && rowKeys.length === 0 ? (
             <div className="p-8 text-center text-[#6a7488] text-sm">
               No matching rows. Try a different search.
             </div>
@@ -490,7 +506,7 @@ export default function BrandWiseSale({
                   >
                     {searchBy}
                   </th>
-                  {activeStores.map((store) => (
+                  {displayStores.map((store) => (
                     <th
                       key={store}
                       colSpan={activeSegments.length}
@@ -503,7 +519,7 @@ export default function BrandWiseSale({
 
                 {/* Header Row 2: Segments (Light Green) */}
                 <tr>
-                  {activeStores.map((store) =>
+                  {displayStores.map((store) =>
                     activeSegments.map((segName) => (
                       <th
                         key={`${store}__${segName}`}
@@ -511,68 +527,96 @@ export default function BrandWiseSale({
                       >
                         {segName}
                       </th>
-                    ))
+                    )),
                   )}
                 </tr>
               </thead>
 
               <tbody className="bg-white">
-                {rowKeys.map((rowKey) => (
-                  <tr key={rowKey} className="hover:bg-[#eef2fb] transition-colors">
-                    {/* Sticky Left Label Column */}
-                    <td className="sticky left-0 z-1 bg-white text-[#1b2230] font-semibold text-left py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap">
-                      {rowKey}
-                    </td>
+                {loading ? (
+                  Array.from({ length: 8 }).map((_, rIdx) => (
+                    <tr key={`skel-bw-${rIdx}`} className="animate-pulse">
+                      <td className="sticky left-0 bg-white py-2.5 px-3 border-b border-r border-[#dde2ea]">
+                        <div className="h-4 bg-slate-200 rounded w-44" />
+                      </td>
+                      {displayStores.map((store) =>
+                        activeSegments.map((segName) => (
+                          <td
+                            key={`skel-${store}-${segName}-${rIdx}`}
+                            className="py-2.5 px-3 border-b border-r border-[#dde2ea] text-right"
+                          >
+                            <div className="h-4 bg-slate-200 rounded w-16 ml-auto" />
+                          </td>
+                        )),
+                      )}
+                    </tr>
+                  ))
+                ) : (
+                  rowKeys.map((rowKey) => (
+                    <tr
+                      key={rowKey}
+                      className="hover:bg-[#eef2fb] transition-colors"
+                    >
+                      {/* Sticky Left Label Column */}
+                      <td className="sticky left-0 z-1 bg-white text-[#1b2230] font-semibold text-left py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap">
+                        {rowKey}
+                      </td>
 
-                    {/* Data Cells */}
+                      {/* Data Cells */}
+                      {activeStores.map((store) =>
+                        activeSegments.map((segName) => {
+                          const segIdx = SEGS.indexOf(segName);
+                          const storeData = pivotData[rowKey]?.[store];
+                          let val = 0;
+                          if (storeData) {
+                            val =
+                              aggregation === "Avg"
+                                ? storeData[4] > 0
+                                  ? storeData[segIdx] /
+                                    Math.max(1, storeData[4] || 1)
+                                  : 0
+                                : storeData[segIdx];
+                          }
+
+                          return (
+                            <td
+                              key={`${store}__${segName}`}
+                              className="py-2 px-3 border-b border-r border-[#dde2ea] text-right text-[#1b2230] whitespace-nowrap tabular-nums"
+                            >
+                              {formatValue(val)}
+                            </td>
+                          );
+                        }),
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+
+              {/* Sticky Total Row */}
+              {!loading && rowKeys.length > 0 && (
+                <tfoot>
+                  <tr className="sticky bottom-0 z-10 bg-[#eef2fb] font-bold">
+                    <td className="sticky left-0 z-20 bg-[#eef2fb] text-[#1b2230] font-bold text-left py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap">
+                      Total
+                    </td>
                     {activeStores.map((store) =>
                       activeSegments.map((segName) => {
-                        const segIdx = SEGS.indexOf(segName);
-                        const storeData = pivotData[rowKey]?.[store];
-                        let val = 0;
-                        if (storeData) {
-                          val =
-                            aggregation === "Avg"
-                              ? storeData[4] > 0
-                                ? storeData[segIdx] / Math.max(1, storeData[4] || 1)
-                                : 0
-                              : storeData[segIdx];
-                        }
-
+                        const colKey = `${store}__${segName}`;
+                        const totalVal = columnTotals[colKey] || 0;
                         return (
                           <td
-                            key={`${store}__${segName}`}
-                            className="py-2 px-3 border-b border-r border-[#dde2ea] text-right text-[#1b2230] whitespace-nowrap tabular-nums"
+                            key={colKey}
+                            className="py-2 px-3 border-b border-r border-[#dde2ea] text-right text-[#1b2230] font-bold whitespace-nowrap tabular-nums bg-[#eef2fb]"
                           >
-                            {formatValue(val)}
+                            {formatTotalValue(totalVal)}
                           </td>
                         );
-                      })
+                      }),
                     )}
                   </tr>
-                ))}
-
-                {/* Sticky Total Row */}
-                <tr className="sticky bottom-0 z-10 bg-[#eef2fb] font-bold">
-                  <td className="sticky left-0 z-20 bg-[#eef2fb] text-[#1b2230] font-bold text-left py-2 px-3 border-b border-r border-[#dde2ea] whitespace-nowrap">
-                    Total
-                  </td>
-                  {activeStores.map((store) =>
-                    activeSegments.map((segName) => {
-                      const colKey = `${store}__${segName}`;
-                      const totalVal = columnTotals[colKey] || 0;
-                      return (
-                        <td
-                          key={colKey}
-                          className="py-2 px-3 border-b border-r border-[#dde2ea] text-right text-[#1b2230] font-bold whitespace-nowrap tabular-nums bg-[#eef2fb]"
-                        >
-                          {formatTotalValue(totalVal)}
-                        </td>
-                      );
-                    })
-                  )}
-                </tr>
-              </tbody>
+                </tfoot>
+              )}
             </table>
           )}
         </div>

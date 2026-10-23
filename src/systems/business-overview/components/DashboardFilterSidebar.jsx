@@ -51,9 +51,13 @@ export const DashboardFilterSidebar = ({
         <span className="text-xs font-black uppercase tracking-wider text-indigo-100">
           Total Profit
         </span>
-        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
-          {computed.totalProfitFormatted || "₹ 0"}
-        </span>
+        {loading ? (
+          <div className="h-7 w-28 bg-white/30 rounded-lg animate-pulse mt-1" />
+        ) : (
+          <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
+            {computed.totalProfitFormatted || "₹ 0"}
+          </span>
+        )}
       </div>
 
       {/* Metric Card 2: Total Quantity Sold */}
@@ -61,9 +65,13 @@ export const DashboardFilterSidebar = ({
         <span className="text-xs font-black uppercase tracking-wider text-indigo-100">
           Total Quantity Sold
         </span>
-        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
-          {computed.totalQtyFormatted || "0"}
-        </span>
+        {loading ? (
+          <div className="h-7 w-24 bg-white/30 rounded-lg animate-pulse mt-1" />
+        ) : (
+          <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
+            {computed.totalQtyFormatted || "0"}
+          </span>
+        )}
       </div>
 
       {/* Metric Card 3: Total Case Sold */}
@@ -71,9 +79,13 @@ export const DashboardFilterSidebar = ({
         <span className="text-xs font-black uppercase tracking-wider text-indigo-100">
           Total Case Sold
         </span>
-        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
-          {computed.totalCasesFormatted || "0"}
-        </span>
+        {loading ? (
+          <div className="h-7 w-24 bg-white/30 rounded-lg animate-pulse mt-1" />
+        ) : (
+          <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
+            {computed.totalCasesFormatted || "0"}
+          </span>
+        )}
       </div>
 
       {/* Filter 1: Select Store */}

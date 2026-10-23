@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import { supabase } from "../../../lib/supabase";
 import DashboardFilterSidebar from "../components/DashboardFilterSidebar";
 import GroupWiseStoreWiseSale from "../components/GroupWiseStoreWiseSale";
@@ -502,7 +508,7 @@ const ChartTooltip = ({ tooltip }) => {
       className="fixed top-0 left-0 z-50 pointer-events-none select-none"
       style={{
         transform: `translate3d(${left}px, ${top}px, 0)`,
-        transition: "transform 75ms cubic-bezier(0.2, 0, 0.2, 1)",
+        transition: "none",
         willChange: "transform",
       }}
     >
@@ -556,14 +562,109 @@ const MonthlySalesCardSkeleton = () => (
     </div>
     {/* Month sales graph div skeleton */}
     <div className="w-full flex items-end justify-between px-2 pt-2 pb-1 h-19 sm:h-20.5 mt-2 bg-sky-100/40 rounded-xl gap-1 overflow-hidden">
-      {[45, 60, 35, 75, 50, 65, 80, 55, 70, 40, 65, 85, 60, 75, 80].map((h, idx) => (
+      {[45, 60, 35, 75, 50, 65, 80, 55, 70, 40, 65, 85, 60, 75, 80].map(
+        (h, idx) => (
+          <div
+            key={idx}
+            className="w-full bg-sky-300/40 rounded-t-xs"
+            style={{ height: `${h}%` }}
+          />
+        ),
+      )}
+    </div>
+  </div>
+);
+
+// ==========================================
+// CARD SKELETON LOADERS FOR ALL DASHBOARD DIVS
+// ==========================================
+const BarListSkeleton = ({ count = 4 }) => (
+  <div className="flex-1 min-w-0 flex flex-col justify-center gap-2.5 py-2 animate-pulse">
+    {Array.from({ length: count }).map((_, i) => (
+      <div key={i} className="flex items-center gap-2">
+        <div className="w-14 h-3 bg-slate-200/80 rounded shrink-0" />
         <div
-          key={idx}
-          className="w-full bg-sky-300/40 rounded-t-xs"
+          className="h-5 bg-indigo-200/60 rounded-r-xs shrink-0"
+          style={{ width: `${35 + ((i * 21) % 45)}%` }}
+        />
+        <div className="w-12 h-3 bg-slate-200/60 rounded ml-1 shrink-0" />
+      </div>
+    ))}
+  </div>
+);
+
+const DonutChartSkeleton = () => (
+  <div className="flex-1 flex flex-col sm:flex-row items-center justify-center gap-3 py-2 animate-pulse min-w-0">
+    <div className="relative w-28 h-28 rounded-full border-16 border-slate-200/80 flex items-center justify-center shrink-0">
+      <div className="w-10 h-3.5 bg-slate-200/70 rounded" />
+    </div>
+    <div className="flex flex-col gap-2 w-32 shrink-0">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-slate-200" />
+          <div className="w-16 h-2.5 bg-slate-200/80 rounded" />
+          <div className="w-7 h-2.5 bg-slate-200/60 rounded ml-auto" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const StackedColumnsSkeleton = () => (
+  <div className="flex-1 flex items-end justify-around gap-2 px-3 pt-3 pb-1 h-36 overflow-hidden animate-pulse">
+    {[60, 85, 45, 75].map((h, i) => (
+      <div
+        key={i}
+        className="flex-1 flex flex-col items-center h-full justify-end max-w-16"
+      >
+        <div className="h-3 w-8 bg-slate-200/80 rounded mb-1.5" />
+        <div
+          className="w-10 rounded-t-xs bg-slate-200/60 overflow-hidden flex flex-col-reverse"
+          style={{ height: `${h}%` }}
+        >
+          <div className="w-full h-1/4 bg-amber-300/40" />
+          <div className="w-full h-1/4 bg-rose-300/40" />
+          <div className="w-full h-1/4 bg-blue-300/40" />
+          <div className="w-full h-1/4 bg-indigo-300/40" />
+        </div>
+        <div className="h-2.5 w-10 bg-slate-200/70 rounded mt-1.5" />
+      </div>
+    ))}
+  </div>
+);
+
+const SplineChartSkeleton = () => (
+  <div className="w-full h-32 flex flex-col justify-end p-2 animate-pulse min-w-0">
+    <div className="w-full flex-1 flex items-end justify-between gap-1 px-3">
+      {[
+        25, 40, 30, 55, 70, 45, 65, 80, 50, 75, 90, 60, 40, 55, 70, 85, 60, 75,
+        45, 60, 80, 95, 65, 50, 70, 85, 55, 65, 75, 90, 60,
+      ].map((h, i) => (
+        <div
+          key={i}
+          className="flex-1 bg-indigo-200/50 rounded-t-xs"
           style={{ height: `${h}%` }}
         />
       ))}
     </div>
+    <div className="w-full h-2 bg-slate-200/60 rounded mt-2" />
+  </div>
+);
+
+const VerticalBarsSkeleton = ({ count = 8 }) => (
+  <div className="w-full h-44 flex items-end justify-around gap-2 px-4 pb-3 animate-pulse">
+    {Array.from({ length: count }).map((_, i) => (
+      <div
+        key={i}
+        className="flex-1 flex flex-col items-center justify-end h-full"
+      >
+        <div
+          className="w-full max-w-7 bg-indigo-200/60 rounded-t-xs"
+          style={{ height: `${25 + ((i * 37) % 65)}%` }}
+        />
+        <div className="w-6 h-2 bg-slate-200 rounded mt-1.5" />
+      </div>
+    ))}
   </div>
 );
 
@@ -642,13 +743,26 @@ const DonutChart = ({
 // ==========================================
 // DAY-WISE SPLINE CHART COMPONENT (WITH CROSSHAIR PROBE)
 // ==========================================
-const DayWiseChart = ({ dayMap = {}, onHoverDay, hoveredDay = null }) => {
+const DayWiseChart = ({
+  dayMap = {},
+  onHoverDay,
+  onMoveTooltip,
+  hoveredDay = null,
+  loading = false,
+}) => {
   const width = 360;
   const height = 145;
   const padL = 36;
   const padR = 12;
   const padT = 12;
   const padB = 26;
+
+  const [localHovered, setLocalHovered] = useState(null);
+  const lastDayRef = useRef(null);
+
+  if (loading) {
+    return <SplineChartSkeleton />;
+  }
 
   // Days 1 to 31
   const daysList = [];
@@ -695,37 +809,66 @@ const DayWiseChart = ({ dayMap = {}, onHoverDay, hoveredDay = null }) => {
       ? coords.find((c) => c.day === minItem.day)
       : null;
 
+  const effectiveHoveredDay = hoveredDay || localHovered;
+  const activeCoord = effectiveHoveredDay
+    ? coords.find((c) => c.day === effectiveHoveredDay.day)
+    : null;
+
   const handleMouseMove = (e) => {
-    if (!onHoverDay) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
-    const svgX = (mouseX / rect.width) * width;
+    const svgX = (mouseX / (rect.width || 1)) * width;
+    const clampedX = Math.max(padL, Math.min(width - padR, svgX));
     const day = Math.min(
-      Math.max(Math.round(1 + ((svgX - padL) / (width - padL - padR)) * 30), 1),
+      Math.max(
+        Math.round(1 + ((clampedX - padL) / (width - padL - padR)) * 30),
+        1,
+      ),
       31,
     );
     const item = coords.find((c) => c.day === day);
     if (item) {
       const isPeak = maxCoord && maxCoord.day === item.day;
       const isMin = minCoord && minCoord.day === item.day;
-      onHoverDay({ ...item, isPeak, isMin }, e);
+      const payload = { ...item, isPeak, isMin };
+      setLocalHovered(payload);
+      if (lastDayRef.current !== day) {
+        lastDayRef.current = day;
+        onHoverDay?.(payload, e);
+      } else {
+        onMoveTooltip?.(e);
+      }
     }
   };
 
-  const activeCoord = hoveredDay
-    ? coords.find((c) => c.day === hoveredDay.day)
-    : null;
+  const handleMouseLeave = () => {
+    lastDayRef.current = null;
+    setLocalHovered(null);
+    onHoverDay?.(null, null);
+  };
 
   return (
     <div
-      className="w-full relative overflow-hidden cursor-crosshair"
+      className="w-full relative overflow-hidden cursor-crosshair select-none touch-none"
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => onHoverDay && onHoverDay(null, null)}
+      onMouseLeave={handleMouseLeave}
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-auto overflow-hidden block"
       >
+        {/* Full-coverage transparent hover capture rect */}
+        <rect
+          x="0"
+          y="0"
+          width={width}
+          height={height}
+          fill="#000000"
+          opacity="0"
+          pointerEvents="all"
+          className="cursor-crosshair"
+        />
+
         {/* Y Grid lines and labels */}
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
           const v = Math.round(ceiling * ratio);
@@ -847,32 +990,59 @@ const DayWiseChart = ({ dayMap = {}, onHoverDay, hoveredDay = null }) => {
           />
         )}
 
-        {/* Active Hover Crosshair Guideline & Dot */}
+        {/* Active Hover Crosshair Guideline & Dot with silky-smooth translation */}
         {activeCoord && (
-          <g>
+          <g
+            style={{
+              transform: `translate3d(${activeCoord.x}px, 0, 0)`,
+              transition: "transform 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              willChange: "transform",
+            }}
+          >
+            {/* Soft vertical guideline glow */}
             <line
-              x1={activeCoord.x}
+              x1={0}
               y1={padT}
-              x2={activeCoord.x}
+              x2={0}
+              y2={height - padB}
+              stroke="#818cf8"
+              strokeWidth="4"
+              opacity="0.25"
+            />
+            {/* Crisp vertical perpendicular line */}
+            <line
+              x1={0}
+              y1={padT}
+              x2={0}
               y2={height - padB}
               stroke="#6366f1"
               strokeWidth="1.5"
               strokeDasharray="3,3"
             />
+            {/* Base tick dot */}
+            <circle cx={0} cy={height - padB} r="2.5" fill="#4338ca" />
+            {/* Probe glow halo */}
             <circle
-              cx={activeCoord.x}
+              cx={0}
               cy={activeCoord.y}
-              r="8"
-              fill="#6366f1"
-              opacity="0.3"
+              r="8.5"
+              fill="#818cf8"
+              opacity="0.35"
+              style={{
+                transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              }}
             />
+            {/* Probe center marker */}
             <circle
-              cx={activeCoord.x}
+              cx={0}
               cy={activeCoord.y}
               r="5"
               fill="#4338ca"
               stroke="#ffffff"
               strokeWidth="2"
+              style={{
+                transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              }}
             />
           </g>
         )}
@@ -906,6 +1076,7 @@ const DateSalesProfitChart = ({
   metric = "amount",
   hoveredDate = null,
   onHoverDate,
+  onMoveTooltip,
 }) => {
   const width = 640;
   const height = 240;
@@ -913,6 +1084,9 @@ const DateSalesProfitChart = ({
   const padR = 18;
   const padT = 24;
   const padB = 48;
+
+  const [localActiveIdx, setLocalActiveIdx] = useState(-1);
+  const lastIdxRef = useRef(-1);
 
   if (!dateList.length) {
     return (
@@ -965,33 +1139,59 @@ const DateSalesProfitChart = ({
 
   const labelStep = Math.max(1, Math.floor(dateList.length / 7));
 
+  const effectiveIdx =
+    hoveredDate !== null
+      ? dateList.findIndex((d) => d.date === hoveredDate)
+      : localActiveIdx;
+  const activeIdx = effectiveIdx >= 0 ? effectiveIdx : -1;
+
   const handleMouseMove = (e) => {
-    if (!onHoverDate || !dateList.length) return;
+    if (!dateList.length) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio =
-      (((e.clientX - rect.left) / rect.width) * width - padL) /
+      (((e.clientX - rect.left) / (rect.width || 1)) * width - padL) /
       Math.max(width - padL - padR, 1);
     const idx = Math.min(
       Math.max(Math.round(ratio * (dateList.length - 1)), 0),
       dateList.length - 1,
     );
-    onHoverDate(dateList[idx], idx, e);
+    setLocalActiveIdx(idx);
+    if (lastIdxRef.current !== idx) {
+      lastIdxRef.current = idx;
+      onHoverDate?.(dateList[idx], idx, e);
+    } else {
+      onMoveTooltip?.(e);
+    }
   };
 
-  const activeIdx = hoveredDate
-    ? dateList.findIndex((d) => d.date === hoveredDate)
-    : -1;
+  const handleMouseLeave = () => {
+    lastIdxRef.current = -1;
+    setLocalActiveIdx(-1);
+    onHoverDate?.(null, -1, null);
+  };
 
   return (
     <div
-      className="w-full relative select-none cursor-crosshair"
+      className="w-full relative select-none cursor-crosshair touch-none"
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => onHoverDate?.(null, -1, null)}
+      onMouseLeave={handleMouseLeave}
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-auto block overflow-visible"
       >
+        {/* Full-coverage transparent hover capture rect */}
+        <rect
+          x="0"
+          y="0"
+          width={width}
+          height={height}
+          fill="#000000"
+          opacity="0"
+          pointerEvents="all"
+          className="cursor-crosshair"
+        />
+
         <defs>
           <linearGradient id="dateSalesGradDynamic" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.28" />
@@ -1109,33 +1309,86 @@ const DateSalesProfitChart = ({
           );
         })}
 
-        {/* Active Crosshair */}
+        {/* Active Crosshair with silky-smooth translation */}
         {activeIdx >= 0 && coords1[activeIdx] && (
-          <g>
+          <g
+            style={{
+              transform: `translate3d(${coords1[activeIdx].x}px, 0, 0)`,
+              transition: "transform 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              willChange: "transform",
+            }}
+          >
+            {/* Soft vertical guideline glow */}
             <line
-              x1={coords1[activeIdx].x}
+              x1={0}
               y1={padT}
-              x2={coords1[activeIdx].x}
+              x2={0}
+              y2={height - padB}
+              stroke="#818cf8"
+              strokeWidth="4"
+              opacity="0.25"
+            />
+            {/* Crisp vertical guideline */}
+            <line
+              x1={0}
+              y1={padT}
+              x2={0}
               y2={height - padB}
               stroke="#6366f1"
               strokeWidth="1.5"
               strokeDasharray="3,3"
             />
+            {/* Base tick dot */}
+            <circle cx={0} cy={height - padB} r="2.5" fill="#4338ca" />
+            {/* Line 1 probe glow */}
             <circle
-              cx={coords1[activeIdx].x}
+              cx={0}
               cy={coords1[activeIdx].y}
-              r={7.5}
-              fill="#6366f1"
+              r="8"
+              fill="#818cf8"
               opacity="0.35"
+              style={{
+                transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              }}
             />
+            {/* Line 1 probe marker */}
             <circle
-              cx={coords1[activeIdx].x}
+              cx={0}
               cy={coords1[activeIdx].y}
-              r={4.5}
+              r="4.8"
               fill="#4338ca"
               stroke="#fff"
               strokeWidth="2"
+              style={{
+                transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+              }}
             />
+            {/* If Amount mode, also probe line 2 (profit) */}
+            {isAmount && coords2[activeIdx] && (
+              <>
+                <circle
+                  cx={0}
+                  cy={coords2[activeIdx].y}
+                  r="7"
+                  fill="#34d399"
+                  opacity="0.35"
+                  style={{
+                    transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+                  }}
+                />
+                <circle
+                  cx={0}
+                  cy={coords2[activeIdx].y}
+                  r="4"
+                  fill="#059669"
+                  stroke="#fff"
+                  strokeWidth="2"
+                  style={{
+                    transition: "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+                  }}
+                />
+              </>
+            )}
           </g>
         )}
       </svg>
@@ -1772,7 +2025,11 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonthIdx = now.getMonth(); // 0-based
-    const currentMonthEndDay = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+    const currentMonthEndDay = new Date(
+      currentYear,
+      currentMonthIdx + 1,
+      0,
+    ).getDate();
     const endStr = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, "0")}-${String(currentMonthEndDay).padStart(2, "0")}`;
     const prefix = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, "0")}`;
     return { currentMonthEndStr: endStr, thisMonthPrefix: prefix };
@@ -1814,7 +2071,9 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
       const m = String(maxEndObj.getMonth() + 1).padStart(2, "0");
       const d = String(maxEndObj.getDate()).padStart(2, "0");
       const calculatedMaxEnd = `${y}-${m}-${d}`;
-      return calculatedMaxEnd > currentMonthEndStr ? currentMonthEndStr : calculatedMaxEnd;
+      return calculatedMaxEnd > currentMonthEndStr
+        ? currentMonthEndStr
+        : calculatedMaxEnd;
     },
     [currentMonthEndStr],
   );
@@ -1831,7 +2090,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         return;
       }
       // Never allow a future start date
-      const validStart = newStart > currentMonthEndStr ? currentMonthEndStr : newStart;
+      const validStart =
+        newStart > currentMonthEndStr ? currentMonthEndStr : newStart;
       setStartDate(validStart);
 
       const maxEnd = getMaxAllowedEndDate(validStart);
@@ -1863,7 +2123,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         setEndDate("");
         return;
       }
-      let clampedEnd = newEnd > currentMonthEndStr ? currentMonthEndStr : newEnd;
+      let clampedEnd =
+        newEnd > currentMonthEndStr ? currentMonthEndStr : newEnd;
       // Don't allow end date less than start date
       if (startDate && clampedEnd < startDate) {
         clampedEnd = startDate;
@@ -1906,7 +2167,10 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
       try {
         const [shopsRes, distinctShopsRes] = await Promise.all([
           supabase.from("shop").select("shop_name"),
-          supabase.from("stock_balance").select("shop_id:store_name").limit(2000),
+          supabase
+            .from("stock_balance")
+            .select("shop_id:store_name")
+            .limit(2000),
         ]);
 
         const names = new Set();
@@ -1940,7 +2204,15 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         "date:snapshot_date, shop_id:store_name, liquor_type, subhead, item_name:item_description, quantity_out:qty_out, quantity_in:qty_in, closing_qty, mrp_rate:mrp_bottle_rate, purchase_rate:purchase_bottle_rate, b_cs:bottles_per_case, type1, type2, type5, brand_name, company_name, party_name";
 
       const batchSize = 1000;
-      const knownShops = ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "KUNAL ULWE", "MADHURA", "OFFICE", "TLS"];
+      const knownShops = [
+        "BALAJI",
+        "FRIENDS",
+        "KUNAL KHARGHAR",
+        "KUNAL ULWE",
+        "MADHURA",
+        "OFFICE",
+        "TLS",
+      ];
       const distinctStores = storeOptions.filter((s) => s !== "All");
       const storesToFetch =
         selectedStore !== "All"
@@ -1981,7 +2253,10 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
 
           const { data, error } = await q;
           if (error) {
-            console.warn(`Error fetching stock_balance for store ${store}:`, error.message);
+            console.warn(
+              `Error fetching stock_balance for store ${store}:`,
+              error.message,
+            );
             break;
           }
           if (!data || data.length === 0) break;
@@ -1992,7 +2267,9 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         return storeRows;
       };
 
-      const results = await Promise.all(storesToFetch.map((s) => fetchStoreRows(s)));
+      const results = await Promise.all(
+        storesToFetch.map((s) => fetchStoreRows(s)),
+      );
       const rows = results.flat();
 
       setRecords(rows);
@@ -2022,7 +2299,14 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedStore, storeOptions, selectedLiquorType, selectedSubhead, startDate, endDate]);
+  }, [
+    selectedStore,
+    storeOptions,
+    selectedLiquorType,
+    selectedSubhead,
+    startDate,
+    endDate,
+  ]);
 
   useEffect(() => {
     fetchRealStockData();
@@ -2505,28 +2789,28 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         {activeTab !== "GroupWise" &&
           activeTab !== "BrandWise" &&
           activeTab !== "SaleExploration" && (
-          <DashboardFilterSidebar
-            computed={computed}
-            activeLiquorType={activeLiquorType}
-            selectedStore={selectedStore}
-            setSelectedStore={setSelectedStore}
-            storeOptions={storeOptions}
-            selectedLiquorType={selectedLiquorType}
-            setSelectedLiquorType={setSelectedLiquorType}
-            liquorTypeOptions={liquorTypeOptions}
-            selectedSubhead={selectedSubhead}
-            setSelectedSubhead={setSelectedSubhead}
-            subheadOptions={subheadOptions}
-            startDate={startDate}
-            setStartDate={handleStartDateChange}
-            endDate={endDate}
-            setEndDate={handleEndDateChange}
-            maxAllowedEndDate={maxAllowedEndDate}
-            currentMonthEndStr={currentMonthEndStr}
-            loading={loading}
-            formatIndianDate={formatIndianDate}
-          />
-        )}
+            <DashboardFilterSidebar
+              computed={computed}
+              activeLiquorType={activeLiquorType}
+              selectedStore={selectedStore}
+              setSelectedStore={setSelectedStore}
+              storeOptions={storeOptions}
+              selectedLiquorType={selectedLiquorType}
+              setSelectedLiquorType={setSelectedLiquorType}
+              liquorTypeOptions={liquorTypeOptions}
+              selectedSubhead={selectedSubhead}
+              setSelectedSubhead={setSelectedSubhead}
+              subheadOptions={subheadOptions}
+              startDate={startDate}
+              setStartDate={handleStartDateChange}
+              endDate={endDate}
+              setEndDate={handleEndDateChange}
+              maxAllowedEndDate={maxAllowedEndDate}
+              currentMonthEndStr={currentMonthEndStr}
+              loading={loading}
+              formatIndianDate={formatIndianDate}
+            />
+          )}
 
         {/* ========================================================= */}
         {/* MAIN DASHBOARD CONTENT AREA */}
@@ -2597,17 +2881,6 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
             </button>
           </header>
 
-          {/* LOADING STATE INDICATOR */}
-          {loading && (
-            <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-2 rounded-xl flex items-center gap-2 text-xs font-bold animate-pulse">
-              <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
-              <span>
-                Fetching and aggregating real stock balance records from
-                database...
-              </span>
-            </div>
-          )}
-
           {/* EMPTY STATE IF 0 RECORDS MATCH */}
           {!loading && records.length === 0 && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl flex items-center gap-3">
@@ -2631,28 +2904,27 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
           {activeTab === "Overview" && (
             <>
               <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {loading ? (
-                  [1, 2, 3, 4].map((i) => (
-                    <MonthlySalesCardSkeleton key={i} />
-                  ))
-                ) : (
-                  computed.monthlySalesCards.map((item, idx) => (
-                  <MonthlySalesCard
-                    key={item.key || idx}
-                    item={item}
-                    activeLiquorType={activeLiquorType}
-                    liquorSalesAmount={
-                      activeLiquorType
-                        ? computed.monthlyLiquorSalesMap[item.key]?.[
-                            activeLiquorType
-                          ] || 0
-                        : null
-                    }
-                    onShowTooltip={showTooltip}
-                    onMoveTooltip={moveTooltip}
-                    onHideTooltip={hideTooltip}
-                  />
-                )))}
+                {loading
+                  ? [1, 2, 3, 4].map((i) => (
+                      <MonthlySalesCardSkeleton key={i} />
+                    ))
+                  : computed.monthlySalesCards.map((item, idx) => (
+                      <MonthlySalesCard
+                        key={item.key || idx}
+                        item={item}
+                        activeLiquorType={activeLiquorType}
+                        liquorSalesAmount={
+                          activeLiquorType
+                            ? computed.monthlyLiquorSalesMap[item.key]?.[
+                                activeLiquorType
+                              ] || 0
+                            : null
+                        }
+                        onShowTooltip={showTooltip}
+                        onMoveTooltip={moveTooltip}
+                        onHideTooltip={hideTooltip}
+                      />
+                    ))}
               </section>
 
               {/* ========================================================= */}
@@ -2999,22 +3271,31 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
 
                   {/* Bottom callout summary from real data */}
                   <div className="grid grid-cols-4 gap-1 text-center border-t border-[#b8ddf8] pt-1.5 text-[9px] font-bold text-slate-600 min-w-0">
-                    {computed.liquorTypeCaseList
-                      .slice(0, 4)
-                      .map((item, idx) => {
-                        const isLinked = activeLiquorType === item.type;
-                        return (
-                          <div
-                            key={idx}
-                            className={`truncate transition-all ${isLinked ? "bg-indigo-100/90 text-indigo-950 rounded py-0.5 ring-1 ring-indigo-300 font-black scale-105" : activeLiquorType ? "opacity-40" : ""}`}
-                          >
-                            <span className="block text-slate-900 font-black truncate">
-                              {item.casesFormatted}
-                            </span>
-                            <span className="truncate">{item.percent}</span>
-                          </div>
-                        );
-                      })}
+                    {loading ? (
+                      [1, 2, 3, 4].map((i) => (
+                        <div key={i} className="animate-pulse flex flex-col items-center">
+                          <div className="h-3 w-8 bg-slate-200/80 rounded mb-1" />
+                          <div className="h-2 w-6 bg-slate-200/60 rounded" />
+                        </div>
+                      ))
+                    ) : (
+                      computed.liquorTypeCaseList
+                        .slice(0, 4)
+                        .map((item, idx) => {
+                          const isLinked = activeLiquorType === item.type;
+                          return (
+                            <div
+                              key={idx}
+                              className={`truncate transition-all ${isLinked ? "bg-indigo-100/90 text-indigo-950 rounded py-0.5 ring-1 ring-indigo-300 font-black scale-105" : activeLiquorType ? "opacity-40" : ""}`}
+                            >
+                              <span className="block text-slate-900 font-black truncate">
+                                {item.casesFormatted}
+                              </span>
+                              <span className="truncate">{item.percent}</span>
+                            </div>
+                          );
+                        })
+                    )}
                   </div>
                 </div>
 
@@ -3039,8 +3320,11 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                       Store
                     </div>
 
-                    <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5 py-0.5">
-                      {computed.storeWiseSalesList.map((item, idx) => {
+                    {loading ? (
+                      <BarListSkeleton count={5} />
+                    ) : (
+                      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5 py-0.5">
+                        {computed.storeWiseSalesList.map((item, idx) => {
                         const widthPercent = Math.min(
                           (item.amount / computed.maxStoreSale) * 100,
                           100,
@@ -3173,7 +3457,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* X Axis scale */}
@@ -3261,8 +3546,11 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                       Total Cases
                     </div>
 
-                    <div className="flex-1 flex items-end justify-around gap-2 px-2 pt-1 pb-0.5 h-36 overflow-hidden">
-                      {computed.monthlyStackedCases.map((m, idx) => {
+                    {loading ? (
+                      <StackedColumnsSkeleton />
+                    ) : (
+                      <div className="flex-1 flex items-end justify-around gap-2 px-2 pt-1 pb-0.5 h-36 overflow-hidden">
+                        {computed.monthlyStackedCases.map((m, idx) => {
                         const maxTotalCases = Math.max(
                           ...computed.monthlyStackedCases.map(
                             (i) => i.totalCases,
@@ -3513,7 +3801,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   <p className="text-center text-xs font-black text-slate-800 border-t border-[#b8ddf8] pt-1">
@@ -3534,6 +3823,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     <DayWiseChart
                       dayMap={computed.dayWiseCasesMap}
                       hoveredDay={hoveredDayProbe}
+                      loading={loading}
+                      onMoveTooltip={moveTooltip}
                       onHoverDay={(item, e) => {
                         setHoveredDayProbe(item);
                         if (item && e) {
@@ -3590,7 +3881,10 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     )}
                   </div>
 
-                  {(() => {
+                  {loading ? (
+                    <DonutChartSkeleton />
+                  ) : (
+                    (() => {
                     const displayedSubheads =
                       activeLiquorType &&
                       computed.subheadsByLiquorLists &&
@@ -3726,7 +4020,8 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                         </div>
                       </div>
                     );
-                  })()}
+                  })()
+                )}
                 </div>
               </section>
             </>
@@ -3778,49 +4073,54 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                   </div>
 
                   <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center">
-                    <DateSalesProfitChart
-                      dateList={computed.dateWiseSalesList}
-                      metric={card1Metric}
-                      hoveredDate={hoveredSalesDate}
-                      onHoverDate={(item, idx, e) => {
-                        setHoveredSalesDate(item?.date || null);
-                        if (item && e) {
-                          showTooltip(
-                            {
-                              title: formatIndianDate(item.date),
-                              badge: "Daily Reading",
-                              items: [
-                                {
-                                  label: "Total Amount",
-                                  value: formatCurrency(item.sales),
-                                  color: "#4f46e5",
-                                },
-                                {
-                                  label: "Total Cases",
-                                  value: `${formatShortNumber(item.cases)} Cases`,
-                                  color: "#3b82f6",
-                                },
-                                {
-                                  label: "Total Profit",
-                                  value: formatCurrency(item.profit),
-                                  color: "#10b981",
-                                },
-                                {
-                                  label: "Margin",
-                                  value:
-                                    item.sales > 0
-                                      ? `${((item.profit / item.sales) * 100).toFixed(1)}%`
-                                      : "0%",
-                                },
-                              ],
-                            },
-                            e,
-                          );
-                        } else {
-                          hideTooltip();
-                        }
-                      }}
-                    />
+                    {loading ? (
+                      <SplineChartSkeleton />
+                    ) : (
+                      <DateSalesProfitChart
+                        dateList={computed.dateWiseSalesList}
+                        metric={card1Metric}
+                        hoveredDate={hoveredSalesDate}
+                        onMoveTooltip={moveTooltip}
+                        onHoverDate={(item, idx, e) => {
+                          setHoveredSalesDate(item?.date || null);
+                          if (item && e) {
+                            showTooltip(
+                              {
+                                title: formatIndianDate(item.date),
+                                badge: "Daily Reading",
+                                items: [
+                                  {
+                                    label: "Total Amount",
+                                    value: formatCurrency(item.sales),
+                                    color: "#4f46e5",
+                                  },
+                                  {
+                                    label: "Total Cases",
+                                    value: `${formatShortNumber(item.cases)} Cases`,
+                                    color: "#3b82f6",
+                                  },
+                                  {
+                                    label: "Total Profit",
+                                    value: formatCurrency(item.profit),
+                                    color: "#10b981",
+                                  },
+                                  {
+                                    label: "Margin",
+                                    value:
+                                      item.sales > 0
+                                        ? `${((item.profit / item.sales) * 100).toFixed(1)}%`
+                                        : "0%",
+                                  },
+                                ],
+                              },
+                              e,
+                            );
+                          } else {
+                            hideTooltip();
+                          }
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -3843,48 +4143,52 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                   </div>
 
                   <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center">
-                    <Top10BrandsBarChart
-                      products={
-                        card2Metric === "amount"
-                          ? computed.topProductsByAmount
-                          : computed.topProductsByCases
-                      }
-                      metric={card2Metric}
-                      hoveredIdx={hoveredProductIdx}
-                      onHoverProduct={(p, idx, e) => {
-                        setHoveredProductIdx(idx);
-                        if (p && e) {
-                          showTooltip(
-                            {
-                              title: p.name,
-                              badge: "Top Brand Sales",
-                              items: [
-                                {
-                                  label: "Sales Amount",
-                                  value: p.formatted,
-                                  color: "#4338ca",
-                                },
-                                {
-                                  label: "Cases Sold",
-                                  value: p.casesFormatted,
-                                  color: "#6366f1",
-                                },
-                                {
-                                  label: "Share of Sales",
-                                  value:
-                                    computed.totalSalesRaw > 0
-                                      ? `${((p.amount / computed.totalSalesRaw) * 100).toFixed(1)}%`
-                                      : "0%",
-                                },
-                              ],
-                            },
-                            e,
-                          );
-                        } else {
-                          hideTooltip();
+                    {loading ? (
+                      <VerticalBarsSkeleton count={10} />
+                    ) : (
+                      <Top10BrandsBarChart
+                        products={
+                          card2Metric === "amount"
+                            ? computed.topProductsByAmount
+                            : computed.topProductsByCases
                         }
-                      }}
-                    />
+                        metric={card2Metric}
+                        hoveredIdx={hoveredProductIdx}
+                        onHoverProduct={(p, idx, e) => {
+                          setHoveredProductIdx(idx);
+                          if (p && e) {
+                            showTooltip(
+                              {
+                                title: p.name,
+                                badge: "Top Brand Sales",
+                                items: [
+                                  {
+                                    label: "Sales Amount",
+                                    value: p.formatted,
+                                    color: "#4338ca",
+                                  },
+                                  {
+                                    label: "Cases Sold",
+                                    value: p.casesFormatted,
+                                    color: "#6366f1",
+                                  },
+                                  {
+                                    label: "Share of Sales",
+                                    value:
+                                      computed.totalSalesRaw > 0
+                                        ? `${((p.amount / computed.totalSalesRaw) * 100).toFixed(1)}%`
+                                        : "0%",
+                                  },
+                                ],
+                              },
+                              e,
+                            );
+                          } else {
+                            hideTooltip();
+                          }
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               </section>
@@ -3918,45 +4222,49 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                   </div>
 
                   <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center">
-                    <TargetActualDifferenceChart
-                      dayList={computed.dayWiseTrendList}
-                      metric={card3Metric}
-                      hoveredDay={hoveredDayProbe}
-                      onHoverDay={(d, idx, e) => {
-                        setHoveredDayProbe(d?.day || null);
-                        if (d && e) {
-                          showTooltip(
-                            {
-                              title: `Day ${d.day}`,
-                              badge: "Target vs Actual",
-                              items: [
-                                {
-                                  label: "Actual Sales",
-                                  value: formatCurrency(d.sales),
-                                  color: "#7c3aed",
-                                },
-                                {
-                                  label: "Target Sales",
-                                  value: formatCurrency(d.targetSales),
-                                  color: "#38bdf8",
-                                },
-                                {
-                                  label: "Actual Cases",
-                                  value: `${formatShortNumber(d.cases)} Cases`,
-                                },
-                                {
-                                  label: "Target Cases",
-                                  value: `${formatShortNumber(d.targetCases)} Cases`,
-                                },
-                              ],
-                            },
-                            e,
-                          );
-                        } else {
-                          hideTooltip();
-                        }
-                      }}
-                    />
+                    {loading ? (
+                      <VerticalBarsSkeleton count={8} />
+                    ) : (
+                      <TargetActualDifferenceChart
+                        dayList={computed.dayWiseTrendList}
+                        metric={card3Metric}
+                        hoveredDay={hoveredDayProbe}
+                        onHoverDay={(d, idx, e) => {
+                          setHoveredDayProbe(d?.day || null);
+                          if (d && e) {
+                            showTooltip(
+                              {
+                                title: `Day ${d.day}`,
+                                badge: "Target vs Actual",
+                                items: [
+                                  {
+                                    label: "Actual Sales",
+                                    value: formatCurrency(d.sales),
+                                    color: "#7c3aed",
+                                  },
+                                  {
+                                    label: "Target Sales",
+                                    value: formatCurrency(d.targetSales),
+                                    color: "#38bdf8",
+                                  },
+                                  {
+                                    label: "Actual Cases",
+                                    value: `${formatShortNumber(d.cases)} Cases`,
+                                  },
+                                  {
+                                    label: "Target Cases",
+                                    value: `${formatShortNumber(d.targetCases)} Cases`,
+                                  },
+                                ],
+                              },
+                              e,
+                            );
+                          } else {
+                            hideTooltip();
+                          }
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -3983,48 +4291,52 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                   </div>
 
                   <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center">
-                    <CategoryHorizontalBarChart
-                      categories={
-                        card4Metric === "amount"
-                          ? computed.categoryBreakdownByAmount
-                          : computed.categoryBreakdownByCases
-                      }
-                      metric={card4Metric}
-                      hoveredIdx={hoveredSubheadIndex}
-                      onHoverCategory={(cat, idx, e) => {
-                        setHoveredSubheadIndex(idx);
-                        if (cat && e) {
-                          showTooltip(
-                            {
-                              title: cat.name,
-                              badge: "Category Breakdown",
-                              items: [
-                                {
-                                  label: "Sales Amount",
-                                  value: cat.amountFormatted,
-                                  color: "#4f46e5",
-                                },
-                                {
-                                  label: "Cases Sold",
-                                  value: cat.casesFormatted,
-                                  color: "#6366f1",
-                                },
-                                {
-                                  label: "Share",
-                                  value:
-                                    computed.totalSalesRaw > 0
-                                      ? `${((cat.amount / computed.totalSalesRaw) * 100).toFixed(1)}%`
-                                      : "0%",
-                                },
-                              ],
-                            },
-                            e,
-                          );
-                        } else {
-                          hideTooltip();
+                    {loading ? (
+                      <BarListSkeleton count={6} />
+                    ) : (
+                      <CategoryHorizontalBarChart
+                        categories={
+                          card4Metric === "amount"
+                            ? computed.categoryBreakdownByAmount
+                            : computed.categoryBreakdownByCases
                         }
-                      }}
-                    />
+                        metric={card4Metric}
+                        hoveredIdx={hoveredSubheadIndex}
+                        onHoverCategory={(cat, idx, e) => {
+                          setHoveredSubheadIndex(idx);
+                          if (cat && e) {
+                            showTooltip(
+                              {
+                                title: cat.name,
+                                badge: "Category Breakdown",
+                                items: [
+                                  {
+                                    label: "Sales Amount",
+                                    value: cat.amountFormatted,
+                                    color: "#4f46e5",
+                                  },
+                                  {
+                                    label: "Cases Sold",
+                                    value: cat.casesFormatted,
+                                    color: "#6366f1",
+                                  },
+                                  {
+                                    label: "Share",
+                                    value:
+                                      computed.totalSalesRaw > 0
+                                        ? `${((cat.amount / computed.totalSalesRaw) * 100).toFixed(1)}%`
+                                        : "0%",
+                                  },
+                                ],
+                              },
+                              e,
+                            );
+                          } else {
+                            hideTooltip();
+                          }
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               </section>
@@ -4041,6 +4353,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
               setStartDate={handleStartDateChange}
               endDate={endDate}
               setEndDate={handleEndDateChange}
+              loading={loading}
             />
           )}
 
@@ -4054,6 +4367,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
               setStartDate={handleStartDateChange}
               endDate={endDate}
               setEndDate={handleEndDateChange}
+              loading={loading}
             />
           )}
 
@@ -4067,6 +4381,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
               setStartDate={handleStartDateChange}
               endDate={endDate}
               setEndDate={handleEndDateChange}
+              loading={loading}
             />
           )}
         </main>

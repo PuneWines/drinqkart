@@ -77,6 +77,7 @@ export default function SaleExplorationTab({
   setStartDate,
   endDate,
   setEndDate,
+  loading = false,
 }) {
   // Local Controls
   const [metric, setMetric] = useState("Revenue"); // "Revenue" | "Quantity" | "Case" | "Profit"
@@ -543,7 +544,11 @@ export default function SaleExplorationTab({
                 Total {metric}
               </span>
               <div className="text-3xl sm:text-4xl font-black tracking-tight mt-2 text-white drop-shadow-sm">
-                {formatMetricValue(aggregations.totalVal, metric)}
+                {loading ? (
+                  <div className="h-9 w-44 bg-white/30 rounded-lg animate-pulse" />
+                ) : (
+                  formatMetricValue(aggregations.totalVal, metric)
+                )}
               </div>
             </div>
 
@@ -566,34 +571,46 @@ export default function SaleExplorationTab({
             </h3>
 
             <div className="flex flex-col gap-2.5">
-              {aggregations.categoryListWithShops.slice(0, 4).map((cat) => {
-                return (
-                  <div key={cat.name} className="flex flex-col gap-1">
-                    <div className="flex justify-between items-center text-[11px] font-bold">
-                      <span className="truncate max-w-37.5 text-slate-700">
-                        {cat.name}
-                      </span>
-                      <span className="font-black text-slate-900">
-                        {cat.percentOfTotal.toFixed(1)}%
-                      </span>
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex flex-col gap-1.5 animate-pulse">
+                    <div className="flex justify-between items-center">
+                      <div className="h-3 w-28 bg-slate-200 rounded" />
+                      <div className="h-3 w-10 bg-slate-200 rounded" />
                     </div>
-                    {/* Horizontal Shop-Partitioned Progress Bar */}
-                    <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden flex shadow-2xs border border-slate-200">
-                      {cat.shopPartitions.map((sp) => (
-                        <div
-                          key={sp.shop}
-                          style={{
-                            width: `${Number(sp.pct || 0)}%`,
-                            backgroundColor: getShopColor(sp.shop, aggregations.distinctShops),
-                          }}
-                          className="h-full transition-all duration-300 hover:brightness-125"
-                          title={`${sp.shop}: ${formatMetricValue(sp.val, metric)} (${Number(sp.pct || 0).toFixed(1)}%)`}
-                        />
-                      ))}
-                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2.5" />
                   </div>
-                );
-              })}
+                ))
+              ) : (
+                aggregations.categoryListWithShops.slice(0, 4).map((cat) => {
+                  return (
+                    <div key={cat.name} className="flex flex-col gap-1">
+                      <div className="flex justify-between items-center text-[11px] font-bold">
+                        <span className="truncate max-w-37.5 text-slate-700">
+                          {cat.name}
+                        </span>
+                        <span className="font-black text-slate-900">
+                          {cat.percentOfTotal.toFixed(1)}%
+                        </span>
+                      </div>
+                      {/* Horizontal Shop-Partitioned Progress Bar */}
+                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden flex shadow-2xs border border-slate-200">
+                        {cat.shopPartitions.map((sp) => (
+                          <div
+                            key={sp.shop}
+                            style={{
+                              width: `${Number(sp.pct || 0)}%`,
+                              backgroundColor: getShopColor(sp.shop, aggregations.distinctShops),
+                            }}
+                            className="h-full transition-all duration-300 hover:brightness-125"
+                            title={`${sp.shop}: ${formatMetricValue(sp.val, metric)} (${Number(sp.pct || 0).toFixed(1)}%)`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -609,14 +626,20 @@ export default function SaleExplorationTab({
                 Top Products by {metric} — Pareto Chart
               </h2>
               <p className="text-xs font-bold text-slate-600 mt-0.5">
-                <span className="text-emerald-700 font-black">
-                  {paretoThreshold}% of {metric}
-                </span>{" "}
-                are generated by{" "}
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-md font-black">
-                  {aggregations.cutoffCount} product(s)
-                </span>{" "}
-                out of {aggregations.paretoBrands.length} listed
+                {loading ? (
+                  <span className="inline-block w-48 h-3.5 bg-slate-200 rounded animate-pulse" />
+                ) : (
+                  <>
+                    <span className="text-emerald-700 font-black">
+                      {paretoThreshold}% of {metric}
+                    </span>{" "}
+                    are generated by{" "}
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-md font-black">
+                      {aggregations.cutoffCount} product(s)
+                    </span>{" "}
+                    out of {aggregations.paretoBrands.length} listed
+                  </>
+                )}
               </p>
             </div>
 
@@ -656,8 +679,18 @@ export default function SaleExplorationTab({
           </div>
 
           {/* Pareto SVG Combination Chart */}
-          <div className="flex-1 w-full relative min-h-55">
-            {(() => {
+          <div className="flex-1 w-full relative min-h-55 flex items-center">
+            {loading ? (
+              <div className="w-full h-48 flex items-end justify-between gap-2 px-6 pb-4 animate-pulse">
+                {Array.from({ length: 14 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 bg-slate-200 rounded-t-md"
+                    style={{ height: `${25 + ((i * 11) % 65)}%` }}
+                  />
+                ))}
+              </div>
+            ) : (() => {
               const svgW = 800;
               const svgH = 220;
               const padL = 48;
@@ -854,7 +887,11 @@ export default function SaleExplorationTab({
                   {trendFreq} Total Sale Trend
                 </h2>
                 <span className="text-[11px] font-bold text-slate-500">
-                  (Average: {formatMetricValue(avgTrendVal, metric)})
+                  {loading ? (
+                    <span className="inline-block w-24 h-3 bg-slate-200 rounded animate-pulse" />
+                  ) : (
+                    `(Average: ${formatMetricValue(avgTrendVal, metric)})`
+                  )}
                 </span>
               </div>
             </div>
@@ -879,7 +916,14 @@ export default function SaleExplorationTab({
 
           {/* Trend Line Chart */}
           <div className="w-full relative flex-1 min-h-48 flex items-center">
-            {(() => {
+            {loading ? (
+              <div className="w-full h-44 flex items-center justify-center p-4">
+                <div className="w-full h-full rounded-xl bg-slate-100 animate-pulse flex flex-col justify-end gap-2 p-4">
+                  <div className="w-full h-3 bg-slate-200 rounded-full" />
+                  <div className="w-2/3 h-2 bg-slate-200 rounded-full" />
+                </div>
+              </div>
+            ) : (() => {
               const list = aggregations.trendList;
               if (!list.length) {
                 return (
@@ -919,117 +963,193 @@ export default function SaleExplorationTab({
 
               const maxPt = [...coords].sort((a, b) => b.value - a.value)[0];
 
+              const activeCoord =
+                hoveredTrendPt !== null && coords[hoveredTrendPt]
+                  ? coords[hoveredTrendPt]
+                  : null;
+
               return (
-                <svg
-                  viewBox={`0 0 ${svgW} ${svgH}`}
-                  className="w-full h-full block overflow-visible select-none"
-                >
-                  {/* Y Axis Grid Lines */}
-                  {[0, 0.33, 0.66, 1].map((ratio) => {
-                    const val = ceiling * ratio;
-                    const y = getY(val);
-                    return (
-                      <g key={ratio}>
-                        <line
-                          x1={padL}
-                          y1={y}
-                          x2={svgW - padR}
-                          y2={y}
-                          stroke="#f1f5f9"
-                          strokeWidth="1"
-                        />
-                        <text
-                          x={padL - 8}
-                          y={y + 3.5}
-                          textAnchor="end"
-                          className="text-[9.5px] fill-slate-400 font-bold"
-                        >
-                          {formatShortK(val)}
-                        </text>
-                      </g>
-                    );
-                  })}
-
-                  {/* Avg Line */}
-                  <line
-                    x1={padL}
-                    y1={avgY}
-                    x2={svgW - padR}
-                    y2={avgY}
-                    stroke="#94a3b8"
-                    strokeWidth="1.2"
-                    strokeDasharray="4,4"
-                  />
-                  <text
-                    x={padL + 10}
-                    y={avgY - 5}
-                    className="text-[9px] fill-slate-500 font-extrabold"
+                <div className="relative w-full h-full">
+                  <svg
+                    viewBox={`0 0 ${svgW} ${svgH}`}
+                    className="w-full h-full block overflow-visible select-none"
                   >
-                    Avg: {formatShortK(avgTrendVal)}
-                  </text>
+                    {/* Y Axis Grid Lines */}
+                    {[0, 0.33, 0.66, 1].map((ratio) => {
+                      const val = ceiling * ratio;
+                      const y = getY(val);
+                      return (
+                        <g key={ratio}>
+                          <line
+                            x1={padL}
+                            y1={y}
+                            x2={svgW - padR}
+                            y2={y}
+                            stroke="#f1f5f9"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={padL - 8}
+                            y={y + 3.5}
+                            textAnchor="end"
+                            className="text-[9.5px] fill-slate-400 font-bold"
+                          >
+                            {formatShortK(val)}
+                          </text>
+                        </g>
+                      );
+                    })}
 
-                  {/* Trend Path */}
-                  {pathD && (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke="#475569"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                    {/* Avg Line */}
+                    <line
+                      x1={padL}
+                      y1={avgY}
+                      x2={svgW - padR}
+                      y2={avgY}
+                      stroke="#94a3b8"
+                      strokeWidth="1.2"
+                      strokeDasharray="4,4"
                     />
-                  )}
+                    <text
+                      x={padL + 10}
+                      y={avgY - 5}
+                      className="text-[9px] fill-slate-500 font-extrabold"
+                    >
+                      Avg: {formatShortK(avgTrendVal)}
+                    </text>
 
-                  {/* Points */}
-                  {coords.map((pt, idx) => {
-                    const isHovered = hoveredTrendPt === idx;
-                    const isMax = maxPt && maxPt.label === pt.label;
-                    return (
-                      <g
-                        key={idx}
-                        className="cursor-pointer"
-                        onMouseEnter={() => setHoveredTrendPt(idx)}
-                        onMouseLeave={() => setHoveredTrendPt(null)}
-                      >
+                    {/* Trend Path */}
+                    {pathD && (
+                      <path
+                        d={pathD}
+                        fill="none"
+                        stroke="#475569"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+
+                    {/* Peak / Key Marker */}
+                    {maxPt && (
+                      <g key="peak-marker">
                         <circle
-                          cx={pt.x}
-                          cy={pt.y}
-                          r={isHovered ? 6 : isMax ? 4.5 : 3}
-                          fill={isMax ? "#ff6b2b" : "#334155"}
+                          cx={maxPt.x}
+                          cy={maxPt.y}
+                          r={4.5}
+                          fill="#ff6b2b"
                           stroke="#ffffff"
                           strokeWidth="2"
                         />
-                        {isMax && (
-                          <text
-                            x={pt.x}
-                            y={pt.y - 8}
-                            textAnchor="middle"
-                            className="text-[9.5px] font-black fill-[#ff6b2b]"
-                          >
-                            Peak: {formatMetricValue(pt.value, metric)}
-                          </text>
-                        )}
+                        <text
+                          x={maxPt.x}
+                          y={maxPt.y - 8}
+                          textAnchor="middle"
+                          className="text-[9.5px] font-black fill-[#ff6b2b]"
+                        >
+                          Peak: {formatMetricValue(maxPt.value, metric)}
+                        </text>
                       </g>
-                    );
-                  })}
+                    )}
 
-                  {/* X Axis Labels */}
-                  {coords.map((pt, i) => {
-                    const step = Math.max(Math.floor(coords.length / 8), 1);
-                    if (i % step !== 0 && i !== coords.length - 1) return null;
-                    return (
-                      <text
-                        key={`xl-${i}`}
-                        x={pt.x}
-                        y={svgH - padB + 16}
-                        textAnchor="middle"
-                        className="text-[9.5px] font-bold fill-slate-600"
+                    {/* Smooth Guided Crosshair & Probe Dot */}
+                    {activeCoord && (
+                      <g
+                        style={{
+                          transform: `translate3d(${activeCoord.x}px, 0, 0)`,
+                          transition:
+                            "transform 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+                          willChange: "transform",
+                        }}
                       >
-                        {pt.label}
-                      </text>
-                    );
-                  })}
-                </svg>
+                        <line
+                          x1={0}
+                          y1={padT}
+                          x2={0}
+                          y2={svgH - padB}
+                          stroke="#ff6b2b"
+                          strokeWidth="1.5"
+                          strokeDasharray="3,3"
+                        />
+                        <circle
+                          cx={0}
+                          cy={activeCoord.y}
+                          r={6.5}
+                          fill="#ff6b2b"
+                          stroke="#ffffff"
+                          strokeWidth="2.5"
+                          style={{
+                            transition:
+                              "cy 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+                            willChange: "cy",
+                          }}
+                        />
+                      </g>
+                    )}
+
+                    {/* X Axis Labels */}
+                    {coords.map((pt, i) => {
+                      const step = Math.max(Math.floor(coords.length / 8), 1);
+                      if (i % step !== 0 && i !== coords.length - 1) return null;
+                      return (
+                        <text
+                          key={`xl-${i}`}
+                          x={pt.x}
+                          y={svgH - padB + 16}
+                          textAnchor="middle"
+                          className="text-[9.5px] font-bold fill-slate-600"
+                        >
+                          {pt.label}
+                        </text>
+                      );
+                    })}
+
+                    {/* Transparent Full-Area Smooth Hover Capture */}
+                    <rect
+                      x={padL}
+                      y={padT}
+                      width={svgW - padL - padR}
+                      height={svgH - padT - padB}
+                      fill="transparent"
+                      className="cursor-crosshair"
+                      onMouseMove={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const clientX = e.clientX - rect.left;
+                        const ratio = Math.max(
+                          0,
+                          Math.min(1, clientX / rect.width),
+                        );
+                        const rawIdx = ratio * (coords.length - 1);
+                        const closestIdx = Math.round(rawIdx);
+                        const clampedIdx = Math.max(
+                          0,
+                          Math.min(coords.length - 1, closestIdx),
+                        );
+                        setHoveredTrendPt(clampedIdx);
+                      }}
+                      onMouseLeave={() => setHoveredTrendPt(null)}
+                    />
+                  </svg>
+
+                  {/* Active Tooltip Pill for Trend Point */}
+                  {activeCoord && (
+                    <div
+                      className="absolute pointer-events-none z-20 bg-slate-900/90 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-lg flex items-center gap-1.5 whitespace-nowrap"
+                      style={{
+                        left: `${(activeCoord.x / svgW) * 100}%`,
+                        top: "6px",
+                        transform: "translateX(-50%)",
+                        transition: "left 140ms cubic-bezier(0.2, 0, 0.2, 1)",
+                      }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b2b]" />
+                      <span>{activeCoord.label}:</span>
+                      <span className="text-[#ff9d66] font-black">
+                        {formatMetricValue(activeCoord.value, metric)}
+                      </span>
+                    </div>
+                  )}
+                </div>
               );
             })()}
           </div>
@@ -1045,8 +1165,15 @@ export default function SaleExplorationTab({
                 {categoryViewMode === "category" ? "Category Breakdown" : "Product Breakdown"} by Shop
               </h2>
               <p className="text-[11px] font-bold text-slate-500">
-                Showing {breakdownData.items.length} of {breakdownData.totalMatchingCount} {categoryViewMode === "category" ? "categories" : "products"}
-                {pinnedShop ? ` (Focused on ${pinnedShop})` : ""}
+                {loading ? (
+                  <span className="inline-block w-36 h-3 bg-slate-200 rounded animate-pulse" />
+                ) : (
+                  <>
+                    Showing {breakdownData.items.length} of {breakdownData.totalMatchingCount}{" "}
+                    {categoryViewMode === "category" ? "categories" : "products"}
+                    {pinnedShop ? ` (Focused on ${pinnedShop})` : ""}
+                  </>
+                )}
               </p>
             </div>
 
@@ -1264,7 +1391,19 @@ export default function SaleExplorationTab({
 
           {/* MAIN VISUALIZATION CONTAINER */}
           <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto max-h-80 pr-1 custom-scrollbar">
-            {breakdownData.items.length === 0 ? (
+            {loading ? (
+              <div className="flex flex-col gap-3 py-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex flex-col gap-1.5 animate-pulse">
+                    <div className="flex justify-between items-center">
+                      <div className="h-3.5 w-32 bg-slate-200 rounded" />
+                      <div className="h-3.5 w-16 bg-slate-200 rounded" />
+                    </div>
+                    <div className="h-3 w-full bg-slate-100 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            ) : breakdownData.items.length === 0 ? (
               <div className="w-full py-12 flex flex-col items-center justify-center text-slate-400 text-xs font-bold gap-1 bg-white/60 rounded-xl border border-dashed border-slate-200">
                 <Search className="w-6 h-6 text-slate-300" />
                 <span>No matching items found</span>
