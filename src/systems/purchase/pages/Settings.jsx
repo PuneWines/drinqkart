@@ -27,18 +27,58 @@ import { supabase } from "../lib/supabase";
 import districtService from "../services/districtService";
 import "../styles/Settings.css";
 
+// Skeleton Table Rows Loader
+const SkeletonTableRows = ({ columns = 6, rows = 6 }) => (
+  <>
+    {Array.from({ length: rows }).map((_, rIdx) => (
+      <tr key={rIdx} className="border-b border-slate-100">
+        {Array.from({ length: columns }).map((__, cIdx) => (
+          <td key={cIdx} className="px-6 py-4 whitespace-nowrap">
+            <div
+              className="h-4 bg-slate-200/80 rounded-md animate-pulse"
+              style={{
+                width:
+                  cIdx === 0
+                    ? "75%"
+                    : cIdx === 1
+                      ? "50%"
+                      : cIdx === columns - 1
+                        ? "40%"
+                        : `${40 + ((rIdx * 7 + cIdx * 11) % 5) * 10}%`,
+              }}
+            />
+          </td>
+        ))}
+      </tr>
+    ))}
+  </>
+);
+
 const Settings = ({ readOnly = false }) => {
   const { users, fetchUsers, updateUser, createUser, deleteUser, currentUser } =
     useAuthStore();
-  const { vendors, fetchVendors, updateVendor, createVendor, deleteVendor } =
-    useVendorStore();
+  const {
+    vendors,
+    fetchVendors,
+    updateVendor,
+    createVendor,
+    deleteVendor,
+    loading: vendorStoreLoading,
+  } = useVendorStore();
   const {
     companies,
     fetchCompanySettings,
     createCompany,
     updateCompany,
     deleteCompany,
+    loading: companyStoreLoading,
   } = useCompanyStore();
+
+  const [loadingVendors, setLoadingVendors] = useState(true);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [loadingDistricts, setLoadingDistricts] = useState(true);
+  const [loadingTransporters, setLoadingTransporters] = useState(true);
+  const [loadingReceivers, setLoadingReceivers] = useState(true);
 
   const [activeTab, setActiveTab] = useState("vendors");
   const [searchQuery, setSearchQuery] = useState("");
@@ -125,14 +165,47 @@ const Settings = ({ readOnly = false }) => {
     contact_number: "",
   });
 
+  const isVendorsLoading = loadingVendors || (vendorStoreLoading && vendors.length === 0);
+  const isCompaniesLoading = loadingCompanies || (companyStoreLoading && companies.length === 0);
+  const isDistrictsLoading = loadingDistricts && districts.length === 0;
+  const isTransportersLoading = loadingTransporters && transporters.length === 0;
+  const isReceiversLoading = loadingReceivers && receivers.length === 0;
+
   useEffect(() => {
-    fetchUsers();
-    fetchVendors();
-    fetchAvailableParties();
-    fetchCompanySettings();
-    fetchDistricts();
-    fetchTransporters();
-    fetchReceivers();
+    let isMounted = true;
+    const loadAll = async () => {
+      try {
+        await Promise.allSettled([
+          (async () => {
+            try {
+              setLoadingVendors(true);
+              await fetchVendors();
+            } finally {
+              if (isMounted) setLoadingVendors(false);
+            }
+          })(),
+          (async () => {
+            try {
+              setLoadingCompanies(true);
+              await fetchCompanySettings();
+            } finally {
+              if (isMounted) setLoadingCompanies(false);
+            }
+          })(),
+          fetchDistricts(),
+          fetchTransporters(),
+          fetchReceivers(),
+          fetchUsers(),
+          fetchAvailableParties(),
+        ]);
+      } catch (err) {
+        console.error("Error loading settings data:", err);
+      }
+    };
+    loadAll();
+    return () => {
+      isMounted = false;
+    };
   }, [fetchUsers, fetchVendors, fetchCompanySettings]);
 
   useEffect(() => {
@@ -150,24 +223,36 @@ const Settings = ({ readOnly = false }) => {
   }, [hoverDistrictPreview]);
 
   const fetchDistricts = async () => {
-    const data = await districtService.getDistricts();
-    if (data) setDistricts(data);
+    try {
+      const data = await districtService.getDistricts();
+      if (data) setDistricts(data);
+    } finally {
+      setLoadingDistricts(false);
+    }
   };
 
   const fetchTransporters = async () => {
-    const { data } = await supabase
-      .from("purchase_transporters")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setTransporters(data);
+    try {
+      const { data } = await supabase
+        .from("purchase_transporters")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (data) setTransporters(data);
+    } finally {
+      setLoadingTransporters(false);
+    }
   };
 
   const fetchReceivers = async () => {
-    const { data } = await supabase
-      .from("purchase_receivers")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setReceivers(data);
+    try {
+      const { data } = await supabase
+        .from("purchase_receivers")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (data) setReceivers(data);
+    } finally {
+      setLoadingReceivers(false);
+    }
   };
 
   const fetchAvailableParties = async () => {
@@ -1457,18 +1542,24 @@ const Settings = ({ readOnly = false }) => {
 
               {/* Vendors Count & Active Filter Indicator */}
               <div className="flex justify-between items-center px-1 text-xs text-slate-500 font-medium">
-                <span>
-                  Showing{" "}
-                  <strong className="text-slate-900 font-bold">
-                    {filteredVendors.length}
-                  </strong>{" "}
-                  of{" "}
-                  <strong className="text-slate-900 font-bold">
-                    {vendors.length}
-                  </strong>{" "}
-                  vendors
-                </span>
-                {vendorSearchQuery && (
+                {isVendorsLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-36 bg-slate-200/80 rounded animate-pulse" />
+                  </div>
+                ) : (
+                  <span>
+                    Showing{" "}
+                    <strong className="text-slate-900 font-bold">
+                      {filteredVendors.length}
+                    </strong>{" "}
+                    of{" "}
+                    <strong className="text-slate-900 font-bold">
+                      {vendors.length}
+                    </strong>{" "}
+                    vendors
+                  </span>
+                )}
+                {vendorSearchQuery && !isVendorsLoading && (
                   <button
                     type="button"
                     onClick={() => setVendorSearchQuery("")}
@@ -2083,73 +2174,76 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {filteredVendors.map((vendor) => (
-                        <tr
-                          key={vendor.id}
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <strong className="text-slate-900 font-bold">
-                              {vendor.party_name}
-                            </strong>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {vendor.company_name ? (
-                              <span
-                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-md ${
-                                  districts.some(
+                      {isVendorsLoading ? (
+                        <SkeletonTableRows columns={6} rows={6} />
+                      ) : filteredVendors.length > 0 ? (
+                        filteredVendors.map((vendor) => (
+                          <tr
+                            key={vendor.id}
+                            className="hover:bg-slate-50/50 transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <strong className="text-slate-900 font-bold">
+                                {vendor.party_name}
+                              </strong>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {vendor.company_name ? (
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-md ${
+                                    districts.some(
+                                      (d) =>
+                                        (d.name || "").toLowerCase() ===
+                                        (vendor.company_name || "").toLowerCase(),
+                                    )
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                      : "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                  }`}
+                                >
+                                  {districts.some(
                                     (d) =>
                                       (d.name || "").toLowerCase() ===
                                       (vendor.company_name || "").toLowerCase(),
-                                  )
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                                }`}
+                                  ) && (
+                                    <MapPin
+                                      size={11}
+                                      className="text-emerald-600"
+                                    />
+                                  )}
+                                  {vendor.company_name}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                                  Direct
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-slate-600 font-medium">
+                              {renderVendorDistrictContactBadges(vendor)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
+                              {vendor.email || "—"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase">
+                              {vendor.gstin || "—"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap flex gap-2">
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleEditVendor(vendor)}
                               >
-                                {districts.some(
-                                  (d) =>
-                                    (d.name || "").toLowerCase() ===
-                                    (vendor.company_name || "").toLowerCase(),
-                                ) && (
-                                  <MapPin
-                                    size={11}
-                                    className="text-emerald-600"
-                                  />
-                                )}
-                                {vendor.company_name}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-                                Direct
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-slate-600 font-medium">
-                            {renderVendorDistrictContactBadges(vendor)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
-                            {vendor.email || "—"}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase">
-                            {vendor.gstin || "—"}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleEditVendor(vendor)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleDeleteVendor(vendor.id)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {filteredVendors.length === 0 && (
+                                Edit
+                              </button>
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleDeleteVendor(vendor.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
                         <tr>
                           <td
                             colSpan="6"
@@ -2503,66 +2597,69 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {companies.map((company) => (
-                        <tr
-                          key={company.id}
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <strong className="text-slate-900 font-bold">
-                              {company.name}
-                            </strong>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase">
-                            {company.gstin}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {company.district ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg">
-                                <MapPin size={12} className="text-indigo-500" />
-                                {company.district}
+                      {isCompaniesLoading ? (
+                        <SkeletonTableRows columns={8} rows={4} />
+                      ) : companies.length > 0 ? (
+                        companies.map((company) => (
+                          <tr
+                            key={company.id}
+                            className="hover:bg-slate-50/50 transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <strong className="text-slate-900 font-bold">
+                                {company.name}
+                              </strong>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase">
+                              {company.gstin}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {company.district ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg">
+                                  <MapPin size={12} className="text-indigo-500" />
+                                  {company.district}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-medium italic text-xs">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 text-[11px] font-bold rounded ${company.requires_transporter !== false ? "bg-indigo-50 text-indigo-700 border border-indigo-200" : "bg-slate-100 text-slate-500 border border-slate-200"}`}
+                              >
+                                {company.requires_transporter !== false
+                                  ? "Required"
+                                  : "Not Required"}
                               </span>
-                            ) : (
-                              <span className="text-slate-400 font-medium italic text-xs">
-                                —
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-0.5 text-[11px] font-bold rounded ${company.requires_transporter !== false ? "bg-indigo-50 text-indigo-700 border border-indigo-200" : "bg-slate-100 text-slate-500 border border-slate-200"}`}
-                            >
-                              {company.requires_transporter !== false
-                                ? "Required"
-                                : "Not Required"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
-                            {company.contact}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
-                            {company.email}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold">
-                            {company.terms?.length || 0}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleEditCompany(company)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleDeleteCompany(company.id)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {companies.length === 0 && (
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
+                              {company.contact}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
+                              {company.email}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold">
+                              {company.terms?.length || 0}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap flex gap-2">
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleEditCompany(company)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleDeleteCompany(company.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
                         <tr>
                           <td
                             colSpan="8"
@@ -2796,89 +2893,92 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {filteredDistricts.map((dist, idx) => {
-                        const assignedCompanies = companies.filter(
-                          (c) =>
-                            (c.district || "").trim().toLowerCase() ===
-                            dist.name.trim().toLowerCase(),
-                        );
-                        return (
-                          <tr
-                            key={dist.id}
-                            className="hover:bg-slate-50/50 transition-colors"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-400">
-                              {idx + 1}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="inline-flex items-center gap-2 font-bold text-slate-900">
-                                <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
-                                  <MapPin size={15} />
-                                </span>
-                                {dist.name}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              {(() => {
-                                const areasList = (Array.isArray(dist.areas) ? dist.areas : [])
-                                  .map((a) => (typeof a === "string" ? a : a?.name || "").trim())
-                                  .filter(Boolean);
-                                if (areasList.length > 0) {
-                                  return (
-                                    <div className="flex flex-wrap gap-1.5 items-center">
-                                      {areasList.map((aName, aIdx) => (
-                                        <span
-                                          key={aIdx}
-                                          className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md"
-                                        >
-                                          <MapPin size={10} className="text-indigo-500" />
-                                          {aName}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  );
-                                }
-                                if (assignedCompanies.length > 0) {
-                                  return (
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {assignedCompanies.map((c) => (
-                                        <span
-                                          key={c.id}
-                                          className="px-2.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 rounded-md"
-                                        >
-                                          {c.name}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <span className="text-slate-400 text-xs italic">
-                                    No areas defined
+                      {isDistrictsLoading ? (
+                        <SkeletonTableRows columns={4} rows={5} />
+                      ) : filteredDistricts.length > 0 ? (
+                        filteredDistricts.map((dist, idx) => {
+                          const assignedCompanies = companies.filter(
+                            (c) =>
+                              (c.district || "").trim().toLowerCase() ===
+                              dist.name.trim().toLowerCase(),
+                          );
+                          return (
+                            <tr
+                              key={dist.id}
+                              className="hover:bg-slate-50/50 transition-colors"
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-400">
+                                {idx + 1}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-2 font-bold text-slate-900">
+                                  <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
+                                    <MapPin size={15} />
                                   </span>
-                                );
-                              })()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                              <button
-                                className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
-                                onClick={() => handleEditDistrict(dist)}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
-                                onClick={() =>
-                                  handleDeleteDistrict(dist.id, dist.name)
-                                }
-                              >
-                                Delete
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {filteredDistricts.length === 0 && (
+                                  {dist.name}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                {(() => {
+                                  const areasList = (Array.isArray(dist.areas) ? dist.areas : [])
+                                    .map((a) => (typeof a === "string" ? a : a?.name || "").trim())
+                                    .filter(Boolean);
+                                  if (areasList.length > 0) {
+                                    return (
+                                      <div className="flex flex-wrap gap-1.5 items-center">
+                                        {areasList.map((aName, aIdx) => (
+                                          <span
+                                            key={aIdx}
+                                            className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md"
+                                          >
+                                            <MapPin size={10} className="text-indigo-500" />
+                                            {aName}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    );
+                                  }
+                                  if (assignedCompanies.length > 0) {
+                                    return (
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {assignedCompanies.map((c) => (
+                                          <span
+                                            key={c.id}
+                                            className="px-2.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 rounded-md"
+                                          >
+                                            {c.name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <span className="text-slate-400 text-xs italic">
+                                      No areas defined
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap flex gap-2">
+                                <button
+                                  className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
+                                  onClick={() => handleEditDistrict(dist)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
+                                  onClick={() =>
+                                    handleDeleteDistrict(dist.id, dist.name)
+                                  }
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
                         <tr>
                           <td
                             colSpan="4"
@@ -2967,18 +3067,24 @@ const Settings = ({ readOnly = false }) => {
 
               {/* Transporters Count & Active Filter Indicator */}
               <div className="flex justify-between items-center px-1 text-xs text-slate-500 font-medium">
-                <span>
-                  Showing{" "}
-                  <strong className="text-slate-900 font-bold">
-                    {filteredTransporters.length}
-                  </strong>{" "}
-                  of{" "}
-                  <strong className="text-slate-900 font-bold">
-                    {transporters.length}
-                  </strong>{" "}
-                  transporters
-                </span>
-                {transporterSearchQuery && (
+                {isTransportersLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-36 bg-slate-200/80 rounded animate-pulse" />
+                  </div>
+                ) : (
+                  <span>
+                    Showing{" "}
+                    <strong className="text-slate-900 font-bold">
+                      {filteredTransporters.length}
+                    </strong>{" "}
+                    of{" "}
+                    <strong className="text-slate-900 font-bold">
+                      {transporters.length}
+                    </strong>{" "}
+                    transporters
+                  </span>
+                )}
+                {transporterSearchQuery && !isTransportersLoading && (
                   <button
                     type="button"
                     onClick={() => setTransporterSearchQuery("")}
@@ -3088,36 +3194,39 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {filteredTransporters.map((t) => (
-                        <tr
-                          key={t.id}
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <strong className="text-slate-900 font-bold">
-                              {t.name}
-                            </strong>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
-                            {t.contact_number}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleEditTransporter(t)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleDeleteTransporter(t.id)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {portalFilteredTransporters.length === 0 && (
+                      {isTransportersLoading ? (
+                        <SkeletonTableRows columns={3} rows={4} />
+                      ) : filteredTransporters.length > 0 ? (
+                        filteredTransporters.map((t) => (
+                          <tr
+                            key={t.id}
+                            className="hover:bg-slate-50/50 transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <strong className="text-slate-900 font-bold">
+                                {t.name}
+                              </strong>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
+                              {t.contact_number}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap flex gap-2">
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleEditTransporter(t)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleDeleteTransporter(t.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
                         <tr>
                           <td
                             colSpan="3"
@@ -3204,18 +3313,24 @@ const Settings = ({ readOnly = false }) => {
 
               {/* Receivers Count & Active Filter Indicator */}
               <div className="flex justify-between items-center px-1 text-xs text-slate-500 font-medium">
-                <span>
-                  Showing{" "}
-                  <strong className="text-slate-900 font-bold">
-                    {filteredReceivers.length}
-                  </strong>{" "}
-                  of{" "}
-                  <strong className="text-slate-900 font-bold">
-                    {receivers.length}
-                  </strong>{" "}
-                  receivers
-                </span>
-                {receiverSearchQuery && (
+                {isReceiversLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-32 bg-slate-200/80 rounded animate-pulse" />
+                  </div>
+                ) : (
+                  <span>
+                    Showing{" "}
+                    <strong className="text-slate-900 font-bold">
+                      {filteredReceivers.length}
+                    </strong>{" "}
+                    of{" "}
+                    <strong className="text-slate-900 font-bold">
+                      {receivers.length}
+                    </strong>{" "}
+                    receivers
+                  </span>
+                )}
+                {receiverSearchQuery && !isReceiversLoading && (
                   <button
                     type="button"
                     onClick={() => setReceiverSearchQuery("")}
@@ -3320,36 +3435,39 @@ const Settings = ({ readOnly = false }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {filteredReceivers.map((r) => (
-                        <tr
-                          key={r.id}
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <strong className="text-slate-900 font-bold">
-                              {r.name}
-                            </strong>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
-                            {r.contact_number}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleEditReceiver(r)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
-                              onClick={() => handleDeleteReceiver(r.id)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {portalFilteredReceivers.length === 0 && (
+                      {isReceiversLoading ? (
+                        <SkeletonTableRows columns={3} rows={4} />
+                      ) : filteredReceivers.length > 0 ? (
+                        filteredReceivers.map((r) => (
+                          <tr
+                            key={r.id}
+                            className="hover:bg-slate-50/50 transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <strong className="text-slate-900 font-bold">
+                                {r.name}
+                              </strong>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
+                              {r.contact_number}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap flex gap-2">
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleEditReceiver(r)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="px-3 py-1.5 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-lg transition-all cursor-pointer"
+                                onClick={() => handleDeleteReceiver(r.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
                         <tr>
                           <td
                             colSpan="3"
@@ -3460,69 +3578,72 @@ const Settings = ({ readOnly = false }) => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
-                        {portalFilteredVendors.map((v) => {
-                          const baseUrl = window.location.origin;
+                        {isVendorsLoading ? (
+                          <SkeletonTableRows columns={5} rows={4} />
+                        ) : portalFilteredVendors.length > 0 ? (
+                          portalFilteredVendors.map((v) => {
+                            const baseUrl = window.location.origin;
 
-                          let link = v.portal_link || `/vendor-portal/${v.id}`;
-                          if (!link.startsWith("http")) {
-                            link = `${baseUrl}${link}`;
-                          }
+                            let link = v.portal_link || `/vendor-portal/${v.id}`;
+                            if (!link.startsWith("http")) {
+                              link = `${baseUrl}${link}`;
+                            }
 
-                          return (
-                            <tr
-                              key={v.id}
-                              className="hover:bg-slate-50/40 transition-colors"
-                            >
-                              <td className="px-4 py-3">
-                                <strong
-                                  className="text-slate-950 font-bold block truncate max-w-[200px]"
-                                  title={v.party_name}
-                                >
-                                  {v.party_name}
-                                </strong>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                {v.company_name ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                    {v.company_name}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-                                    Direct
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-slate-600 font-medium">
-                                {renderVendorDistrictContactBadges(v)}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center max-w-[200px]">
-                                  <code
-                                    title={link}
-                                    className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                            return (
+                              <tr
+                                key={v.id}
+                                className="hover:bg-slate-50/40 transition-colors"
+                              >
+                                <td className="px-4 py-3">
+                                  <strong
+                                    className="text-slate-950 font-bold block truncate max-w-[200px]"
+                                    title={v.party_name}
                                   >
-                                    {link.replace(/^https?:\/\/[^/]+/, "") ||
-                                      link}
-                                  </code>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right">
-                                <button
-                                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(link);
-                                    alert(
-                                      "Vendor Portal Link copied to clipboard!",
-                                    );
-                                  }}
-                                >
-                                  <Copy size={12} /> Copy Link
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {portalFilteredVendors.length === 0 && (
+                                    {v.party_name}
+                                  </strong>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  {v.company_name ? (
+                                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                      {v.company_name}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                                      Direct
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600 font-medium">
+                                  {renderVendorDistrictContactBadges(v)}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center max-w-[200px]">
+                                    <code
+                                      title={link}
+                                      className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                                    >
+                                      {link.replace(/^https?:\/\/[^/]+/, "") ||
+                                        link}
+                                    </code>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-right">
+                                  <button
+                                    className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(link);
+                                      alert(
+                                        "Vendor Portal Link copied to clipboard!",
+                                      );
+                                    }}
+                                  >
+                                    <Copy size={12} /> Copy Link
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
                           <tr>
                             <td
                               colSpan="5"
@@ -3566,58 +3687,61 @@ const Settings = ({ readOnly = false }) => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
-                        {portalFilteredTransporters.map((t) => {
-                          const baseUrl = window.location.origin;
-                          let link =
-                            t.portal_link || `/transporter-portal/${t.id}`;
-                          if (!link.startsWith("http")) {
-                            link = `${baseUrl}${link}`;
-                          }
+                        {isTransportersLoading ? (
+                          <SkeletonTableRows columns={4} rows={4} />
+                        ) : portalFilteredTransporters.length > 0 ? (
+                          portalFilteredTransporters.map((t) => {
+                            const baseUrl = window.location.origin;
+                            let link =
+                              t.portal_link || `/transporter-portal/${t.id}`;
+                            if (!link.startsWith("http")) {
+                              link = `${baseUrl}${link}`;
+                            }
 
-                          return (
-                            <tr
-                              key={t.id}
-                              className="hover:bg-slate-50/40 transition-colors"
-                            >
-                              <td className="px-4 py-3">
-                                <strong
-                                  className="text-slate-950 font-bold block truncate max-w-[240px]"
-                                  title={t.name}
-                                >
-                                  {t.name}
-                                </strong>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold font-mono text-xs">
-                                {t.contact_number || "—"}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center max-w-[240px]">
-                                  <code
-                                    title={link}
-                                    className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                            return (
+                              <tr
+                                key={t.id}
+                                className="hover:bg-slate-50/40 transition-colors"
+                              >
+                                <td className="px-4 py-3">
+                                  <strong
+                                    className="text-slate-950 font-bold block truncate max-w-[240px]"
+                                    title={t.name}
                                   >
-                                    {link.replace(/^https?:\/\/[^/]+/, "") ||
-                                      link}
-                                  </code>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right">
-                                <button
-                                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(link);
-                                    alert(
-                                      "Transporter Portal Link copied to clipboard!",
-                                    );
-                                  }}
-                                >
-                                  <Copy size={12} /> Copy Link
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {filteredTransporters.length === 0 && (
+                                    {t.name}
+                                  </strong>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold font-mono text-xs">
+                                  {t.contact_number || "—"}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center max-w-[240px]">
+                                    <code
+                                      title={link}
+                                      className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                                    >
+                                      {link.replace(/^https?:\/\/[^/]+/, "") ||
+                                        link}
+                                    </code>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-right">
+                                  <button
+                                    className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(link);
+                                      alert(
+                                        "Transporter Portal Link copied to clipboard!",
+                                      );
+                                    }}
+                                  >
+                                    <Copy size={12} /> Copy Link
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
                           <tr>
                             <td
                               colSpan="4"
@@ -3661,58 +3785,61 @@ const Settings = ({ readOnly = false }) => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
-                        {portalFilteredReceivers.map((r) => {
-                          const baseUrl = window.location.origin;
-                          let link =
-                            r.portal_link || `/receiver-portal/${r.id}`;
-                          if (!link.startsWith("http")) {
-                            link = `${baseUrl}${link}`;
-                          }
+                        {isReceiversLoading ? (
+                          <SkeletonTableRows columns={4} rows={4} />
+                        ) : portalFilteredReceivers.length > 0 ? (
+                          portalFilteredReceivers.map((r) => {
+                            const baseUrl = window.location.origin;
+                            let link =
+                              r.portal_link || `/receiver-portal/${r.id}`;
+                            if (!link.startsWith("http")) {
+                              link = `${baseUrl}${link}`;
+                            }
 
-                          return (
-                            <tr
-                              key={r.id}
-                              className="hover:bg-slate-50/40 transition-colors"
-                            >
-                              <td className="px-4 py-3">
-                                <strong
-                                  className="text-slate-950 font-bold block truncate max-w-[240px]"
-                                  title={r.name}
-                                >
-                                  {r.name}
-                                </strong>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold font-mono text-xs">
-                                {r.contact_number || "—"}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center max-w-[240px]">
-                                  <code
-                                    title={link}
-                                    className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                            return (
+                              <tr
+                                key={r.id}
+                                className="hover:bg-slate-50/40 transition-colors"
+                              >
+                                <td className="px-4 py-3">
+                                  <strong
+                                    className="text-slate-950 font-bold block truncate max-w-[240px]"
+                                    title={r.name}
                                   >
-                                    {link.replace(/^https?:\/\/[^/]+/, "") ||
-                                      link}
-                                  </code>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right">
-                                <button
-                                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(link);
-                                    alert(
-                                      "Receiver Portal Link copied to clipboard!",
-                                    );
-                                  }}
-                                >
-                                  <Copy size={12} /> Copy Link
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {filteredReceivers.length === 0 && (
+                                    {r.name}
+                                  </strong>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold font-mono text-xs">
+                                  {r.contact_number || "—"}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center max-w-[240px]">
+                                    <code
+                                      title={link}
+                                      className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono text-indigo-700 truncate select-all block w-full"
+                                    >
+                                      {link.replace(/^https?:\/\/[^/]+/, "") ||
+                                        link}
+                                    </code>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-right">
+                                  <button
+                                    className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(link);
+                                      alert(
+                                        "Receiver Portal Link copied to clipboard!",
+                                      );
+                                    }}
+                                  >
+                                    <Copy size={12} /> Copy Link
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
                           <tr>
                             <td
                               colSpan="4"
