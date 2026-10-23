@@ -544,203 +544,28 @@ const ChartTooltip = ({ tooltip }) => {
 };
 
 // ==========================================
-// EXECUTIVE SKELETON LOADING COMPONENT
+// MONTHLY SALES CARD SKELETON LOADING
 // ==========================================
-const DashboardSkeletonLoading = ({ activeTab = "Overview" }) => {
-  return (
-    <div className="flex flex-col gap-3.5 w-full">
-      {/* Sleek Skeleton Loading Banner */}
-      <div className="bg-linear-to-r from-sky-50 via-indigo-50 to-sky-50 border border-sky-200 text-indigo-700 px-4 py-2.5 rounded-2xl flex items-center justify-between shadow-2xs animate-pulse">
-        <div className="flex items-center gap-2.5">
-          <RefreshCw className="w-4 h-4 animate-spin text-indigo-600 shrink-0" />
-          <span className="text-xs font-black tracking-tight text-indigo-900">
-            Fetching and aggregating real stock balance records from database...
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />
-          <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider hidden sm:inline">
-            Live Query Active
-          </span>
-        </div>
-      </div>
-
-      {activeTab === "Overview" && (
-        <>
-          {/* Top Monthly Sales Cards Skeletons */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 pb-2.5 border-2 border-[#b8ddf8]/70 min-h-40 sm:min-h-42 flex flex-col items-center justify-between shadow-xs animate-pulse"
-              >
-                <div className="text-center w-full flex flex-col items-center">
-                  <div className="h-6 sm:h-7 w-28 sm:w-32 bg-slate-200/80 rounded-lg" />
-                  <div className="h-4 w-20 bg-slate-200/60 rounded-md mt-2" />
-                </div>
-                {/* Simulated sparkline wave silhouette */}
-                <div className="w-full flex items-end justify-between px-2 pt-2 pb-1 h-19 sm:h-20.5 mt-2 bg-sky-100/40 rounded-xl gap-1 overflow-hidden">
-                  {[45, 60, 35, 75, 50, 65, 80, 55, 70, 40, 65, 85, 60, 75, 80].map((h, idx) => (
-                    <div
-                      key={idx}
-                      className="w-full bg-sky-300/40 rounded-t-xs"
-                      style={{ height: `${h}%` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </section>
-
-          {/* Middle Row Skeletons (3 Major Visualizations) */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            {/* Card 1 Skeleton: Horizontal Bar */}
-            <div className="bg-[#f8fcff] rounded-2xl p-4 border-2 border-[#b8ddf8]/70 shadow-xs flex flex-col justify-between min-h-75 animate-pulse">
-              <div className="h-4 w-44 bg-slate-200/80 rounded-md mx-auto mb-4" />
-              <div className="space-y-3.5 my-auto">
-                {[
-                  { labelW: "w-10", widthPct: "85%", color: "bg-indigo-300/50" },
-                  { labelW: "w-12", widthPct: "65%", color: "bg-sky-300/50" },
-                  { labelW: "w-8", widthPct: "45%", color: "bg-emerald-300/50" },
-                  { labelW: "w-11", widthPct: "25%", color: "bg-amber-300/50" },
-                ].map((row, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <div className={`h-3 ${row.labelW} bg-slate-200/70 rounded`} />
-                    <div className="flex-1 bg-slate-100 rounded-md h-5 overflow-hidden">
-                      <div
-                        className={`h-full ${row.color} rounded-r-md`}
-                        style={{ width: row.widthPct }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="h-3 w-32 bg-slate-200/60 rounded mx-auto mt-2" />
-            </div>
-
-            {/* Card 2 Skeleton: Donut Chart */}
-            <div className="bg-[#f8fcff] rounded-2xl p-4 border-2 border-[#b8ddf8]/70 shadow-xs flex flex-col items-center justify-between min-h-75 animate-pulse">
-              <div className="h-4 w-40 bg-slate-200/80 rounded-md mx-auto mb-2" />
-              <div className="relative my-auto flex items-center justify-center">
-                <div className="w-32 h-32 rounded-full border-8 border-slate-200/70 border-t-indigo-400/60 border-r-sky-400/60 border-b-amber-400/60 flex items-center justify-center">
-                  <div className="text-center flex flex-col items-center">
-                    <div className="h-5 w-12 bg-slate-300/80 rounded" />
-                    <div className="h-2.5 w-16 bg-slate-200/70 rounded mt-1" />
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-center gap-3 w-full mt-2">
-                {[1, 2, 3, 4].map((k) => (
-                  <div key={k} className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-slate-300/70" />
-                    <div className="h-2.5 w-8 bg-slate-200/60 rounded" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Card 3 Skeleton: Store Wise Horizontal Bars */}
-            <div className="bg-[#f8fcff] rounded-2xl p-4 border-2 border-[#b8ddf8]/70 shadow-xs flex flex-col justify-between min-h-75 animate-pulse">
-              <div className="h-4 w-36 bg-slate-200/80 rounded-md mx-auto mb-4" />
-              <div className="space-y-3 my-auto">
-                {[88, 72, 60, 48, 36, 24].map((widthPct, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <div className="h-3 w-14 bg-slate-200/70 rounded shrink-0" />
-                    <div className="flex-1 bg-slate-100 rounded-md h-4.5 overflow-hidden">
-                      <div
-                        className="h-full bg-indigo-300/40 rounded-r-md"
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="h-3 w-28 bg-slate-200/60 rounded mx-auto mt-2" />
-            </div>
-          </section>
-
-          {/* Bottom Row Skeletons (3 Lower Visualizations) */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            {/* Card 1: Stacked Bar Chart */}
-            <div className="bg-[#f8fcff] rounded-2xl p-4 border-2 border-[#b8ddf8]/70 shadow-xs flex flex-col justify-between min-h-75 animate-pulse">
-              <div className="h-4 w-44 bg-slate-200/80 rounded-md mx-auto mb-3" />
-              <div className="flex items-end justify-around h-44 bg-slate-50/80 rounded-xl p-3 gap-2">
-                {[65, 85, 45, 95].map((h, idx) => (
-                  <div key={idx} className="flex flex-col items-center gap-1.5 w-12">
-                    <div
-                      className="w-full bg-indigo-300/45 rounded-t-md"
-                      style={{ height: `${h}%` }}
-                    />
-                    <div className="h-2.5 w-8 bg-slate-200/60 rounded" />
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-center gap-3 mt-2">
-                {[1, 2, 3].map((k) => (
-                  <div key={k} className="h-2.5 w-12 bg-slate-200/60 rounded" />
-                ))}
-              </div>
-            </div>
-
-            {/* Card 2: Line / Area Chart */}
-            <div className="bg-[#f8fcff] rounded-2xl p-4 border-2 border-[#b8ddf8]/70 shadow-xs flex flex-col justify-between min-h-75 animate-pulse">
-              <div className="h-4 w-36 bg-slate-200/80 rounded-md mx-auto mb-3" />
-              <div className="flex items-end justify-between h-44 bg-sky-50/60 rounded-xl p-3 gap-1 overflow-hidden">
-                {[30, 45, 60, 40, 75, 50, 65, 90, 55, 70, 60, 80, 50, 75, 85].map((h, idx) => (
-                  <div
-                    key={idx}
-                    className="w-full bg-sky-300/35 rounded-t-xs"
-                    style={{ height: `${h}%` }}
-                  />
-                ))}
-              </div>
-              <div className="h-3 w-28 bg-slate-200/60 rounded mx-auto mt-2" />
-            </div>
-
-            {/* Card 3: Donut / Subhead Breakdown */}
-            <div className="bg-[#f8fcff] rounded-2xl p-4 border-2 border-[#b8ddf8]/70 shadow-xs flex flex-col items-center justify-between min-h-75 animate-pulse">
-              <div className="h-4 w-48 bg-slate-200/80 rounded-md mx-auto mb-2" />
-              <div className="w-32 h-32 rounded-full border-8 border-slate-200/70 border-t-emerald-400/60 border-r-indigo-400/60 border-b-purple-400/60 flex items-center justify-center my-auto">
-                <div className="h-4 w-12 bg-slate-300/70 rounded" />
-              </div>
-              <div className="flex justify-center gap-3 w-full mt-2">
-                {[1, 2, 3].map((k) => (
-                  <div key={k} className="h-2.5 w-10 bg-slate-200/60 rounded" />
-                ))}
-              </div>
-            </div>
-          </section>
-        </>
-      )}
-
-      {activeTab === "Sales" && (
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="bg-[#f8fcff] rounded-2xl p-4 border-2 border-[#b8ddf8]/70 shadow-xs flex flex-col justify-between min-h-85 animate-pulse"
-            >
-              <div className="h-5 w-48 bg-slate-200/80 rounded-md mx-auto mb-3" />
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="h-6 w-24 bg-slate-200/70 rounded-lg" />
-                <div className="h-4 w-28 bg-slate-200/60 rounded-md" />
-              </div>
-              <div className="flex-1 bg-slate-100/70 rounded-xl p-4 flex items-end gap-2">
-                {[40, 60, 50, 75, 80, 55, 70, 90, 65, 85].map((h, idx) => (
-                  <div
-                    key={idx}
-                    className="w-full bg-indigo-300/40 rounded-t-md"
-                    style={{ height: `${h}%` }}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
+const MonthlySalesCardSkeleton = () => (
+  <div className="bg-[#f8fcff] rounded-2xl p-3 sm:p-3.5 pb-2.5 border-2 border-[#b8ddf8]/70 min-h-40 sm:min-h-42 flex flex-col items-center justify-between shadow-xs animate-pulse">
+    <div className="text-center w-full flex flex-col items-center">
+      {/* Amount placeholder */}
+      <div className="h-6 sm:h-7 w-28 sm:w-32 bg-slate-200/80 rounded-lg" />
+      {/* Label placeholder */}
+      <div className="h-4 w-20 bg-slate-200/60 rounded-md mt-2" />
     </div>
-  );
-};
+    {/* Month sales graph div skeleton */}
+    <div className="w-full flex items-end justify-between px-2 pt-2 pb-1 h-19 sm:h-20.5 mt-2 bg-sky-100/40 rounded-xl gap-1 overflow-hidden">
+      {[45, 60, 35, 75, 50, 65, 80, 55, 70, 40, 65, 85, 60, 75, 80].map((h, idx) => (
+        <div
+          key={idx}
+          className="w-full bg-sky-300/40 rounded-t-xs"
+          style={{ height: `${h}%` }}
+        />
+      ))}
+    </div>
+  </div>
+);
 
 // ==========================================
 // DONUT CHART COMPONENT (WITH POWER BI HOVER)
@@ -2772,27 +2597,33 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
             </button>
           </header>
 
-          {/* SKELETON LOADING OR MAIN CONTENT */}
-          {loading ? (
-            <DashboardSkeletonLoading activeTab={activeTab} />
-          ) : (
-            <>
-              {/* EMPTY STATE IF 0 RECORDS MATCH */}
-              {records.length === 0 && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <div className="text-xs">
-                    <p className="font-bold">
-                      No stock balance records found for the selected filter
-                      criteria.
-                    </p>
-                    <p className="text-amber-700 mt-0.5">
-                      Try resetting filters or expanding the date range to see real
-                      stock data.
-                    </p>
-                  </div>
-                </div>
-              )}
+          {/* LOADING STATE INDICATOR */}
+          {loading && (
+            <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-2 rounded-xl flex items-center gap-2 text-xs font-bold animate-pulse">
+              <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+              <span>
+                Fetching and aggregating real stock balance records from
+                database...
+              </span>
+            </div>
+          )}
+
+          {/* EMPTY STATE IF 0 RECORDS MATCH */}
+          {!loading && records.length === 0 && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="text-xs">
+                <p className="font-bold">
+                  No stock balance records found for the selected filter
+                  criteria.
+                </p>
+                <p className="text-amber-700 mt-0.5">
+                  Try resetting filters or expanding the date range to see real
+                  stock data.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ========================================================= */}
           {/* TOP MONTHLY SALES CARDS WITH REAL SPARKLINES */}
@@ -2800,7 +2631,12 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
           {activeTab === "Overview" && (
             <>
               <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {computed.monthlySalesCards.map((item, idx) => (
+                {loading ? (
+                  [1, 2, 3, 4].map((i) => (
+                    <MonthlySalesCardSkeleton key={i} />
+                  ))
+                ) : (
+                  computed.monthlySalesCards.map((item, idx) => (
                   <MonthlySalesCard
                     key={item.key || idx}
                     item={item}
@@ -2816,7 +2652,7 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
                     onMoveTooltip={moveTooltip}
                     onHideTooltip={hideTooltip}
                   />
-                ))}
+                )))}
               </section>
 
               {/* ========================================================= */}
@@ -4232,8 +4068,6 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
               endDate={endDate}
               setEndDate={handleEndDateChange}
             />
-          )}
-            </>
           )}
         </main>
       </div>
