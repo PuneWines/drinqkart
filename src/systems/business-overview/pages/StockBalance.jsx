@@ -117,10 +117,33 @@ export default function StockBalance() {
     return () => clearTimeout(t);
   }, [search, debouncedSearch]);
 
+  // Current month reference
+  const currentMonthEndStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const d = new Date(y, m + 1, 0).getDate();
+    return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }, []);
+
   // Any filter change starts again from page 1
   const handleShopFilterChange = (value) => { setShopFilter(value); setPage(1); };
-  const handleStartDateChange = (value) => { setStartDate(value); setPage(1); };
-  const handleEndDateChange = (value) => { setEndDate(value); setPage(1); };
+  const handleStartDateChange = (value) => {
+    let validStart = value;
+    if (validStart > currentMonthEndStr) validStart = currentMonthEndStr;
+    setStartDate(validStart);
+    setPage(1);
+    if (!endDate || endDate < validStart || endDate > currentMonthEndStr) {
+      setEndDate(currentMonthEndStr);
+    }
+  };
+  const handleEndDateChange = (value) => {
+    let validEnd = value;
+    if (validEnd > currentMonthEndStr) validEnd = currentMonthEndStr;
+    if (startDate && validEnd < startDate) validEnd = startDate;
+    setEndDate(validEnd);
+    setPage(1);
+  };
 
   // Fetch one page (PAGE_SIZE rows) of stock records, plus the total count for the current filters
   const fetchStockRecords = useCallback(async () => {
@@ -471,6 +494,7 @@ export default function StockBalance() {
               <input
                 type="date"
                 value={startDate}
+                max={currentMonthEndStr}
                 onChange={(e) => handleStartDateChange(e.target.value)}
                 className="bg-transparent text-xs text-slate-700 outline-none font-medium"
                 id="filter-start-date"
@@ -482,6 +506,8 @@ export default function StockBalance() {
               <input
                 type="date"
                 value={endDate}
+                min={startDate || undefined}
+                max={currentMonthEndStr}
                 onChange={(e) => handleEndDateChange(e.target.value)}
                 className="bg-transparent text-xs text-slate-700 outline-none font-medium"
                 id="filter-end-date"
@@ -736,7 +762,7 @@ export default function StockBalance() {
                   key={p}
                   onClick={() => setPage(p)}
                   disabled={loading}
-                  className={`min-w-[30px] px-2 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed ${
+                  className={`min-w-7.5 px-2 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed ${
                     p === page
                       ? 'bg-indigo-600 border-indigo-600 text-white'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'

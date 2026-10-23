@@ -23,6 +23,8 @@ export const DashboardFilterSidebar = ({
   endDate = "",
   setEndDate,
   maxAllowedEndDate = "",
+  currentMonthEndStr = "",
+  loading = false,
   formatIndianDate = (d) => d,
 }) => {
   return (
@@ -49,8 +51,12 @@ export const DashboardFilterSidebar = ({
         <span className="text-xs font-black uppercase tracking-wider text-indigo-100">
           Total Profit
         </span>
-        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
-          {computed.totalProfitFormatted || "₹ 0"}
+        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5 min-h-8 flex items-center justify-center">
+          {loading ? (
+            <span className="inline-block h-6 sm:h-7 w-24 sm:w-28 bg-white/35 rounded-md animate-pulse" />
+          ) : (
+            computed.totalProfitFormatted || "₹ 0"
+          )}
         </span>
       </div>
 
@@ -59,8 +65,12 @@ export const DashboardFilterSidebar = ({
         <span className="text-xs font-black uppercase tracking-wider text-indigo-100">
           Total Quantity Sold
         </span>
-        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
-          {computed.totalQtyFormatted || "0"}
+        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5 min-h-8 flex items-center justify-center">
+          {loading ? (
+            <span className="inline-block h-6 sm:h-7 w-20 sm:w-24 bg-white/35 rounded-md animate-pulse" />
+          ) : (
+            computed.totalQtyFormatted || "0"
+          )}
         </span>
       </div>
 
@@ -69,8 +79,12 @@ export const DashboardFilterSidebar = ({
         <span className="text-xs font-black uppercase tracking-wider text-indigo-100">
           Total Case Sold
         </span>
-        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5">
-          {computed.totalCasesFormatted || "0"}
+        <span className="text-xl sm:text-2xl font-black tracking-tight mt-0.5 min-h-8 flex items-center justify-center">
+          {loading ? (
+            <span className="inline-block h-6 sm:h-7 w-16 sm:w-20 bg-white/35 rounded-md animate-pulse" />
+          ) : (
+            computed.totalCasesFormatted || "0"
+          )}
         </span>
       </div>
 
@@ -168,6 +182,7 @@ export const DashboardFilterSidebar = ({
           <input
             type="date"
             value={startDate}
+            max={currentMonthEndStr || undefined}
             onChange={(e) => setStartDate && setStartDate(e.target.value)}
             className="w-full bg-transparent py-2 pl-3 pr-6 text-xs font-bold text-slate-800 outline-none cursor-pointer"
           />
@@ -192,7 +207,7 @@ export const DashboardFilterSidebar = ({
             type="date"
             value={endDate}
             min={startDate || undefined}
-            max={maxAllowedEndDate || undefined}
+            max={maxAllowedEndDate || currentMonthEndStr || undefined}
             onChange={(e) => setEndDate && setEndDate(e.target.value)}
             className="w-full bg-transparent py-2 pl-3 pr-6 text-xs font-bold text-slate-800 outline-none cursor-pointer"
           />
