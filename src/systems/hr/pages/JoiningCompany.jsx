@@ -328,7 +328,7 @@ export default function JoiningCompany({ readOnly = false }) {
         <div>
           <h1 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 flex items-center gap-2">
             <Building2 className="text-[#d4b457]" />
-            Shops Management (Global Table: `shop`)
+            Shop Management
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Manage global shops, full business profiles, GSTIN, contact details, and customer feedback QR codes.
