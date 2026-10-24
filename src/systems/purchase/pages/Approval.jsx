@@ -483,68 +483,72 @@ const Approval = () => {
         const indentPageQueries = Array.from(
           { length: totalPages },
           (_, page) => {
-            let q = supabase
-              .from("purchase_indent_items")
+            let q = supabase.from("purchase_indent_items");
+            let queryWithSelect;
+
+            if (useSingleShopFilter) {
+              queryWithSelect = q
+                .select("*, purchase_indents!inner(shop_name)")
+                .eq("purchase_indents.shop_name", effectiveShop);
+            } else if (isRestricted) {
+              queryWithSelect = q
+                .select("*, purchase_indents!inner(shop_name)")
+                .in("purchase_indents.shop_name", assignedShops);
+            } else {
+              queryWithSelect = q.select("*, purchase_indents(shop_name)");
+            }
+
+            return queryWithSelect
               .or("approval_status.eq.pending,approval_status.is.null")
               .order("created_at", { ascending: false })
               .order("id", { ascending: true })
               .range(page * pageSize, (page + 1) * pageSize - 1);
-
-            if (useSingleShopFilter) {
-              return q
-                .select("*, purchase_indents!inner(shop_name)")
-                .eq("purchase_indents.shop_name", effectiveShop);
-            } else if (isRestricted) {
-              return q
-                .select("*, purchase_indents!inner(shop_name)")
-                .in("purchase_indents.shop_name", assignedShops);
-            } else {
-              return q.select("*, purchase_indents(shop_name)");
-            }
           },
         );
 
         // 2. Fetch approved indent items (history)
-        let approvedQuery = supabase
-          .from("purchase_approved_indent_items")
-          .order("created_at", { ascending: false })
-          .limit(500);
+        let approvedQuery = supabase.from("purchase_approved_indent_items");
+        let approvedWithSelect;
 
         if (useSingleShopFilter) {
-          approvedQuery = approvedQuery
+          approvedWithSelect = approvedQuery
             .select("*, purchase_indents!inner(shop_name)")
             .eq("purchase_indents.shop_name", effectiveShop);
         } else if (isRestricted) {
-          approvedQuery = approvedQuery
+          approvedWithSelect = approvedQuery
             .select("*, purchase_indents!inner(shop_name)")
             .in("purchase_indents.shop_name", assignedShops);
         } else {
-          approvedQuery = approvedQuery.select("*, purchase_indents(shop_name)");
+          approvedWithSelect = approvedQuery.select("*, purchase_indents(shop_name)");
         }
+        approvedWithSelect = approvedWithSelect
+          .order("created_at", { ascending: false })
+          .limit(500);
 
         // 3. Fetch rejected indent items (history)
-        let rejectedQuery = supabase
-          .from("purchase_indent_items")
+        let rejectedQuery = supabase.from("purchase_indent_items");
+        let rejectedWithSelect;
+
+        if (useSingleShopFilter) {
+          rejectedWithSelect = rejectedQuery
+            .select("*, purchase_indents!inner(shop_name)")
+            .eq("purchase_indents.shop_name", effectiveShop);
+        } else if (isRestricted) {
+          rejectedWithSelect = rejectedQuery
+            .select("*, purchase_indents!inner(shop_name)")
+            .in("purchase_indents.shop_name", assignedShops);
+        } else {
+          rejectedWithSelect = rejectedQuery.select("*, purchase_indents(shop_name)");
+        }
+        rejectedWithSelect = rejectedWithSelect
           .eq("approval_status", "rejected")
           .order("updated_at", { ascending: false })
           .limit(500);
 
-        if (useSingleShopFilter) {
-          rejectedQuery = rejectedQuery
-            .select("*, purchase_indents!inner(shop_name)")
-            .eq("purchase_indents.shop_name", effectiveShop);
-        } else if (isRestricted) {
-          rejectedQuery = rejectedQuery
-            .select("*, purchase_indents!inner(shop_name)")
-            .in("purchase_indents.shop_name", assignedShops);
-        } else {
-          rejectedQuery = rejectedQuery.select("*, purchase_indents(shop_name)");
-        }
-
         const [approvedResult, rejectedResult, ...indentResults] =
           await Promise.all([
-            approvedQuery,
-            rejectedQuery,
+            approvedWithSelect,
+            rejectedWithSelect,
             ...indentPageQueries,
           ]);
 
@@ -1071,7 +1075,10 @@ const Approval = () => {
   const pendingBatches = Object.entries(pendingGroupedApprovals).filter(
     ([baseId, items]) => {
       const shopOk =
-        selectedShop === "All" || items[0]?.shop_name === selectedShop;
+        !selectedShop ||
+        selectedShop === "All" ||
+        (items[0]?.shop_name || "").trim().toLowerCase() ===
+          selectedShop.trim().toLowerCase();
       const dateOk = checkDateRange(items[0]?.created_at);
       const searchOk = checkSearchQuery(baseId, items);
       // Batches in pendingGroupedApprovals that have active pending items
@@ -1091,7 +1098,10 @@ const Approval = () => {
   const historyBatches = Object.entries(historyGroupedApprovals).filter(
     ([baseId, items]) => {
       const shopOk =
-        selectedShop === "All" || items[0]?.shop_name === selectedShop;
+        !selectedShop ||
+        selectedShop === "All" ||
+        (items[0]?.shop_name || "").trim().toLowerCase() ===
+          selectedShop.trim().toLowerCase();
       const dateOk = checkDateRange(items[0]?.created_at);
       const searchOk = checkSearchQuery(baseId, items);
       const activeItems = items.filter((item) => !item.is_excluded);
