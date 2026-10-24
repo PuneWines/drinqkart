@@ -145,7 +145,28 @@ export default function AdminApprovalPage() {
   }, []);
 
   const currentRole = (currentUserObj?.role || localStorage.getItem("role") || "").toLowerCase();
+  const currentUsername = (currentUserObj?.user_name || localStorage.getItem("user-name") || "").toLowerCase();
+  const isSuperAdmin = currentRole === "superadmin" || currentUsername === "masteradmin";
+  const isHOD = currentRole === "hod";
+  const isGlobalAuthority = isSuperAdmin || isHOD;
+  const isAdmin = currentRole === "admin" && !isGlobalAuthority;
   const isManager = currentRole === "manager";
+
+  const assignedShops = useMemo(() => {
+    if (isGlobalAuthority) return [];
+    const rawAccess = (
+      currentUserObj?.user_access ||
+      currentUserObj?.shop_name ||
+      localStorage.getItem("user_access") ||
+      localStorage.getItem("shop_name") ||
+      ""
+    );
+    return rawAccess
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }, [currentUserObj, isGlobalAuthority]);
+
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem("admin_approval_active_tab");
     if (saved) return saved;
@@ -182,6 +203,44 @@ export default function AdminApprovalPage() {
     };
     fetchShops();
   }, []);
+
+  const availableShops = useMemo(() => {
+    if (isGlobalAuthority) {
+      return historyShopsList;
+    }
+    if (isAdmin) {
+      return historyShopsList.filter((s) =>
+        assignedShops.includes(s.toLowerCase().trim()),
+      );
+    }
+    return [];
+  }, [isGlobalAuthority, isAdmin, historyShopsList, assignedShops]);
+
+  useEffect(() => {
+    if (isAdmin && assignedShops.length === 1 && historyShopFilter === "All") {
+      const match = historyShopsList.find(
+        (s) => s.toLowerCase().trim() === assignedShops[0],
+      );
+      if (match) {
+        setHistoryShopFilter(match);
+      }
+    }
+  }, [isAdmin, assignedShops, historyShopsList, historyShopFilter]);
+
+  const isTaskAuthorized = useCallback(
+    (task) => {
+      if (!task) return false;
+      if (isGlobalAuthority) return true;
+      if (isManager) return true;
+      if (isAdmin) {
+        const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+        return assignedShops.length > 0 && assignedShops.includes(taskShop);
+      }
+      return false;
+    },
+    [isGlobalAuthority, isManager, isAdmin, assignedShops],
+  );
+
   const [processingId, setProcessingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [visibleCount, setVisibleCount] = useState(50);
@@ -240,6 +299,10 @@ export default function AdminApprovalPage() {
   }, [activeTab, isManager]);
 
   const handleExtensionRemark = async (task) => {
+    if (isAdmin && !isTaskAuthorized(task)) {
+      showToast("Unauthorized: You can only remark on tasks for your assigned store.", "error");
+      return;
+    }
     const remark = adminRemarks[task.id];
     if (!remark || !remark.trim()) {
       showToast("Please enter a remark.", "error");
@@ -278,13 +341,22 @@ export default function AdminApprovalPage() {
   const loadTasks = useCallback(async () => {
     setLoading(true);
     setPendingTasks([]);
-    const userRole = localStorage.getItem("role");
-    const username = localStorage.getItem("user-name");
+    const userRole = localStorage.getItem("role") || currentUserObj?.role || "";
+    const username = localStorage.getItem("user-name") || currentUserObj?.user_name || "";
     const currentUsername = (username || "").toLowerCase();
     const currentUserRole = (userRole || "").toLowerCase();
-    const isSystemAdmin =
-      currentUsername === "admin" || currentUserRole === "admin";
-    const managerShops = (localStorage.getItem("user_access") || "")
+    const isSuperAdmin =
+      currentUserRole === "superadmin" || currentUsername === "masteradmin";
+    const isHOD = currentUserRole === "hod";
+    const isGlobalAuthority = isSuperAdmin || isHOD;
+    const isAdmin = currentUserRole === "admin" && !isGlobalAuthority;
+    const isManager = currentUserRole === "manager";
+
+    const managerShops = (
+      localStorage.getItem("user_access") ||
+      currentUserObj?.user_access ||
+      ""
+    )
       .toLowerCase()
       .split(",")
       .map((shop) => shop.trim())
@@ -312,8 +384,17 @@ export default function AdminApprovalPage() {
         else if (activeTab === "ea") data = await fetchApprovedEA();
         else if (activeTab === "checklist")
           data = await fetchChecklistHistory();
-        else if (activeTab === "work")
-          data = await fetchWorkTaskHistoryApi(currentUserRole, username, historyShopFilter);
+        else if (activeTab === "work") {
+          const shopToQuery =
+            isAdmin && assignedShops.length === 1 && historyShopFilter === "All"
+              ? assignedShops[0]
+              : historyShopFilter;
+          data = await fetchWorkTaskHistoryApi(
+            currentUserRole,
+            username,
+            shopToQuery,
+          );
+        }
       }
 
       // Deduplicate data to ensure each task only shows once
@@ -345,10 +426,10 @@ export default function AdminApprovalPage() {
       console.error("Error loading tasks:", error);
     }
 
-    // Filter tasks if not super admin/admin (HOD/Users cannot approve their own tasks)
+    // Filter tasks if not super admin (no one can approve their own tasks)
     let filteredData = data || [];
 
-    if (!isSystemAdmin) {
+    if (!isSuperAdmin) {
       filteredData = (data || []).filter((task) => {
         const doerName = (
           task.name ||
@@ -365,14 +446,12 @@ export default function AdminApprovalPage() {
         const isPast = isPastDeadline(task);
         const taskStatus = (task.work_status || task.status || "").toLowerCase();
 
-        if (currentUserRole === "manager") {
-          // Manager filtering
-          // 1. Must be assigned to this manager
+        if (isManager) {
+          // Manager filtering — 100% PRESERVED
           const taskManager = (task.manager_name || '').toLowerCase();
           const isAssignedToMe = taskManager.split(',').map(m => m.trim()).includes(currentUsername);
           if (!isAssignedToMe) return false;
 
-          // 2. Must match allowed shops (if restricted)
           const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
           const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
           if (!isShopAllowed) return false;
@@ -380,19 +459,29 @@ export default function AdminApprovalPage() {
           const isPastDate = isPastSubmission(task.current_date || task.submission_date);
 
           if (viewMode === "pending") {
-            // Pending: not past calendar day, and has been submitted but not approved by manager
             const isSubmitted = ["submitted", "done", "completed"].includes(taskStatus);
             return !isPastDate && isSubmitted && !task.manager_approved_by;
           } else {
-            // History: approved/rejected by me, or past calendar day unapproved
             const isApprovedByMe = (task.manager_approved_by || "").toLowerCase() === currentUsername;
             const isRejectedByMe = taskStatus === "rejected" && (task.manager_approved_by || "").toLowerCase() === currentUsername;
             const isPastUnapproved = isPastDate && !task.manager_approved_by;
             return isApprovedByMe || isRejectedByMe || isPastUnapproved;
           }
-        } else if (isSystemAdmin) {
-          // Admin / Super Admin filtering:
-          // Admin can review and approve all MANAGER_APPROVED tasks throughout the operating day.
+        } else if (isGlobalAuthority || isAdmin) {
+          // Admin / Super Admin / HOD Stage 3 filtering:
+          const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+
+          // 3.1 & 3.2: Store Admin strictly scoped to assigned shops
+          if (isAdmin && !isGlobalAuthority) {
+            const isShopAllowed = assignedShops.length > 0 && assignedShops.includes(taskShop);
+            if (!isShopAllowed) return false;
+          }
+
+          // UI Shop Filter matching (if user picked a specific shop in dropdown)
+          if (historyShopFilter && historyShopFilter !== "All") {
+            if (taskShop !== historyShopFilter.toLowerCase().trim()) return false;
+          }
+
           const isPastDate = isPastSubmission(task.current_date || task.submission_date);
 
           if (viewMode === "pending") {
@@ -405,38 +494,32 @@ export default function AdminApprovalPage() {
             return isAdminProcessed || isPastUnapproved;
           }
         } else {
-          // Non-manager, non-admin cannot view/approve work tasks
           return false;
         }
       });
     } else {
       // Non-work tabs filtering (checklist, delegation, maintenance, repair, ea)
-      if (currentUserRole === "hod") {
-        let reportingUsers = [];
-        const { data: reports } = await supabase
-          .from("users")
-          .select("user_name")
-          .eq("reported_by", username);
-        if (reports && reports.length > 0) {
-          reportingUsers = reports.map((r) =>
-            (r.user_name || "").toLowerCase(),
-          );
-        }
-
-        filteredData = filteredData.filter((task) => {
-          const doerName = (
-            task.name ||
-            task.doer_name ||
-            task.filled_by ||
-            ""
-          ).toLowerCase();
-          return reportingUsers.includes(doerName);
-        });
-      } else if (currentUserRole === "manager") {
-        // Managers only have access to work tab, non-work tabs are filtered out
+      if (isManager) {
         filteredData = [];
-      } else if (isSystemAdmin) {
-        // Admin sees all for non-work tabs — no shop restriction
+      } else if (isGlobalAuthority) {
+        // 3.3 Global HOD / Masteradmin Gate: Unrestricted global authority across all enterprise shops!
+        if (historyShopFilter && historyShopFilter !== "All") {
+          filteredData = filteredData.filter((task) => {
+            const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+            return taskShop === historyShopFilter.toLowerCase().trim();
+          });
+        }
+      } else if (isAdmin) {
+        // 3.1 & 3.2: Store Admin strictly scoped to assigned shops
+        filteredData = filteredData.filter((task) => {
+          const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+          const isShopAllowed = assignedShops.length > 0 && assignedShops.includes(taskShop);
+          if (!isShopAllowed) return false;
+          if (historyShopFilter && historyShopFilter !== "All") {
+            return taskShop === historyShopFilter.toLowerCase().trim();
+          }
+          return true;
+        });
       } else {
         filteredData = [];
       }
@@ -444,7 +527,17 @@ export default function AdminApprovalPage() {
 
     setPendingTasks(filteredData);
     setLoading(false);
-  }, [activeTab, viewMode, historyShopFilter]);
+  }, [
+    activeTab,
+    viewMode,
+    historyShopFilter,
+    assignedShops,
+    isGlobalAuthority,
+    isAdmin,
+    isManager,
+    isSuperAdmin,
+    currentUserObj,
+  ]);
 
   useEffect(() => {
     loadTasks();
@@ -479,20 +572,19 @@ export default function AdminApprovalPage() {
       task.filled_by ||
       ""
     ).toLowerCase();
-    const currentUsername = (
-      localStorage.getItem("user-name") || ""
-    ).toLowerCase();
-    const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
-    const isSystemAdmin =
-      currentUsername === "admin" || currentUserRole === "admin";
 
-    if (!isSystemAdmin && doerName === currentUsername) {
+    if (!isSuperAdmin && doerName === currentUsername) {
       showToast("You cannot approve your own submitted task.", "error");
       return;
     }
 
+    if (isAdmin && !isTaskAuthorized(task)) {
+      showToast("Unauthorized: You can only approve tasks for your assigned store.", "error");
+      return;
+    }
+
     if (
-      (currentUserRole === "manager" || currentUserRole === "admin") &&
+      (isManager || isAdmin) &&
       activeTab === "work" &&
       isPastSubmission(task.current_date || task.submission_date)
     ) {
@@ -543,9 +635,13 @@ export default function AdminApprovalPage() {
     }
   };
   const handleReject = (task) => {
-    const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
+    if (isAdmin && !isTaskAuthorized(task)) {
+      showToast("Unauthorized: You can only reject tasks for your assigned store.", "error");
+      return;
+    }
+
     if (
-      (currentUserRole === "manager" || currentUserRole === "admin") &&
+      (isManager || isAdmin) &&
       activeTab === "work" &&
       isPastSubmission(task.current_date || task.submission_date)
     ) {
@@ -579,15 +675,12 @@ export default function AdminApprovalPage() {
   const handleBulkApprove = async () => {
     if (selectedTaskIds.length === 0) return;
 
-    const currentUsername = (
-      localStorage.getItem("user-name") || ""
-    ).toLowerCase();
-
     setBulkProcessing(true);
     let successCount = 0;
     let failCount = 0;
 
-    // Only approve tasks that are NOT in 'extend' status AND (NOT submitted by current user OR user is system admin)
+    // Only approve tasks that are NOT in 'extend' status AND (NOT submitted by current user OR user is super admin)
+    // AND within assigned shop for Store Admin
     const tasksToApprove = pendingTasks.filter((t) => {
       const isSelected = selectedTaskIds.includes(t.id);
       const isNotExtended = t.status !== "extend";
@@ -597,18 +690,14 @@ export default function AdminApprovalPage() {
         t.filled_by ||
         ""
       ).toLowerCase();
-      const currentUserRole = (
-        localStorage.getItem("role") || ""
-      ).toLowerCase();
-      const isSystemAdmin =
-        currentUsername === "admin" || currentUserRole === "admin";
-      const isNotSelf = isSystemAdmin || doerName !== currentUsername;
+      const isShopAllowed = isTaskAuthorized(t);
+      const isNotSelf = isSuperAdmin || doerName !== currentUsername;
       const isNotPastForApproval =
         activeTab !== "work" ||
-        (currentUserRole !== "manager" && currentUserRole !== "admin") ||
+        (!isManager && !isAdmin) ||
         !isPastDeadline(t);
 
-      return isSelected && isNotExtended && isNotSelf && isNotPastForApproval;
+      return isSelected && isNotExtended && isNotSelf && isNotPastForApproval && isShopAllowed;
     });
 
     if (tasksToApprove.length === 0) {
@@ -669,7 +758,7 @@ export default function AdminApprovalPage() {
     setShowBulkRemarkModal(false);
 
     const tasksToRemark = pendingTasks.filter(
-      (t) => selectedTaskIds.includes(t.id) && t.status === "extend",
+      (t) => selectedTaskIds.includes(t.id) && t.status === "extend" && isTaskAuthorized(t),
     );
     let count = 0;
 
@@ -695,6 +784,10 @@ export default function AdminApprovalPage() {
 
   const confirmReject = async () => {
     if (!taskToReject) return;
+    if (isAdmin && !isTaskAuthorized(taskToReject)) {
+      showToast("Unauthorized: You can only reject tasks for your assigned store.", "error");
+      return;
+    }
     if (!rejectionReason.trim()) {
       showToast("Rejection reason is required.", "error");
       return;
@@ -811,7 +904,9 @@ export default function AdminApprovalPage() {
                   <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                     {isManager
                       ? "Manager's"
-                      : "Admin"}{" "}
+                      : isGlobalAuthority
+                        ? "Global"
+                        : "Admin"}{" "}
                     <span className="text-purple-600">Approval</span>
                   </h1>
                 </motion.div>
@@ -930,71 +1025,83 @@ export default function AdminApprovalPage() {
 
               {/* View Mode & Search */}
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
-                {viewMode === "history" &&
-                  activeTab === "work" && (
-                    <div className="flex flex-wrap items-center gap-2 border border-purple-100 bg-purple-50/50 rounded-lg p-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap">
-                          Shop:
+                {!isManager && (
+                  <div className="flex flex-wrap items-center gap-2 border border-purple-100 bg-purple-50/50 rounded-lg p-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap">
+                        Store:
+                      </span>
+                      {isAdmin && assignedShops.length === 1 ? (
+                        <span className="text-[10px] sm:text-xs font-black text-purple-800 bg-white border border-purple-200 px-2 py-1 rounded-md uppercase tracking-wider">
+                          {availableShops[0] || assignedShops[0]}
                         </span>
+                      ) : (
                         <select
                           value={historyShopFilter}
                           onChange={(e) => setHistoryShopFilter(e.target.value)}
                           className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium cursor-pointer"
                         >
-                          <option value="All">All Shops</option>
-                          {historyShopsList.map((shopName) => (
+                          <option value="All">
+                            {isAdmin ? "All Assigned Shops" : "All Shops"}
+                          </option>
+                          {availableShops.map((shopName) => (
                             <option key={shopName} value={shopName}>
                               {shopName}
                             </option>
                           ))}
                         </select>
-                      </div>
-
-                      {!isManager && (
-                        <>
-                          <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap ml-1">
-                            Mgr. Approval Range:
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9px] sm:text-[10px] text-gray-500">
-                              From
-                            </span>
-                            <input
-                              type="date"
-                              value={mgrStartDate}
-                              onChange={(e) => setMgrStartDate(e.target.value)}
-                              className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9px] sm:text-[10px] text-gray-500">
-                              To
-                            </span>
-                            <input
-                              type="date"
-                              value={mgrEndDate}
-                              onChange={(e) => setMgrEndDate(e.target.value)}
-                              className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
-                            />
-                          </div>
-                        </>
-                      )}
-
-                      {(mgrStartDate || mgrEndDate || historyShopFilter !== "All") && (
-                        <button
-                          onClick={() => {
-                            setMgrStartDate("");
-                            setMgrEndDate("");
-                            setHistoryShopFilter("All");
-                          }}
-                          className="text-[10px] sm:text-xs text-red-500 hover:underline font-bold px-1"
-                        >
-                          Clear
-                        </button>
                       )}
                     </div>
-                  )}
+
+                    {viewMode === "history" && (
+                      <>
+                        <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap ml-1">
+                          Range:
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] sm:text-[10px] text-gray-500">
+                            From
+                          </span>
+                          <input
+                            type="date"
+                            value={mgrStartDate}
+                            onChange={(e) => setMgrStartDate(e.target.value)}
+                            className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] sm:text-[10px] text-gray-500">
+                            To
+                          </span>
+                          <input
+                            type="date"
+                            value={mgrEndDate}
+                            onChange={(e) => setMgrEndDate(e.target.value)}
+                            className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {(mgrStartDate ||
+                      mgrEndDate ||
+                      (historyShopFilter !== "All" &&
+                        (!isAdmin || assignedShops.length > 1))) && (
+                      <button
+                        onClick={() => {
+                          setMgrStartDate("");
+                          setMgrEndDate("");
+                          if (!isAdmin || assignedShops.length > 1) {
+                            setHistoryShopFilter("All");
+                          }
+                        }}
+                        className="text-[10px] sm:text-xs text-red-500 hover:underline font-bold px-1"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
                   <button
                     onClick={() => setViewMode("pending")}
@@ -1129,11 +1236,12 @@ export default function AdminApprovalPage() {
                             checked={selectedTaskIds.includes(task.id)}
                             onChange={() => toggleTaskSelection(task.id)}
                             disabled={
-                              isManager &&
-                              isPastDeadline(task) &&
-                              (task.shop || task.shop_name || "")
-                                .toLowerCase()
-                                .trim() !== "office"
+                              (isAdmin && !isTaskAuthorized(task)) ||
+                              (isManager &&
+                                isPastDeadline(task) &&
+                                (task.shop || task.shop_name || "")
+                                  .toLowerCase()
+                                  .trim() !== "office")
                             }
                           />
                         </td>
@@ -1423,6 +1531,7 @@ export default function AdminApprovalPage() {
                                 onClick={() => handleApprove(task)}
                                 disabled={
                                   processingId === task.id ||
+                                  (isAdmin && !isTaskAuthorized(task)) ||
                                   (isManager &&
                                     isPastSubmission(task.current_date || task.submission_date) &&
                                     (task.shop || task.shop_name || "")
@@ -1442,6 +1551,7 @@ export default function AdminApprovalPage() {
                                 onClick={() => handleReject(task)}
                                 disabled={
                                   processingId === task.id ||
+                                  (isAdmin && !isTaskAuthorized(task)) ||
                                   (isManager &&
                                     isPastSubmission(task.current_date || task.submission_date) &&
                                     (task.shop || task.shop_name || "")
@@ -1571,11 +1681,12 @@ export default function AdminApprovalPage() {
                           checked={selectedTaskIds.includes(task.id)}
                           onChange={() => toggleTaskSelection(task.id)}
                           disabled={
-                            isManager &&
-                            isPastDeadline(task) &&
-                            (task.shop || task.shop_name || "")
-                              .toLowerCase()
-                              .trim() !== "office"
+                            (isAdmin && !isTaskAuthorized(task)) ||
+                            (isManager &&
+                              isPastDeadline(task) &&
+                              (task.shop || task.shop_name || "")
+                                .toLowerCase()
+                                .trim() !== "office")
                           }
                         />
                       )}
@@ -1867,6 +1978,7 @@ export default function AdminApprovalPage() {
                             onClick={() => handleApprove(task)}
                             disabled={
                               processingId === task.id ||
+                              (isAdmin && !isTaskAuthorized(task)) ||
                               (isManager &&
                                 isPastSubmission(task.current_date || task.submission_date) &&
                                 (task.shop || task.shop_name || "")
@@ -1886,6 +1998,7 @@ export default function AdminApprovalPage() {
                             onClick={() => handleReject(task)}
                             disabled={
                               processingId === task.id ||
+                              (isAdmin && !isTaskAuthorized(task)) ||
                               (isManager &&
                                 isPastSubmission(task.current_date || task.submission_date) &&
                                 (task.shop || task.shop_name || "")

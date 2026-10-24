@@ -6,6 +6,7 @@ import {
 import PettyCashModal, { CategoryAmounts } from '../components/PettyCashModal';
 import { supabase } from '../supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { ViewOnlyBanner } from '../../../utils/permissionUtils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PettyCashRow {
@@ -279,9 +280,14 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     String(s.id).includes(shopSearch)
   );
 
-  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
+      {!isModifyAllowed && (
+        <ViewOnlyBanner
+          pageTitle="Petty Cash Module"
+          message="You have view-only access to Petty Cash records. Creating new expenses, editing, and deleting records are restricted."
+        />
+      )}
       {/* ── Paytm-Style Mobile Form Action Card (< 768px) ── */}
       {isModifyAllowed && (
         <div className="md:hidden bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-2">
@@ -310,22 +316,20 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
       )}
 
       {/* ── Summary Cards (Over table) ── */}
-      {isModifyAllowed && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
-          {/* Total Expense Card */}
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
-            <div>
-              <p className="text-xs font-normal text-gray-500 font-sans">Total Expense</p>
-              <h3 className="text-lg font-medium font-sans text-rose-600 mt-1">
-                {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
-              </h3>
-            </div>
-            <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-              <FaWallet className="text-lg" />
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
+        {/* Total Expense Card */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-normal text-gray-500 font-sans">Total Expense</p>
+            <h3 className="text-lg font-medium font-sans text-rose-600 mt-1">
+              {fmt(filtered.reduce((s, r) => s + r.totalExpense, 0))}
+            </h3>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+            <FaWallet className="text-lg" />
           </div>
         </div>
-      )}
+      </div>
 
       {/* ── Filter Bar (Below cards) ── */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-3">
@@ -400,34 +404,32 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {/* Refresh */}
-            {isModifyAllowed && (
-              <button
-                onClick={fetchRows}
-                title="Refresh"
-                className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
-              >
-                <FaSync className={loading ? 'animate-spin' : ''} />
-                <span className="hidden sm:inline">Refresh</span>
-              </button>
-            )}
-
+            <button
+              onClick={fetchRows}
+              title="Refresh"
+              className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all text-xs font-medium cursor-pointer"
+            >
+              <FaSync className={loading ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
 
             {/* Add New Expense */}
-            <button
-              onClick={openAddModal}
-              className="flex items-center gap-2 px-4 py-1.5 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all shadow-md text-xs cursor-pointer"
-            >
-              <FaPlus />
-              <span className="hidden sm:inline">Add New Expense</span>
-              <span className="sm:hidden">Add</span>
-            </button>
+            {isModifyAllowed && (
+              <button
+                onClick={openAddModal}
+                className="flex items-center gap-2 px-4 py-1.5 bg-[#2a5298] text-white rounded-lg font-semibold hover:bg-[#1e3d70] transition-all shadow-md text-xs cursor-pointer"
+              >
+                <FaPlus />
+                <span className="hidden sm:inline">Add New Expense</span>
+                <span className="sm:hidden">Add</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* ── Table card ── */}
-      {isModifyAllowed && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 
         <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2 text-sm text-gray-500">
           <FaFileAlt className="text-[#2a5298]" />
@@ -496,7 +498,6 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
           </table>
         </div>
       </div>
-    )}
 
       {/* ── PettyCash Modal ── */}
       <PettyCashModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSave} initialData={editData} />

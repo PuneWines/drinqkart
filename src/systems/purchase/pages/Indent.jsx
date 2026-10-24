@@ -29,6 +29,7 @@ import useShopStore from "../store/useShopStore";
 import useAuthStore from "../store/useAuthStore";
 import { getInLifecycleItemNames } from "../services/purchaseOrderService";
 import { dashboardSyncService } from "../services/dashboardSyncService";
+import { ViewOnlyBanner, getPagePermission } from "../../../utils/permissionUtils";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
 const AccordionItem = ({ item, calcs, handleInlineChange }) => {
@@ -296,6 +297,9 @@ const Indent = () => {
 
   const { toasts, addToast, removeToast } = useToast();
   const { shops, fetchShops, assignedShops, isShopAdmin } = useShopStore();
+  const { currentUser } = useAuthStore();
+  const indentPerm = getPagePermission(currentUser, 'purchase', 'Indent');
+  const isModifyAllowed = indentPerm.canModify;
   const [submittedHistory, setSubmittedHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [submissionItems, setSubmissionItems] = useState({});
@@ -1390,6 +1394,10 @@ const Indent = () => {
   };
 
   const handleIndentSubmit = async () => {
+    if (!isModifyAllowed) {
+      addToast("View-Only Mode: You have read-only access to Indents. Submitting is restricted.", "error");
+      return;
+    }
     if (!selectedShop || selectedShop.trim() === "") {
       addToast(
         "Shop name is required. Please select a shop before submitting.",
@@ -1608,6 +1616,12 @@ const Indent = () => {
 
       {/* Page Shell */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        {!isModifyAllowed && (
+          <ViewOnlyBanner
+            pageTitle="Indent Module"
+            message="You have view-only access to Indents. Uploading CSV, creating, or submitting new indents is restricted."
+          />
+        )}
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-[#0f172a] to-[#1e293b] bg-clip-text text-transparent tracking-tight">
@@ -1659,7 +1673,7 @@ const Indent = () => {
         {/* Upload Button Area */}
         <div className="mb-6">
           <div className="flex flex-wrap items-center gap-3">
-            {tableData.length > 0 && (
+            {isModifyAllowed && tableData.length > 0 && (
               <button
                 onClick={() => setShowModal(true)}
                 className="flex items-center gap-2 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#059669] hover:to-[#047857] text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:shadow-lg transition-all text-sm"
@@ -1669,7 +1683,7 @@ const Indent = () => {
               </button>
             )}
 
-            {tableData.length > 0 && !tableData[0]?.partyIndentId && (
+            {isModifyAllowed && tableData.length > 0 && !tableData[0]?.partyIndentId && (
               <button
                 className="flex items-center gap-2 bg-gradient-to-r from-[#4f46e5] to-[#4338ca] hover:from-[#4338ca] hover:to-[#3730a3] text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:shadow-lg transition-all text-sm"
                 onClick={handleIndentSubmit}
@@ -1679,7 +1693,7 @@ const Indent = () => {
               </button>
             )}
 
-            {tableData.length > 0 && (
+            {isModifyAllowed && tableData.length > 0 && (
               <button
                 onClick={() => {
                   setTableData([]);
@@ -1975,6 +1989,19 @@ const Indent = () => {
                 </table>
               )}
             </div>
+          </div>
+        ) : !isModifyAllowed ? (
+          // View-Only Empty State
+          <div className="flex flex-col items-center justify-center py-8 px-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg text-center">
+            <div className="w-10 h-10 bg-amber-50 border border-amber-200 rounded-full flex items-center justify-center mb-2">
+              <Eye className="w-5 h-5 text-amber-600" />
+            </div>
+            <p className="text-sm font-semibold text-slate-800 mb-1">
+              View-Only Mode
+            </p>
+            <p className="text-xs text-slate-500">
+              New indent creation is restricted for your account. You can review submitted indents and history below.
+            </p>
           </div>
         ) : (
           // Compact Empty State

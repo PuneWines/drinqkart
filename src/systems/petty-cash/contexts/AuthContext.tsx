@@ -13,6 +13,8 @@ export interface User {
   initials: string;
   loginTime: string;
   counterAccess?: string[];
+  employee_id?: string | number;
+  [key: string]: any;
 }
 
 interface AuthContextType {
@@ -377,9 +379,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return [];
   };
 
+  const isSuperadminUser = (): boolean => {
+    const roleLower = (user?.role || localStorage.getItem('role') || '').toLowerCase();
+    const nameLower = (user?.username || user?.name || localStorage.getItem('user-name') || '').toLowerCase();
+    const empId = String(user?.employee_id || '').trim();
+    return roleLower === 'superadmin' || roleLower === 'masteradmin' || nameLower === 'masteradmin' || empId === '999';
+  };
+
   const hasPageAccess = (pageName: string): boolean => {
     if (!user) return false;
-    if (isAdmin()) return true;
+    if (isSuperadminUser()) return true;
 
     const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     const target = normalize(pageName);
@@ -387,33 +396,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Enforcement: Reports / Financial Reports only visible to admin & manager
     if (target === "reports" || target === "financialreports") {
       const roleLower = (user.role || '').toLowerCase().trim();
-      if (roleLower !== "admin" && roleLower !== "manager" && roleLower !== "masteradmin") {
+      if (roleLower !== "admin" && roleLower !== "manager" && roleLower !== "masteradmin" && roleLower !== "hod") {
         return false;
       }
     }
 
     const masterPermissions = getMasterPermissions();
 
-    // Parse permission keys if they are structured like "system.page.access"
-    const userPages = masterPermissions.map(p => {
-      const parts = p.split('.');
-      if (parts.length >= 2) {
-        return normalize(parts[1]);
-      }
-      return normalize(p);
-    });
+    if (masterPermissions.length > 0) {
+      // Parse permission keys if they are structured like "system.page.access"
+      const userPages = masterPermissions.map(p => {
+        const parts = p.split('.');
+        if (parts.length >= 2) {
+          return normalize(parts[1]);
+        }
+        return normalize(p);
+      });
 
-    if (userPages.includes(target)) return true;
+      if (userPages.includes(target)) return true;
 
-    const targetAliases = PAGE_ALIASES[target] || [];
-    if (userPages.some(up => targetAliases.includes(up))) return true;
+      const targetAliases = PAGE_ALIASES[target] || [];
+      if (userPages.some(up => targetAliases.includes(up))) return true;
 
-    return false;
+      return false;
+    }
+
+    return isAdmin() || (user.role || '').toLowerCase() === 'manager';
   };
 
   const hasPageModifyAccess = (pageName: string): boolean => {
     if (!user) return false;
-    if (isAdmin()) return true;
+    // Superadmin has supreme unrestricted modify authority
+    if (isSuperadminUser()) return true;
 
     const masterPermissions = getMasterPermissions();
     const normalize = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
@@ -427,7 +441,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const pgName = parts[1];
           const action = parts[2];
           const normPgName = normalize(pgName);
-          const matchesTarget = normPgName === target || (PAGE_ALIASES[target] && PAGE_ALIASES[target].includes(normPgName));
+          const matchesTarget = normPgName === target ||
+            (PAGE_ALIASES[target] && PAGE_ALIASES[target].includes(normPgName)) ||
+            (PAGE_ALIASES[normPgName] && PAGE_ALIASES[normPgName].includes(target));
           return matchesTarget && action.toLowerCase() === 'modify';
         }
         const pNorm = normalize(p);
@@ -439,7 +455,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Legacy fallback for systems where masterPermissions are not configured
     const roleLower = (user.role || '').toLowerCase().trim();
-    return roleLower === 'admin' || roleLower === 'manager' || roleLower === 'masteradmin';
+    return roleLower === 'admin' || roleLower === 'manager' || roleLower === 'masteradmin' || roleLower === 'hod';
   };
 
   const hasShopAccess = (shopName: string): boolean => {

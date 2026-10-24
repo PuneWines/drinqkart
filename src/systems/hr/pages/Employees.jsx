@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles, Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText, ExternalLink, ChevronLeft, Printer, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -13,17 +13,6 @@ const DEVICES = [
     { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
     { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
-
-const LOCATION_TO_SHOP_MAP = {
-  'BAWDHAN': 'MADHURA',
-  'HINJEWADI': 'TLS',
-  'WAGHOLI': 'FRIENDS',
-  'AKOLE': 'BALAJI',
-  'MUMBAI': 'KUNAL ULWE',
-  'KHARGHAR': 'KUNAL KHARGHAR'
-};
-
-const JOINING_PLACES = Object.keys(LOCATION_TO_SHOP_MAP);
 
 const resolveDeviceStore = (log) => {
   if (!log) return '';
@@ -242,13 +231,53 @@ export default function EmployeeManagement() {
       const formatted = (data || []).map(d => ({
         id: d.id,
         company_name: d.shop_name,
-        shop_name: d.shop_name
+        shop_name: d.shop_name,
+        full_name: d.full_name || '',
+        location: d.location || d.address || d.shop_name || '',
+        address: d.address || ''
       }))
       setJoiningCompanies(formatted)
     } catch (error) {
       console.error('Error fetching joining companies from shop table:', error)
     }
   }
+
+  // Derive dynamic joining places from database shop records
+  const dynamicJoiningPlaces = useMemo(() => {
+    const places = new Set();
+    joiningCompanies.forEach(c => {
+      if (c.shop_name) places.add(c.shop_name.toUpperCase());
+      if (c.location && typeof c.location === 'string') {
+        const cleanLoc = c.location.trim().toUpperCase();
+        if (cleanLoc.length <= 30) places.add(cleanLoc);
+      }
+    });
+    // Add legacy location keys to ensure backward compatibility for historical records
+    ['BAWDHAN', 'HINJEWADI', 'WAGHOLI', 'AKOLE', 'MUMBAI', 'KHARGHAR'].forEach(p => places.add(p));
+    return Array.from(places).sort();
+  }, [joiningCompanies]);
+
+  const resolveShopFromPlace = (placeName) => {
+    if (!placeName) return '';
+    const clean = placeName.trim().toUpperCase();
+    const matched = joiningCompanies.find(c =>
+      (c.shop_name && c.shop_name.toUpperCase() === clean) ||
+      (c.location && c.location.toUpperCase().includes(clean)) ||
+      (c.address && c.address.toUpperCase().includes(clean)) ||
+      (c.full_name && c.full_name.toUpperCase().includes(clean))
+    );
+    if (matched && matched.shop_name) return matched.shop_name;
+    const LEGACY_MAP = {
+      'BAWDHAN': 'MADHURA',
+      'BAVDHAN': 'MADHURA',
+      'HINJEWADI': 'TLS',
+      'WAGHOLI': 'FRIENDS',
+      'AKOLE': 'BALAJI',
+      'MUMBAI': 'KUNAL ULWE',
+      'KHARGHAR': 'KUNAL KHARGHAR'
+    };
+    return LEGACY_MAP[clean] || clean;
+  };
 
   const fetchEmployees = async () => {
     try {
@@ -455,7 +484,7 @@ export default function EmployeeManagement() {
     setFormData(prev => {
       const updated = { ...prev, [name]: value }
       if (name === 'joining_place') {
-        updated.joining_company_name = LOCATION_TO_SHOP_MAP[value] || ''
+        updated.joining_company_name = resolveShopFromPlace(value)
       }
       return updated
     })
@@ -478,7 +507,7 @@ export default function EmployeeManagement() {
     setEditFormData(prev => {
       const updated = { ...prev, [name]: value }
       if (name === 'joining_place') {
-        updated.joining_company_name = LOCATION_TO_SHOP_MAP[value] || ''
+        updated.joining_company_name = resolveShopFromPlace(value)
       }
       return updated
     })
@@ -888,8 +917,8 @@ export default function EmployeeManagement() {
   const openEditPanel = (employee) => {
     setEditingEmployee(employee)
     const rawPlace = (employee.joining_place || '').toString().trim().toUpperCase();
-    const matchedPlace = JOINING_PLACES.find(p => p === rawPlace || p.replace(/[^A-Z0-9]/g, '') === rawPlace.replace(/[^A-Z0-9]/g, '') || (rawPlace === 'BAVDHAN' && p === 'BAWDHAN') || (rawPlace === 'WAGOLI' && p === 'WAGHOLI')) || rawPlace;
-    const matchedShop = employee.joining_company_name || LOCATION_TO_SHOP_MAP[matchedPlace] || '';
+    const matchedPlace = dynamicJoiningPlaces.find(p => p === rawPlace || p.replace(/[^A-Z0-9]/g, '') === rawPlace.replace(/[^A-Z0-9]/g, '') || (rawPlace === 'BAVDHAN' && p === 'BAWDHAN') || (rawPlace === 'WAGOLI' && p === 'WAGHOLI')) || rawPlace;
+    const matchedShop = employee.joining_company_name || resolveShopFromPlace(matchedPlace) || '';
 
     setEditFormData({
       employee_id: employee.employee_id,  // <-- ADD THIS LINE
@@ -1856,7 +1885,7 @@ export default function EmployeeManagement() {
                       required
                     >
                       <option value="">Select Joining Place</option>
-                      {JOINING_PLACES.map((place) => (
+                      {dynamicJoiningPlaces.map((place) => (
                         <option key={place} value={place}>
                           {place}
                         </option>
@@ -2233,12 +2262,12 @@ export default function EmployeeManagement() {
                           required
                         >
                           <option value="">Select Joining Place</option>
-                          {JOINING_PLACES.map((place) => (
+                          {dynamicJoiningPlaces.map((place) => (
                             <option key={place} value={place}>
                               {place}
                             </option>
                           ))}
-                          {editFormData.joining_place && !JOINING_PLACES.includes(editFormData.joining_place) && (
+                          {editFormData.joining_place && !dynamicJoiningPlaces.includes(editFormData.joining_place) && (
                             <option value={editFormData.joining_place}>
                               {editFormData.joining_place}
                             </option>

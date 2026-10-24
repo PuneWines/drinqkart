@@ -5,6 +5,7 @@ import {
   FileSpreadsheet, RefreshCw, Search, Trash2, Calendar, Store, CheckSquare, BarChart3,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
+import useShopStore from '../../purchase/store/useShopStore';
 import toast, { Toaster } from 'react-hot-toast';
 
 const PAGE_SIZE = 100;
@@ -34,10 +35,6 @@ const parseRowKey = (key) => {
   const [store_name, snapshot_date, item_id] = String(key).split(ROW_KEY_SEP);
   return { store_name, snapshot_date, item_id };
 };
-
-const DEFAULT_SHOPS = [
-  'BALAJI', 'FRIENDS', 'KUNAL KHARGHAR', 'KUNAL ULWE', 'MADHURA', 'OFFICE', 'TLS'
-];
 
 // Default date range: last 6 months to current month (e.g. May 1 to Oct 31)
 export function getDefaultDateRange() {
@@ -80,7 +77,7 @@ export default function StockBalance() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
-  // Fetch shops for selection and auto-matching
+  // Fetch shops dynamically from Supabase shop table or useShopStore
   useEffect(() => {
     async function loadShops() {
       try {
@@ -96,11 +93,13 @@ export default function StockBalance() {
           })).filter(s => s.name);
           setShops(formatted);
         } else {
-          setShops(DEFAULT_SHOPS.map(name => ({ id: name, name })));
+          const fallbackShops = useShopStore.getState().shops || [];
+          setShops(fallbackShops.map(name => ({ id: name, name })));
         }
       } catch (err) {
         console.error('Error fetching shops:', err);
-        setShops(DEFAULT_SHOPS.map(name => ({ id: name, name })));
+        const fallbackShops = useShopStore.getState().shops || [];
+        setShops(fallbackShops.map(name => ({ id: name, name })));
       }
     }
     loadShops();

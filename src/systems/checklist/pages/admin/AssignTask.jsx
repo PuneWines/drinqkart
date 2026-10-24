@@ -2,16 +2,20 @@ import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { ClipboardList, Wrench, Hammer, Plus, ArrowUpRight, LayoutGrid, Users, Database } from "lucide-react";
+import { ViewOnlyBanner, getPagePermission } from "../../../../utils/permissionUtils";
 
 export default function AssignTask() {
   const navigate = useNavigate();
 
+  const taskPerm = getPagePermission(null, 'checklist', 'Assign Task');
+  const isModifyAllowed = taskPerm.canModify;
+
   useEffect(() => {
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-    if (role === "user") {
+    // Only redirect if user has NO view or modify access to Assign Task / Task
+    if (!taskPerm.canView) {
       navigate("/dashboard/admin");
     }
-  }, [navigate]);
+  }, [taskPerm.canView, navigate]);
 
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const designation = (localStorage.getItem("designation") || "").toLowerCase();
@@ -78,6 +82,12 @@ export default function AssignTask() {
       <div className="p-6 max-w-7xl mx-auto">
 
         {/* System Header */}
+        {!isModifyAllowed && (
+          <ViewOnlyBanner
+            pageTitle="Task Assignment Hub"
+            message="You have view-only access to Tasks. Creating or modifying checklist tasks is restricted."
+          />
+        )}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 pb-6 border-b border-gray-100/80">
           <div className="flex items-center gap-4">
             <div className="w-1.5 h-8 bg-purple-600 rounded-full hidden sm:block" />

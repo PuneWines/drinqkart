@@ -28,15 +28,16 @@ export const getEffectiveUserShops = () => {
     .toLowerCase()
     .trim();
 
-  const isAdmin =
-    !role ||
-    role === "admin" ||
+  // Superadmin (L5) and HOD (L4) hold supreme global store authority across all shops.
+  // Backward compatibility with legacy masteradmin username/role.
+  const isGlobalSuperOrHod =
+    role === "superadmin" ||
     role === "masteradmin" ||
-    userName === "masteradmin" ||
-    userName === "admin";
+    role === "hod" ||
+    userName === "masteradmin";
 
-  if (isAdmin) {
-    return { isAdmin: true, assignedShops: [] };
+  if (isGlobalSuperOrHod) {
+    return { isAdmin: true, isGlobal: true, assignedShops: [] };
   }
 
   const rawSources = [

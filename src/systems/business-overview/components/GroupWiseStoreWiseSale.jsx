@@ -15,6 +15,7 @@ import {
   Info,
   Calendar,
 } from "lucide-react";
+import useShopStore from "../../purchase/store/useShopStore";
 
 // ==========================================
 // CONFIGURATION & CONSTANTS
@@ -472,6 +473,14 @@ export default function GroupWiseStoreWiseSale({
     };
   }, [data, sel, opts.store, tableSearch]);
 
+  const { shops: storeMasterList } = useShopStore();
+  const skeletonStores = useMemo(() => {
+    if (pivotResults.stores && pivotResults.stores.length > 0) return pivotResults.stores;
+    if (opts.store && opts.store.length > 0) return opts.store;
+    if (storeMasterList && storeMasterList.length > 0) return storeMasterList;
+    return [];
+  }, [pivotResults.stores, opts.store, storeMasterList]);
+
   // Export to Excel Functionality
   const handleExportExcel = () => {
     try {
@@ -716,10 +725,7 @@ export default function GroupWiseStoreWiseSale({
                   <th className="py-3 px-4 text-left font-black tracking-wide border-r border-indigo-900/60 min-w-55 sticky left-0 z-40 bg-[#180e5b]">
                     <div className="h-4 w-28 bg-white/30 rounded" />
                   </th>
-                  {(pivotResults.stores.length > 0
-                    ? pivotResults.stores
-                    : ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"]
-                  ).map((store) => (
+                  {skeletonStores.map((store) => (
                     <th
                       key={store}
                       className="py-3 px-3.5 text-right font-black border-r border-indigo-900/60 min-w-27.5"
@@ -738,10 +744,7 @@ export default function GroupWiseStoreWiseSale({
                     <td className="py-2.5 px-4 border-r border-slate-200 sticky left-0 bg-white">
                       <div className="h-4 bg-slate-200 rounded-md w-36" />
                     </td>
-                    {(pivotResults.stores.length > 0
-                      ? pivotResults.stores
-                      : ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"]
-                    ).map((s, cIdx) => (
+                    {skeletonStores.map((s, cIdx) => (
                       <td
                         key={`c-${cIdx}`}
                         className="py-2.5 px-2.5 text-right border-r border-slate-100"
@@ -760,10 +763,7 @@ export default function GroupWiseStoreWiseSale({
                   <td className="py-3 px-4 border-r border-indigo-300 sticky left-0 bg-[#eef4ff]">
                     <div className="h-4 bg-indigo-300/60 rounded-md w-16" />
                   </td>
-                  {(pivotResults.stores.length > 0
-                    ? pivotResults.stores
-                    : ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"]
-                  ).map((s, cIdx) => (
+                  {skeletonStores.map((s, cIdx) => (
                     <td
                       key={`tf-${cIdx}`}
                       className="py-3 px-2.5 text-right border-r border-indigo-200"

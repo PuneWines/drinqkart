@@ -2,50 +2,54 @@ import { useState, useEffect } from 'react'
 import { Users, UserCheck, Clock, UserX, UserMinus, Briefcase, Calendar, TrendingUp, Award, PieChart, Filter, Search, AlertCircle, Eye } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
+import useShopStore from '../../purchase/store/useShopStore'
 
-// Location ↔ Shop mappings
-// const LOCATION_TO_SHOP_MAP = {
-//     'BAVDHAN': 'MADHURA',
-//     'BAWDHAN': 'MADHURA',
-//     'HINJEWADI': 'VISHAL',
-//     'WAGHOLI': 'FRIENDS',
-//     'AKOLE': 'BALAJI',
-//     'MUMBAI': 'KUNAL',
-//     'ULWE': 'KUNAL ULWE',
-//     'MUMBAI ULWE': 'KUNAL ULWE',
-//     'KHARGHAR': 'KUNAL KHARGHAR'
-// };
-
-const LOCATION_TO_SHOP_MAP = {
-    'BAVDHAN': 'MADHURA',
-    'BAWDHAN': 'MADHURA',
-    'HINJEWADI': 'TLS',
-    'HINJHWADI': 'TLS',
-    'VISHAL': 'TLS',
-    'WAGHOLI': 'FRIENDS',
-    'AKOLE': 'BALAJI',
-    'MUMBAI': 'KUNAL ULWE',
-    'KHARGHAR': 'KUNAL KHARGHAR'
+// Dynamic location ↔ shop resolver helper
+const getDynamicShopLocation = (shopName, details = []) => {
+    if (!shopName) return '';
+    const clean = shopName.trim().toUpperCase();
+    const detail = details.find(d => (d.shop_name || d.name || '').trim().toUpperCase() === clean);
+    return detail?.location || detail?.address || clean;
 };
 
-const SHOP_TO_LOCATION_MAP = {
-    'MADHURA': 'BAVDHAN',
-    'TLS': 'HINJEWADI',
-    'FRIENDS': 'WAGHOLI',
-    'BALAJI': 'AKOLE',
-    'KUNAL ULWE': 'MUMBAI',
-    'KUNAL KHARGHAR': 'KHARGHAR'
+// Dynamic location ↔ shop resolver using DB shops
+const resolveLocationToShop = (locStr, details = []) => {
+    if (!locStr) return '';
+    const clean = String(locStr).trim().toUpperCase();
+    if (!clean) return '';
+
+    const directMatch = details.find(d => (d.shop_name || '').toUpperCase() === clean);
+    if (directMatch && directMatch.shop_name) return directMatch.shop_name;
+
+    const normalized = clean
+        .replace(/BAWDHAN/g, 'BAVDHAN')
+        .replace(/HINJHWADI/g, 'HINJEWADI')
+        .replace(/WAGOLI/g, 'WAGHOLI');
+
+    const matched = details.find(d => {
+        const full = (d.full_name || '').toUpperCase();
+        const addr = (d.address || '').toUpperCase();
+        const loc = (d.location || '').toUpperCase();
+        const sName = (d.shop_name || '').toUpperCase();
+        return full.includes(normalized) || addr.includes(normalized) || loc.includes(normalized) || (normalized.length > 3 && sName.includes(normalized));
+    });
+    if (matched && matched.shop_name) return matched.shop_name;
+
+    const LEGACY_MAP = {
+        'BAVDHAN': 'MADHURA',
+        'BAWDHAN': 'MADHURA',
+        'HINJEWADI': 'TLS',
+        'HINJHWADI': 'TLS',
+        'VISHAL': 'TLS',
+        'WAGHOLI': 'FRIENDS',
+        'AKOLE': 'BALAJI',
+        'MUMBAI': 'KUNAL ULWE',
+        'ULWE': 'KUNAL ULWE',
+        'MUMBAI ULWE': 'KUNAL ULWE',
+        'KHARGHAR': 'KUNAL KHARGHAR'
+    };
+    return LEGACY_MAP[clean] || clean;
 };
-// const SHOP_TO_LOCATION_MAP = {
-//     'MADHURA': 'BAVDHAN',
-//     'BAWDHAN': 'BAVDHAN',
-//     'VISHAL': 'HINJEWADI',
-//     'FRIENDS': 'WAGHOLI',
-//     'BALAJI': 'AKOLE',
-//     'KUNAL': 'MUMBAI',
-//     'KUNAL ULWE': 'MUMBAI ULWE',
-//     'KUNAL KHARGHAR': 'KHARGHAR'
-// };
 
 export default function Dashboard() {
     const { user: currentUserObj } = useAuth();
@@ -82,12 +86,24 @@ export default function Dashboard() {
         parts.forEach(p => {
             if (p !== 'ALL' && p !== 'NO SHOP') {
                 shops.add(p);
-                const mappedShop = LOCATION_TO_SHOP_MAP[p];
+                const storeDetails = useShopStore.getState().shopsDetails || [];
+                const mappedShop = resolveLocationToShop(p, storeDetails);
                 if (mappedShop) shops.add(mappedShop.toUpperCase());
-                const mappedLoc = SHOP_TO_LOCATION_MAP[p];
-                if (mappedLoc) shops.add(mappedLoc.toUpperCase());
 
-                // Exact synonym mappings for shops/locations
+                // Lookup dynamically in shopsDetails from useShopStore
+                const found = storeDetails.find(
+                    d => (d.shop_name || '').toUpperCase() === p ||
+                         (d.full_name || '').toUpperCase() === p ||
+                         (d.address || '').toUpperCase().includes(p) ||
+                         (d.location || '').toUpperCase().includes(p)
+                );
+                if (found) {
+                    if (found.shop_name) shops.add(found.shop_name.toUpperCase());
+                    if (found.full_name) shops.add(found.full_name.toUpperCase());
+                    if (found.location) shops.add(found.location.toUpperCase());
+                }
+
+                // Exact synonym mappings for legacy locations
                 if (p === 'KUNAL ULWE' || p === 'ULWE' || p === 'MUMBAI ULWE' || p === 'MUMBAI') {
                     shops.add('KUNAL ULWE');
                     shops.add('ULWE');
@@ -366,7 +382,7 @@ export default function Dashboard() {
                 const log = logsMap.get(empIdKey) || (!isNaN(numId) ? logsMap.get(String(numId)) : null) || (empName ? logsMap.get(`name-${empName}`) : null)
                 if (log) {
                     const logStoreRaw = (log.store_name || log.joining_place || log.shop_name || '').toString().trim().toUpperCase();
-                    const logStoreMapped = LOCATION_TO_SHOP_MAP[logStoreRaw] || logStoreRaw;
+                    const logStoreMapped = resolveLocationToShop(logStoreRaw, useShopStore.getState().shopsDetails) || logStoreRaw;
                     const isLogStoreAuth = !authShops || authShops.size === 0 || isUnrestrictedAdmin || authShops.has(logStoreRaw) || authShops.has(logStoreMapped);
 
                     if (isLogStoreAuth) {
@@ -513,7 +529,7 @@ export default function Dashboard() {
                     }
                 } else {
                     const empStoreRaw = (emp.joining_place || emp.store_name || '').toString().trim().toUpperCase();
-                    const empStoreMapped = LOCATION_TO_SHOP_MAP[empStoreRaw] || empStoreRaw;
+                    const empStoreMapped = resolveLocationToShop(empStoreRaw, useShopStore.getState().shopsDetails) || empStoreRaw;
                     const isEmpStoreAuth = !authShops || authShops.size === 0 || isUnrestrictedAdmin || authShops.has(empStoreRaw) || authShops.has(empStoreMapped);
 
                     if (isEmpStoreAuth) {
@@ -683,20 +699,22 @@ export default function Dashboard() {
                 }
             })
 
-            // Fetch shops from shop table as well to guarantee all store locations are listed
+            // Fetch shops dynamically from shop table to guarantee all store locations are listed
             try {
-                const { data: shopsData } = await supabase.from('shop').select('shop_name')
-                if (shopsData) {
+                const { data: shopsData } = await supabase.from('shop').select('shop_name, full_name, address')
+                if (shopsData && shopsData.length > 0) {
                     shopsData.forEach(s => {
                         if (s.shop_name && s.shop_name.trim()) masterStores.add(s.shop_name.trim())
                     })
+                } else {
+                    const fallbackShops = useShopStore.getState().shops || []
+                    fallbackShops.forEach(s => masterStores.add(s))
                 }
             } catch (e) {
                 console.error('Error fetching shop table:', e)
+                const fallbackShops = useShopStore.getState().shops || []
+                fallbackShops.forEach(s => masterStores.add(s))
             }
-
-            const defaultMasterShops = ['AKOLE', 'BALAJI', 'BAVDHAN', 'FRIENDS', 'HINJEWADI', 'KHARGHAR', 'MADHURA', 'MUMBAI', 'OFFICE', 'TLS', 'WAGHOLI']
-            defaultMasterShops.forEach(s => masterStores.add(s))
 
             setAllStoresList(Array.from(masterStores).sort())
             setPresentEmployeesList(presentList)
@@ -1324,7 +1342,7 @@ export default function Dashboard() {
                             const authStores = getUserAuthorizedStores();
                             const availableLocations = dropDownLocations.filter(loc => {
                                 if (!authStores) return true;
-                                const mappedShop = (LOCATION_TO_SHOP_MAP[loc] || loc).toUpperCase();
+                                const mappedShop = (resolveLocationToShop(loc, useShopStore.getState().shopsDetails) || loc).toUpperCase();
                                 return authStores.has(loc.toUpperCase()) || authStores.has(mappedShop);
                             });
 

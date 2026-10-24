@@ -23,6 +23,7 @@ import "../styles/PurchaseOrder.css";
 import PurchaseOrderPreview from "../components/purchase-order/PurchaseOrderPreview";
 import AddExcludedModal from "../components/purchase-order/AddExcludedModal";
 import Toast, { useToast } from "../components/Toast";
+import { ViewOnlyBanner, getPagePermission } from "../../../utils/permissionUtils";
 
 // PDF Templates
 import TraderPDF from "../pdf/TraderPDF";
@@ -67,6 +68,9 @@ const PurchaseOrder = () => {
   const { companies, companySettings, fetchCompanySettings } =
     useCompanyStore();
   const { selectedShop, assignedShops, isShopAdmin, getShopFullName, getShopRecord } = useShopStore();
+  const { currentUser } = useAuthStore();
+  const poPerm = getPagePermission(currentUser, 'purchase', 'PO');
+  const isModifyAllowed = poPerm.canModify;
   const [selectedCompanyId, setSelectedCompanyId] = useState("none");
   const [approvedItems, setApprovedItems] = useState([]);
   const [vendorsList, setVendorsList] = useState([]);
@@ -1643,6 +1647,14 @@ const PurchaseOrder = () => {
   const handleDownloadPDF = async () => {
     if (isSubmittingRef.current || isUploading) return;
 
+    if (!isModifyAllowed) {
+      addToast(
+        "View-Only Mode: You have read-only access to Purchase Orders. Generating or submitting PO is restricted.",
+        "error",
+      );
+      return;
+    }
+
     if (poMode === "manual" && selectedShop === "All") {
       addToast(
         "Please select a specific shop from the sidebar filter to create a Manual PO.",
@@ -2368,6 +2380,14 @@ const PurchaseOrder = () => {
         alreadyAddedIds={alreadyAddedIds}
       />
 
+      {/* View-Only Banner */}
+      {!isModifyAllowed && (
+        <ViewOnlyBanner
+          pageTitle="Purchase Orders"
+          message="You have view-only access to Purchase Orders. Generating or submitting POs, and manual editing are restricted."
+        />
+      )}
+
       {/* Top bar */}
       <div
         className="po-topbar"
@@ -2392,15 +2412,17 @@ const PurchaseOrder = () => {
           >
             <FileText size={15} /> Preview PDF
           </button>
-          <button
-            className="po-btn-secondary"
-            onClick={handleDownloadPDF}
-            disabled={!activeParty || isUploading || poMode === "hold"}
-            style={{ margin: 0 }}
-          >
-            <Printer size={15} />{" "}
-            {isUploading ? "Submitting..." : "Generate & Submit PO"}
-          </button>
+          {isModifyAllowed && (
+            <button
+              className="po-btn-secondary"
+              onClick={handleDownloadPDF}
+              disabled={!activeParty || isUploading || poMode === "hold"}
+              style={{ margin: 0 }}
+            >
+              <Printer size={15} />{" "}
+              {isUploading ? "Submitting..." : "Generate & Submit PO"}
+            </button>
+          )}
         </div>
       </div>
 

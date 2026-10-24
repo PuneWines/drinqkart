@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo   } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, FileCheck, Play, Pause, ExternalLink, Database
@@ -13,6 +13,7 @@ import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification, sendUrgentTaskNotification, sendMasterTaskAssignmentNotification } from "../../services/whatsappService";
 import { useMagicToast } from "../../context/MagicToastContext";
+import { ViewOnlyBanner, getPagePermission, getUserAssignedShops } from "../../../../utils/permissionUtils";
 
 const formatDate = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
 const formatDateISO = (date) => {
@@ -63,7 +64,7 @@ const getYouTubeId = (url) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
-};
+};7
 
 
 // Single Task Card
@@ -520,7 +521,21 @@ export default function ChecklistTask() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const { showToast } = useMagicToast();
+    const taskPerm = getPagePermission(null, 'checklist', 'Task');
+    const isModifyAllowed = taskPerm.canModify;
     const { shops, doerName, givenBy, automatedTasks, levels } = useSelector((state) => state.assignTask);
+
+    const assignedShops = useMemo(() => {
+        return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
+    }, []);
+    const hasGlobalShopAccess = assignedShops.length === 0;
+
+    const availableShops = useMemo(() => {
+        if (hasGlobalShopAccess) return shops;
+        const filtered = shops.filter(s => assignedShops.includes(s.toLowerCase()));
+        return filtered.length > 0 ? filtered : assignedShops.map(s => s.toUpperCase());
+    }, [shops, hasGlobalShopAccess, assignedShops]);
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
     const [holidays, setHolidays] = useState([]);
@@ -534,6 +549,14 @@ export default function ChecklistTask() {
             givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD") ? localStorage.getItem("user-name") : ""
         }
     ]);
+
+    useEffect(() => {
+        if (!hasGlobalShopAccess && availableShops.length > 0 && !selectedShop) {
+            setSelectedShop(availableShops[0]);
+            setTasks(prev => prev.map(t => ({ ...t, shop: t.shop || availableShops[0] })));
+        }
+    }, [hasGlobalShopAccess, availableShops, selectedShop]);
+
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [allGeneratedTasks, setAllGeneratedTasks] = useState([]);
     const [totalExpandedCount, setTotalExpandedCount] = useState(0);
@@ -705,6 +728,10 @@ export default function ChecklistTask() {
     };
 
     const handlePreview = async () => {
+        if (!isModifyAllowed) {
+            showToast("View-Only Mode: You have read-only access to Tasks. Creating or assigning tasks is restricted.", "error");
+            return;
+        }
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
@@ -856,6 +883,10 @@ export default function ChecklistTask() {
 
     const confirmSubmission = async () => {
         if (isSubmitting) return;
+        if (!isModifyAllowed) {
+            showToast("View-Only Mode: You have read-only access to Tasks. Assigning tasks is restricted.", "error");
+            return;
+        }
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.shop || !t.givenBy) {
@@ -1135,18 +1166,27 @@ export default function ChecklistTask() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => navigate('/dashboard/bulk-import')}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-200 text-purple-700 rounded-xl text-xs font-black hover:bg-purple-50 transition-all shadow-sm active:scale-95"
-                        >
-                            <Database className="w-3.5 h-3.5" /> Add Tasks
-                        </button>
+                        {isModifyAllowed && (
+                            <button
+                                type="button"
+                                onClick={() => navigate('/dashboard/bulk-import')}
+                                className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-200 text-purple-700 rounded-xl text-xs font-black hover:bg-purple-50 transition-all shadow-sm active:scale-95"
+                            >
+                                <Database className="w-3.5 h-3.5" /> Add Tasks
+                            </button>
+                        )}
                         <button onClick={() => navigate('/dashboard/assign-task')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
+
+                {!isModifyAllowed && (
+                    <ViewOnlyBanner
+                        pageTitle="Checklist Tasks"
+                        message="You have view-only access to Tasks. Creating, editing, or assigning checklist tasks is restricted."
+                    />
+                )}
 
                 {/* Success Message */}
                 {successMessage && (
@@ -1178,7 +1218,7 @@ export default function ChecklistTask() {
                             task={task}
                             index={index}
                             total={tasks.length}
-                            shops={shops}
+                            shops={availableShops}
                             doerName={doerName}
                             givenBy={givenBy}
                             levels={levels}
@@ -1222,11 +1262,17 @@ export default function ChecklistTask() {
                         <button
                             type="button"
                             onClick={handlePreview}
-                            disabled={isSubmitting}
-                            className="flex-grow py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-md transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            disabled={isSubmitting || !isModifyAllowed}
+                            className={`flex-grow py-3 font-bold rounded-xl shadow-md transform transition-all flex items-center justify-center gap-2 ${
+                                !isModifyAllowed
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-75 shadow-none'
+                                    : 'bg-purple-600 hover:bg-purple-700 text-white active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed'
+                            }`}
                         >
                             {isSubmitting ? (
                                 <><Loader2 size={18} className="animate-spin" /> Generating...</>
+                            ) : !isModifyAllowed ? (
+                                <>View-Only Mode — Assignment Disabled</>
                             ) : (
                                 <><Calendar size={18} /> Preview Tasks</>
                             )}

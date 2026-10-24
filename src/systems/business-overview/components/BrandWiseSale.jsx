@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { Download, Calendar } from "lucide-react";
+import useShopStore from "../../purchase/store/useShopStore";
 
 const SEGS = ["Sale", "Purchase", "Closing qty", "Closing case"];
 const SEARCH_BY_OPTIONS = ["Item Name", "Brand Name", "Company", "Trader Wise"];
@@ -152,9 +153,10 @@ export default function BrandWiseSale({
     return availableStores.filter((s) => selectedStores.has(s));
   }, [availableStores, selectedStores]);
 
+  const { shops: storeMasterList } = useShopStore();
   const skeletonStores = useMemo(
-    () => ["BALAJI", "FRIENDS", "KUNAL KHARGHAR", "TLS"],
-    [],
+    () => (storeMasterList && storeMasterList.length > 0 ? storeMasterList.slice(0, 4) : []),
+    [storeMasterList],
   );
 
   const displayStores = useMemo(() => {

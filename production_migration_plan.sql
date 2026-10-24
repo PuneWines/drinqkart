@@ -43,7 +43,7 @@ UPDATE "Inventory_items" SET "shop_id" = 7  WHERE "shop_id" = 16; -- MADHURA: 2 
 -- 3.2 Inventory_vendors (40 rows total)
 UPDATE "Inventory_vendors" SET "shop_id" = 8  WHERE "shop_id" = 17; -- BALAJI: 1 row
 UPDATE "Inventory_vendors" SET "shop_id" = 12 WHERE "shop_id" = 13; -- FRIENDS: 13 rows
-UPDATE "Inventory_vendors" SET "shop_id" = 5  WHERE "shop_id" = 15; -- KUNAL ULWE: 25 rows
+UPDATE "Inventory_vendors" SET "shop_id" = 5  WHERE "shop_id" = 15; -- ULWE: 25 rows
 UPDATE "Inventory_vendors" SET "shop_id" = 7  WHERE "shop_id" = 16; -- MADHURA: 1 row
 
 -- 3.3 Inventory_inventory_transactions (10,137 rows total)

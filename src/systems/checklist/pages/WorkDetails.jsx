@@ -27,6 +27,7 @@ import { userDetails } from "../redux/slice/settingSlice";
 import { useMagicToast } from "../context/MagicToastContext";
 import { generateWorkTasksApi, resetWorkTasksApi, checkAndPromoteAssignmentsApi, fetchPaginatedWorkRecordsApi, deactivateMasterTaskApi, deactivateMasterTasksBulkApi } from "../redux/api/workRecordsApi";
 import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../services/whatsappService";
+import { ViewOnlyBanner, getPagePermission, getUserAssignedShops } from "../../../utils/permissionUtils";
 
 const isAssignmentExpired = (item) => {
   if (!item.end_datetime) return false;
@@ -151,12 +152,14 @@ export default function WorkDetails() {
   const { tasks: masterTasks, assignments, loading, saving, error } = useSelector(state => state.workRecords);
   const { userData } = useSelector(state => state.setting);
 
-  // Use same role logic as AdminLayout
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const username = (localStorage.getItem("user-name") || "").toLowerCase();
-  const isSuperAdmin = username === "admin";
+  const isSuperAdmin = username === "admin" || username === "masteradmin";
   const isAdmin = isSuperAdmin || role === "admin";
-  const isHOD = role === "hod" || role === "manager";
+  const isHOD = role === "hod";
+
+  const workPerm = getPagePermission(null, 'checklist', 'Work Records');
+  const isModifyAllowed = workPerm.canModify;
 
   const userAccess = localStorage.getItem("user_access") || "";
   const managerShops = useMemo(() => {
@@ -165,7 +168,13 @@ export default function WorkDetails() {
 
   // Filter & UI States
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedShop, setSelectedShop] = useState("select");
+  const [selectedShop, setSelectedShop] = useState(() => {
+    const rawAssigned = getUserAssignedShops();
+    if (rawAssigned && rawAssigned.length > 0) {
+      return rawAssigned[0];
+    }
+    return "select";
+  });
   const [bulkStartDate, setBulkStartDate] = useState("");
   const [bulkEndDate, setBulkEndDate] = useState("");
   const [selectedRows, setSelectedRows] = useState(new Set());
@@ -276,8 +285,16 @@ export default function WorkDetails() {
     dispatch(userDetails());
   }, [dispatch]);
 
-  const [assignedShops, setAssignedShops] = useState([]);
-  const [hasAllShopsAccess, setHasAllShopsAccess] = useState(true);
+  const [assignedShops, setAssignedShops] = useState(() => {
+    return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
+  });
+  const [hasAllShopsAccess, setHasAllShopsAccess] = useState(() => {
+    const userRole = (localStorage.getItem("role") || "").toLowerCase();
+    const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
+    const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod" || currentUsername === "admin" || currentUsername === "masteradmin";
+    const universalAssigned = getUserAssignedShops();
+    return isSuperadminOrHOD && universalAssigned.length === 0;
+  });
 
   // Fetch assigned shop access for logged in user directly from DB
   useEffect(() => {
@@ -300,14 +317,18 @@ export default function WorkDetails() {
         }
       }
 
+      const universalAssigned = getUserAssignedShops();
       const userRole = (role || localStorage.getItem("role") || "").toLowerCase();
-      const isUserAdmin = userRole === "admin" || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+      const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod" || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
 
-      if (!isUserAdmin && rawShopStr && rawShopStr.toLowerCase() !== "all") {
-        const list = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-        setAssignedShops(list);
+      if (!isSuperadminOrHOD && (universalAssigned.length > 0 || (rawShopStr && rawShopStr.toLowerCase() !== "all"))) {
+        const combined = Array.from(new Set([
+          ...universalAssigned.map(s => s.toLowerCase()),
+          ...(rawShopStr && rawShopStr.toLowerCase() !== "all" ? rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [])
+        ]));
+        setAssignedShops(combined);
         setHasAllShopsAccess(false);
-      } else {
+      } else if (isSuperadminOrHOD) {
         setAssignedShops([]);
         setHasAllShopsAccess(true);
       }
@@ -338,9 +359,11 @@ export default function WorkDetails() {
 
   // Derived Available Shops List based on assigned shops and database shops
   const availableShops = useMemo(() => {
-    const filteredMasterTasks = role === "manager"
-      ? masterTasks.filter(t => managerShops.includes(t.shop?.shop_name?.toLowerCase()))
-      : masterTasks;
+    const filteredMasterTasks = !hasAllShopsAccess && assignedShops.length > 0
+      ? masterTasks.filter(t => assignedShops.includes(t.shop?.shop_name?.toLowerCase()))
+      : (role === "manager"
+        ? masterTasks.filter(t => managerShops.includes(t.shop?.shop_name?.toLowerCase()))
+        : masterTasks);
     const taskShops = filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean);
     const combinedShops = Array.from(new Set([...allDbShops, ...taskShops]));
 
@@ -353,7 +376,7 @@ export default function WorkDetails() {
 
   useEffect(() => {
     if (!hasAllShopsAccess && availableShops.length > 0) {
-      if (selectedShop !== "select" && (selectedShop === "All" || !availableShops.map(s => String(s).toLowerCase()).includes(String(selectedShop).toLowerCase()))) {
+      if (selectedShop === "select" || selectedShop === "All" || !availableShops.map(s => String(s).toLowerCase()).includes(String(selectedShop).toLowerCase())) {
         setSelectedShop(availableShops[0]);
       }
     }
@@ -417,7 +440,7 @@ export default function WorkDetails() {
       if (role === "manager" && !managerShops.includes(itemShopLower)) {
         return false;
       }
-      const matchesShop = selectedShop === "All" || selectedShop === "select" || item.shopName === selectedShop;
+      const matchesShop = (hasAllShopsAccess && (selectedShop === "All" || selectedShop === "select")) || item.shopName?.toLowerCase() === selectedShop?.toLowerCase();
       const matchesSearch = item.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.manager_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -961,6 +984,12 @@ export default function WorkDetails() {
   return (
     <AdminLayout>
       <div className="flex flex-col gap-4 mt-2 animate-in fade-in duration-500 pb-20 md:pb-4">
+        {!isModifyAllowed && (
+          <ViewOnlyBanner
+            pageTitle="Master Work Records"
+            message="You have view-only access to Work Records. Creating, editing, or deleting task definitions is restricted."
+          />
+        )}
         {/* Header Section */}
         <div className="bg-white border-b border-purple-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm relative overflow-hidden rounded-t-xl">
           <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-blue-600 to-purple-600" />

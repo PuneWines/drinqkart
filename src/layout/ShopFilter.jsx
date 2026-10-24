@@ -3,42 +3,58 @@ import useShopStore from "../systems/purchase/store/useShopStore";
 import { useAuth } from "../context/AuthContext";
 import { Store } from "lucide-react";
 
+const PALETTES = [
+  "bg-white border-blue-200 text-blue-800 hover:bg-blue-50/50",
+  "bg-white border-emerald-200 text-emerald-800 hover:bg-emerald-50/50",
+  "bg-white border-amber-200 text-amber-800 hover:bg-amber-50/50",
+  "bg-white border-purple-200 text-purple-800 hover:bg-purple-50/50",
+  "bg-white border-rose-200 text-rose-800 hover:bg-rose-50/50",
+  "bg-white border-indigo-200 text-indigo-800 hover:bg-indigo-50/50",
+  "bg-white border-teal-200 text-teal-800 hover:bg-teal-50/50",
+  "bg-white border-cyan-200 text-cyan-800 hover:bg-cyan-50/50",
+];
+
+const getShopLabel = (shop) => {
+  if (!shop) return "";
+  const name = typeof shop === "string" ? shop : String(shop);
+  if (name.length > 22) {
+    return `${name.slice(0, 19)}...`;
+  }
+  return name;
+};
+
+const getUnselectedStyle = (shop, shopsDetails = []) => {
+  if (!shop) return "bg-white border-slate-200 text-slate-700 hover:bg-slate-50";
+  const str = String(shop).trim();
+  const detail = shopsDetails?.find(
+    (s) => (s.shop_name || s.name || "").trim().toLowerCase() === str.toLowerCase()
+  );
+  if (detail?.badge_color && typeof detail.badge_color === "string" && detail.badge_color.includes("border-")) {
+    return detail.badge_color;
+  }
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return PALETTES[Math.abs(hash) % PALETTES.length];
+};
+
 const ShopFilter = ({ isCollapsed = false }) => {
   const { user } = useAuth();
-  const { shops, selectedShop, setSelectedShop } = useShopStore();
+  const { shops, shopsDetails, selectedShop, setSelectedShop } = useShopStore();
 
   const userRole = (user?.role || "").toLowerCase().trim();
   const userName = (user?.user_name || user?.username || "")
     .toLowerCase()
     .trim();
   const isAdmin =
-    !userRole || userRole === "admin" || userName === "masteradmin" || userName === "admin";
-
-  const getShopLabel = (shop) => {
-    if (shop === "The Liquor Story - Vishal - Hinjewadi") {
-      return "The Liquor Story ...";
-    }
-    return shop;
-  };
-
-  const getUnselectedStyle = (shop) => {
-    switch (shop) {
-      case "FRIENDS":
-        return "bg-white border-blue-200 text-blue-800 hover:bg-blue-50/50";
-      case "The Liquor Story - Vishal - Hinjewadi":
-        return "bg-white border-emerald-200 text-emerald-800 hover:bg-emerald-50/50";
-      case "MADHURA":
-        return "bg-white border-amber-200 text-amber-800 hover:bg-amber-50/50";
-      case "KUNAL":
-      case "KUNAL ULWE":
-      case "KUNAL KHARGHAR":
-        return "bg-white border-purple-200 text-purple-800 hover:bg-purple-50/50";
-      case "BALAJI":
-        return "bg-white border-rose-200 text-rose-800 hover:bg-rose-50/50";
-      default:
-        return "bg-white border-slate-200 text-slate-700 hover:bg-slate-50";
-    }
-  };
+    !userRole ||
+    userRole === "admin" ||
+    userRole === "superadmin" ||
+    userRole === "hod" ||
+    userName === "masteradmin" ||
+    userName === "admin";
 
   // 1. If not admin and no assigned shop, hide filter
   if (!isAdmin && (!shops || shops.length === 0)) {
@@ -140,7 +156,7 @@ const ShopFilter = ({ isCollapsed = false }) => {
               className={`px-2.5 py-1.5 rounded-2xl  text-xs font-semibold transition-all duration-150 cursor-pointer text-center truncate border ${
                 isSelected
                   ? "bg-[#2563eb] border-[#2563eb] text-white font-bold shadow-xs "
-                  : getUnselectedStyle(shop)
+                  : getUnselectedStyle(shop, shopsDetails)
               }`}
             >
               {getShopLabel(shop)}

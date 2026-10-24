@@ -29,6 +29,7 @@ import {
   LayoutGrid,
   BarChart3,
 } from "lucide-react";
+import { getPagePermission } from "../../../../utils/permissionUtils";
 
 const parseChecklistAllowedPages = (userData) => {
   if (!userData) return [];
@@ -265,42 +266,41 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
 
     const path = location.pathname;
 
-    const storedRoleLower = (storedRole || "user").toLowerCase();
-    const pageAccessRaw = localStorage.getItem("page_access");
-    let pageAccess = [];
-    try {
-      pageAccess = JSON.parse(pageAccessRaw) || [];
-    } catch (e) {
-      pageAccess = [];
-    }
+    // Initial sync from localStorage so allowed pages incorporate master_user_system_page_access
+    const stored = localStorage.getItem("page_access");
+    const storedMaster = localStorage.getItem("master_user_system_page_access");
+    const allowedPages = parseChecklistAllowedPages({ page_access: stored, master_user_system_page_access: storedMaster });
+    setPageAccess(allowedPages);
 
-    if (pageAccess.length > 0) {
-      const isPathAllowed = (path) => {
-        if (path === "/dashboard/admin" || path === "/dashboard/notifications") return true;
+    const isPathAllowed = (path) => {
+      if (path === "/dashboard/admin" || path === "/dashboard/notifications") return true;
 
-        const matchedRoute = routes.find(r => r.href === path || (r.subItems && r.subItems.some(s => s.href === path)));
-        if (!matchedRoute) return true;
+      const matchedRoute = routes.find(r => r.href === path || (r.subItems && r.subItems.some(s => s.href === path)));
+      if (!matchedRoute) return true;
 
-        if (matchedRoute.isSubmenu) {
-          const matchedSub = matchedRoute.subItems.find(s => s.href === path);
-          return matchedSub ? pageAccess.some(p => p.toLowerCase() === matchedSub.label.toLowerCase()) : false;
-        }
+      const label = matchedRoute.isSubmenu
+        ? matchedRoute.subItems?.find(s => s.href === path)?.label || matchedRoute.label
+        : matchedRoute.label;
 
-        const labelLower = matchedRoute.label.toLowerCase();
-        return pageAccess.some(p => {
-          const pLower = p.toLowerCase();
-          if (pLower === labelLower) return true;
-          if ((labelLower === "work records" || labelLower === "work details") && (pLower === "work records" || pLower === "work details")) return true;
-          if ((labelLower === "all tasks" || labelLower === "task") && (pLower === "all tasks" || pLower === "task")) return true;
-          return false;
-        });
-      };
+      // Universal RBAC permission evaluation
+      const perm = getPagePermission(null, 'checklist', label);
+      if (perm.canView) return true;
 
-      if (!isPathAllowed(path)) {
-        console.warn(`🚫 Access denied to ${path}. Redirecting to dashboard.`);
-        navigate("/dashboard/admin");
-        return;
-      }
+      const labelLower = label.toLowerCase();
+      return allowedPages.some(p => {
+        const pLower = p.toLowerCase();
+        if (pLower === labelLower) return true;
+        if ((labelLower === "work records" || labelLower === "work details") && (pLower === "work records" || pLower === "work details")) return true;
+        if ((labelLower === "all tasks" || labelLower === "task") && (pLower === "all tasks" || pLower === "task")) return true;
+        if ((labelLower === "assign task" || labelLower === "task") && (pLower === "assign task" || pLower === "task")) return true;
+        return false;
+      });
+    };
+
+    if (!isPathAllowed(path)) {
+      console.warn(`🚫 Access denied to ${path}. Redirecting to dashboard.`);
+      navigate("/dashboard/admin");
+      return;
     }
 
     const cachedImage = localStorage.getItem("profile_image");
@@ -419,31 +419,38 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
     return route.label;
   };
 
-  // Filter routes strictly based on pageAccess for all users
+  // Filter routes strictly based on pageAccess and getPagePermission for all users
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
     const userRoleNormalized = (userRole || "user").toLowerCase();
 
     return routes
       .filter((route) => {
+        if (route.label === "Dashboard" || route.label === "Announcements") return true;
+
+        if (route.label === "Holiday") {
+          return route.subItems && route.subItems.some(sub => {
+            const perm = getPagePermission(null, 'checklist', sub.label);
+            return perm.canView || pageAccess.includes(sub.label);
+          });
+        }
+
+        const perm = getPagePermission(null, 'checklist', route.label);
+        if (perm.canView) return true;
+
         if (pageAccess && pageAccess.length > 0) {
-          if (route.label === "Settings") {
-            return pageAccess.includes("Settings");
-          }
-          if (route.label === "Holiday") {
-            return route.subItems && route.subItems.some(sub => pageAccess.includes(sub.label));
-          }
           return pageAccess.includes(route.label);
         }
 
-        // If pageAccess is empty, default to showing only basic pages (Dashboard, Announcements)
-        return route.label === "Dashboard" || route.label === "Announcements";
+        return false;
       })
       .map(route => {
         if (route.subItems) {
           return {
             ...route,
             subItems: route.subItems.filter(sub => {
+              const perm = getPagePermission(null, 'checklist', sub.label);
+              if (perm.canView) return true;
               if (pageAccess && pageAccess.length > 0) {
                 return pageAccess.includes(sub.label);
               }

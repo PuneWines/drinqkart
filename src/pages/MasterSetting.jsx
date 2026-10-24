@@ -252,15 +252,29 @@ export default function MasterSetting() {
   const { user: currentUserObj, refreshUser } = useAuth();
   const [users, setUsers] = useState([]);
 
+  const currentRole = (currentUserObj?.role || "").toLowerCase().trim();
+  const currentUserName = (
+    currentUserObj?.user_name ||
+    currentUserObj?.username ||
+    ""
+  )
+    .toLowerCase()
+    .trim();
+
+  // Superadmin check: either role is superadmin/masteradmin OR username is masteradmin (during transition)
+  const isSuperadmin =
+    currentRole === "superadmin" ||
+    currentRole === "masteradmin" ||
+    currentUserName === "masteradmin";
+
+  const isHod = currentRole === "hod";
+  const isShopAdmin =
+    (currentRole === "admin" || currentUserName === "admin") && !isSuperadmin;
+
   // Determine if logged-in user has modify access vs view-only access on Master Settings
   const isMasterSettingModifyAllowed = useMemo(() => {
     if (!currentUserObj) return false;
-    const userName = (
-      currentUserObj.user_name ||
-      currentUserObj.username ||
-      ""
-    ).toLowerCase();
-    if (userName === "masteradmin") return true;
+    if (isSuperadmin || isHod) return true;
 
     let masterAccess = [];
     const rawVal =
@@ -293,9 +307,140 @@ export default function MasterSetting() {
       });
     }
 
-    const role = (currentUserObj.role || "").toLowerCase();
-    return role === "admin";
-  }, [currentUserObj]);
+    return isShopAdmin;
+  }, [currentUserObj, isSuperadmin, isHod, isShopAdmin]);
+
+  // Assigned shops for shop-scoped admin
+  const userAssignedShops = useMemo(() => {
+    if (isSuperadmin || isHod) return [];
+    const rawSources = [
+      currentUserObj?.shop_name,
+      currentUserObj?.user_access,
+      currentUserObj?.shops,
+      localStorage.getItem("shop_name"),
+      localStorage.getItem("user_access"),
+    ];
+    const assigned = [];
+    rawSources.forEach((raw) => {
+      if (!raw) return;
+      if (Array.isArray(raw)) {
+        raw.forEach((s) => {
+          if (
+            typeof s === "string" &&
+            s.trim() &&
+            s.trim().toLowerCase() !== "all" &&
+            s.trim().toLowerCase() !== "n/a"
+          ) {
+            assigned.push(s.trim());
+          }
+        });
+      } else if (typeof raw === "string") {
+        raw.split(",").forEach((s) => {
+          const trimmed = s.trim();
+          if (
+            trimmed &&
+            trimmed.toLowerCase() !== "all" &&
+            trimmed.toLowerCase() !== "n/a"
+          ) {
+            assigned.push(trimmed);
+          }
+        });
+      }
+    });
+    return [...new Set(assigned)];
+  }, [currentUserObj, isSuperadmin, isHod]);
+
+  // Active Superadmin account across the entire system (Dynamic Singleton Rule)
+  const activeSuperadminUser = useMemo(() => {
+    return users.find((u) => {
+      const r = (u.role || "").toLowerCase().trim();
+      return r === "superadmin" || r === "masteradmin";
+    });
+  }, [users]);
+
+  // Role hierarchy numeric ranking (Level 1 User to Level 5 Superadmin)
+  const getRoleRank = (role, userName = "") => {
+    const r = (role || "").toLowerCase().trim();
+    const u = (userName || "").toLowerCase().trim();
+    if (r === "superadmin" || r === "masteradmin" || u === "masteradmin") return 5;
+    if (r === "hod") return 4;
+    if (r === "admin" || u === "admin") return 3;
+    if (r === "manager") return 2;
+    return 1;
+  };
+
+  // Determine whether current user can edit a specific account
+  const canEditThisUser = (targetUser) => {
+    if (!isMasterSettingModifyAllowed) return false;
+    if (isSuperadmin) return true;
+
+    const targetRank = getRoleRank(
+      targetUser?.role,
+      targetUser?.user_name || targetUser?.username
+    );
+
+    // Active Superadmin cannot be edited or demoted by anyone except Superadmin
+    if (targetRank === 5) return false;
+
+    // HOD can edit Admin, Manager, User across all shops
+    if (isHod) return targetRank < 4;
+
+    // Shop Admin can only edit Manager and User in their assigned shop(s)
+    if (isShopAdmin) {
+      if (targetRank >= 3) return false;
+      if (userAssignedShops.length === 0) return false;
+
+      const targetShop = (targetUser.shop_name || "").toLowerCase().trim();
+      const targetAccess = (targetUser.user_access || "").toLowerCase().trim();
+      return userAssignedShops.some((as) => {
+        const asLower = as.toLowerCase().trim();
+        return (
+          targetShop === asLower ||
+          targetAccess === asLower ||
+          targetAccess.includes(asLower)
+        );
+      });
+    }
+
+    return false;
+  };
+
+  // Determine whether current user can delete a specific account
+  const canDeleteThisUser = (targetUser) => {
+    if (!isMasterSettingModifyAllowed) return false;
+
+    const targetRank = getRoleRank(
+      targetUser?.role,
+      targetUser?.user_name || targetUser?.username
+    );
+
+    // Active Superadmin CAN NEVER be deleted by anyone!
+    if (targetRank === 5) return false;
+
+    if (isSuperadmin) return true;
+
+    // HOD can delete Admin, Manager, User across all shops
+    if (isHod) return targetRank < 4;
+
+    // Shop Admin can only delete Manager and User in their assigned shop(s)
+    if (isShopAdmin) {
+      if (targetRank >= 3) return false;
+      if (userAssignedShops.length === 0) return false;
+
+      const targetShop = (targetUser.shop_name || "").toLowerCase().trim();
+      const targetAccess = (targetUser.user_access || "").toLowerCase().trim();
+      return userAssignedShops.some((as) => {
+        const asLower = as.toLowerCase().trim();
+        return (
+          targetShop === asLower ||
+          targetAccess === asLower ||
+          targetAccess.includes(asLower)
+        );
+      });
+    }
+
+    return false;
+  };
   const COLUMN_DEFINITIONS = [
     { key: "employee_id", label: "Employee ID" },
     { key: "emp_name", label: "Emp Name" },
@@ -369,9 +514,47 @@ export default function MasterSetting() {
   const [savingShop, setSavingShop] = useState(false);
 
   const handleOpenQuickShopEdit = (user) => {
+    if (!canEditThisUser(user)) {
+      showToast("Action restricted: You cannot edit this user's shop.", "error");
+      return;
+    }
     setEditingShopUser(user);
     setQuickShopInput(user.shop_name || "");
   };
+
+  // Dynamic roles available when editing a user
+  const availableEditRoles = useMemo(() => {
+    if (isShopAdmin) {
+      return ["User", "Manager"];
+    }
+    const roles = ["User", "Manager", "Admin", "HOD"];
+    const isTargetActiveSuperadmin =
+      activeSuperadminUser &&
+      editingUser &&
+      (String(activeSuperadminUser.id) === String(editingUser.id) ||
+        (activeSuperadminUser.user_name || activeSuperadminUser.username) ===
+          (editingUser.user_name || editingUser.username));
+
+    // Superadmin is assignable ONLY IF:
+    // 1) The role is vacant (!activeSuperadminUser), OR
+    // 2) The account currently being edited IS the active Superadmin
+    if (!activeSuperadminUser || isTargetActiveSuperadmin) {
+      roles.push("Superadmin");
+    }
+    return roles;
+  }, [isShopAdmin, activeSuperadminUser, editingUser]);
+
+  // Dynamic roles available when creating a new user
+  const availableAddRoles = useMemo(() => {
+    if (isShopAdmin) {
+      return ["User", "Manager"];
+    }
+    const roles = ["User", "Manager", "Admin", "HOD"];
+    if (!activeSuperadminUser) {
+      roles.push("Superadmin");
+    }
+    return roles;
+  }, [isShopAdmin, activeSuperadminUser]);
 
   const handleSaveQuickShop = async () => {
     if (!editingShopUser) return;
@@ -491,9 +674,18 @@ export default function MasterSetting() {
 
     return employeesList.filter((emp) => {
       const empId = emp.employee_id?.toString().trim().toLowerCase();
-      return empId && !existingUserEmpIds.has(empId);
+      if (!empId || existingUserEmpIds.has(empId)) return false;
+
+      // If shop admin, only show employees of their assigned shop
+      if (isShopAdmin && userAssignedShops.length > 0) {
+        const empShop = (emp.joining_company_name || "").toLowerCase().trim();
+        return userAssignedShops.some(
+          (as) => as.toLowerCase().trim() === empShop,
+        );
+      }
+      return true;
     });
-  }, [employeesList, users]);
+  }, [employeesList, users, isShopAdmin, userAssignedShops]);
 
   const showToast = (msg, type = "info") => {
     setToastMessage({ msg, type });
@@ -525,13 +717,15 @@ export default function MasterSetting() {
     setSelectedEmployee(null);
     setEmpStatus(null);
     setExistingUserInfo(null);
+    const defaultShop =
+      isShopAdmin && userAssignedShops.length > 0 ? userAssignedShops[0] : "";
     setNewUserForm({
       employee_id: "",
       username: "",
       password: "",
-      role: "user",
+      role: "User",
       email: "",
-      shopName: "",
+      shopName: defaultShop,
       can_self_assign: false,
       systemPreset: "purchase",
       counterAccess: [],
@@ -619,6 +813,28 @@ export default function MasterSetting() {
       return;
     }
 
+    // Guard: Dynamic Singleton Check for Superadmin
+    if (newUserForm.role === "Superadmin") {
+      if (activeSuperadminUser) {
+        showToast(
+          `Conflict: User "${activeSuperadminUser.user_name || activeSuperadminUser.username}" is already assigned as the Superadmin. The system strictly permits only ONE Superadmin.`,
+          "error",
+        );
+        return;
+      }
+    }
+
+    // Guard: Shop Admin role restriction
+    if (isShopAdmin) {
+      if (newUserForm.role !== "User" && newUserForm.role !== "Manager") {
+        showToast(
+          "Action restricted: Shop Admins can only create User or Manager accounts.",
+          "error",
+        );
+        return;
+      }
+    }
+
     setSaving(true);
 
     let initialPerms = [];
@@ -701,16 +917,9 @@ export default function MasterSetting() {
   };
 
   const handleDeleteUser = async (userObj) => {
-    const currentUserName = (
-      currentUserObj?.user_name ||
-      currentUserObj?.username ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-    if (currentUserName !== "masteradmin") {
+    if (!canDeleteThisUser(userObj)) {
       showToast(
-        "Action restricted: Deleting users is only permitted for Master Admin.",
+        "Action restricted: You do not have permission to delete this user.",
         "error",
       );
       return;
@@ -718,15 +927,6 @@ export default function MasterSetting() {
 
     const userId = userObj?.id;
     const username = userObj?.user_name || userObj?.username || "user";
-    const targetRole = (userObj?.role || "").toLowerCase().trim();
-
-    if (targetRole === "admin") {
-      showToast(
-        "Action restricted: Admin role users cannot be deleted.",
-        "error",
-      );
-      return;
-    }
 
     if (!window.confirm(`Are you sure you want to delete user "${username}"?`))
       return;
@@ -1002,6 +1202,8 @@ export default function MasterSetting() {
     if (rLower === "manager") normalizedRole = "Manager";
     else if (rLower === "hod") normalizedRole = "HOD";
     else if (rLower === "admin") normalizedRole = "Admin";
+    else if (rLower === "superadmin" || rLower === "masteradmin")
+      normalizedRole = "Superadmin";
     else if (rLower === "employee" || rLower === "user")
       normalizedRole = "User";
     else if (user.role) normalizedRole = user.role;
@@ -1191,6 +1393,47 @@ export default function MasterSetting() {
   // Save changes to database
   const handleSaveUser = async () => {
     if (!editingUser) return;
+
+    // Guard: Dynamic Singleton Check
+    if (roleInput === "Superadmin") {
+      const otherSuperadmin = users.find((u) => {
+        const r = (u.role || "").toLowerCase().trim();
+        const isSuper = r === "superadmin" || r === "masteradmin";
+        const isSameUser = String(u.id) === String(editingUser.id);
+        return isSuper && !isSameUser;
+      });
+      if (otherSuperadmin) {
+        showToast(
+          `Conflict: User "${otherSuperadmin.user_name || otherSuperadmin.username}" is already assigned as the Superadmin. The system strictly permits only ONE Superadmin.`,
+          "error",
+        );
+        return;
+      }
+    }
+
+    // Guard: Prevent non-Superadmin from demoting the active Superadmin
+    const targetIsActiveSuperadmin =
+      activeSuperadminUser &&
+      String(activeSuperadminUser.id) === String(editingUser.id);
+    if (targetIsActiveSuperadmin && !isSuperadmin && roleInput !== "Superadmin") {
+      showToast(
+        "Action restricted: Demoting the active Superadmin can only be performed by Superadmin.",
+        "error",
+      );
+      return;
+    }
+
+    // Guard: Shop Admin role restriction
+    if (isShopAdmin) {
+      if (roleInput !== "User" && roleInput !== "Manager") {
+        showToast(
+          "Action restricted: Shop Admins can only assign User or Manager roles.",
+          "error",
+        );
+        return;
+      }
+    }
+
     setSaving(true);
 
     const finalAccess = Object.keys(accessPermissions);
@@ -1357,6 +1600,21 @@ export default function MasterSetting() {
   };
 
   const filteredUsers = users.filter((u) => {
+    // If shop-scoped Admin, only show users belonging to their assigned shop(s)
+    if (isShopAdmin && userAssignedShops.length > 0) {
+      const uShop = (u.shop_name || "").toLowerCase().trim();
+      const uAccess = (u.user_access || "").toLowerCase().trim();
+      const belongsToAssignedShop = userAssignedShops.some((as) => {
+        const asLower = as.toLowerCase().trim();
+        return (
+          uShop === asLower ||
+          uAccess === asLower ||
+          uAccess.includes(asLower)
+        );
+      });
+      if (!belongsToAssignedShop) return false;
+    }
+
     const termLower = searchTerm.toLowerCase().trim();
     const uName = (u.user_name || u.username || "").toLowerCase();
     const eName = (u.emp_name || "").toLowerCase();
@@ -1401,9 +1659,16 @@ export default function MasterSetting() {
     const userName = (currentUserObj.user_name || currentUserObj.username || "")
       .toLowerCase()
       .trim();
-    if (userName === "masteradmin") return "modify";
-
     const role = (currentUserObj.role || "").toLowerCase().trim();
+
+    if (
+      userName === "masteradmin" ||
+      role === "superadmin" ||
+      role === "masteradmin" ||
+      role === "hod"
+    ) {
+      return "modify";
+    }
 
     let masterAccess = [];
     const rawVal =
@@ -1787,30 +2052,29 @@ export default function MasterSetting() {
                       <td className="py-2 px-3 whitespace-nowrap">
                         {isMasterSettingModifyAllowed ? (
                           <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => handleOpenEdit(u)}
-                              className="p-1 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] rounded transition-colors inline-flex items-center justify-center cursor-pointer"
-                              title="Edit User"
-                            >
-                              <Edit3 size={13} />
-                            </button>
-                            {(
-                              currentUserObj?.user_name ||
-                              currentUserObj?.username ||
-                              ""
-                            )
-                              .toLowerCase()
-                              .trim() === "masteradmin" &&
-                              (u.role || "").toLowerCase().trim() !==
-                                "admin" && (
-                                <button
-                                  onClick={() => handleDeleteUser(u)}
-                                  className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded transition-colors inline-flex items-center justify-center cursor-pointer"
-                                  title="Delete User"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              )}
+                            {canEditThisUser(u) && (
+                              <button
+                                onClick={() => handleOpenEdit(u)}
+                                className="p-1 bg-[#C9A84C] hover:bg-[#b8973b] text-[#1A1A1A] rounded transition-colors inline-flex items-center justify-center cursor-pointer"
+                                title="Edit User"
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                            )}
+                            {canDeleteThisUser(u) && (
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded transition-colors inline-flex items-center justify-center cursor-pointer"
+                                title="Delete User"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                            {!canEditThisUser(u) && !canDeleteThisUser(u) && (
+                              <span className="text-[10px] font-semibold text-slate-400 italic">
+                                Protected
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-[11px] font-semibold text-slate-400 italic">
@@ -1871,11 +2135,40 @@ export default function MasterSetting() {
                       {visibleColumns.includes("role") && (
                         <td className="py-2 px-3 capitalize font-medium text-[#1A1A1A]/70 whitespace-nowrap">
                           <div className="flex flex-col gap-0.5 items-start">
-                            <span className="px-1.5 py-0.5 bg-[#FAFAFA] border border-[#1A1A1A]/15 rounded text-[9.5px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                              {(u.role || "user").toLowerCase() === "employee"
-                                ? "user"
-                                : u.role || "user"}
-                            </span>
+                            {(() => {
+                              const rLower = (u.role || "user").toLowerCase().trim();
+                              const isSuper = rLower === "superadmin" || rLower === "masteradmin";
+                              const isH = rLower === "hod";
+                              const isAdm = rLower === "admin";
+                              const isMgr = rLower === "manager";
+
+                              let badgeClasses = "bg-[#FAFAFA] border-[#1A1A1A]/15 text-[#1A1A1A]";
+                              if (isSuper) {
+                                badgeClasses = "bg-amber-100 border-amber-400 text-amber-950 font-extrabold shadow-2xs";
+                              } else if (isH) {
+                                badgeClasses = "bg-indigo-50 border-indigo-300 text-indigo-900 font-bold";
+                              } else if (isAdm) {
+                                badgeClasses = "bg-sky-50 border-sky-300 text-sky-900 font-bold";
+                              } else if (isMgr) {
+                                badgeClasses = "bg-teal-50 border-teal-300 text-teal-900 font-bold";
+                              }
+
+                              const displayRole =
+                                rLower === "employee"
+                                  ? "User"
+                                  : isSuper
+                                    ? "Superadmin"
+                                    : u.role || "User";
+
+                              return (
+                                <span
+                                  className={`px-2 py-0.5 border rounded text-[9.5px] uppercase tracking-wider flex items-center gap-1 ${badgeClasses}`}
+                                >
+                                  {isSuper && <span className="text-amber-600 font-bold">★</span>}
+                                  {displayRole}
+                                </span>
+                              );
+                            })()}
                             {u.can_self_assign ? (
                               <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded text-[8.5px] font-bold uppercase tracking-wider">
                                 Self Assign: Enabled
@@ -2111,10 +2404,11 @@ export default function MasterSetting() {
                     onChange={(e) => setRoleInput(e.target.value)}
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                   >
-                    <option value="User">User</option>
-                    <option value="Manager">Manager</option>
-                    <option value="HOD">HOD</option>
-                    <option value="Admin">Admin</option>
+                    {availableEditRoles.map((r) => (
+                      <option key={r} value={r}>
+                        {r === "Superadmin" ? "Superadmin (Apex Authority)" : r}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -2936,10 +3230,11 @@ export default function MasterSetting() {
                       }
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                     >
-                      <option value="User">User</option>
-                      <option value="Manager">Manager</option>
-                      <option value="HOD">HOD</option>
-                      <option value="Admin">Admin</option>
+                      {availableAddRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {r === "Superadmin" ? "Superadmin (Apex Authority)" : r}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -3024,7 +3319,14 @@ export default function MasterSetting() {
                   </label>
                   {availableShops.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto custom-scrollbar bg-slate-50 p-2.5 rounded border border-slate-200">
-                      {availableShops.map((shop) => {
+                      {(isShopAdmin && userAssignedShops.length > 0
+                        ? availableShops.filter((s) =>
+                            userAssignedShops.some(
+                              (as) => as.toLowerCase() === s.toLowerCase(),
+                            ),
+                          )
+                        : availableShops
+                      ).map((shop) => {
                         const isSelected =
                           selectedNewUserShopsList.includes(shop);
                         return (

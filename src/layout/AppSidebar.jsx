@@ -222,7 +222,13 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                     const sysNameLower = sys.label.toLowerCase().trim();
                     const role = (user?.role || localStorage.getItem('role') || '').toLowerCase();
                     const userName = (user?.user_name || user?.username || '').toLowerCase();
-                    const isAdmin = role === 'admin' || role === 'masteradmin' || userName === 'admin' || userName === 'masteradmin';
+                    const isAdmin =
+                      role === 'admin' ||
+                      role === 'masteradmin' ||
+                      role === 'superadmin' ||
+                      role === 'hod' ||
+                      userName === 'admin' ||
+                      userName === 'masteradmin';
 
                     if (!isAdmin) {
                       let rawAccess = user?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];
@@ -447,7 +453,13 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                     const sysNameLower = sys.label.toLowerCase().trim();
                     const role = (user?.role || localStorage.getItem('role') || '').toLowerCase();
                     const userName = (user?.user_name || user?.username || '').toLowerCase();
-                    const isAdmin = role === 'admin' || role === 'masteradmin' || userName === 'admin' || userName === 'masteradmin';
+                    const isAdmin =
+                      role === 'admin' ||
+                      role === 'masteradmin' ||
+                      role === 'superadmin' ||
+                      role === 'hod' ||
+                      userName === 'admin' ||
+                      userName === 'masteradmin';
 
                     if (!isAdmin) {
                       let rawAccess = user?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];

@@ -16,12 +16,18 @@ import { Toaster } from "react-hot-toast";
 import JoiningCompany from "./pages/JoiningCompany";
 import Roaster from "./pages/Roaster";
 import EmployeeLearning from "./pages/EmployeeLearning";
+import { useAuth } from "../../context/AuthContext";
+import { getPagePermission } from "../../utils/permissionUtils";
 import "./index.css";
 
 // Mounted under /systems/hr/* by the root router (see src/App.jsx). Auth,
 // logout, and navigation are all handled by the unified AuthContext / root
 // AppSidebar before this component ever renders.
 function HrApp() {
+  const { user } = useAuth();
+  const joiningShopPerm = getPagePermission(user, 'hr', 'Joining shop');
+  const isJoiningShopReadOnly = !joiningShopPerm.canModify;
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
@@ -30,7 +36,7 @@ function HrApp() {
             <Route path="" element={<Dashboard />} />
             <Route path="employees" element={<Employees />} />
             <Route path="employee-learning" element={<EmployeeLearning />} />
-            <Route path="joining-shop" element={<JoiningCompany />} />
+            <Route path="joining-shop" element={<JoiningCompany readOnly={isJoiningShopReadOnly} />} />
             <Route
               path="attendance"
               element={<Navigate to="daily" replace />}

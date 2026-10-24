@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import SearchableDropdown from '../components/ui/SearchableDropdown';
 import Toast from '../components/ui/Toast';
+import { ViewOnlyBanner, getPagePermission } from '../../../utils/permissionUtils';
 
 import {
   getItems,
@@ -55,29 +56,28 @@ export default function FormEntry({ currentUser }) {
 
   const allowedPermissions = useMemo(() => currentUser?.page_access || [], [currentUser]);
 
+  const purchasePerm = useMemo(() => getPagePermission(currentUser, 'inventory', 'Purchase Form Entry'), [currentUser]);
+  const closingPerm = useMemo(() => getPagePermission(currentUser, 'inventory', 'Closing Stock Form Entry'), [currentUser]);
+  const cashTallyPerm = useMemo(() => getPagePermission(currentUser, 'inventory', 'Cash Tally Form Entry'), [currentUser]);
+
   const isPurchaseAllowed = useMemo(() => (
-    isMasterAdmin ||
-    isAdmin ||
-    hasMasterPerm('Purchase Form Entry') ||
-    hasMasterPerm('Form Entry') ||
-    allowedPermissions.includes('entry_purchases')
-  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+    purchasePerm.canView || (allowedPermissions.includes('entry_purchases') && !masterAccessList.length)
+  ), [purchasePerm, allowedPermissions, masterAccessList]);
 
   const isClosingAllowed = useMemo(() => (
-    isMasterAdmin ||
-    isAdmin ||
-    hasMasterPerm('Closing Stock Form Entry') ||
-    hasMasterPerm('Form Entry') ||
-    allowedPermissions.includes('entry_closing')
-  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+    closingPerm.canView || (allowedPermissions.includes('entry_closing') && !masterAccessList.length)
+  ), [closingPerm, allowedPermissions, masterAccessList]);
 
   const isCashTallyAllowed = useMemo(() => (
-    isMasterAdmin ||
-    isAdmin ||
-    hasMasterPerm('Cash Tally Form Entry') ||
-    hasMasterPerm('Form Entry') ||
-    allowedPermissions.includes('entry_cashtally')
-  ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+    cashTallyPerm.canView || (allowedPermissions.includes('entry_cashtally') && !masterAccessList.length)
+  ), [cashTallyPerm, allowedPermissions, masterAccessList]);
+
+  const isCurrentTypeModifyAllowed = useMemo(() => {
+    if (quantityType === 'Purchase Quantity') return purchasePerm.canModify;
+    if (quantityType === 'Closing Quantity') return closingPerm.canModify;
+    if (quantityType === 'Sale Amount') return cashTallyPerm.canModify;
+    return false;
+  }, [quantityType, purchasePerm, closingPerm, cashTallyPerm]);
 
   const allowedTypes = useMemo(() => {
     const types = [];
@@ -411,6 +411,10 @@ export default function FormEntry({ currentUser }) {
   // Form Submission Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isCurrentTypeModifyAllowed) {
+      showToast(`View-Only Mode: You have read-only access to ${quantityType}. Submissions are disabled.`, 'error');
+      return;
+    }
     setErrors({});
     const newErrors = {};
 
@@ -621,6 +625,12 @@ export default function FormEntry({ currentUser }) {
 
         {/* Form Body wrapper */}
         <div className="p-6 md:p-8">
+          {!isCurrentTypeModifyAllowed && (
+            <ViewOnlyBanner
+              pageTitle={quantityType}
+              message={`You have view-only access to ${quantityType}. Form field modification and submission are restricted.`}
+            />
+          )}
           <form onSubmit={handleSubmit} className="space-y-8">
             
             {/* ── Common Header ─────────────────────────────────────── */}
@@ -1132,12 +1142,15 @@ export default function FormEntry({ currentUser }) {
               <button
                 type="submit"
                 disabled={
+                  !isCurrentTypeModifyAllowed ||
                   (quantityType === 'Closing Quantity' && isClosingOverflow) ||
                   (quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered)
                 }
                 className={`w-full inline-flex items-center justify-center px-8 py-3.5 rounded-xl text-sm font-bold text-white transition-all duration-300 cursor-pointer ${
-                  (quantityType === 'Closing Quantity' && isClosingOverflow) ||
-                  (quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered)
+                  !isCurrentTypeModifyAllowed
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-75 shadow-none'
+                    : (quantityType === 'Closing Quantity' && isClosingOverflow) ||
+                      (quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered)
                     ? 'bg-slate-300 cursor-not-allowed opacity-60'
                     : 'bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 shadow-md hover:shadow-lg'
                 }`}
@@ -1145,11 +1158,13 @@ export default function FormEntry({ currentUser }) {
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {quantityType === 'Closing Quantity' && isClosingOverflow
-                  ? 'Cannot Submit — Stock Overflow'
-                  : quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered
-                    ? 'Cannot Submit — Closing Stock Missing'
-                    : 'Submit Data'}
+                {!isCurrentTypeModifyAllowed
+                  ? 'View-Only Mode — Submission Disabled'
+                  : quantityType === 'Closing Quantity' && isClosingOverflow
+                    ? 'Cannot Submit — Stock Overflow'
+                    : quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered
+                      ? 'Cannot Submit — Closing Stock Missing'
+                      : 'Submit Data'}
               </button>
             </div>
           </form>

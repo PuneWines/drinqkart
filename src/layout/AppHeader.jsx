@@ -66,7 +66,13 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
   const userObj = user || {};
   const userName = userObj.user_name || userObj.username || 'User';
   const role = (userObj.role || localStorage.getItem('role') || 'User').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'masteradmin' || userName.toLowerCase() === 'admin' || userName.toLowerCase() === 'masteradmin';
+  const isAdmin =
+    role === 'admin' ||
+    role === 'masteradmin' ||
+    role === 'superadmin' ||
+    role === 'hod' ||
+    userName.toLowerCase() === 'admin' ||
+    userName.toLowerCase() === 'masteradmin';
 
   return (
     <header className="w-full max-w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20 min-w-0 overflow-hidden">
@@ -132,6 +138,15 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
           >
             {userName.slice(0, 2)}
           </Link>
+
+          <button
+            id="mobile-header-logout-btn"
+            onClick={handleLogout}
+            title="Logout"
+            className="p-1.5 rounded-full text-[#8C6D23] hover:bg-[#C9A84C]/10 transition-colors cursor-pointer flex items-center justify-center"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
 
@@ -176,6 +191,7 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
           <div className="h-5 w-px bg-gray-200" />
 
           <button
+            id="app-header-logout-btn"
             onClick={handleLogout}
             title="Logout"
             className="flex items-center justify-center p-2 rounded-full text-[#8C6D23] hover:bg-[#C9A84C]/10 transition-colors cursor-pointer"

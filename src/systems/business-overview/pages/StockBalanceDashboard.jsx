@@ -10,6 +10,7 @@ import DashboardFilterSidebar from "../components/DashboardFilterSidebar";
 import GroupWiseStoreWiseSale from "../components/GroupWiseStoreWiseSale";
 import BrandWiseSale from "../components/BrandWiseSale";
 import SaleExplorationTab from "../components/SaleExplorationTab";
+import useShopStore from "../../purchase/store/useShopStore";
 import {
   TrendingUp,
   Eraser,
@@ -2204,22 +2205,14 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
         "date:snapshot_date, shop_id:store_name, liquor_type, subhead, item_name:item_description, quantity_out:qty_out, quantity_in:qty_in, closing_qty, mrp_rate:mrp_bottle_rate, purchase_rate:purchase_bottle_rate, b_cs:bottles_per_case, type1, type2, type5, brand_name, company_name, party_name";
 
       const batchSize = 1000;
-      const knownShops = [
-        "BALAJI",
-        "FRIENDS",
-        "KUNAL KHARGHAR",
-        "KUNAL ULWE",
-        "MADHURA",
-        "OFFICE",
-        "TLS",
-      ];
       const distinctStores = storeOptions.filter((s) => s !== "All");
+      const fallbackShops = useShopStore.getState().shops || [];
       const storesToFetch =
         selectedStore !== "All"
           ? [selectedStore]
           : distinctStores.length > 0
             ? distinctStores
-            : knownShops;
+            : fallbackShops;
 
       const fetchStoreRows = async (store) => {
         let storeRows = [];

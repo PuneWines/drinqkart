@@ -1,10 +1,16 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
+import { getPagePermission } from "../../../utils/permissionUtils";
 
 const getInitialUser = () => {
   try {
     const storedUser = localStorage.getItem('currentUser') || localStorage.getItem('drinqkart_user');
-    return storedUser ? JSON.parse(storedUser) : null;
+    if (!storedUser) return null;
+    const user = JSON.parse(storedUser);
+    if (user && !user.permissions && user.master_user_system_page_access) {
+      user.permissions = parsePurchasePermissionsFromAccess(user.master_user_system_page_access);
+    }
+    return user;
   } catch (e) {
     return null;
   }
@@ -32,12 +38,21 @@ export const parsePurchasePermissionsFromAccess = (masterAccess) => {
   if (!Array.isArray(list)) list = Object.keys(list || {});
 
   const permKeys = [];
-  Object.entries(PURCHASE_PERM_MAP).forEach(([key, val]) => {
-    if (list.includes(val) || list.includes(val.replace('.modify', '.view'))) {
+  Object.entries(PURCHASE_PERM_MAP).forEach(([key, modifyVal]) => {
+    const viewVal = modifyVal.replace('.modify', '.view');
+    const hasModify = list.includes(modifyVal);
+    const hasView = list.includes(viewVal) || hasModify;
+
+    if (hasModify) {
       permKeys.push(key);
+      permKeys.push(`${key}:modify`);
+      permKeys.push(`${key}:view`);
+    } else if (hasView) {
+      permKeys.push(key);
+      permKeys.push(`${key}:view`);
     }
   });
-  return permKeys;
+  return [...new Set(permKeys)];
 };
 
 export const buildMasterAccessFromPurchasePerms = (existingAccess, selectedPurchasePerms) => {
@@ -195,13 +210,68 @@ const useAuthStore = create((set, get) => ({
 
   hasPermission: (permission) => {
     const { currentUser } = get();
-    return currentUser?.permissions?.includes(permission) || false;
+    if (!currentUser) return false;
+    const role = (currentUser.role || localStorage.getItem('role') || '').toLowerCase().trim();
+    const username = (currentUser.user_name || currentUser.username || localStorage.getItem('user-name') || '').toLowerCase().trim();
+    const empId = String(currentUser.employee_id || currentUser.emp_code || '').trim();
+    if (role === 'superadmin' || role === 'masteradmin' || username === 'masteradmin' || empId === '999') {
+      return true;
+    }
+    if (permission.endsWith(':modify')) {
+      const baseKey = permission.replace(':modify', '');
+      return get().canModify(baseKey);
+    }
+    if (permission.endsWith(':view')) {
+      const baseKey = permission.replace(':view', '');
+      return get().canView(baseKey);
+    }
+    return currentUser?.permissions?.includes(permission) || get().canView(permission);
+  },
+
+  canModify: (permKey) => {
+    const { currentUser } = get();
+    if (!currentUser) return false;
+    const role = (currentUser.role || localStorage.getItem('role') || '').toLowerCase().trim();
+    const username = (currentUser.user_name || currentUser.username || localStorage.getItem('user-name') || '').toLowerCase().trim();
+    const empId = String(currentUser.employee_id || currentUser.emp_code || '').trim();
+    if (role === 'superadmin' || role === 'masteradmin' || username === 'masteradmin' || empId === '999') {
+      return true;
+    }
+    const perm = getPagePermission(currentUser, 'purchase', permKey);
+    return perm.canModify;
+  },
+
+  canView: (permKey) => {
+    const { currentUser } = get();
+    if (!currentUser) return false;
+    const role = (currentUser.role || localStorage.getItem('role') || '').toLowerCase().trim();
+    const username = (currentUser.user_name || currentUser.username || localStorage.getItem('user-name') || '').toLowerCase().trim();
+    const empId = String(currentUser.employee_id || currentUser.emp_code || '').trim();
+    if (role === 'superadmin' || role === 'masteradmin' || username === 'masteradmin' || empId === '999') {
+      return true;
+    }
+    const perm = getPagePermission(currentUser, 'purchase', permKey);
+    return perm.canView;
+  },
+
+  isRestricted: (permKey) => {
+    const { canView, canModify } = get();
+    return canView(permKey) && !canModify(permKey);
   },
 
   initSession: () => {
     const storedUser = localStorage.getItem('currentUser') || localStorage.getItem('drinqkart_user');
     if (storedUser) {
-      set({ currentUser: JSON.parse(storedUser) });
+      try {
+        const parsed = JSON.parse(storedUser);
+        if (parsed) {
+          const masterAccess = parsed.master_user_system_page_access || localStorage.getItem('master_user_system_page_access');
+          parsed.permissions = parsePurchasePermissionsFromAccess(masterAccess);
+          set({ currentUser: parsed });
+        }
+      } catch (e) {
+        set({ currentUser: JSON.parse(storedUser) });
+      }
     }
   }
 }));

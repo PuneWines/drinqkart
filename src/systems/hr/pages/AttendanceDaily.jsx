@@ -3,24 +3,16 @@ import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
 import { Search, Download, Calendar, Loader2, CheckCircle, X, Clock, Pencil, Filter, Users, User, Clock as ClockIcon, TrendingUp, Database, RefreshCw, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Plus, ChevronDown, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
-
-const SHOP_NAME_TO_LOCATION = {
-  'MADHURA': 'BAVDHAN',
-  'TLS': 'HINJEWADI',
-  'FRIENDS': 'WAGHOLI',
-  'BALAJI': 'AKOLE',
-  'KUNAL ULWE': 'MUMBAI',
-  'KUNAL KHARGHAR': 'KHARGHAR'
-};
+import useShopStore from '../../purchase/store/useShopStore';
 
 const DEVICES = [
   { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' },
-  { name: 'MADHURA', apiName: SHOP_NAME_TO_LOCATION['MADHURA'], serial: 'C26238441B1E342D' },
-  { name: 'TLS', apiName: SHOP_NAME_TO_LOCATION['TLS'], serial: 'AMDB25061400335' },
-  { name: 'FRIENDS', apiName: SHOP_NAME_TO_LOCATION['FRIENDS'], serial: 'AMDB25061400343' },
-  { name: 'BALAJI', apiName: SHOP_NAME_TO_LOCATION['BALAJI'], serial: 'C262CC13CF202038' },
-  { name: 'KUNAL ULWE', apiName: SHOP_NAME_TO_LOCATION['KUNAL ULWE'], serial: 'C2630450C32A2327' },
-  { name: 'KUNAL KHARGHAR', apiName: SHOP_NAME_TO_LOCATION['KUNAL KHARGHAR'], serial: 'AMDB25120600859' }
+  { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
+  { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
+  { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
+  { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
+  { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+  { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
@@ -2673,25 +2665,48 @@ const AttendanceDaily = () => {
     setSelectedDate(`${yyyy}-${mm}-${dd}`);
   };
 
-  const LOCATION_TO_SHOP_MAP = {
-    'BAVDHAN': 'MADHURA',
-    'BAWDHAN': 'MADHURA',
-    'HINJEWADI': 'TLS',
-    'HINJHWADI': 'TLS',
-    'VISHAL': 'TLS',
-    'WAGHOLI': 'FRIENDS',
-    'AKOLE': 'BALAJI',
-    'MUMBAI': 'KUNAL ULWE',
-    'KHARGHAR': 'KUNAL KHARGHAR'
+  const { shops: storeMasterList, shopsDetails } = useShopStore();
+  const shops = (storeMasterList && storeMasterList.length > 0) ? storeMasterList : [];
+
+  const resolveLocationToShop = (locStr, details = []) => {
+    if (!locStr) return '';
+    const clean = String(locStr).trim().toUpperCase();
+    if (!clean) return '';
+    const directMatch = details.find(d => (d.shop_name || '').toUpperCase() === clean);
+    if (directMatch && directMatch.shop_name) return directMatch.shop_name;
+    const normalized = clean.replace(/BAWDHAN/g, 'BAVDHAN').replace(/HINJHWADI/g, 'HINJEWADI').replace(/WAGOLI/g, 'WAGHOLI');
+    const matched = details.find(d => {
+      const full = (d.full_name || '').toUpperCase();
+      const addr = (d.address || '').toUpperCase();
+      const loc = (d.location || '').toUpperCase();
+      const sName = (d.shop_name || '').toUpperCase();
+      return full.includes(normalized) || addr.includes(normalized) || loc.includes(normalized) || (normalized.length > 3 && sName.includes(normalized));
+    });
+    if (matched && matched.shop_name) return matched.shop_name;
+    const LEGACY_MAP = {
+      'BAVDHAN': 'MADHURA',
+      'BAWDHAN': 'MADHURA',
+      'HINJEWADI': 'TLS',
+      'HINJHWADI': 'TLS',
+      'VISHAL': 'TLS',
+      'WAGHOLI': 'FRIENDS',
+      'AKOLE': 'BALAJI',
+      'MUMBAI': 'KUNAL ULWE',
+      'ULWE': 'KUNAL ULWE',
+      'MUMBAI ULWE': 'KUNAL ULWE',
+      'KHARGHAR': 'KUNAL KHARGHAR'
+    };
+    return LEGACY_MAP[clean] || clean;
   };
 
-  const shops = Object.keys(SHOP_NAME_TO_LOCATION);
-
-  // Helper to map shop name to location
+  // Helper to map shop name to location dynamically
   const getMappedLocation = (shopName) => {
     if (!shopName) return '';
     const cleanName = shopName.trim().toUpperCase();
-    return SHOP_NAME_TO_LOCATION[cleanName] || cleanName;
+    const detail = shopsDetails?.find(
+      (s) => (s.shop_name || s.name || '').trim().toUpperCase() === cleanName
+    );
+    return detail?.location || detail?.address || cleanName;
   };
 
   // Filter employees
@@ -2732,7 +2747,7 @@ const AttendanceDaily = () => {
 
         const punchedLoc = (resolvePunchedStore(emp) || '').trim().toUpperCase();
         const rawAssigned = (emp.store_name || emp.joining_place || '').trim().toUpperCase();
-        const mappedShopName = LOCATION_TO_SHOP_MAP[rawAssigned] || rawAssigned;
+        const mappedShopName = resolveLocationToShop(rawAssigned, shopsDetails) || rawAssigned;
 
         const matchesStore = selectedStore === 'ALL' ||
           selectedStore === mappedShopName ||
@@ -4028,14 +4043,7 @@ const AttendanceDaily = () => {
                             {(() => {
                               const rawAssigned = employeeProfile?.joining_place || employee.store_name || '-';
                               const cleanAssigned = rawAssigned.toString().trim().toUpperCase();
-                              const assignedStore = LOCATION_TO_SHOP_MAP[cleanAssigned] ||
-                                (cleanAssigned.includes('HINJ') || cleanAssigned.includes('VISHAL') ? 'TLS' :
-                                  cleanAssigned.includes('ULWE') || cleanAssigned.includes('MUMBAI') ? 'KUNAL ULWE' :
-                                    cleanAssigned.includes('BAVD') || cleanAssigned.includes('BAWD') ? 'MADHURA' :
-                                      cleanAssigned.includes('WAGH') ? 'FRIENDS' :
-                                        cleanAssigned.includes('AKOL') ? 'BALAJI' :
-                                          cleanAssigned.includes('KHARG') ? 'KUNAL KHARGHAR' :
-                                            (cleanAssigned !== '-' ? rawAssigned.toString().trim() : '-'));
+                              const assignedStore = resolveLocationToShop(cleanAssigned, shopsDetails) || (cleanAssigned !== '-' ? rawAssigned.toString().trim() : '-');
                               return (
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-semibold text-gray-900">

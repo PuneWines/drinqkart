@@ -437,7 +437,7 @@ export const AuthProvider = ({ children }) => {
       // Strict role matching check
       let isRoleValid = false;
       if (selectedRole === "admin") {
-        isRoleValid = isMaster || userRole === "admin";
+        isRoleValid = isMaster || userRole === "admin" || userRole === "superadmin";
       } else if (selectedRole === "HOD") {
         isRoleValid = userRole === "hod";
       } else if (selectedRole === "manager") {
@@ -447,7 +447,8 @@ export const AuthProvider = ({ children }) => {
           !isMaster &&
           userRole !== "admin" &&
           userRole !== "manager" &&
-          userRole !== "hod";
+          userRole !== "hod" &&
+          userRole !== "superadmin";
       }
 
       if (!isRoleValid) {
@@ -483,7 +484,7 @@ export const AuthProvider = ({ children }) => {
 
         let isRoleValid = false;
         if (selectedRole === "admin") {
-          isRoleValid = isMaster || userRole === "admin";
+          isRoleValid = isMaster || userRole === "admin" || userRole === "superadmin";
         } else if (selectedRole === "HOD") {
           isRoleValid = userRole === "hod";
         } else if (selectedRole === "manager") {
@@ -493,7 +494,8 @@ export const AuthProvider = ({ children }) => {
             !isMaster &&
             userRole !== "admin" &&
             userRole !== "manager" &&
-            userRole !== "hod";
+            userRole !== "hod" &&
+            userRole !== "superadmin";
         }
 
         if (!isRoleValid) {

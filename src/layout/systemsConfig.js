@@ -222,8 +222,13 @@ export const getVisibleSystems = (user) => {
   } catch (e) {}
 
   const currentUserNameClean = (userObj.user_name || userObj.username || currentUserStored?.user_name || currentUserStored?.username || '').toLowerCase();
-  const isMasterAdmin = currentUserNameClean === 'masteradmin' || currentUserNameClean === 'admin';
   const userRole = (userObj.role || currentUserStored?.role || '').toLowerCase();
+  const isMasterAdmin =
+    currentUserNameClean === 'masteradmin' ||
+    currentUserNameClean === 'admin' ||
+    userRole === 'superadmin' ||
+    userRole === 'masteradmin' ||
+    userRole === 'hod';
 
   const primaryMasterAccess = [
     ...parseMasterAccessList(userObj.master_user_system_page_access),

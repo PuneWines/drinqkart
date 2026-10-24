@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Calendar, QrCode, Copy, Printer, Lock, Upload } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { ViewOnlyBanner } from '../../../utils/permissionUtils'
 
 export default function JoiningCompany({ readOnly = false }) {
   const [companies, setCompanies] = useState([])
@@ -39,15 +40,6 @@ export default function JoiningCompany({ readOnly = false }) {
   const [qrModalShop, setQrModalShop] = useState(null)
   const [hasLocationColumn, setHasLocationColumn] = useState(false)
 
-  const SHOP_NAME_TO_LOCATION = {
-    'MADHURA': 'BAVDHAN',
-    'TLS': 'HINJEWADI',
-    'FRIENDS': 'WAGHOLI',
-    'BALAJI': 'AKOLE',
-    'KUNAL ULWE': 'ULWE',
-    'KUNAL KHARGHAR': 'KHARGHAR'
-  }
-
   const CUSTOM_LOCATIONS_KEY = 'drinqkart_custom_shop_locations'
 
   const getCustomLocations = () => {
@@ -80,7 +72,8 @@ export default function JoiningCompany({ readOnly = false }) {
     const shopName = (company.shop_name || company.company_name || '').trim().toUpperCase()
     const customLocs = getCustomLocations()
     if (customLocs[shopName]) return customLocs[shopName]
-    return SHOP_NAME_TO_LOCATION[shopName] || ''
+    if (company.address && company.address.trim()) return company.address.trim()
+    return company.shop_name || company.company_name || ''
   }
 
   useEffect(() => {
@@ -324,6 +317,12 @@ export default function JoiningCompany({ readOnly = false }) {
       )}
 
       {/* Full-width Header Bar */}
+      {readOnly && (
+        <ViewOnlyBanner
+          pageTitle="Joining Shop Directory"
+          message="You have view-only access to Joining Shops. Adding new shops, updating shop details, and editing credentials are restricted."
+        />
+      )}
       <div className="bg-white shadow-sm border border-slate-200 p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 flex items-center gap-2">

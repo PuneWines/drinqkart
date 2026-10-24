@@ -22,6 +22,7 @@ import { fetchWorkRecords, saveAssignments } from "../redux/slice/workRecordsSli
 import { userDetails } from "../redux/slice/settingSlice";
 import { useMagicToast } from "../context/MagicToastContext";
 import { checkAndPromoteAssignmentsApi } from "../redux/api/workRecordsApi";
+import { ViewOnlyBanner, getPagePermission, getUserAssignedShops } from "../../../utils/permissionUtils";
 
 const getTaskStatusInfo = (item, isModified) => {
   if (isModified) {
@@ -76,21 +77,30 @@ export default function ScheduledWorkTasks() {
   const { tasks: masterTasks, assignments, loading, saving, error } = useSelector(state => state.workRecords);
   const { userData } = useSelector(state => state.setting);
 
-  // User Role Logic
+  // User Role & Permissions Logic
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const username = (localStorage.getItem("user-name") || "").toLowerCase();
-  const isSuperAdmin = username === "admin";
+  const isSuperAdmin = username === "admin" || username === "masteradmin";
   const isAdmin = isSuperAdmin || role === "admin";
-  const isHOD = role === "hod" || role === "manager";
+  const isHOD = role === "hod";
 
-  const userAccess = localStorage.getItem("user_access") || "";
-  const managerShops = useMemo(() => {
-    return userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  }, [userAccess]);
+  const workPerm = getPagePermission(null, 'checklist', 'Work Records');
+  const isModifyAllowed = workPerm.canModify;
+
+  const assignedShops = useMemo(() => {
+    return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
+  }, []);
+  const hasGlobalShopAccess = (isSuperAdmin || isHOD) && assignedShops.length === 0;
 
   // UI States
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedShop, setSelectedShop] = useState("All");
+  const [selectedShop, setSelectedShop] = useState(() => {
+    const rawAssigned = getUserAssignedShops();
+    if (rawAssigned && rawAssigned.length > 0) {
+      return rawAssigned[0];
+    }
+    return "All";
+  });
   const [searchDropdown, setSearchDropdown] = useState({ type: null, id: null, term: "" });
   const [modifiedRows, setModifiedRows] = useState({});
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -173,8 +183,8 @@ export default function ScheduledWorkTasks() {
         .map(s => s.trim())
         .filter(Boolean);
 
-      const isManagerOrHOD = (role || "").toLowerCase() === "manager" || (role || "").toLowerCase() === "hod";
-      if (isManagerOrHOD && managerShops.length > 0 && !userShopsList.some(s => managerShops.includes(s))) {
+      // Scoped users can only assign to employees/managers in their assigned shops
+      if (!hasGlobalShopAccess && !userShopsList.some(s => assignedShops.includes(s))) {
         return false;
       }
 
@@ -184,7 +194,7 @@ export default function ScheduledWorkTasks() {
 
       return true;
     });
-  }, [userData, role, managerShops, selectedShop]);
+  }, [userData, hasGlobalShopAccess, assignedShops, selectedShop]);
 
   const managerUserData = useMemo(() => {
     return shopFilteredUsers.filter(u => (u.role || "").toLowerCase() === "manager");
@@ -198,12 +208,26 @@ export default function ScheduledWorkTasks() {
   }, [shopFilteredUsers]);
 
   const shops = useMemo(() => {
-    const filteredMasterTasks = role === "manager"
-      ? masterTasks.filter(t => managerShops.includes(t.shop?.shop_name?.toLowerCase()))
+    const filteredMasterTasks = !hasGlobalShopAccess
+      ? masterTasks.filter(t => assignedShops.includes(t.shop?.shop_name?.toLowerCase()))
       : masterTasks;
+
     const s = new Set(filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean));
-    return ["All", ...Array.from(s)];
-  }, [masterTasks, role, managerShops]);
+    const shopList = Array.from(s);
+
+    if (hasGlobalShopAccess) {
+      return ["All", ...shopList];
+    }
+    return shopList.length > 0 ? shopList : assignedShops.map(sh => sh.toUpperCase());
+  }, [masterTasks, hasGlobalShopAccess, assignedShops]);
+
+  useEffect(() => {
+    if (!hasGlobalShopAccess && assignedShops.length > 0) {
+      if (selectedShop === "All" || !assignedShops.includes(selectedShop.toLowerCase())) {
+        setSelectedShop(shops[0] || assignedShops[0]);
+      }
+    }
+  }, [hasGlobalShopAccess, assignedShops, shops, selectedShop]);
 
   // Merge Master Tasks and Current Assignments
   const mergedData = useMemo(() => {
@@ -226,16 +250,18 @@ export default function ScheduledWorkTasks() {
   // Filtering
   const filteredTasks = useMemo(() => {
     return mergedData.filter(item => {
-      if (role === "manager" && !managerShops.includes(item.shopName?.toLowerCase())) {
+      const itemShopLower = (item.shopName || "").toLowerCase();
+      // Strict shop scoping: non-global users can ONLY see their assigned shop tasks
+      if (!hasGlobalShopAccess && !assignedShops.includes(itemShopLower)) {
         return false;
       }
-      const matchesShop = selectedShop === "All" || item.shopName === selectedShop;
+      const matchesShop = selectedShop === "All" || item.shopName?.toLowerCase() === selectedShop?.toLowerCase();
       const matchesSearch = item.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.next_manager_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.next_employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesShop && matchesSearch;
     });
-  }, [mergedData, selectedShop, searchTerm, role, managerShops]);
+  }, [mergedData, selectedShop, searchTerm, hasGlobalShopAccess, assignedShops]);
 
   const handleFieldChange = (taskId, field, value) => {
     setModifiedRows(prev => ({
@@ -281,6 +307,11 @@ export default function ScheduledWorkTasks() {
   };
 
   const applyBulkSchedules = () => {
+    if (!isModifyAllowed) {
+      showToast("You are in view-only mode. Modifying schedules is restricted.", "error");
+      return;
+    }
+
     if (!(isAdmin || isHOD)) {
       showToast("Only admins and managers can bulk schedule tasks", "error");
       return;
@@ -360,10 +391,15 @@ export default function ScheduledWorkTasks() {
         return "Scheduled Manager and Employee names are required";
       }
     }
+
     return null;
   };
 
   const handleSaveChanges = async () => {
+    if (!isModifyAllowed) {
+      showToast("You are in view-only mode. Saving scheduled records is restricted.", "error");
+      return;
+    }
     const allIdsToProcess = Object.keys(modifiedRows).map(id => parseInt(id));
 
     if (allIdsToProcess.length === 0) {
@@ -469,6 +505,12 @@ export default function ScheduledWorkTasks() {
   return (
     <AdminLayout>
       <div className="flex flex-col gap-4 mt-2 animate-in fade-in duration-500 pb-20 md:pb-4">
+        {!isModifyAllowed && (
+          <ViewOnlyBanner
+            pageTitle="Scheduled Work Tasks"
+            message="You have view-only access to Scheduled Work Tasks. Creating, saving, or modifying next assignment cycles is restricted."
+          />
+        )}
         {/* Header Section */}
         <div className="bg-white border-b border-purple-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm relative overflow-hidden rounded-t-xl">
           <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-600 to-purple-600" />
@@ -557,7 +599,7 @@ export default function ScheduledWorkTasks() {
             </div>
           </div>
 
-          {(isAdmin || isHOD) && (
+          {(isAdmin || isHOD) && isModifyAllowed && (
             <>
               {/* Bulk Start Date */}
               <div className="space-y-1">
@@ -597,14 +639,16 @@ export default function ScheduledWorkTasks() {
           )}
 
           {/* Save All Schedules */}
-          <button
-            onClick={handleSaveChanges}
-            disabled={saving || Object.keys(modifiedRows).length === 0}
-            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-indigo-200 active:scale-95 sm:col-span-2 md:col-span-1"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {saving ? "Saving..." : "Save All Schedules"}
-          </button>
+          {isModifyAllowed && (
+            <button
+              onClick={handleSaveChanges}
+              disabled={saving || Object.keys(modifiedRows).length === 0}
+              className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-indigo-200 active:scale-95 sm:col-span-2 md:col-span-1"
+            >
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {saving ? "Saving..." : "Save All Schedules"}
+            </button>
+          )}
         </div>
       </motion.div>
 
