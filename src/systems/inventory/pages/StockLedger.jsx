@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { isUserShopScoped, getUserAssignedShops } from '../../../utils/permissionUtils';
 import SearchableDropdown from '../components/ui/SearchableDropdown';
 import Toast from '../components/ui/Toast';
 import ItemDetailsModal from '../components/ui/ItemDetailsModal';
@@ -137,7 +138,17 @@ export default function StockLedger({ currentUser }) {
     async function loadMetadata() {
       try {
         const shops = await getShops();
-        setShopsList(shops);
+        const isScoped = isUserShopScoped();
+        const assigned = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+        if (isScoped && assigned.length > 0) {
+          const filteredShops = (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()));
+          setShopsList(filteredShops);
+          if (filteredShops.length > 0 && !selectedShopId) {
+            setSelectedShopId(filteredShops[0].id.toString());
+          }
+        } else {
+          setShopsList(shops);
+        }
       } catch (err) {
         console.error('Failed to load shops for filters:', err);
       } finally {

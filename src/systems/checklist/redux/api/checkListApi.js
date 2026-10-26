@@ -1,4 +1,5 @@
 import supabase from "../../SupabaseClient";
+import { getUserAssignedShops, isUserShopScoped, isUserSuperadmin } from "../../../../utils/permissionUtils";
 
 // In your API file
 // 1. COMPLETE API FUNCTIONS - checkListApi.js
@@ -34,27 +35,29 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
     }
 
     // Apply role & shop filter
-    if (roleUpper === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || '').toLowerCase().trim();
+
+    if (roleLower === 'user' && username) {
       query = query.eq('name', username);
-    } else if (!isMasterAdmin && roleUpper !== 'ADMIN' && (roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
-      const rawShops = userAccess
-        .split(',')
-        .map(s => s.trim())
-        .filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
-
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      // Admin: strictly limited to their assigned shop(s)
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(
+          assigned.flatMap(s => [
+            s,
+            s.toUpperCase(),
+            s.toLowerCase(),
+            s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+          ])
+        )];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
     }
+    // HOD & Superadmin: isUserShopScoped() is false -> Multi-shop access across ALL shops
+
 
     const { data, error, count } = await query;
 
@@ -97,27 +100,29 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
       query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,shop_name.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
     }
 
-    if (roleUpper === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || '').toLowerCase().trim();
+
+    if (roleLower === 'user' && username) {
       query = query.eq('name', username);
-    } else if (!isMasterAdmin && roleUpper !== 'ADMIN' && (roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
-      const rawShops = userAccess
-        .split(',')
-        .map(s => s.trim())
-        .filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
-
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      // Admin: strictly limited to their assigned shop(s)
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(
+          assigned.flatMap(s => [
+            s,
+            s.toUpperCase(),
+            s.toLowerCase(),
+            s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+          ])
+        )];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
     }
+    // HOD & Superadmin: isUserShopScoped() is false -> Multi-shop access across ALL shops
+
 
     const { data, error, count } = await query;
 

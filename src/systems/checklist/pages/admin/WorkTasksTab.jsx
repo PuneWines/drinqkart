@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import supabase from "../../SupabaseClient";
+import { isUserShopScoped, getUserAssignedShops } from "../../../../utils/permissionUtils";
 import {
   Search,
   CheckCircle2,
@@ -276,6 +277,7 @@ const WorkTasksTab = ({
   isSubmitting,
   setIsSubmitting,
   registerSubmit,
+  isModifyAllowed = true,
 }) => {
   const { showToast } = useMagicToast();
 
@@ -501,25 +503,22 @@ const WorkTasksTab = ({
       let allowedShops = [];
       let filterByShop = false;
 
-      if (!isSuperAdmin && userShopStr && userShopStr.toLowerCase() !== "all" && userShopStr.toLowerCase() !== "admin") {
-        allowedShops = userShopStr.split(',').map(shop => shop.trim().toLowerCase()).filter(d => d && d !== 'all');
+      const isScoped = isUserShopScoped();
+      if (isScoped) {
+        allowedShops = getUserAssignedShops().map(shop => shop.trim().toLowerCase()).filter(Boolean);
         if (allowedShops.length > 0) {
           filterByShop = true;
         }
       }
 
-      if (isSuperAdmin || currentUserRole === "manager") {
+      if (isSuperAdmin || currentUserRole === "hod") {
+        // HOD & Superadmin have multi-shop enterprise access across ALL tasks and shops
         applyNameFilter = false;
-      } else if (currentUserRole === "hod") {
-        const { data: reports } = await supabase
-          .from("users")
-          .select("user_name")
-          .eq("reported_by", username);
-        if (reports && reports.length > 0) {
-          reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
-        }
-        applyNameFilter = true;
-      } else if (currentUserRole === "admin" || filterByShop) {
+        filterByShop = false;
+      } else if (currentUserRole === "admin") {
+        applyNameFilter = false;
+        // filterByShop is determined above via isScoped & assignedShops
+      } else if (currentUserRole === "manager") {
         applyNameFilter = false;
       }
 
@@ -823,6 +822,11 @@ const WorkTasksTab = ({
   }, [isLoading, isLoadingMore, hasMore, loadMore]);
 
   const handleSelectItem = useCallback((id, isChecked) => {
+    if (!isModifyAllowed) {
+      showToast("You have view-only access. Selecting and submitting tasks is restricted.", "error");
+      return;
+    }
+
     setSelectedItems((prev) => {
       const next = new Set(prev);
       if (isChecked) {
@@ -850,10 +854,11 @@ const WorkTasksTab = ({
         return n;
       });
     }
-  }, [setSelectedItems]);
+  }, [setSelectedItems, isModifyAllowed, showToast]);
 
   const handleSelectAll = useCallback(
     (e) => {
+      if (!isModifyAllowed) return;
       if (e.target.checked) {
         const submittableTasks = filteredPendingTasks.filter(t => {
           const ds = getWorkTaskDynamicStatus(t, currentTime);
@@ -869,9 +874,10 @@ const WorkTasksTab = ({
         setUploadedImages({});
         setStatusData({});
       }
-    }, [filteredPendingTasks, userRole, username, currentTime]);
+    }, [filteredPendingTasks, userRole, username, currentTime, isModifyAllowed]);
 
   const handleImageUpload = useCallback((id, e) => {
+    if (!isModifyAllowed) return;
     const file = e.target.files[0];
     if (file) {
       if (imagePreviews[id]) {
@@ -883,7 +889,7 @@ const WorkTasksTab = ({
       setImagePreviews((prev) => ({ ...prev, [id]: previewUrl }));
       setSuccessMessage(`File selected for task ID: ${id}`);
     }
-  }, [imagePreviews]);
+  }, [imagePreviews, isModifyAllowed]);
 
   useEffect(() => {
     return () => {
@@ -903,6 +909,10 @@ const WorkTasksTab = ({
   };
 
   const handleSubmit = useCallback(async () => {
+    if (!isModifyAllowed) {
+      showToast("You have view-only access. Submitting tasks is disabled.", "error");
+      return;
+    }
     if (selectedItems.size === 0) {
       showToast("Please select at least one task to submit", "error");
       return;
@@ -967,7 +977,7 @@ const WorkTasksTab = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [selectedItems, tasks, statusData, uploadedImages, remarksData, username, fetchData, showToast, setIsSubmitting, setSelectedItems]);
+  }, [selectedItems, tasks, statusData, uploadedImages, remarksData, username, fetchData, showToast, setIsSubmitting, setSelectedItems, isModifyAllowed]);
 
   useEffect(() => {
     if (registerSubmit) {
@@ -995,24 +1005,17 @@ const WorkTasksTab = ({
       let allowedShops = [];
       let filterByShop = false;
 
-      if (isSuperAdmin) {
+      if (isSuperAdmin || currentUserRole === "hod") {
         applyNameFilter = false;
+        filterByShop = false;
       } else if (currentUserRole === "admin") {
         applyNameFilter = false;
-        const userAccess = localStorage.getItem("user_access") || "";
-        if (userAccess && userAccess.toLowerCase() !== "all" && userAccess.toLowerCase() !== "admin") {
-          allowedShops = userAccess.split(',').map(shop => shop.trim().toLowerCase()).filter(d => d && d !== 'all');
+        const isScoped = isUserShopScoped();
+        if (isScoped) {
+          allowedShops = getUserAssignedShops().map(shop => shop.trim().toLowerCase()).filter(Boolean);
           if (allowedShops.length > 0) {
             filterByShop = true;
           }
-        }
-      } else if (currentUserRole === "hod") {
-        const { data: reports } = await supabase
-          .from("users")
-          .select("user_name")
-          .eq("reported_by", username);
-        if (reports && reports.length > 0) {
-          reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
         }
       } else if (currentUserRole === "manager") {
         const { data: allDbUsers } = await supabase
@@ -1368,7 +1371,8 @@ const WorkTasksTab = ({
                               return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                             })()}
                             onChange={handleSelectAll}
-                            className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30"
+                            disabled={!isModifyAllowed}
+                            className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                           />
                         </th>
                       )}
@@ -1423,7 +1427,7 @@ const WorkTasksTab = ({
                                     type="checkbox"
                                     checked={selectedItems.has(task.id)}
                                     onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                    disabled={(() => {
+                                    disabled={!isModifyAllowed || (() => {
                                       const ds = getWorkTaskDynamicStatus(task, currentTime);
                                       const role = (userRole || "").toLowerCase();
                                       const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
@@ -1527,7 +1531,7 @@ const WorkTasksTab = ({
                                       value={remarksData[task.id] || ""}
                                       onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
                                       className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
-                                      disabled={!selectedItems.has(task.id)}
+                                      disabled={!isModifyAllowed || !selectedItems.has(task.id)}
                                     />
                                   </td>
                                   <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 bg-emerald-50/30">
@@ -1574,7 +1578,7 @@ const WorkTasksTab = ({
                                           capture="environment"
                                           className="hidden"
                                           onChange={(e) => handleImageUpload(task.id, e)}
-                                          disabled={!selectedItems.has(task.id)}
+                                          disabled={!isModifyAllowed || !selectedItems.has(task.id)}
                                         />
                                       </label>
                                     </div>
@@ -1630,7 +1634,8 @@ const WorkTasksTab = ({
                             return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                           })()}
                           onChange={handleSelectAll}
-                          className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
+                          disabled={!isModifyAllowed}
+                          className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         />
                       </div>
                       <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
@@ -1679,14 +1684,14 @@ const WorkTasksTab = ({
                                   type="checkbox"
                                   checked={selectedItems.has(task.id)}
                                   onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                  disabled={(() => {
+                                  disabled={!isModifyAllowed || (() => {
                                     const ds = getWorkTaskDynamicStatus(task, currentTime);
                                     const role = (userRole || "").toLowerCase();
                                     const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
                                     const isAssignedByMe = !isAdmin && role === "manager" && task.manager_name === username && task.name !== username;
                                     return ds === "UPCOMING" || isAssignedByMe;
                                   })()}
-                                  className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                  className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                                 />
                               )}
                               <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
@@ -1830,8 +1835,8 @@ const WorkTasksTab = ({
                                     placeholder="Enter remarks"
                                     value={remarksData[task.id] || ""}
                                     onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                    disabled={!selectedItems.has(task.id)}
-                                    className="w-full text-xs border-gray-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                                    disabled={!isModifyAllowed || !selectedItems.has(task.id)}
+                                    className="w-full text-xs border-gray-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-purple-400 disabled:opacity-50"
                                   />
                                 </div>
                                 <div className="flex flex-col gap-3">
@@ -1868,7 +1873,7 @@ const WorkTasksTab = ({
                                            ? <span>Photo <span className="text-red-500 font-bold">*</span></span>
                                            : "Photo"}
                                       </span>
-                                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!isModifyAllowed || !selectedItems.has(task.id)} />
                                     </label>
                                   </div>
                                 </div>
@@ -1907,7 +1912,7 @@ const WorkTasksTab = ({
               </div>
 
               {/* Mobile Floating Submit Bar */}
-              {!showHistory && selectedItems.size > 0 && (
+              {!showHistory && isModifyAllowed && selectedItems.size > 0 && (
                 <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
                   <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
                     <div className="flex items-center justify-between">

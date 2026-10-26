@@ -4,6 +4,7 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import { Plus, ClipboardList, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, AlertCircle, X, Edit, Save, Loader2, Play, Pause, Search, Mic, Users, Filter, Check, ChevronDown, ShieldAlert, LayoutGrid } from 'lucide-react';
 import AudioPlayer from '../../components/AudioPlayer';
 import supabase from '../../SupabaseClient';
+import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
 
 const extractAudioUrl = (text) => {
     if (!text || typeof text !== 'string') return null;
@@ -166,8 +167,13 @@ const CalendarPage = () => {
                 .eq('status', 'active')
                 .order('user_name', { ascending: true });
 
-            if (role === 'HOD' && username) {
-                query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
+            const isScoped = isUserShopScoped();
+            if (isScoped) {
+                const assignedShops = getUserAssignedShops();
+                if (assignedShops.length > 0) {
+                    const shopFilterParts = assignedShops.map(s => `shop_name.ilike.%${s}%,user_access.ilike.%${s}%`).join(',');
+                    query = query.or(shopFilterParts);
+                }
             }
 
             const { data, error } = await query;
@@ -208,7 +214,8 @@ const CalendarPage = () => {
             let workQuery = supabase.from('work_task').select('*').gte('current_date', startStr).lte('current_date', endStr);
 
             // Role Filters
-            if (role === 'user' && username) {
+            const roleLower = (role || '').toLowerCase();
+            if (roleLower === 'user' && username) {
                 const filter = username;
                 checklistQuery = checklistQuery.eq('name', filter);
                 maintenanceQuery = maintenanceQuery.eq('name', filter);
@@ -216,24 +223,17 @@ const CalendarPage = () => {
                 delegationQuery = delegationQuery.eq('name', filter);
                 eaQuery = eaQuery.eq('doer_name', filter);
                 workQuery = workQuery.eq('name', filter);
-            } else if (role === 'HOD' && username) {
-                const { data: reports } = await supabase
-                    .from("users")
-                    .select("user_name")
-                    .eq("reported_by", username);
-                const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-
-                checklistQuery = checklistQuery.in('name', reportingUsers);
-                maintenanceQuery = maintenanceQuery.in('name', reportingUsers);
-                repairQuery = repairQuery.in('assigned_person', reportingUsers);
-                delegationQuery = delegationQuery.in('name', reportingUsers);
-                eaQuery = eaQuery.in('doer_name', reportingUsers);
-                workQuery = workQuery.in('name', reportingUsers);
+            } else if (isUserShopScoped()) {
+                // Admin: scoped to their assigned shops
+                const assigned = getUserAssignedShops();
+                if (assigned.length > 0) {
+                    checklistQuery = checklistQuery.in('shop_name', assigned);
+                    maintenanceQuery = maintenanceQuery.in('shop_name', assigned);
+                    delegationQuery = delegationQuery.in('shop_name', assigned);
+                    workQuery = workQuery.in('shop_name', assigned);
+                }
             }
-            // For admins, we now show EVERYTHING by default to match the global counts 
-            // of the Working Day Calendar, unless we WANT to add optional filtering later.
-            // This fixes the issue where counts are visible but tasks are hidden due to 
-            // strict shop/access rules.
+            // HOD & Superadmin have multi-shop enterprise access across ALL shops without restriction!
 
             let [
                 checklistRes,

@@ -199,8 +199,13 @@ function AccountDataPage() {
     })
   }
 
+  const isElevatedRole = (r) => {
+    const norm = (r || "").toLowerCase();
+    return norm === "admin" || norm === "hod" || norm === "superadmin" || norm === "masteradmin";
+  };
+
   const getFilteredMembersList = () => {
-    if (userRole === "admin") {
+    if (isElevatedRole(userRole) || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin") {
       return membersList
     } else {
       return membersList.filter(member => member.toLowerCase() === username.toLowerCase())
@@ -274,8 +279,9 @@ function AccountDataPage() {
         const assignedTo = rowValues[4] || "Unassigned"
         membersSet.add(assignedTo)
 
-        const isUserMatch = currentUserRole === "admin" || assignedTo.toLowerCase() === currentUsername.toLowerCase()
-        if (!isUserMatch && currentUserRole !== "admin") return
+        const isElevatedUser = isElevatedRole(currentUserRole) || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+        const isUserMatch = isElevatedUser || assignedTo.toLowerCase() === currentUsername.toLowerCase()
+        if (!isUserMatch && !isElevatedUser) return
 
         const columnGValue = rowValues[6]
         const columnKValue = rowValues[10]
@@ -344,7 +350,8 @@ function AccountDataPage() {
             pendingAccounts.push(rowData)
           }
         } else if (hasColumnG && !isColumnKEmpty) {
-          const isUserHistoryMatch = currentUserRole === "admin" || assignedTo.toLowerCase() === currentUsername.toLowerCase()
+          const isElevatedUser = isElevatedRole(currentUserRole) || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+          const isUserHistoryMatch = isElevatedUser || assignedTo.toLowerCase() === currentUsername.toLowerCase()
           if (isUserHistoryMatch) {
             historyRows.push(rowData)
           }
@@ -627,7 +634,7 @@ function AccountDataPage() {
             <h2 className="text-purple-700 font-medium">{showHistory ? `Completed ${CONFIG.SHEET_NAME} Tasks` : `Pending ${CONFIG.SHEET_NAME} Tasks`}</h2>
             <p className="text-purple-600 text-sm">
               {showHistory
-                ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${userRole === "admin" ? "all" : "your"} tasks`
+                ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${isElevatedRole(userRole) ? "all" : "your"} tasks`
                 : CONFIG.PAGE_CONFIG.description}
             </p>
           </div>

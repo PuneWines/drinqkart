@@ -31,6 +31,7 @@ import AudioPlayer from "../components/AudioPlayer";
 import RenderDescription from "../components/RenderDescription";
 import { useMagicToast } from "../context/MagicToastContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { ViewOnlyBanner, getPagePermission, getUserAssignedShops, isUserShopScoped, isUserSuperadmin } from "../../../utils/permissionUtils";
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -93,6 +94,12 @@ const getTimeStatus = (dateString, taskStatus) => {
 export default function QuickTask() {
   const navigate = useNavigate();
   const { showToast } = useMagicToast();
+  const quickTaskPerm = getPagePermission(null, 'checklist', 'Quick Task');
+  const isSuperAdmin = isUserSuperadmin();
+  const canView = quickTaskPerm.canView || isSuperAdmin;
+  const isModifyAllowed = quickTaskPerm.canModify || isSuperAdmin;
+  const isScoped = isUserShopScoped();
+  const assignedShops = useMemo(() => getUserAssignedShops(), []);
   const [tasks, setTasks] = useState([]);
   const [delegationLoading, setDelegationLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -136,10 +143,16 @@ export default function QuickTask() {
   useEffect(() => {
     const fetchShopsData = async () => {
       const { data } = await supabase.from('shop').select('id, shop_name');
-      if (data) setAllShopsData(data);
+      if (data) {
+        if (isScoped && assignedShops.length > 0) {
+          setAllShopsData(data.filter(s => assignedShops.some(as => as.toLowerCase() === (s.shop_name || '').toLowerCase())));
+        } else {
+          setAllShopsData(data);
+        }
+      }
     };
     fetchShopsData();
-  }, []);
+  }, [isScoped, assignedShops]);
 
   useEffect(() => {
     if (activeTab === 'work') {
@@ -152,8 +165,11 @@ export default function QuickTask() {
 
           if (!err && assignmentsData) {
             const activeAssignments = assignmentsData.filter(item => item.master_work_tasks && item.master_work_tasks.is_active !== false);
-            const uniqueShops = [...new Set(activeAssignments.map(item => item.master_work_tasks?.shop?.shop_name).filter(Boolean))].sort();
+            let uniqueShops = [...new Set(activeAssignments.map(item => item.master_work_tasks?.shop?.shop_name).filter(Boolean))].sort();
             const uniqueStatuses = [...new Set(activeAssignments.map(item => item.status).filter(Boolean))].sort();
+            if (isScoped && assignedShops.length > 0) {
+              uniqueShops = uniqueShops.filter(s => assignedShops.some(as => as.toLowerCase() === s.toLowerCase()));
+            }
             setWorkShopsList(uniqueShops);
             setWorkStatusesList(uniqueStatuses);
           }
@@ -163,7 +179,8 @@ export default function QuickTask() {
       };
       fetchWorkFilters();
     }
-  }, [activeTab]);
+  }, [activeTab, isScoped, assignedShops]);
+
 
   const requestSort = (key) => {
     let direction = 'asc';
@@ -196,16 +213,15 @@ export default function QuickTask() {
   } = useSelector((state) => state.maintenance);
   const dispatch = useDispatch();
   const userRole = (localStorage.getItem("role") || "").toLowerCase();
-  const isAdmin = userRole === "admin";
+  const isAdmin = userRole === "admin" || userRole === "hod" || isSuperAdmin;
 
-  // HOD Access Restriction
+  // Access Permission Guard
   useEffect(() => {
-    const role = localStorage.getItem("role")?.toLowerCase();
-    if (role === "hod") {
-      showToast("Access Denied: HODs cannot access Quick Task management.", "error");
+    if (!canView) {
+      showToast("Access Denied: You do not have permission to access Quick Task management.", "error");
       navigate("/dashboard");
     }
-  }, [navigate]);
+  }, [canView, navigate, showToast]);
 
   useEffect(() => {
     dispatch(fetchUsers());
@@ -220,13 +236,22 @@ export default function QuickTask() {
         fetchUniqueDoerNameDataApi(),
         fetchCustomDropdownsApi()
       ]);
-      setShops(shopData);
+      if (isScoped && assignedShops.length > 0) {
+        const scopedShops = (shopData || []).filter(s => {
+          const sName = (typeof s === 'object' ? s.shop_name : s) || '';
+          return assignedShops.some(as => as.toLowerCase() === sName.toLowerCase());
+        });
+        setShops(scopedShops);
+      } else {
+        setShops(shopData);
+      }
       setGivenByList(givens);
       setDoersList(doers);
       setCustomOptions(customs);
     };
     fetchDropdownData();
-  }, [dispatch]);
+  }, [dispatch, isScoped, assignedShops]);
+
 
   // Re-fetch when activeTab or filters change (with debounced search)
   useEffect(() => {
@@ -333,6 +358,10 @@ export default function QuickTask() {
 
   // Edit functionality
   const handleEditClick = (task) => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Quick Task. Editing tasks is restricted.", "error");
+      return;
+    }
     setEditingTaskId(task.id);
     // Parse instruction attachments if they exist
     let instructionUrls = [];
@@ -424,6 +453,10 @@ export default function QuickTask() {
   };
 
   const handleSaveEdit = async () => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Quick Task. Modifying tasks is restricted.", "error");
+      return;
+    }
     if (!editFormData.id) return;
 
     setIsSaving(true);
@@ -666,6 +699,10 @@ export default function QuickTask() {
 
   // Delete
   const handleDeleteSelected = async () => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Quick Task. Deleting tasks is restricted.", "error");
+      return;
+    }
     if (selectedTasks.length === 0) return;
 
     if (activeTab === 'work') {
@@ -703,6 +740,10 @@ export default function QuickTask() {
   const [isResetting, setIsResetting] = useState(false);
 
   const handleBulkResetWork = async () => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Quick Task. Resetting tasks is restricted.", "error");
+      return;
+    }
     if (selectedTasks.length === 0) return;
 
     if (!window.confirm(`Are you sure you want to reset assignment details for ${selectedTasks.length} selected task(s)? Manager & Employee will be cleared, status set to ACTIVE, and live unsubmitted tasks will be cleared.`)) {
@@ -782,6 +823,11 @@ export default function QuickTask() {
 
   const filteredWorkTasks = useMemo(() => {
     const searched = workTasks.filter(task => {
+      if (isScoped && assignedShops.length > 0) {
+        const tShop = (task.shop_name || task.shop || '').trim().toLowerCase();
+        if (!assignedShops.some(as => as.toLowerCase() === tShop)) return false;
+      }
+
       if (workShopFilter && workShopFilter !== 'All') {
         const tShop = (task.shop_name || task.shop || '').trim().toLowerCase();
         if (tShop !== workShopFilter.trim().toLowerCase()) return false;
@@ -800,6 +846,7 @@ export default function QuickTask() {
         (task.given_by || '').toLowerCase().includes(term)
       );
     });
+
 
     const seen = new Set();
     const unique = searched.filter(task => {
@@ -840,11 +887,16 @@ export default function QuickTask() {
     });
     // Deduplicate strictly by task_description + name (API already deduped, this is a safety net)
     const unique = searched.filter(task => {
+      if (isScoped && assignedShops.length > 0) {
+        const tShop = (task.shop || task.shop_name || '').trim().toLowerCase();
+        if (!assignedShops.some(as => as.toLowerCase() === tShop)) return false;
+      }
       const key = `${(task.shop || task.shop_name || '').trim()}::${(task.task_description || '').trim()}::${(task.name || '').trim()}::${(task.frequency || '').trim()}::${(task.created_at || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+
 
     // Sort by sortConfig or default to task_id ascending
     return [...unique].sort((a, b) => {
@@ -876,11 +928,16 @@ export default function QuickTask() {
     // Deduplicate by task_description + name
     const seen = new Set();
     const unique = searched.filter(task => {
+      if (isScoped && assignedShops.length > 0) {
+        const tShop = (task.shop_name || task.shop || '').trim().toLowerCase();
+        if (!assignedShops.some(as => as.toLowerCase() === tShop)) return false;
+      }
       const key = `${(task.machine_name || '').trim()}::${(task.part_name || '').trim()}::${(task.part_area || '').trim()}::${(task.task_description || '').trim()}::${(task.name || '').trim()}::${(task.freq || task.frequency || '').trim()}::${(task.task_start_date || task.created_at || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+
 
     // Sort by task_start_date ascending
     return [...unique].sort((a, b) => {
@@ -912,6 +969,9 @@ export default function QuickTask() {
   return (
     <>
       <AdminLayout>
+        {!isModifyAllowed && (
+          <ViewOnlyBanner isModifyAllowed={isModifyAllowed} pageName="Quick Task" message="You have read-only access to Quick Task. Editing, resetting, and deleting tasks is restricted." />
+        )}
         <div className="sticky top-0 z-30 bg-white pb-4 border-b border-gray-200">
           <div className="flex flex-col gap-1">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1018,7 +1078,7 @@ export default function QuickTask() {
               </div>
 
               {/* Fixed Delete Button Position: Lower right corner below WORK option */}
-              {selectedTasks.length > 0 && (activeTab !== 'work' || isAdmin) && (
+              {selectedTasks.length > 0 && (activeTab !== 'work' || isAdmin) && isModifyAllowed && (
                 <button
                   onClick={handleDeleteSelected}
                   disabled={isDeleting}
@@ -1503,7 +1563,7 @@ export default function QuickTask() {
                       <p className="text-purple-600 text-sm">Showing unique active work task assignments</p>
                     </div>
                   </div>
-                  {selectedTasks.length > 0 && isAdmin && (
+                  {selectedTasks.length > 0 && isAdmin && isModifyAllowed && (
                     <button
                       onClick={handleBulkResetWork}
                       disabled={isResetting}
@@ -2206,8 +2266,8 @@ export default function QuickTask() {
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  disabled={isSaving || isUploading}
-                  className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-purple-100"
+                  disabled={isSaving || isUploading || !isModifyAllowed}
+                  className={`flex-grow flex justify-center items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg ${!isModifyAllowed ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' : 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-100 disabled:opacity-50'}`}
                 >
                   {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                   {isSaving ? 'Saving...' : 'Save Changes'}

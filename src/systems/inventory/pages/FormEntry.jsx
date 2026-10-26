@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import SearchableDropdown from '../components/ui/SearchableDropdown';
 import Toast from '../components/ui/Toast';
-import { ViewOnlyBanner, getPagePermission } from '../../../utils/permissionUtils';
+import { ViewOnlyBanner, getPagePermission, isUserShopScoped, getUserAssignedShops } from '../../../utils/permissionUtils';
 
 import {
   getItems,
@@ -154,22 +154,27 @@ export default function FormEntry({ currentUser }) {
       ]);
       setItemsList(items);
       setVendorsList(vendors);
-      setShopsList(shops);
-      if (shops && shops.length > 0) {
-        if (currentUser?.role === 'operator') {
-          const matched = shops.find(s =>
+
+      const isScoped = isUserShopScoped();
+      const assigned = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+      const visibleShops = (isScoped && assigned.length > 0)
+        ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
+        : (shops || []);
+      setShopsList(visibleShops);
+
+      if (visibleShops && visibleShops.length > 0) {
+        if (currentUser?.role === 'operator' || (isScoped && assigned.length > 0)) {
+          const matched = visibleShops.find(s =>
             (currentUser?.shop_id && s.id.toString() === currentUser.shop_id.toString()) ||
             (currentUser?.shop_name && s.shop_name?.trim().toLowerCase() === currentUser.shop_name.trim().toLowerCase())
           );
           if (matched) {
             setSelectedShopId(matched.id.toString());
-          } else if (currentUser?.shop_id) {
-            setSelectedShopId(currentUser.shop_id.toString());
-          } else if (!selectedShopId) {
-            setSelectedShopId(shops[0].id.toString());
+          } else {
+            setSelectedShopId(visibleShops[0].id.toString());
           }
         } else if (!selectedShopId) {
-          setSelectedShopId(shops[0].id.toString());
+          setSelectedShopId(visibleShops[0].id.toString());
         }
       }
     } catch (err) {

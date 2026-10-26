@@ -1,6 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../../lib/supabase";
 
-const supabaseUrl = import.meta.env.VITE_PETTY_CASH_SUPABASE_URL || "";
-const supabaseAnonKey = import.meta.env.VITE_PETTY_CASH_SUPABASE_KEY || "";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export { supabase };
+export default supabase;

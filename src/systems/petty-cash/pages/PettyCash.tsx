@@ -6,7 +6,7 @@ import {
 import PettyCashModal, { CategoryAmounts } from '../components/PettyCashModal';
 import { supabase } from '../supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { ViewOnlyBanner } from '../../../utils/permissionUtils';
+import { ViewOnlyBanner, scopeQueryToUserShops } from '../../../utils/permissionUtils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PettyCashRow {
@@ -131,10 +131,12 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   const fetchRows = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from('petty_cash_expense')
         .select('*')
         .order('date', { ascending: false });
+      q = scopeQueryToUserShops(q, 'shop_name');
+      const { data, error } = await q;
       if (error) throw error;
       const uniqueRecords: any[] = [];
       const seenPattyIds = new Set<string>();
@@ -171,10 +173,12 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   const fetchShops = useCallback(async () => {
     setShopsLoading(true);
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from('shop')
         .select('*')
         .order('id', { ascending: true });
+      q = scopeQueryToUserShops(q, 'shop_name');
+      const { data, error } = await q;
       if (error) throw error;
       setShops((data || []).map((r: any) => ({ id: r.id, name: r.shop_name || r.name || '' })));
     } catch (err) { console.error('Error fetching shops:', err); }

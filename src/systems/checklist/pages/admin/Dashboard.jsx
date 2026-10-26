@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useDispatch, useSelector } from "react-redux"
 import supabase from "../../SupabaseClient"
 import AdminLayout from "../../components/layout/AdminLayout.jsx"
+import { getUserAssignedShops, isUserShopScoped, isUserSuperadmin } from "../../../../utils/permissionUtils"
 import DashboardHeader from "./dashboard/DashboardHeader.jsx"
 import StatisticsCards from "./dashboard/StaticsCard.jsx"
 import TaskNavigationTabs from "./dashboard/TaskNavigationTab.jsx"
@@ -294,22 +295,31 @@ export default function AdminDashboard() {
       Dec: { completed: 0, pending: 0 },
     };
 
-    // Filter tasks based on role and reported hierarchy
+    // Filter tasks based on role and shop scoping
+    const isScoped = isUserShopScoped();
+    const assignedShops = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+
     const processedTasks = data
       .map((task) => {
         const currentUserName = (username || "").toLowerCase();
         const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
         const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+        const taskShop = (task.shop_name || task.shop || "").toLowerCase().trim();
 
-        if (userRole === "hod" || userRole === "manager") {
-          if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
+        // Admin: strictly limited to their assigned shop(s)
+        if (isScoped && assignedShops.length > 0) {
+          if (!assignedShops.some(s => s === taskShop || taskShop.includes(s) || s.includes(taskShop))) {
             return null;
           }
-        } else if (userRole !== "admin") {
+        }
+
+        if (userRole === "user") {
           if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
             return null;
           }
         }
+        // HOD & Superadmin have multi-shop access to ALL tasks across all shops
+
 
         const taskStartDate = parseTaskStartDate(task.task_start_date);
         const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
@@ -824,26 +834,33 @@ export default function AdminDashboard() {
         }
       }
 
+      // Filter tasks based on role and shop scoping
+      const isScoped = isUserShopScoped();
+      const assignedShops = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+
       // Process tasks with your field names
       const processedTasks = filteredData
         .map((task) => {
-          // Skip if not involved (assigned to OR created by) for non-admin
           const currentUserName = (username || "").toLowerCase();
           const roleNormalized = (userRole || "").toLowerCase();
           const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
           const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+          const taskShop = (task.shop_name || task.shop || "").toLowerCase().trim();
 
-          if (roleNormalized !== "admin") {
-            if (roleNormalized === 'hod' || roleNormalized === 'manager') {
-              if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
-                return null;
-              }
-            } else {
-              if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
-                return null;
-              }
+          // Admin: strictly limited to their assigned shop(s)
+          if (isScoped && assignedShops.length > 0) {
+            if (!assignedShops.some(s => s === taskShop || taskShop.includes(s) || s.includes(taskShop))) {
+              return null;
             }
           }
+
+          if (roleNormalized === "user") {
+            if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+              return null;
+            }
+          }
+          // HOD & Superadmin have multi-shop access to ALL tasks across all shops
+
 
           // OLD: // FIXED: Use correct field name from your Supabase data - prefer planned_date
           // OLD: const taskStartDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.created_at);
@@ -1126,12 +1143,15 @@ export default function AdminDashboard() {
           }
         }
 
-        const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
-        const isAdminUser = currentUserRole === 'admin' || (currentUsername || '').toLowerCase() === 'admin' || (currentUsername || '').toLowerCase() === 'masteradmin';
-
+        const isScoped = isUserShopScoped();
         let userShopsList = [];
-        if (!isAdminUser && rawShopStr && rawShopStr.toLowerCase() !== "all") {
-          userShopsList = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        if (isScoped) {
+          const assigned = getUserAssignedShops();
+          if (assigned.length > 0) {
+            userShopsList = assigned.map(s => s.toLowerCase());
+          } else if (rawShopStr && rawShopStr.toLowerCase() !== "all") {
+            userShopsList = rawShopStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          }
         }
 
         if (userShopsList.length > 0) {

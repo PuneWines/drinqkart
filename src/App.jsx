@@ -38,14 +38,36 @@ import ReceiverPortal from './systems/purchase/pages/ReceiverPortal';
 import FeedbackPortal from './systems/business-overview/pages/FeedbackPortal';
 import PublicTraderInvoiceForm from './systems/business-overview/pages/PublicTraderInvoiceForm';
 
+import { getVisibleSystems, getActiveSystem, systems } from './layout/systemsConfig';
+import { isUserSuperadmin } from './utils/permissionUtils';
+
 // Wraps a merged system's routes: requires a logged-in user and renders
 // the top navigation header and system sub-sidebar alongside content.
-const ConsoleRoute = ({ children }) => {
+const ConsoleRoute = ({ children, systemId }) => {
   const { user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const location = useLocation();
 
   if (!user) return <Navigate to="/login" replace />;
+
+  // Centralized apex authority check for Superadmin
+  const isSuperadmin = isUserSuperadmin(user);
+
+  const activeSys = getActiveSystem(systems, location.pathname);
+  const targetSysId = systemId || activeSys?.id;
+
+  if (targetSysId && !isSuperadmin) {
+    const visibleSystems = getVisibleSystems(user);
+    const isAllowed = visibleSystems.some((s) => s.id === targetSysId);
+    if (!isAllowed) {
+      // Direct unauthorized URL access: redirect to user's first allowed system or profile
+      const fallbackRoute =
+        visibleSystems[0]?.subtabs?.find((st) => st.to && st.type !== 'header')?.to ||
+        '/systems/profile';
+      return <Navigate to={fallbackRoute} replace />;
+    }
+  }
 
   // Clone children and inject the sidebar collapse controller
   const childrenWithProps = React.Children.map(children, (child) =>
@@ -129,7 +151,7 @@ const AppLayout = () => {
           <Route
             path="/dashboard/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="checklist">
                 <Provider store={checklistStore}>
                   <QueryClientProvider client={checklistQueryClient}>
                     <ChecklistDashboard />
@@ -143,7 +165,7 @@ const AppLayout = () => {
           <Route
             path="/systems/hr/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="hr">
                 <HrApp />
               </ConsoleRoute>
             }
@@ -151,7 +173,7 @@ const AppLayout = () => {
           <Route
             path="/systems/inventory/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="inventory">
                 <InventoryApp />
               </ConsoleRoute>
             }
@@ -159,7 +181,7 @@ const AppLayout = () => {
           <Route
             path="/systems/petty-cash/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="petty-cash">
                 <PettyCashApp />
               </ConsoleRoute>
             }
@@ -167,7 +189,7 @@ const AppLayout = () => {
           <Route
             path="/systems/purchase/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="purchase">
                 <PurchaseApp />
               </ConsoleRoute>
             }
@@ -175,15 +197,24 @@ const AppLayout = () => {
           <Route
             path="/systems/master-setting/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="master-setting">
                 <MasterSetting />
               </ConsoleRoute>
             }
           />
+          {/* Legacy root redirects for master-setting direct URLs */}
+          <Route
+            path="/master-setting/*"
+            element={<Navigate to="/systems/master-setting" replace />}
+          />
+          <Route
+            path="/master-settings/*"
+            element={<Navigate to="/systems/master-setting" replace />}
+          />
           <Route
             path="/systems/whatsapp/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="whatsapp">
                 <BroadcastDashboard />
               </ConsoleRoute>
             }
@@ -191,7 +222,7 @@ const AppLayout = () => {
           <Route
             path="/systems/sales-analytics/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="sale-analytics">
                 <StockBalanceDashboard />
               </ConsoleRoute>
             }
@@ -199,7 +230,7 @@ const AppLayout = () => {
           <Route
             path="/systems/stock-report/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="stock-report">
                 <StockBalance />
               </ConsoleRoute>
             }
@@ -207,7 +238,7 @@ const AppLayout = () => {
           <Route
             path="/systems/business-overview/*"
             element={
-              <ConsoleRoute>
+              <ConsoleRoute systemId="business-overview">
                 <BusinessOverviewApp />
               </ConsoleRoute>
             }

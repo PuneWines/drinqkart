@@ -1,4 +1,5 @@
 import supabase from "../../SupabaseClient";
+import { getUserAssignedShops, isUserShopScoped, isUserSuperadmin } from "../../../../utils/permissionUtils";
 
 // ── Centralized date column mapping (NEW) ──
 const getDateColumn = (dashboardType) => {
@@ -59,24 +60,28 @@ export const fetchDashboardDataApi = async (
       .range(from, to);
 
     // Apply role-based filtering first
-    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin' || role === 'ADMIN';
-    if (role === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (!isMasterAdmin && (role === 'HOD' || role === 'MANAGER')) {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      // Admin: strictly limited to their assigned shop(s)
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(
+          assigned.flatMap(s => [
+            s,
+            s.toUpperCase(),
+            s.toLowerCase(),
+            s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+          ])
+        )];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
     }
+    // HOD & Superadmin: isUserShopScoped() is false -> Multi-shop access across ALL shops
+
 
     // Apply shop filter if provided (for checklist and delegation)
     if (shopFilter && shopFilter !== 'all') {
@@ -221,24 +226,28 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       .not(nameField, 'is', null);
 
     // Apply role-based filtering
-    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin' || role === 'ADMIN';
-    if (role === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (!isMasterAdmin && (role === 'HOD' || role === 'MANAGER')) {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      // Admin: strictly limited to their assigned shop(s)
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(
+          assigned.flatMap(s => [
+            s,
+            s.toUpperCase(),
+            s.toLowerCase(),
+            s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+          ])
+        )];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
     }
+    // HOD & Superadmin: isUserShopScoped() is false -> Multi-shop access across ALL shops
+
 
     // Apply staff filter
     if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
@@ -386,25 +395,19 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
       dashboardType === 'ea' ? 'doer_name' : 'name';
 
-    const upperRole = (role || "").toUpperCase();
-    // Apply filters
-    if (upperRole === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
-    } else if (staffFilter && staffFilter !== 'all') {
+    }
+ else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }
 
@@ -549,23 +552,19 @@ export const fetchStaffTasksDataApi = async (
     }
 
     // Apply role-based filtering
-    if (role === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' || role === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
     }
+
 
     // Apply staff filter if provided
     if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
@@ -879,23 +878,19 @@ export const getStaffTasksCountApi = async (
       .not(nameField, 'is', null);
 
     // Apply role-based filtering
-    if (role === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (role === 'HOD' || role === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
     }
+
 
     // Apply staff filter
     if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
@@ -1051,10 +1046,8 @@ export const getTotalUsersCountApi = async (shopFilter = null) => {
       .not('user_name', 'is', null)
       .not('user_name', 'eq', '');
 
-    // Apply role-based filtering
-    if (role === 'HOD' && username) {
-      query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
-    }
+    // HOD has global multi-shop access to all users
+
 
     // Apply shop filter if provided and not "all"
     if (shopFilter && shopFilter !== 'all') {
@@ -1103,12 +1096,19 @@ export const getUniqueShopsApi = async () => {
 
     let shops = (data || []).map(d => d.shop_name.trim()).filter(Boolean);
 
-    if ((role === 'HOD' || role === 'manager') && userAccess && userAccess !== 'all') {
-      const allowedShops = userAccess.split(',').map(d => d.trim().toLowerCase());
-      shops = shops.filter(d => allowedShops.includes(d.toLowerCase()));
+    // Admin is scoped strictly to assigned shops; HOD and Superadmin get ALL shops
+    if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = assigned.map(d => d.trim().toLowerCase());
+        shops = shops.filter(d => allowedShops.includes(d.toLowerCase()));
+      } else {
+        shops = [];
+      }
     }
 
     return shops;
+
   } catch (error) {
     console.error("Error from Supabase:", error);
     throw error;
@@ -1138,10 +1138,8 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
 
     let staff = data;
 
-    // Filter by HOD reports if applicable
-    if (role === 'HOD' && username) {
-      staff = staff.filter(user => user.reported_by === username || user.user_name === username);
-    }
+    // HOD has access to all staff members
+
 
     // Filter by Manager shop if applicable
     if (role === 'manager') {
@@ -1668,24 +1666,19 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
       dashboardType === 'ea' ? 'doer_name' : 'name';
 
     // Apply filters
-    const upperRole = (role || "").toUpperCase();
-    if (upperRole === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
-    } else if (staffFilter && staffFilter !== 'all') {
+    }
+ else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }
 
@@ -1792,25 +1785,19 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
       dashboardType === 'ea' ? 'doer_name' : 'name';
 
-    const upperRole = (role || "").toUpperCase();
-    // Apply filters
-    if (upperRole === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
-    } else if (staffFilter && staffFilter !== 'all') {
+    }
+ else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }
 
@@ -1916,25 +1903,19 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
       dashboardType === 'ea' ? 'doer_name' : 'name';
 
-    const upperRole = (role || "").toUpperCase();
-    // Apply filters
-    if (upperRole === 'USER' && username) {
+    const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
+    if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (upperRole === 'HOD' || upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || localStorage.getItem('shop_name') || "";
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      const allowedShops = [...new Set(
-        rawShops.flatMap(s => [
-          s,
-          s.toUpperCase(),
-          s.toLowerCase(),
-          s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-        ])
-      )];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
-    } else if (staffFilter && staffFilter !== 'all') {
+    }
+ else if (staffFilter && staffFilter !== 'all') {
       query = query.eq(nameField, staffFilter);
     }
 

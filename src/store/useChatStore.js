@@ -673,8 +673,7 @@ export const useChatStore = create((set, get) => ({
   setIsNewContactModalOpen: (isOpen) => set({ isNewContactModalOpen: isOpen }),
 
   initGlobalWhatsAppRealtime: () => {
-    if (get()._realtimeSubscribed) return;
-    set({ _realtimeSubscribed: true });
+    if (get()._realtimeSubscribed) return get()._realtimeChannel;
 
     const channel = supabase
       .channel('global-whatsapp-realtime')
@@ -699,7 +698,16 @@ export const useChatStore = create((set, get) => ({
       )
       .subscribe();
 
+    set({ _realtimeSubscribed: true, _realtimeChannel: channel });
     return channel;
+  },
+
+  cleanupGlobalWhatsAppRealtime: () => {
+    const channel = get()._realtimeChannel;
+    if (channel) {
+      supabase.removeChannel(channel);
+      set({ _realtimeSubscribed: false, _realtimeChannel: null });
+    }
   },
 
   fetchWhatsAppConversations: async () => {

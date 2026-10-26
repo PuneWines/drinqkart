@@ -129,6 +129,11 @@ function DelegationDataPage() {
     setUsername(user || "");
   }, []);
 
+  const isElevatedRole = (r) => {
+    const norm = (r || "").toLowerCase();
+    return norm === "admin" || norm === "hod" || norm === "superadmin" || norm === "masteradmin";
+  };
+
   // Initialize remarksData from delegation tasks (e.g., to show rejection reasons)
   useEffect(() => {
     if (delegation && delegation.length > 0) {
@@ -270,7 +275,7 @@ function DelegationDataPage() {
     return delegation.filter((task) => {
       const assignedUser = task.name || task.assigned_person || "";
       const userMatch =
-        (userRole || "").toLowerCase() === "admin" ||
+        isElevatedRole(userRole) ||
         (assignedUser && assignedUser.toLowerCase() === (username || "").toLowerCase());
 
       if (!userMatch) return false;
@@ -966,7 +971,7 @@ function DelegationDataPage() {
               </h2>
               <p className="text-purple-600 text-xs sm:text-sm mt-1">
                 {showHistory
-                  ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${userRole === "admin" ? "all" : "your"
+                  ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${isElevatedRole(userRole) ? "all" : "your"
                   } tasks`
                   : CONFIG.PAGE_CONFIG.description}
               </p>
@@ -1073,7 +1078,7 @@ function DelegationDataPage() {
                         <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                           Image
                         </th>
-                        {userRole === "admin" && (
+                        {isElevatedRole(userRole) && (
                           <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                             User
                           </th>
@@ -1168,7 +1173,7 @@ function DelegationDataPage() {
                                 </span>
                               )}
                             </td>
-                            {userRole === "admin" && (
+                            {isElevatedRole(userRole) && (
                               <td className="px-3 py-2.5">
                                 <div className="text-xs text-gray-900 whitespace-normal break-words">
                                   {history.name || "—"}
@@ -1185,7 +1190,7 @@ function DelegationDataPage() {
                       ) : (
                         <tr>
                           <td
-                            colSpan={userRole === "admin" ? 9 : 8}
+                            colSpan={isElevatedRole(userRole) ? 9 : 8}
                             className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
                           >
                             {searchTerm || startDate || endDate

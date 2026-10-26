@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   TrendingUp,
 } from 'lucide-react';
+import { isUserSuperadmin, hasSystemAccess } from '../utils/permissionUtils';
 
 export const systems = [
   {
@@ -221,37 +222,44 @@ export const getVisibleSystems = (user) => {
     }
   } catch (e) {}
 
-  const currentUserNameClean = (userObj.user_name || userObj.username || currentUserStored?.user_name || currentUserStored?.username || '').toLowerCase();
-  const userRole = (userObj.role || currentUserStored?.role || '').toLowerCase();
-  const isMasterAdmin =
-    currentUserNameClean === 'masteradmin' ||
-    currentUserNameClean === 'admin' ||
-    userRole === 'superadmin' ||
-    userRole === 'masteradmin' ||
-    userRole === 'hod';
+  const mergedUser = {
+    ...currentUserStored,
+    ...userObj,
+    role: userObj.role || currentUserStored?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : ''),
+    user_name: userObj.user_name || userObj.username || currentUserStored?.user_name || currentUserStored?.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') || localStorage.getItem('currentUserName') : ''),
+    master_user_system_page_access: userObj.master_user_system_page_access ?? currentUserStored?.master_user_system_page_access ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('master_user_system_page_access') : null)
+  };
+
+  // Supreme Apex Authority: Superadmin has unconditional full access to all systems and pages
+  if (isUserSuperadmin(mergedUser)) {
+    return systems;
+  }
 
   const primaryMasterAccess = [
-    ...parseMasterAccessList(userObj.master_user_system_page_access),
+    ...parseMasterAccessList(mergedUser.master_user_system_page_access),
     ...parseMasterAccessList(currentUserStored?.master_user_system_page_access),
-    ...parseMasterAccessList(localStorage.getItem('master_user_system_page_access'))
+    ...parseMasterAccessList(typeof localStorage !== 'undefined' ? localStorage.getItem('master_user_system_page_access') : null)
   ];
 
   const legacyAccess = [
-    ...parseMasterAccessList(userObj.page_access),
-    ...parseMasterAccessList(userObj.pages),
+    ...parseMasterAccessList(mergedUser.page_access),
+    ...parseMasterAccessList(mergedUser.pages),
     ...parseMasterAccessList(currentUserStored?.page_access),
     ...parseMasterAccessList(currentUserStored?.pages),
-    ...parseMasterAccessList(localStorage.getItem('page_access'))
+    ...parseMasterAccessList(typeof localStorage !== 'undefined' ? localStorage.getItem('page_access') : null)
   ];
 
   const masterAccessList = primaryMasterAccess.length > 0 ? primaryMasterAccess : legacyAccess;
-
-  console.log('[AccessControl Debug] userRole:', userRole);
-  console.log('[AccessControl Debug] masterAccessList:', masterAccessList);
+  const userRole = (mergedUser.role || '').toLowerCase().trim();
 
   const isSubtabAllowed = (systemId, sub) => {
-    // Admin and MasterAdmin have full permission across all systems and pages
-    if (userRole === 'admin' || isMasterAdmin) {
+    // If no custom masterAccessList is configured, Admin and HOD have full default access
+    if (masterAccessList.length === 0 && (userRole === 'admin' || userRole === 'hod')) {
+      return true;
+    }
+
+    // Baseline checklist pages for unconfigured users
+    if (masterAccessList.length === 0 && systemId === 'checklist' && (sub.label === 'Dashboard' || sub.label === 'Announcements' || sub.label === 'Task' || sub.label === 'All Tasks')) {
       return true;
     }
 
@@ -277,9 +285,6 @@ export const getVisibleSystems = (user) => {
         return false;
       }
     }
-
-    // For non-checklist systems, masteradmin/admin maintains full access by default
-    if (systemId !== 'checklist' && (isMasterAdmin || userRole === 'admin')) return true;
 
     if (masterAccessList.length > 0) {
       const labelsToCheck = [sub.label];
@@ -385,8 +390,7 @@ export const getVisibleSystems = (user) => {
       return hasMasterPerm;
     }
 
-    // Admin role users must NOT bypass assigned pages for checklist system
-    if (systemId !== 'checklist' && userRole === 'admin') return true;
+    if (userRole === 'admin') return true;
 
     const legacyPageAccess = parseMasterAccessList(userObj.page_access);
     if (legacyPageAccess.length > 0) {
@@ -418,6 +422,11 @@ export const getVisibleSystems = (user) => {
   };
 
   return systems.map((system) => {
+    // Centralized check: if user has no access to this system at all, completely hide it
+    if (!hasSystemAccess(mergedUser, system.id)) {
+      return null;
+    }
+
     const allowedSubtabs = system.subtabs.map((sub) => {
       if (sub.children) {
         const allowedChildren = sub.children.filter((child) => isSubtabAllowed(system.id, child));
@@ -428,7 +437,7 @@ export const getVisibleSystems = (user) => {
       return isSubtabAllowed(system.id, sub) ? sub : null;
     }).filter(Boolean);
     return { ...system, subtabs: allowedSubtabs };
-  }).filter((system) => system.subtabs.some((s) => s.type !== 'header'));
+  }).filter((system) => system && system.subtabs.some((s) => s.type !== 'header'));
 };
 
 export const getActiveSystem = (visibleSystems, pathname) => {

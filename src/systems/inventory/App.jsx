@@ -58,7 +58,7 @@ function App() {
     if (currentUser) {
       const allowed = currentUser.page_access || [];
       const userRole = (currentUser.role || '').toLowerCase();
-      const isMasterAdmin = (currentUser.user_name || currentUser.username || '').toLowerCase() === 'masteradmin';
+      const isMasterAdmin = userRole === 'superadmin' || userRole === 'masteradmin' || (currentUser.user_name || currentUser.username || '').toLowerCase() === 'masteradmin';
 
       let masterAccessList = [];
       try {
@@ -90,7 +90,7 @@ function App() {
       };
 
       const hasAccess = (page) => {
-        if (isMasterAdmin || userRole === 'admin') return true;
+        if (isMasterAdmin) return true;
 
         if (page === 'entry') {
           return (

@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
+import { ViewOnlyBanner, getPagePermission } from "../../../../utils/permissionUtils";
+
 import {
   fetchPendingApprovals,
   updateDelegationDoneStatus,
@@ -130,8 +133,17 @@ const isPastDeadline = (task) => {
 };
 
 export default function AdminApprovalPage() {
+  const navigate = useNavigate();
   const { showToast } = useMagicToast();
-  
+
+  const approvalPerm = getPagePermission(null, 'checklist', 'Admin Approval');
+
+  useEffect(() => {
+    if (!approvalPerm.canView) {
+      navigate("/dashboard/task", { replace: true });
+    }
+  }, [approvalPerm.canView, navigate]);
+
   const currentUserObj = useMemo(() => {
     try {
       const currentUserStr = localStorage.getItem("currentUser");
@@ -890,6 +902,9 @@ export default function AdminApprovalPage() {
   return (
     <AdminLayout>
       <div className="space-y-4 sm:space-y-6">
+        {!approvalPerm.canModify && (
+          <ViewOnlyBanner message="You have view-only access to Admin Approvals. Approval and rejection actions are disabled." />
+        )}
         {/* Sticky Header and Controls */}
         <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-6 mb-3 sm:mb-6 border-b border-gray-100/50 shadow-sm transition-all duration-300">
           <div className="max-w-7xl mx-auto space-y-3 sm:space-y-6">
@@ -917,7 +932,7 @@ export default function AdminApprovalPage() {
               </div>
 
               <div className="flex items-center gap-4">
-                {viewMode === "pending" && selectedTaskIds.length > 0 && (
+                {viewMode === "pending" && selectedTaskIds.length > 0 && approvalPerm.canModify && (
                   <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                     {/* Show Approve button only for non-extended tasks or non-delegation tabs */}
                     {(activeTab !== "delegation" ||
@@ -1087,19 +1102,19 @@ export default function AdminApprovalPage() {
                       mgrEndDate ||
                       (historyShopFilter !== "All" &&
                         (!isAdmin || assignedShops.length > 1))) && (
-                      <button
-                        onClick={() => {
-                          setMgrStartDate("");
-                          setMgrEndDate("");
-                          if (!isAdmin || assignedShops.length > 1) {
-                            setHistoryShopFilter("All");
-                          }
-                        }}
-                        className="text-[10px] sm:text-xs text-red-500 hover:underline font-bold px-1"
-                      >
-                        Clear
-                      </button>
-                    )}
+                        <button
+                          onClick={() => {
+                            setMgrStartDate("");
+                            setMgrEndDate("");
+                            if (!isAdmin || assignedShops.length > 1) {
+                              setHistoryShopFilter("All");
+                            }
+                          }}
+                          className="text-[10px] sm:text-xs text-red-500 hover:underline font-bold px-1"
+                        >
+                          Clear
+                        </button>
+                      )}
                   </div>
                 )}
                 <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
@@ -1498,7 +1513,11 @@ export default function AdminApprovalPage() {
                         })()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {viewMode === "pending" ? (
+                        {!approvalPerm.canModify ? (
+                          <span className="text-xs font-semibold text-gray-400 italic">
+                            View Only
+                          </span>
+                        ) : viewMode === "pending" ? (
                           task.status === "extend" ? (
                             <div className="flex flex-col gap-2 min-w-[200px]">
                               <textarea

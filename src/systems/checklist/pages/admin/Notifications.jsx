@@ -21,7 +21,7 @@ export default function Notifications() {
     roleTarget: "all",
   });
 
-  const isAdmin = currentUserRole === "admin";
+  const isAdmin = currentUserRole === "admin" || currentUserRole === "hod" || currentUserRole === "superadmin" || currentUserRole === "masteradmin";
 
   useEffect(() => {
     if (currentUserRole) {

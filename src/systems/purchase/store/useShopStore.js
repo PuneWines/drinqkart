@@ -228,10 +228,13 @@ const useShopStore = create((set, get) => ({
           isShopAdmin: isAdmin,
         });
       } else {
+        if (error) {
+          console.warn("[useShopStore] Could not refresh shops from DB, retaining cached shops:", error.message || error);
+        }
         set({ loading: false });
       }
     } catch (e) {
-      console.error("Failed to fetch shops from global shop table:", e);
+      console.warn("[useShopStore] Network/API unreachable for shop fetch, using cached shops:", e?.message || e);
       set({ loading: false });
     }
   },

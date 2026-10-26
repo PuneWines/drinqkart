@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { fetchStaffTasksDataApi, getStaffTasksCountApi, getTotalUsersCountApi } from "../redux/api/dashboardApi"
 import AdminLayout from '../components/layout/AdminLayout';
 import supabase from '../SupabaseClient';
+import { isUserShopScoped, getUserAssignedShops } from '../../../utils/permissionUtils';
 
 function StaffTasksPage() {
     const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all")
@@ -708,7 +709,18 @@ function StaffTasksPage() {
             setUserRolesMap(rolesMap);
 
             let allStaffNames = (dbUsersData || []).map(u => u.user_name).filter(Boolean);
-            if (userRoleLower === "manager" && managerShopUsers.length > 0) {
+            const isScoped = isUserShopScoped();
+            const assignedShops = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+
+            if (isScoped && assignedShops.length > 0) {
+                const scopedUsers = (dbUsersData || []).filter(u => {
+                    const uShop = (u.shop_name || u.user_access || "").toLowerCase();
+                    const uShopsList = uShop.split(',').map(s => s.trim()).filter(Boolean);
+                    return uShopsList.some(s => assignedShops.includes(s) || assignedShops.some(as => s.includes(as)));
+                }).map(u => (u.user_name || "").toLowerCase());
+
+                allStaffNames = allStaffNames.filter(name => scopedUsers.includes(name.toLowerCase()));
+            } else if (userRoleLower === "manager" && managerShopUsers.length > 0) {
                 allStaffNames = allStaffNames.filter(name => managerShopUsers.includes(name.toLowerCase()));
             }
             const uniqueStaffOptions = [...new Set(allStaffNames)].sort((a, b) => a.localeCompare(b));
@@ -716,8 +728,14 @@ function StaffTasksPage() {
 
             let filtered = combinedData;
 
-            // Apply manager shop filter if logged in as manager
-            if (userRoleLower === "manager" && managerShopUsers.length > 0) {
+            // Apply shop scoping for Admin/Manager
+            if (isScoped && assignedShops.length > 0) {
+                filtered = filtered.filter(staff => {
+                    const sShop = (staff.shop_name || "").toLowerCase();
+                    return allStaffNames.some(n => n.toLowerCase() === (staff.name || "").toLowerCase()) ||
+                           assignedShops.some(as => sShop === as || sShop.includes(as) || as.includes(sShop));
+                });
+            } else if (userRoleLower === "manager" && managerShopUsers.length > 0) {
                 filtered = filtered.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
             }
 

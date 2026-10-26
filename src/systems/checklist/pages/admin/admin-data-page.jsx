@@ -59,9 +59,14 @@ function AccountDataPage({ showLayout = true }) {
   }
 
   useEffect(() => {
-    const role = localStorage.getItem('role')
+    const role = localStorage.getItem('role') || sessionStorage.getItem('role')
     setUserRole(role || '')
   }, [])
+
+  const isElevatedRole = (r) => {
+    const norm = (r || '').toLowerCase();
+    return norm === 'admin' || norm === 'hod' || norm === 'superadmin' || norm === 'masteradmin';
+  };
 
   // Parse Google Sheets Date format into a proper date string
   const parseGoogleSheetsDate = (dateStr) => {
@@ -405,11 +410,12 @@ function AccountDataPage({ showLayout = true }) {
         const assignedTo = getCellValue(row, 4) || 'Unassigned';
         membersSet.add(assignedTo); // Add to members list for dropdown
 
-        const isUserMatch = userRole === 'admin' ||
+        const isElevated = isElevatedRole(userRole) || (username || '').toLowerCase() === 'admin' || (username || '').toLowerCase() === 'masteradmin';
+        const isUserMatch = isElevated ||
           assignedTo.toLowerCase() === username.toLowerCase();
 
-        // If not a match and not admin, skip this row
-        if (!isUserMatch && userRole !== 'admin') return;
+        // If not a match and not elevated, skip this row
+        if (!isUserMatch && !isElevated) return;
 
         // Safely get values from columns L, M, P, and Q
         const columnLValue = getCellValue(row, 11);
@@ -667,7 +673,7 @@ function AccountDataPage({ showLayout = true }) {
           </div>
 
           {/* History Toggle Button */}
-          {userRole === 'admin' && (
+          {isElevatedRole(userRole) && (
             <button
               onClick={toggleHistory}
               className="rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 py-2 px-4 text-white hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"

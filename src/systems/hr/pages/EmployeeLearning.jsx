@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
+import { isUserShopScoped, getUserAssignedShops } from '../../../utils/permissionUtils';
 import { Check, CheckCircle2, Clock, AlertCircle, RefreshCw, Search, Filter, X } from 'lucide-react';
 
 /* ---------------- Task Catalogue ---------------- */
@@ -103,8 +104,8 @@ export default function EmployeeLearning() {
   const userRole = (currentUserObj?.role || '').toLowerCase().trim();
   const userNameClean = (currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim();
 
-  // Explicit Admin / Master / MasterAdmin check
-  const isAdminUser = userRole === 'admin' || userRole === 'master' || userNameClean === 'masteradmin' || userNameClean === 'testadmin';
+  // Explicit Admin / Master / MasterAdmin / HOD check
+  const isAdminUser = userRole === 'admin' || userRole === 'master' || userRole === 'hod' || userRole === 'superadmin' || userNameClean === 'masteradmin' || userNameClean === 'testadmin';
   const isManagerUser = userRole === 'manager';
 
   // Check if Manager has explicit modify permission for Employee Learning or HR system
@@ -167,16 +168,11 @@ export default function EmployeeLearning() {
 
       let allShops = shopData || [];
 
-      // Filter shops for non-admin manager
+      // Filter shops for shop-scoped roles (Admin & Manager)
       if (currentUserObj) {
-        const uRole = (currentUserObj.role || '').toLowerCase().trim();
-        const uName = (currentUserObj.user_name || currentUserObj.username || '').toLowerCase().trim();
-        const isAdm = uRole === 'admin' || uRole === 'master' || uName === 'masteradmin' || uName === 'testadmin';
-
-        if (!isAdm) {
-          const userShopsStr = (currentUserObj.shop_name || currentUserObj.user_access || '').toString().trim().toLowerCase();
-          const userShopsList = userShopsStr.split(',').map(s => s.trim()).filter(Boolean);
-
+        const isScoped = isUserShopScoped(currentUserObj);
+        if (isScoped) {
+          const userShopsList = getUserAssignedShops(currentUserObj).map(s => s.toLowerCase());
           if (userShopsList.length > 0) {
             allShops = allShops.filter(s => {
               const shopNameLower = (s.shop_name || '').toLowerCase().trim();
@@ -305,16 +301,14 @@ export default function EmployeeLearning() {
       let scopedList = combinedList;
 
       if (currentUserObj) {
-        const isAdmin = userRole === 'admin' || userRole === 'master' || userNameClean === 'masteradmin' || userNameClean === 'testadmin';
-
+        const isScoped = isUserShopScoped(currentUserObj);
         const currentEmpId = (currentUserObj.employee_id || '').toString().trim().toLowerCase();
         const currentUserName = (currentUserObj.user_name || currentUserObj.username || currentUserObj.emp_name || '').toString().trim().toLowerCase();
-        const userShopsStr = (currentUserObj.shop_name || currentUserObj.user_access || '').toString().trim().toLowerCase();
-        const userShopsList = userShopsStr.split(',').map(s => s.trim()).filter(Boolean);
 
-        if (!isAdmin) {
-          if (userRole === 'manager') {
-            // Manager: Access to all employees belonging to their affiliated shop(s)
+        if (isScoped) {
+          const userShopsList = getUserAssignedShops(currentUserObj).map(s => s.toLowerCase());
+          if (userRole === 'admin' || userRole === 'manager') {
+            // Admin & Manager: Access to all employees belonging to their affiliated shop(s)
             if (userShopsList.length > 0) {
               scopedList = combinedList.filter(emp => {
                 const empShopNorm = (emp.joining_company_name || emp.shop_name || '').toString().trim().toLowerCase();
@@ -430,15 +424,13 @@ export default function EmployeeLearning() {
         // SCOPE SUBMISSIONS BASED ON ROLE & SHOP ACCESS
         // -------------------------------------------------------------
         if (currentUserObj) {
-          const isAdmin = userRole === 'admin' || userRole === 'master' || userNameClean === 'masteradmin' || userNameClean === 'testadmin';
-
+          const isScoped = isUserShopScoped(currentUserObj);
           const currentEmpId = (currentUserObj.employee_id || '').toString().trim().toLowerCase();
           const currentUserName = (currentUserObj.user_name || currentUserObj.username || currentUserObj.emp_name || '').toString().trim().toLowerCase();
-          const userShopsStr = (currentUserObj.shop_name || currentUserObj.user_access || '').toString().trim().toLowerCase();
-          const userShopsList = userShopsStr.split(',').map(s => s.trim()).filter(Boolean);
 
-          if (!isAdmin) {
-            if (userRole === 'manager') {
+          if (isScoped) {
+            const userShopsList = getUserAssignedShops(currentUserObj).map(s => s.toLowerCase());
+            if (userRole === 'admin' || userRole === 'manager') {
               if (userShopsList.length > 0) {
                 mappedSubs = mappedSubs.filter(s => {
                   const subShop = (s.shop || '').toString().trim().toLowerCase();

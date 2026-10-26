@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles, Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText, ExternalLink, ChevronLeft, Printer, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { scopeQueryToUserShops } from '../../../utils/permissionUtils'
 
 // Storage bucket name
 const STORAGE_BUCKET = 'HR_System_employee_documents'
@@ -285,12 +286,14 @@ export default function EmployeeManagement() {
       const mappedList = []
 
       // Fetch directly and exclusively from hr_management_employees table
-      const { data: hrData, error: hrError } = await supabase
+      let empQuery = supabase
         .from('hr_management_employees')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      if (hrError) throw hrError
+      empQuery = scopeQueryToUserShops(empQuery, 'joining_company_name');
+
+      const { data: hrData, error: hrError } = await empQuery;
 
       // Fetch latest attendance logs for each employee to check transfer status (last punch location vs assigned location)
       const { data: latestLogs, error: logsErr } = await supabase

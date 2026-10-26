@@ -23,6 +23,7 @@ import {
   Columns,
   ChevronDown,
   Check,
+  ShieldAlert,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -248,6 +249,30 @@ const AVAILABLE_SYSTEMS = [
   },
 ];
 
+// Helper to generate full modify permissions for all systems and pages
+const getAllModifyPermissions = () => {
+  const perms = {};
+  AVAILABLE_SYSTEMS.forEach((sys) => {
+    if (sys.id === "whatsapp") {
+      perms["whatsapp"] = "whatsapp";
+      return;
+    }
+    const pages = sys.sections
+      ? sys.sections.flatMap((s) => s.pages)
+      : sys.pages || [];
+    if (pages.length > 0) {
+      pages.forEach((p) => {
+        const k = `${sys.id}.${p}.modify`;
+        perms[k] = k;
+      });
+    } else {
+      const k = `${sys.id}.modify`;
+      perms[k] = k;
+    }
+  });
+  return perms;
+};
+
 export default function MasterSetting() {
   const { user: currentUserObj, refreshUser } = useAuth();
   const [users, setUsers] = useState([]);
@@ -274,7 +299,7 @@ export default function MasterSetting() {
   // Determine if logged-in user has modify access vs view-only access on Master Settings
   const isMasterSettingModifyAllowed = useMemo(() => {
     if (!currentUserObj) return false;
-    if (isSuperadmin || isHod) return true;
+    if (isSuperadmin) return true;
 
     let masterAccess = [];
     const rawVal =
@@ -302,12 +327,15 @@ export default function MasterSetting() {
           itemLower === "master-setting.user & system access.modify" ||
           itemLower === "master-setting.master setting.modify" ||
           itemLower === "master_setting.user & system access.modify" ||
-          itemLower === "master_setting.master setting.modify"
+          itemLower === "master_setting.master setting.modify" ||
+          itemLower === "master-setting.modify" ||
+          itemLower === "master_setting.modify"
         );
       });
     }
 
-    return isShopAdmin;
+    // Default when no custom masterAccess is configured: HOD and Shop Admin have modify access
+    return isHod || isShopAdmin;
   }, [currentUserObj, isSuperadmin, isHod, isShopAdmin]);
 
   // Assigned shops for shop-scoped admin
@@ -317,14 +345,29 @@ export default function MasterSetting() {
       currentUserObj?.shop_name,
       currentUserObj?.user_access,
       currentUserObj?.shops,
+      currentUserObj?.shop,
+      currentUserObj?.assigned_shops,
       localStorage.getItem("shop_name"),
       localStorage.getItem("user_access"),
+      localStorage.getItem("shop"),
+      localStorage.getItem("assigned_shops"),
     ];
     const assigned = [];
     rawSources.forEach((raw) => {
       if (!raw) return;
-      if (Array.isArray(raw)) {
-        raw.forEach((s) => {
+      let val = raw;
+      if (
+        typeof raw === "string" &&
+        (raw.trim().startsWith("[") || raw.trim().startsWith("{"))
+      ) {
+        try {
+          val = JSON.parse(raw);
+        } catch (e) {
+          val = raw;
+        }
+      }
+      if (Array.isArray(val)) {
+        val.forEach((s) => {
           if (
             typeof s === "string" &&
             s.trim() &&
@@ -334,8 +377,8 @@ export default function MasterSetting() {
             assigned.push(s.trim());
           }
         });
-      } else if (typeof raw === "string") {
-        raw.split(",").forEach((s) => {
+      } else if (typeof val === "string") {
+        val.split(",").forEach((s) => {
           const trimmed = s.trim();
           if (
             trimmed &&
@@ -390,14 +433,46 @@ export default function MasterSetting() {
       if (targetRank >= 3) return false;
       if (userAssignedShops.length === 0) return false;
 
-      const targetShop = (targetUser.shop_name || "").toLowerCase().trim();
-      const targetAccess = (targetUser.user_access || "").toLowerCase().trim();
+      const targetShopSources = [
+        targetUser?.shop_name,
+        targetUser?.user_access,
+        targetUser?.shop,
+        targetUser?.shops,
+        targetUser?.assigned_shops,
+      ];
+      const targetShops = [];
+      targetShopSources.forEach((raw) => {
+        if (!raw) return;
+        let val = raw;
+        if (
+          typeof raw === "string" &&
+          (raw.trim().startsWith("[") || raw.trim().startsWith("{"))
+        ) {
+          try {
+            val = JSON.parse(raw);
+          } catch (e) {
+            val = raw;
+          }
+        }
+        if (Array.isArray(val)) {
+          val.forEach((s) => {
+            if (typeof s === "string" && s.trim()) {
+              targetShops.push(s.trim().toLowerCase());
+            }
+          });
+        } else if (typeof val === "string") {
+          val.split(",").forEach((s) => {
+            if (s.trim()) {
+              targetShops.push(s.trim().toLowerCase());
+            }
+          });
+        }
+      });
+
       return userAssignedShops.some((as) => {
         const asLower = as.toLowerCase().trim();
-        return (
-          targetShop === asLower ||
-          targetAccess === asLower ||
-          targetAccess.includes(asLower)
+        return targetShops.some(
+          (ts) => ts === asLower || ts.includes(asLower) || asLower.includes(ts)
         );
       });
     }
@@ -427,14 +502,46 @@ export default function MasterSetting() {
       if (targetRank >= 3) return false;
       if (userAssignedShops.length === 0) return false;
 
-      const targetShop = (targetUser.shop_name || "").toLowerCase().trim();
-      const targetAccess = (targetUser.user_access || "").toLowerCase().trim();
+      const targetShopSources = [
+        targetUser?.shop_name,
+        targetUser?.user_access,
+        targetUser?.shop,
+        targetUser?.shops,
+        targetUser?.assigned_shops,
+      ];
+      const targetShops = [];
+      targetShopSources.forEach((raw) => {
+        if (!raw) return;
+        let val = raw;
+        if (
+          typeof raw === "string" &&
+          (raw.trim().startsWith("[") || raw.trim().startsWith("{"))
+        ) {
+          try {
+            val = JSON.parse(raw);
+          } catch (e) {
+            val = raw;
+          }
+        }
+        if (Array.isArray(val)) {
+          val.forEach((s) => {
+            if (typeof s === "string" && s.trim()) {
+              targetShops.push(s.trim().toLowerCase());
+            }
+          });
+        } else if (typeof val === "string") {
+          val.split(",").forEach((s) => {
+            if (s.trim()) {
+              targetShops.push(s.trim().toLowerCase());
+            }
+          });
+        }
+      });
+
       return userAssignedShops.some((as) => {
         const asLower = as.toLowerCase().trim();
-        return (
-          targetShop === asLower ||
-          targetAccess === asLower ||
-          targetAccess.includes(asLower)
+        return targetShops.some(
+          (ts) => ts === asLower || ts.includes(asLower) || asLower.includes(ts)
         );
       });
     }
@@ -503,6 +610,67 @@ export default function MasterSetting() {
   const [reminderShopName, setReminderShopName] = useState("");
   const [counterAccessInput, setCounterAccessInput] = useState([]);
   const [accessPermissions, setAccessPermissions] = useState({});
+  const [collapsedSystemIds, setCollapsedSystemIds] = useState({}); // Auto-close OFF: all permission divs open by default
+  const toggleSystemExpand = (sysId) => {
+    setCollapsedSystemIds((prev) => ({
+      ...prev,
+      [sysId]: !prev[sysId],
+    }));
+  };
+
+  // Set all pages in a single system to a specific permission level ('modify', 'view', 'none')
+  const setSystemAllPagesLevel = (systemId, level) => {
+    const sys = AVAILABLE_SYSTEMS.find((s) => s.id === systemId);
+    if (!sys) return;
+
+    const updated = { ...accessPermissions };
+    const pagesToUpdate = [];
+
+    if (sys.pages) pagesToUpdate.push(...sys.pages);
+    if (sys.sections) {
+      sys.sections.forEach((sec) => {
+        if (sec.pages) pagesToUpdate.push(...sec.pages);
+      });
+    }
+
+    if (systemId === "whatsapp") {
+      if (level === "modify" || level === "view") {
+        updated["whatsapp"] = "whatsapp";
+      } else {
+        delete updated["whatsapp"];
+      }
+    } else {
+      pagesToUpdate.forEach((pg) => {
+        const sysDash = systemId.toLowerCase();
+        const sysUnder = sysDash.replace("-", "_");
+        const pgLower = pg.toLowerCase().trim();
+
+        // Remove existing keys for this page
+        Object.keys(updated).forEach((k) => {
+          const kLower = k.toLowerCase().trim();
+          if (
+            kLower === `${sysDash}.${pgLower}.modify` ||
+            kLower === `${sysUnder}.${pgLower}.modify` ||
+            kLower === `${sysDash}.${pgLower}.view` ||
+            kLower === `${sysUnder}.${pgLower}.view` ||
+            kLower === `${sysDash}.${pgLower}` ||
+            kLower === `${sysUnder}.${pgLower}`
+          ) {
+            delete updated[k];
+          }
+        });
+
+        if (level === "modify") {
+          updated[`${sysDash}.${pgLower}.modify`] = `${sysDash}.${pgLower}.modify`;
+        } else if (level === "view") {
+          updated[`${sysDash}.${pgLower}.view`] = `${sysDash}.${pgLower}.view`;
+        }
+      });
+    }
+
+    setAccessPermissions(updated);
+    setRawJsonText(JSON.stringify(Object.keys(updated), null, 2));
+  };
   const [jsonMode, setJsonMode] = useState(false);
   const [rawJsonText, setRawJsonText] = useState("[]");
   const [jsonError, setJsonError] = useState("");
@@ -555,6 +723,17 @@ export default function MasterSetting() {
     }
     return roles;
   }, [isShopAdmin, activeSuperadminUser]);
+
+  // Selectable shops constrained to assigned shops for shop admins
+  const selectableShops = useMemo(() => {
+    if (isShopAdmin && userAssignedShops.length > 0) {
+      const filtered = availableShops.filter((s) =>
+        userAssignedShops.some((as) => as.toLowerCase() === s.toLowerCase())
+      );
+      return filtered.length > 0 ? filtered : userAssignedShops;
+    }
+    return availableShops;
+  }, [availableShops, isShopAdmin, userAssignedShops]);
 
   const handleSaveQuickShop = async () => {
     if (!editingShopUser) return;
@@ -696,10 +875,16 @@ export default function MasterSetting() {
   const fetchEmployeesList = async () => {
     setLoadingEmployees(true);
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from("hr_management_employees")
         .select("*")
         .order("name_as_per_aadhar", { ascending: true });
+
+      if (isShopAdmin && userAssignedShops.length > 0) {
+        q = q.in("joining_company_name", userAssignedShops);
+      }
+
+      const { data, error } = await q;
 
       if (!error && data) {
         setEmployeesList(data);
@@ -838,13 +1023,13 @@ export default function MasterSetting() {
     setSaving(true);
 
     let initialPerms = [];
-    if (newUserForm.systemPreset === "all") {
-      AVAILABLE_SYSTEMS.forEach((sys) => {
-        const pages = sys.sections
-          ? sys.sections.flatMap((s) => s.pages)
-          : sys.pages || [];
-        pages.forEach((p) => initialPerms.push(`${sys.id}.${p}.modify`));
-      });
+    const createdRoleLower = (newUserForm.role || "").toLowerCase().trim();
+    if (
+      newUserForm.systemPreset === "all" ||
+      createdRoleLower === "superadmin" ||
+      createdRoleLower === "hod"
+    ) {
+      initialPerms = Object.keys(getAllModifyPermissions());
     } else if (newUserForm.systemPreset) {
       const sys = AVAILABLE_SYSTEMS.find(
         (s) => s.id === newUserForm.systemPreset,
@@ -949,16 +1134,26 @@ export default function MasterSetting() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
+      let usersQuery = supabase
+        .from("users")
+        .select("*")
+        .order("user_name", { ascending: true });
+
+      let empQuery = supabase.from("hr_management_employees").select("*");
+
+      if (isShopAdmin && userAssignedShops.length > 0) {
+        usersQuery = usersQuery.or(
+          userAssignedShops
+            .map((s) => `shop_name.ilike.%${s}%,user_access.ilike.%${s}%`)
+            .join(",")
+        );
+        empQuery = empQuery.in("joining_company_name", userAssignedShops);
+      }
+
       const [
         { data: usersData, error: usersErr },
         { data: empData, error: empErr },
-      ] = await Promise.all([
-        supabase
-          .from("users")
-          .select("*")
-          .order("user_name", { ascending: true }),
-        supabase.from("hr_management_employees").select("*"),
-      ]);
+      ] = await Promise.all([usersQuery, empQuery]);
 
       if (usersErr) {
         console.error("Error fetching users:", usersErr);
@@ -1258,11 +1453,17 @@ export default function MasterSetting() {
       });
     }
 
+    // If an HOD or Superadmin has no explicit granular permissions configured yet, default to all modify
+    if (Object.keys(permObj).length === 0 && (rLower === "hod" || rLower === "superadmin" || rLower === "masteradmin")) {
+      permObj = getAllModifyPermissions();
+    }
+
     setAccessPermissions(permObj);
     const initialArray = Object.keys(permObj);
     setRawJsonText(JSON.stringify(initialArray, null, 2));
     setJsonMode(false);
     setJsonError("");
+    setCollapsedSystemIds({}); // Auto-close OFF: all permission divs open by default
   };
 
   // Permission Key Helpers
@@ -1425,6 +1626,17 @@ export default function MasterSetting() {
 
     // Guard: Shop Admin role restriction
     if (isShopAdmin) {
+      const targetRank = getRoleRank(
+        editingUser?.role,
+        editingUser?.user_name || editingUser?.username
+      );
+      if (targetRank >= 3) {
+        showToast(
+          "Action restricted: Shop Admins cannot edit Admin, HOD, or Superadmin accounts.",
+          "error",
+        );
+        return;
+      }
       if (roleInput !== "User" && roleInput !== "Manager") {
         showToast(
           "Action restricted: Shop Admins can only assign User or Manager roles.",
@@ -1571,11 +1783,16 @@ export default function MasterSetting() {
             (currentUserObj.user_name || currentUserObj.username) ===
               (editingUser.user_name || editingUser.username));
         if (isCurrentLoggedIn) {
+          localStorage.setItem(
+            "master_user_system_page_access",
+            JSON.stringify(finalAccess),
+          );
           ["user", "drinqkart_user", "currentUser"].forEach((key) => {
             const raw = localStorage.getItem(key);
             if (raw) {
               try {
                 const obj = JSON.parse(raw);
+                obj.master_user_system_page_access = finalAccess;
                 if (finalMobile) {
                   obj.number = finalMobile;
                   obj.phone = finalMobile;
@@ -1602,14 +1819,46 @@ export default function MasterSetting() {
   const filteredUsers = users.filter((u) => {
     // If shop-scoped Admin, only show users belonging to their assigned shop(s)
     if (isShopAdmin && userAssignedShops.length > 0) {
-      const uShop = (u.shop_name || "").toLowerCase().trim();
-      const uAccess = (u.user_access || "").toLowerCase().trim();
+      const targetShopSources = [
+        u?.shop_name,
+        u?.user_access,
+        u?.shop,
+        u?.shops,
+        u?.assigned_shops,
+      ];
+      const targetShops = [];
+      targetShopSources.forEach((raw) => {
+        if (!raw) return;
+        let val = raw;
+        if (
+          typeof raw === "string" &&
+          (raw.trim().startsWith("[") || raw.trim().startsWith("{"))
+        ) {
+          try {
+            val = JSON.parse(raw);
+          } catch (e) {
+            val = raw;
+          }
+        }
+        if (Array.isArray(val)) {
+          val.forEach((s) => {
+            if (typeof s === "string" && s.trim()) {
+              targetShops.push(s.trim().toLowerCase());
+            }
+          });
+        } else if (typeof val === "string") {
+          val.split(",").forEach((s) => {
+            if (s.trim()) {
+              targetShops.push(s.trim().toLowerCase());
+            }
+          });
+        }
+      });
+
       const belongsToAssignedShop = userAssignedShops.some((as) => {
         const asLower = as.toLowerCase().trim();
-        return (
-          uShop === asLower ||
-          uAccess === asLower ||
-          uAccess.includes(asLower)
+        return targetShops.some(
+          (ts) => ts === asLower || ts.includes(asLower) || asLower.includes(ts)
         );
       });
       if (!belongsToAssignedShop) return false;
@@ -1664,8 +1913,7 @@ export default function MasterSetting() {
     if (
       userName === "masteradmin" ||
       role === "superadmin" ||
-      role === "masteradmin" ||
-      role === "hod"
+      role === "masteradmin"
     ) {
       return "modify";
     }
@@ -1724,21 +1972,47 @@ export default function MasterSetting() {
 
       if (hasModify) return "modify";
       if (hasView) return "view";
-      if (role === "admin") return "modify";
+      // Explicit configuration exists but this page wasn't granted modify or view
       return "none";
     }
 
-    if (role === "admin") return "modify";
+    // Default when no custom masterAccess is configured: HOD and Admin have modify access
+    if (role === "hod" || role === "admin") return "modify";
     return "none";
   };
 
   const location = useLocation();
 
+  const userAccessPerm = getMasterSettingPagePermission("User & System Access");
   const shopPerm = getMasterSettingPagePermission("Shop");
   const counterPerm = getMasterSettingPagePermission("Counter");
   const expensesPerm = getMasterSettingPagePermission("Expenses");
   const shopVisitChecklistPerm = getMasterSettingPagePermission("Shop Visit Checklist");
   const schemeMasterPerm = getMasterSettingPagePermission("Scheme Master");
+
+  // Global Master Setting access check
+  const hasAnyMasterSettingAccess = [
+    userAccessPerm,
+    shopPerm,
+    counterPerm,
+    expensesPerm,
+    shopVisitChecklistPerm,
+    schemeMasterPerm,
+  ].some((p) => p !== "none");
+
+  if (!hasAnyMasterSettingAccess && !isSuperadmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-[#FAFAFA]">
+        <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-xl font-serif font-bold text-slate-800 mb-2">Access Restricted</h2>
+        <p className="text-sm text-slate-600 max-w-md">
+          You do not have permission to access Master Settings. Please contact your system administrator.
+        </p>
+      </div>
+    );
+  }
 
   // Sub-route: Shop Visit Checklist Settings
   if (
@@ -1746,6 +2020,19 @@ export default function MasterSetting() {
     location.pathname.includes("/shop-visit-settings") ||
     location.pathname.toLowerCase().includes("/shop-visit")
   ) {
+    if (shopVisitChecklistPerm === "none" && !isSuperadmin) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-[#FAFAFA]">
+          <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+            <ShieldAlert size={32} />
+          </div>
+          <h2 className="text-xl font-serif font-bold text-slate-800 mb-2">Access Restricted</h2>
+          <p className="text-sm text-slate-600 max-w-md">
+            You do not have permission to access Shop Visit Checklist Settings.
+          </p>
+        </div>
+      );
+    }
     return <ShopVisitSettings readOnly={shopVisitChecklistPerm === "view"} />;
   }
 
@@ -1755,6 +2042,19 @@ export default function MasterSetting() {
     location.pathname.includes("/scheme-parties") ||
     location.pathname.includes("/scheme-setting")
   ) {
+    if (schemeMasterPerm === "none" && !isSuperadmin) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-[#FAFAFA]">
+          <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+            <ShieldAlert size={32} />
+          </div>
+          <h2 className="text-xl font-serif font-bold text-slate-800 mb-2">Access Restricted</h2>
+          <p className="text-sm text-slate-600 max-w-md">
+            You do not have permission to access Scheme Master Settings.
+          </p>
+        </div>
+      );
+    }
     return <SchemeMasterSettings readOnly={schemeMasterPerm === "view"} />;
   }
 
@@ -1771,6 +2071,19 @@ export default function MasterSetting() {
     location.pathname.includes("/Shop") ||
     location.pathname.toLowerCase().includes("/shop")
   ) {
+    if (shopPerm === "none" && !isSuperadmin) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-[#FAFAFA]">
+          <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+            <ShieldAlert size={32} />
+          </div>
+          <h2 className="text-xl font-serif font-bold text-slate-800 mb-2">Access Restricted</h2>
+          <p className="text-sm text-slate-600 max-w-md">
+            You do not have permission to access Shop Management.
+          </p>
+        </div>
+      );
+    }
     return <JoiningCompany readOnly={shopPerm === "view"} />;
   }
 
@@ -1779,6 +2092,19 @@ export default function MasterSetting() {
     location.pathname.includes("/Counter") ||
     location.pathname.toLowerCase().includes("/counter")
   ) {
+    if (counterPerm === "none" && !isSuperadmin) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-[#FAFAFA]">
+          <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+            <ShieldAlert size={32} />
+          </div>
+          <h2 className="text-xl font-serif font-bold text-slate-800 mb-2">Access Restricted</h2>
+          <p className="text-sm text-slate-600 max-w-md">
+            You do not have permission to access Counter Management.
+          </p>
+        </div>
+      );
+    }
     return <CounterManagement readOnly={counterPerm === "view"} />;
   }
 
@@ -1787,7 +2113,41 @@ export default function MasterSetting() {
     location.pathname.includes("/Expenses") ||
     location.pathname.toLowerCase().includes("/expenses")
   ) {
+    if (expensesPerm === "none" && !isSuperadmin) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-[#FAFAFA]">
+          <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+            <ShieldAlert size={32} />
+          </div>
+          <h2 className="text-xl font-serif font-bold text-slate-800 mb-2">Access Restricted</h2>
+          <p className="text-sm text-slate-600 max-w-md">
+            You do not have permission to access Expenses Management.
+          </p>
+        </div>
+      );
+    }
     return <ExpensesManagement readOnly={expensesPerm === "view"} />;
+  }
+
+  // Fallback check for root User & System Access tab
+  if (userAccessPerm === "none" && !isSuperadmin) {
+    if (shopPerm !== "none") return <Navigate to="/systems/master-setting/shop" replace />;
+    if (counterPerm !== "none") return <Navigate to="/systems/master-setting/counter" replace />;
+    if (expensesPerm !== "none") return <Navigate to="/systems/master-setting/expenses" replace />;
+    if (shopVisitChecklistPerm !== "none") return <Navigate to="/systems/master-setting/shop-visit-checklist" replace />;
+    if (schemeMasterPerm !== "none") return <Navigate to="/systems/master-setting/scheme-master" replace />;
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-[#FAFAFA]">
+        <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-xl font-serif font-bold text-slate-800 mb-2">Access Restricted</h2>
+        <p className="text-sm text-slate-600 max-w-md">
+          You do not have permission to access the User &amp; System Access directory.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -2401,7 +2761,16 @@ export default function MasterSetting() {
                   </label>
                   <select
                     value={roleInput}
-                    onChange={(e) => setRoleInput(e.target.value)}
+                    onChange={(e) => {
+                      const newRole = e.target.value;
+                      setRoleInput(newRole);
+                      const rLower = newRole.toLowerCase().trim();
+                      if (rLower === "hod" || rLower === "superadmin") {
+                        const allModify = getAllModifyPermissions();
+                        setAccessPermissions(allModify);
+                        setRawJsonText(JSON.stringify(Object.keys(allModify), null, 2));
+                      }
+                    }}
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                   >
                     {availableEditRoles.map((r) => (
@@ -2466,7 +2835,7 @@ export default function MasterSetting() {
                     className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                   >
                     <option value="">-- Select Shop --</option>
-                    {availableShops.map((s) => (
+                    {selectableShops.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
@@ -2500,15 +2869,110 @@ export default function MasterSetting() {
                 </div>
               </div>
 
+              {/* Shop Access (user_access) Section - Multi-shop access across all systems */}
+              <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                    <Building
+                      size={16}
+                      className="text-[#C9A84C]"
+                    />
+                    Shop Access (
+                    <code className="font-mono text-[#8C6D23] lowercase">
+                      user_access
+                    </code>
+                    )
+                  </label>
+                  {availableShops.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSelectAllShops}
+                      className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                    >
+                      {selectedShopsList.length ===
+                      availableShops.length
+                        ? "Deselect All"
+                        : "Select All Shops"}
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Select allowed shop locations for
+                  multi-shop system access (stored in{" "}
+                  <code className="font-mono font-bold text-[#1C120C]">
+                    user_access
+                  </code>
+                  ):
+                </p>
+
+                {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
+                {availableShops.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    {availableShops.map((shop) => {
+                      const isSelected =
+                        selectedShopsList.includes(shop);
+                      return (
+                        <button
+                          key={shop}
+                          type="button"
+                          onClick={() =>
+                            handleToggleShop(shop)
+                          }
+                          className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                            isSelected
+                              ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
+                              : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100"
+                          }`}
+                        >
+                          <span
+                            className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
+                              isSelected
+                                ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
+                                : "border-slate-400 bg-white"
+                            }`}
+                          >
+                            {isSelected && "✓"}
+                          </span>
+                          <span>{shop}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-slate-400 italic">
+                    Loading options from shop table...
+                  </div>
+                )}
+
+                {/* Comma-Separated Text Input */}
+                <div className="pt-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Assigned Shop Locations (Comma-separated
+                    text)
+                  </label>
+                  <input
+                    type="text"
+                    value={shopNameInput}
+                    onChange={(e) =>
+                      setShopNameInput(e.target.value)
+                    }
+                    placeholder="e.g. BALAJI, FRIENDS, KUNAL"
+                    className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
+                  />
+                </div>
+              </div>
+
               {/* Permission Management */}
               <div>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 bg-white p-3.5 border border-slate-200 rounded-xl shadow-2xs">
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-slate-900">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-[#C9A84C]" />
                       master_user_system_page_access
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Set permission level per page:{" "}
+                      Configure granular access per page:{" "}
                       <code className="font-mono text-[#8C6D23] font-bold">
                         .view
                       </code>{" "}
@@ -2518,26 +2982,77 @@ export default function MasterSetting() {
                       </code>
                     </p>
                   </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedSystemIds({})}
+                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10.5px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      Expand All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allClosed = {};
+                        AVAILABLE_SYSTEMS.forEach((s) => {
+                          allClosed[s.id] = true;
+                        });
+                        setCollapsedSystemIds(allClosed);
+                      }}
+                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10.5px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
 
                 {/* Interactive UI - Distinct System Cards, Section Banners & Page Rows */}
-                <div className="space-y-2 bg-slate-50/50  rounded-xl">
+                <div className="space-y-3 bg-transparent rounded-xl">
                   {AVAILABLE_SYSTEMS.map((sys) => {
                     const sectionsToRender = sys.sections || [
                       { title: null, pages: sys.pages || [] },
                     ];
 
+                    // Auto-close OFF: all permission divs open and visible by default
+                    const isExpanded = !collapsedSystemIds[sys.id];
+
+                    // Compute count of modify and view for this system
+                    let modifyCount = 0;
+                    let viewCount = 0;
+                    if (sys.id === "whatsapp") {
+                      if (accessPermissions["whatsapp"]) modifyCount = 1;
+                    } else {
+                      sys.pages?.forEach((pg) => {
+                        const lvl = getPageLevel(sys.id, pg);
+                        if (lvl === "modify") modifyCount++;
+                        else if (lvl === "view") viewCount++;
+                      });
+                      sys.sections?.forEach((sec) => {
+                        sec.pages?.forEach((pg) => {
+                          const lvl = getPageLevel(sys.id, pg);
+                          if (lvl === "modify") modifyCount++;
+                          else if (lvl === "view") viewCount++;
+                        });
+                      });
+                    }
+
                     return (
                       <div
                         key={sys.id}
-                        className="bg-white rounded-xl border-1 border-slate-200 shadow-sm overflow-hidden transition-all hover:border-[#C9A84C]/50"
+                        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:border-[#C9A84C]/50"
                       >
-                        {/* SYSTEM HEADER BAR - Prominent Dark Card Header */}
-                        <div className="bg-[#1C120C] text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#C9A84C]/30">
-                          <div className="flex items-center gap-3">
-                            <span className="w-3 h-3 rounded-full bg-[#C9A84C] shrink-0" />
-                            <div>
-                              <h4 className="text-sm font-bold tracking-wide text-white uppercase font-serif">
+                        {/* SYSTEM HEADER BAR - Interactive Header with Quick Actions */}
+                        <div
+                          className="bg-[#1C120C] text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#C9A84C]/30 select-none"
+                        >
+                          <div
+                            onClick={() => toggleSystemExpand(sys.id)}
+                            className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                          >
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#C9A84C] shrink-0" />
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-bold tracking-wide text-white uppercase font-serif truncate">
                                 {sys.name}
                               </h4>
                               <span className="text-[10px] font-mono text-[#C9A84C] font-semibold tracking-wider">
@@ -2545,10 +3060,73 @@ export default function MasterSetting() {
                               </span>
                             </div>
                           </div>
+
+                          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                            {/* System-level Quick Actions */}
+                            <div className="flex items-center gap-1 bg-white/10 p-0.5 rounded border border-white/15 mr-1">
+                              <button
+                                type="button"
+                                onClick={() => setSystemAllPagesLevel(sys.id, "modify")}
+                                className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-[#C9A84C] hover:bg-[#C9A84C]/20 rounded transition-colors cursor-pointer"
+                                title={`Set all pages in ${sys.name} to modify`}
+                              >
+                                + All Modify
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSystemAllPagesLevel(sys.id, "view")}
+                                className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-slate-300 hover:bg-white/10 rounded transition-colors cursor-pointer"
+                                title={`Set all pages in ${sys.name} to view`}
+                              >
+                                + All View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSystemAllPagesLevel(sys.id, "none")}
+                                className="px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-rose-300 hover:bg-rose-900/30 rounded transition-colors cursor-pointer"
+                                title={`Clear all permissions for ${sys.name}`}
+                              >
+                                Clear
+                              </button>
+                            </div>
+
+                            {/* Summary Badges */}
+                            {modifyCount > 0 && (
+                              <span className="px-2 py-0.5 bg-[#C9A84C]/25 text-[#C9A84C] border border-[#C9A84C]/50 text-[10px] font-bold uppercase tracking-wider rounded">
+                                {modifyCount} Modify
+                              </span>
+                            )}
+                            {viewCount > 0 && (
+                              <span className="px-2 py-0.5 bg-slate-700 text-slate-200 border border-slate-600 text-[10px] font-semibold uppercase tracking-wider rounded">
+                                {viewCount} View
+                              </span>
+                            )}
+                            {modifyCount === 0 && viewCount === 0 && (
+                              <span className="px-2 py-0.5 bg-white/10 text-white/50 text-[10px] font-medium tracking-wider rounded">
+                                None
+                              </span>
+                            )}
+
+                            {/* Toggle Accordion Button */}
+                            <button
+                              type="button"
+                              onClick={() => toggleSystemExpand(sys.id)}
+                              className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer text-[#C9A84C]"
+                              title={isExpanded ? "Collapse section" : "Expand section"}
+                            >
+                              <ChevronDown
+                                size={18}
+                                className={`transition-transform duration-200 ${
+                                  isExpanded ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                          </div>
                         </div>
 
-                        {/* SYSTEM CONTENT (SECTIONS & PAGES) */}
-                        <div className="p-5 space-y-6 bg-slate-50/40">
+                        {/* SYSTEM CONTENT (SECTIONS & PAGES) - Open by default */}
+                        {isExpanded && (
+                          <div className="p-5 space-y-6 bg-slate-50/40">
                           {sys.id === "whatsapp" ? (
                             <div className="flex items-center justify-between p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs">
                               <div className="flex flex-col gap-1 pr-4">
@@ -2595,203 +3173,107 @@ export default function MasterSetting() {
                             </div>
                           ) : (
                             <>
-                              {/* Shop Access Section inside Checklist Delegation */}
+                              {/* Counter Access Section inside Checklist Delegation */}
                               {sys.id === "checklist" && (
-                                <>
-                                  <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3">
-                                    <div className="flex items-center justify-between">
-                                      <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
-                                        <Building
-                                          size={16}
-                                          className="text-[#C9A84C]"
-                                        />
-                                        Shop Access (
-                                        <code className="font-mono text-[#8C6D23] lowercase">
-                                          user_access
-                                        </code>
-                                        )
-                                      </label>
-                                      {availableShops.length > 0 && (
-                                        <button
-                                          type="button"
-                                          onClick={handleSelectAllShops}
-                                          className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
-                                        >
-                                          {selectedShopsList.length ===
-                                          availableShops.length
-                                            ? "Deselect All"
-                                            : "Select All Shops"}
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    <p className="text-[11px] text-slate-500 font-medium">
-                                      Select allowed shop locations for
-                                      multi-shop system access (stored in{" "}
-                                      <code className="font-mono font-bold text-[#1C120C]">
-                                        user_access
-                                      </code>
-                                      ):
-                                    </p>
-
-                                    {/* Dynamic Shop Badges / Checkboxes from 'shop' table */}
-                                    {availableShops.length > 0 ? (
-                                      <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        {availableShops.map((shop) => {
-                                          const isSelected =
-                                            selectedShopsList.includes(shop);
-                                          return (
-                                            <button
-                                              key={shop}
-                                              type="button"
-                                              onClick={() =>
-                                                handleToggleShop(shop)
-                                              }
-                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                                                isSelected
-                                                  ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
-                                                  : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100"
-                                              }`}
-                                            >
-                                              <span
-                                                className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
-                                                  isSelected
-                                                    ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
-                                                    : "border-slate-400 bg-white"
-                                                }`}
-                                              >
-                                                {isSelected && "✓"}
-                                              </span>
-                                              <span>{shop}</span>
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    ) : (
-                                      <div className="text-[11px] text-slate-400 italic">
-                                        Loading options from shop table...
-                                      </div>
-                                    )}
-
-                                    {/* Comma-Separated Text Input */}
-                                    <div className="pt-1">
-                                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                                        Assigned Shop Locations (Comma-separated
-                                        text)
-                                      </label>
-                                      <input
-                                        type="text"
-                                        value={shopNameInput}
-                                        onChange={(e) =>
-                                          setShopNameInput(e.target.value)
-                                        }
-                                        placeholder="e.g. BALAJI, FRIENDS, KUNAL"
-                                        className="w-full bg-slate-50 border border-slate-300 text-[#1A1A1A] px-3.5 py-2.5 text-xs font-mono font-bold focus:outline-none focus:border-[#C9A84C] focus:bg-white rounded-md transition-colors shadow-inner"
+                                <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3 mb-4">
+                                  <div className="flex items-center justify-between">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
+                                      <Lock
+                                        size={16}
+                                        className="text-[#C9A84C]"
                                       />
-                                    </div>
-                                  </div>
-
-                                  {/* Counter Access Section */}
-                                  <div className="p-4 bg-white border border-[#C9A84C]/40 rounded-xl shadow-xs space-y-3 mt-4">
-                                    <div className="flex items-center justify-between">
-                                      <label className="block text-xs font-bold uppercase tracking-wider text-[#1C120C] font-serif flex items-center gap-2">
-                                        <Lock
-                                          size={16}
-                                          className="text-[#C9A84C]"
-                                        />
-                                        Counter Access (
-                                        <code className="font-mono text-[#8C6D23] lowercase">
-                                          counter_access
-                                        </code>
-                                        )
-                                      </label>
-                                      {availableCounters.length > 0 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (
-                                              counterAccessInput.length ===
-                                              availableCounters.length
-                                            ) {
-                                              setCounterAccessInput([]);
-                                            } else {
-                                              setCounterAccessInput([
-                                                ...availableCounters,
-                                              ]);
-                                            }
-                                          }}
-                                          className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
-                                        >
-                                          {counterAccessInput.length ===
-                                          availableCounters.length
-                                            ? "Deselect All"
-                                            : "Select All Counters"}
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    <p className="text-[11px] text-slate-500 font-medium">
-                                      Select assigned counters from the database{" "}
-                                      <code className="font-mono font-bold text-[#1C120C]">
-                                        master_counter
-                                      </code>{" "}
-                                      table:
-                                    </p>
-
-                                    {/* Dynamic Counter Badges / Checkboxes from 'master_counter' table */}
-                                    {availableCounters.length > 0 ? (
-                                      <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        {availableCounters.map((counter) => {
-                                          const isSelected =
-                                            counterAccessInput.includes(
-                                              counter,
-                                            );
-                                          return (
-                                            <button
-                                              key={counter}
-                                              type="button"
-                                              onClick={() => {
-                                                if (isSelected) {
-                                                  setCounterAccessInput(
-                                                    counterAccessInput.filter(
-                                                      (c) => c !== counter,
-                                                    ),
-                                                  );
-                                                } else {
-                                                  setCounterAccessInput([
-                                                    ...counterAccessInput,
-                                                    counter,
-                                                  ]);
-                                                }
-                                              }}
-                                              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                                                isSelected
-                                                  ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
-                                                  : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100"
-                                              }`}
-                                            >
-                                              <span
-                                                className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
-                                                  isSelected
-                                                    ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
-                                                    : "border-slate-400 bg-white"
-                                                }`}
-                                              >
-                                                {isSelected && "✓"}
-                                              </span>
-                                              <span>{counter}</span>
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    ) : (
-                                      <div className="text-[11px] text-slate-400 italic">
-                                        Loading options from master_counter
-                                        table...
-                                      </div>
+                                      Counter Access (
+                                      <code className="font-mono text-[#8C6D23] lowercase">
+                                        counter_access
+                                      </code>
+                                      )
+                                    </label>
+                                    {availableCounters.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (
+                                            counterAccessInput.length ===
+                                            availableCounters.length
+                                          ) {
+                                            setCounterAccessInput([]);
+                                          } else {
+                                            setCounterAccessInput([
+                                              ...availableCounters,
+                                            ]);
+                                          }
+                                        }}
+                                        className="text-[10px] font-bold text-[#C9A84C] hover:underline uppercase tracking-wider cursor-pointer"
+                                      >
+                                        {counterAccessInput.length ===
+                                        availableCounters.length
+                                          ? "Deselect All"
+                                          : "Select All Counters"}
+                                      </button>
                                     )}
                                   </div>
-                                </>
+
+                                  <p className="text-[11px] text-slate-500 font-medium">
+                                    Select assigned counters from the database{" "}
+                                    <code className="font-mono font-bold text-[#1C120C]">
+                                      master_counter
+                                    </code>{" "}
+                                    table:
+                                  </p>
+
+                                  {/* Dynamic Counter Badges / Checkboxes from 'master_counter' table */}
+                                  {availableCounters.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2 py-1 max-h-36 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                      {availableCounters.map((counter) => {
+                                        const isSelected =
+                                          counterAccessInput.includes(
+                                            counter,
+                                          );
+                                        return (
+                                          <button
+                                            key={counter}
+                                            type="button"
+                                            onClick={() => {
+                                              if (isSelected) {
+                                                setCounterAccessInput(
+                                                  counterAccessInput.filter(
+                                                    (c) => c !== counter,
+                                                  ),
+                                                );
+                                              } else {
+                                                setCounterAccessInput([
+                                                  ...counterAccessInput,
+                                                  counter,
+                                                ]);
+                                              }
+                                            }}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                                              isSelected
+                                                ? "bg-[#1C120C] text-[#C9A84C] border-[#C9A84C] shadow-xs"
+                                                : "bg-white text-slate-700 border-slate-300 hover:border-[#C9A84C]/60 hover:bg-slate-100"
+                                            }`}
+                                          >
+                                            <span
+                                              className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] font-bold ${
+                                                isSelected
+                                                  ? "bg-[#C9A84C] text-[#1C120C] border-[#C9A84C]"
+                                                  : "border-slate-400 bg-white"
+                                              }`}
+                                            >
+                                              {isSelected && "✓"}
+                                            </span>
+                                            <span>{counter}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="text-[11px] text-slate-400 italic">
+                                      Loading options from master_counter
+                                      table...
+                                    </div>
+                                  )}
+                                </div>
                               )}
 
                               {sectionsToRender.map((sec, secIdx) => (
@@ -2816,22 +3298,38 @@ export default function MasterSetting() {
                                       return (
                                         <div
                                           key={pg}
-                                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 pl-3.5 bg-white border border-slate-200 rounded-lg hover:border-[#C9A84C] h transition-all"
+                                          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 pl-3.5 rounded-lg border transition-all ${
+                                            currentLevel === "modify"
+                                              ? "bg-[#C9A84C]/5 border-[#C9A84C]/40 shadow-xs"
+                                              : currentLevel === "view"
+                                                ? "bg-slate-50 border-slate-300"
+                                                : "bg-white border-slate-200 hover:border-slate-300"
+                                          }`}
                                         >
                                           {/* Page Title & Bullet */}
-                                          <div className="flex items-center gap-3 min-w-0">
+                                          <div className="flex items-center gap-2.5 min-w-0">
                                             <span
-                                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                              className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
                                                 currentLevel === "modify"
                                                   ? "bg-[#C9A84C] ring-2 ring-[#C9A84C]/30"
                                                   : currentLevel === "view"
-                                                    ? "bg-slate-900"
+                                                    ? "bg-[#1C120C]"
                                                     : "bg-slate-300"
                                               }`}
                                             />
                                             <span className="text-xs font-bold text-slate-800 tracking-tight font-serif truncate">
                                               {pg}
                                             </span>
+                                            {currentLevel === "modify" && (
+                                              <span className="px-1.5 py-0.5 bg-[#C9A84C]/20 text-[#8C6D23] font-mono font-bold text-[9px] uppercase tracking-wider rounded">
+                                                modify
+                                              </span>
+                                            )}
+                                            {currentLevel === "view" && (
+                                              <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 font-mono font-bold text-[9px] uppercase tracking-wider rounded">
+                                                view
+                                              </span>
+                                            )}
                                           </div>
 
                                           {/* Page Level Access Toggle Buttons */}
@@ -2894,6 +3392,7 @@ export default function MasterSetting() {
                             </>
                           )}
                         </div>
+                        )}
                       </div>
                     );
                   })}
@@ -3225,9 +3724,16 @@ export default function MasterSetting() {
                     </label>
                     <select
                       value={newUserForm.role}
-                      onChange={(e) =>
-                        setNewUserForm({ ...newUserForm, role: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const rLower = val.toLowerCase().trim();
+                        const isFullAccessRole = rLower === "superadmin" || rLower === "hod";
+                        setNewUserForm({
+                          ...newUserForm,
+                          role: val,
+                          ...(isFullAccessRole ? { systemPreset: "all" } : {}),
+                        });
+                      }}
                       className="w-full bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C9A84C]"
                     >
                       {availableAddRoles.map((r) => (

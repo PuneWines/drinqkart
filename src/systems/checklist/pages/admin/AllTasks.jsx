@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "rea
 import { useDispatch, useSelector } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../SupabaseClient";
+import { getUserAssignedShops, isUserShopScoped } from "../../../../utils/permissionUtils";
 import {
   ClipboardList,
   Wrench,
@@ -34,6 +35,7 @@ import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
 import RenderDescription from "../../components/RenderDescription";
 import WorkTasksTab from "./WorkTasksTab";
+import { ViewOnlyBanner, getPagePermission } from "../../../../utils/permissionUtils";
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -49,6 +51,8 @@ const AllTasks = () => {
   const dispatch = useDispatch();
   const { customDropdowns = [] } = useSelector((state) => state.setting || {});
   const { showToast } = useMagicToast();
+  const allTasksPerm = getPagePermission(null, 'checklist', 'All Tasks');
+  const isModifyAllowed = allTasksPerm.canModify;
   // Active tab state
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem("alltasks_active_tab") || "checklist";
@@ -131,6 +135,7 @@ const AllTasks = () => {
   // Manager role: can only submit tasks where BOTH given_by === username AND name === username
   // Admin/HOD: can submit any task
   const canSubmitTask = useCallback((task) => {
+    if (!isModifyAllowed) return false;
     if (!task || !username) return false;
     const role = (userRole || "").toLowerCase();
     const taskName = (task.name || task.assigned_person || task.doer_name || "").toLowerCase().trim();
@@ -146,7 +151,7 @@ const AllTasks = () => {
     }
     // Admin, HOD, masteradmin — can submit all
     return true;
-  }, [username, userRole]);
+  }, [username, userRole, isModifyAllowed]);
   const [startDate, setStartDate] = useState(getFirstDayOfMonth());
   const [endDate, setEndDate] = useState(getCurrentDayOfMonth());
 
@@ -165,21 +170,21 @@ const AllTasks = () => {
     const role = (userRole || "").toLowerCase();
     const currentUsername = username || "";
 
-    if (role === "admin") {
+    if (role === "superadmin" || role === "masteradmin" || role === "hod" || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin") {
       return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
-    } else if (role === "manager") {
-      const managerUser = allUsers.find(u => typeof u === 'object' && u.user_name === currentUsername);
-      const userAccess = localStorage.getItem("user_access") || (managerUser ? managerUser.user_access : "") || "";
-      const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
-      const matched = allUsers.filter(u => {
-        if (typeof u !== 'object') return false;
-        const userShop = (u.shop_name || u.user_access || "").toLowerCase();
-        const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-        return userShopsList.some(s => managerShops.includes(s));
-      }).map(u => u.user_name);
-
-      return [...new Set([currentUsername, ...matched])].filter(Boolean);
+    } else if (role === "admin" || role === "manager") {
+      const isScoped = isUserShopScoped();
+      const allowedShops = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+      if (allowedShops.length > 0) {
+        const matched = allUsers.filter(u => {
+          if (typeof u !== 'object') return false;
+          const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+          const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+          return userShopsList.some(s => allowedShops.includes(s));
+        }).map(u => u.user_name);
+        return [...new Set([currentUsername, ...matched])].filter(Boolean);
+      }
+      return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
     } else if (role === "user" || role === "employee") {
       return [currentUsername].filter(Boolean);
     }
@@ -500,44 +505,31 @@ const AllTasks = () => {
 
       const currentUsername = (username || "");
       const currentUserRole = (userRole || "").toLowerCase();
-      const isSuperAdmin = currentUsername.toLowerCase() === "admin";
+      const isSuperAdmin = currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin" || currentUserRole === "superadmin" || currentUserRole === "masteradmin";
 
       let reportingUsers = [currentUsername];
       let applyNameFilter = true;
 
-      if (isSuperAdmin) {
+      if (isSuperAdmin || currentUserRole === "hod") {
+        // Superadmin and HOD have multi-shop enterprise access across ALL tasks and shops
         applyNameFilter = false;
       } else if (currentUserRole === "admin") {
-        applyNameFilter = false; // Admins see all tasks, not restricted by name
+        applyNameFilter = false; // Admins see all tasks in their shops, not restricted by user name
 
-        // Shop based logic for admin
-        const userAccess = localStorage.getItem("user_access") || "";
-        if (userAccess && userAccess.toLowerCase() !== "all" && userAccess.toLowerCase() !== "admin") {
-          const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d.toLowerCase() !== 'all');
-          if (allowedShops.length > 0) {
-            // regular tab uses 'shop_name', others use 'shop_name'
-            if (activeTab === 'regular') {
-              query = query.in('shop_name', allowedShops);
-            } else if (activeTab === 'ea' || activeTab === 'repair') {
-              // ea_tasks and repair_tasks typically don't have a shop column, we skip filtering to avoid DB error. 
-              // Since EA/Repair are usually cross-shop, maybe we just don't filter, or we check if they have specific access.
-              const tabNameStr = activeTab === 'ea' ? 'EA' : 'Repair';
-              if (!allowedShops.includes(tabNameStr) && !allowedShops.includes(tabNameStr.toLowerCase())) {
-                // If they don't have explicit access and are restricted to shops, maybe they shouldn't see these tasks
-                query = query.eq('id', -1); // returns empty
-              }
-            } else {
-              query = query.in('shop_name', allowedShops);
+        // Shop based logic for admin: strictly scoped to assigned shops
+        const isScoped = isUserShopScoped();
+        const allowedShops = isScoped ? getUserAssignedShops() : [];
+        if (allowedShops.length > 0) {
+          if (activeTab === 'regular' || activeTab === 'checklist' || activeTab === 'delegation' || activeTab === 'maintenance') {
+            query = query.in('shop_name', allowedShops);
+          } else if (activeTab === 'ea' || activeTab === 'repair') {
+            const tabNameStr = activeTab === 'ea' ? 'EA' : 'Repair';
+            if (!allowedShops.some(s => s.toLowerCase() === tabNameStr.toLowerCase())) {
+              query = query.eq('id', -1);
             }
+          } else {
+            query = query.in('shop_name', allowedShops);
           }
-        }
-      } else if (currentUserRole === "hod") {
-        const { data: reports } = await supabase
-          .from("users")
-          .select("user_name")
-          .eq("reported_by", username);
-        if (reports && reports.length > 0) {
-          reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
         }
       } else if (currentUserRole === "manager") {
         const userAccess = localStorage.getItem("user_access") || localStorage.getItem("shop_name") || "";
@@ -816,9 +808,17 @@ const AllTasks = () => {
   // Handle Selections
   const handleSelectItem = useCallback((id, isChecked) => {
     if (isChecked) {
+      if (!isModifyAllowed) {
+        alert("⚠️ You have view-only access. Selecting and submitting tasks is restricted.");
+        return;
+      }
       // RBAC: Block selection of tasks that the current user cannot submit
       const task = tasks.find(t => t.id === id || t.task_id === id);
       if (task && !canSubmitTask(task)) {
+        if (!isModifyAllowed) {
+          alert("⚠️ You have view-only access. Selecting and submitting tasks is restricted.");
+          return;
+        }
         const role = (userRole || "").toLowerCase();
         if (role === "manager") {
           alert(`⚠️ You can only submit tasks where you are both the Manager and the Employee assigned.\n\nManager Name and Employee must both match your username to submit.`);
@@ -856,10 +856,11 @@ const AllTasks = () => {
         return n;
       });
     }
-  }, [tasks, canSubmitTask, userRole]);
+  }, [tasks, canSubmitTask, userRole, isModifyAllowed]);
 
   const handleSelectAll = useCallback(
     (e) => {
+      if (!isModifyAllowed) return;
       if (e.target.checked) {
         const submittableTasks = filteredPendingTasks.filter(t => {
           const timeStatus = getTimeStatus(t[statusDateColumn], t.status);
@@ -873,7 +874,7 @@ const AllTasks = () => {
         setUploadedImages({});
         setStatusData({});
       }
-    }, [filteredPendingTasks, getTimeStatus, statusDateColumn, canSubmitTask]);
+    }, [filteredPendingTasks, getTimeStatus, statusDateColumn, canSubmitTask, isModifyAllowed]);
 
   const paginatedTasks = useMemo(() => {
     return (showHistory ? filteredHistoryTasks : filteredPendingTasks).slice(0, visibleCount);
@@ -948,6 +949,10 @@ const AllTasks = () => {
 
   // Repair Update Handler
   const openUpdateModal = (task) => {
+    if (!isModifyAllowed) {
+      showToast("You have view-only access. Updating repair tasks is disabled.", "error");
+      return;
+    }
     setSelectedUpdateTask(task);
     setUpdateForm({
       partReplaced: task.part_replaced || "",
@@ -963,6 +968,10 @@ const AllTasks = () => {
 
   const handleRepairUpdateSubmit = async (e) => {
     e.preventDefault();
+    if (!isModifyAllowed) {
+      showToast("You have view-only access. Updating repair tasks is disabled.", "error");
+      return;
+    }
     if (!updateForm.status) return alert("Please select a status");
 
     // If status is Pending, just close modal and return (don't save/submit)
@@ -1033,6 +1042,10 @@ const AllTasks = () => {
   };
 
   const handleSubmit = async () => {
+    if (!isModifyAllowed) {
+      showToast("You have view-only access. Submitting tasks is disabled.", "error");
+      return;
+    }
     if (selectedItems.size === 0) {
       showToast("Please select at least one task to submit", "error");
       return;
@@ -1284,6 +1297,9 @@ const AllTasks = () => {
 
   return (
     <AdminLayout>
+      {!isModifyAllowed && (
+        <ViewOnlyBanner isModifyAllowed={isModifyAllowed} pageName="All Tasks" message="You have read-only access to Tasks. Submitting or updating task statuses is restricted." />
+      )}
       <div className="space-y-4 sm:space-y-6">
         {/* Sticky Header Section - Solid background prevents scrolled details from bleeding through */}
         <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md border-b border-gray-200/80 shadow-xs py-3 px-2 transition-all duration-300">
@@ -1425,8 +1441,8 @@ const AllTasks = () => {
                       {activeTab !== "repair" && (
                         <button
                           onClick={activeTab === "work" ? () => childSubmitRef.current?.() : handleSubmit}
-                          disabled={selectedItems.size === 0 || isSubmitting}
-                          className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-40 shadow-md shadow-purple-600/10 transition-all"
+                          disabled={!isModifyAllowed || selectedItems.size === 0 || isSubmitting}
+                          className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-40 shadow-md shadow-purple-600/10 transition-all disabled:cursor-not-allowed"
                         >
                           {isSubmitting ? "..." : `Submit (${selectedItems.size})`}
                         </button>
@@ -1466,6 +1482,7 @@ const AllTasks = () => {
             isSubmitting={isSubmitting}
             setIsSubmitting={setIsSubmitting}
             registerSubmit={handleRegisterSubmit}
+            isModifyAllowed={isModifyAllowed}
           />
         ) : (
           <>
@@ -1548,7 +1565,8 @@ const AllTasks = () => {
                                     return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                                   })()}
                                   onChange={handleSelectAll}
-                                  className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30"
+                                  disabled={!isModifyAllowed}
+                                  className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                                 />
                               </th>
                             )}
@@ -1613,11 +1631,16 @@ const AllTasks = () => {
                                             <button
                                               type="button"
                                               title={(() => {
+                                                if (!isModifyAllowed) return "You have view-only access. Submitting tasks is disabled.";
                                                 const role = (userRole || "").toLowerCase();
                                                 if (role === "manager") return "You can only submit tasks where you are both the Manager and the Employee";
                                                 return "You can only submit tasks assigned to you";
                                               })()}
                                               onClick={() => {
+                                                if (!isModifyAllowed) {
+                                                  alert("⚠️ Submit Restricted\n\nYou have view-only access. Submitting tasks is disabled.");
+                                                  return;
+                                                }
                                                 const role = (userRole || "").toLowerCase();
                                                 if (role === "manager") {
                                                   alert(`⚠️ Submit Restricted\n\nYou can only submit tasks where BOTH:\n• Manager Name = your name\n• Employee = your name\n\nThis task is assigned to a different employee.`);
@@ -1638,7 +1661,7 @@ const AllTasks = () => {
                                         {!showHistory ? (
                                           <>
                                             <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                              <button onClick={() => openUpdateModal(task)} className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1">
+                                              <button onClick={() => openUpdateModal(task)} disabled={!isModifyAllowed} className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-xs font-medium transition-colors flex items-center gap-1">
                                                 <Edit className="h-3 w-3" /> Process
                                               </button>
                                             </td>
@@ -1955,7 +1978,8 @@ const AllTasks = () => {
                                   return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                                 })()}
                                 onChange={handleSelectAll}
-                                className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
+                                disabled={!isModifyAllowed}
+                                className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                               />
                             </div>
                             <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
@@ -2009,8 +2033,12 @@ const AllTasks = () => {
                                       ) : (
                                         <button
                                           type="button"
-                                          title="You cannot submit this task"
+                                          title={!isModifyAllowed ? "You have view-only access. Submitting tasks is disabled." : "You cannot submit this task"}
                                           onClick={() => {
+                                            if (!isModifyAllowed) {
+                                              alert("⚠️ Submit Restricted\n\nYou have view-only access. Submitting tasks is disabled.");
+                                              return;
+                                            }
                                             const role = (userRole || "").toLowerCase();
                                             if (role === "manager") {
                                               alert(`⚠️ Submit Restricted\n\nYou can only submit tasks where BOTH:\n• Manager Name = your name\n• Employee = your name\n\nThis task is assigned to a different employee.`);
@@ -2018,7 +2046,7 @@ const AllTasks = () => {
                                               alert(`⚠️ Submit Restricted\n\nYou can only submit tasks assigned to you.`);
                                             }
                                           }}
-                                          className="h-4 w-4 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                                          className="h-4 w-4 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors cursor-not-allowed"
                                         >
                                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                         </button>
@@ -2217,7 +2245,8 @@ const AllTasks = () => {
                                     <div className="pt-2">
                                       <button
                                         onClick={() => openUpdateModal(task)}
-                                        className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                                        disabled={!isModifyAllowed}
+                                        className="w-full py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
                                       >
                                         <Edit className="h-3.5 w-3.5" /> PROCESS REPAIR
                                       </button>
@@ -2268,7 +2297,7 @@ const AllTasks = () => {
                     </div>
 
                     {/* Mobile Floating Submit Bar */}
-                    {!showHistory && selectedItems.size > 0 && (
+                    {!showHistory && isModifyAllowed && selectedItems.size > 0 && (
                       <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
                         <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
                           <div className="flex items-center justify-between">
@@ -2433,7 +2462,7 @@ const AllTasks = () => {
               </div>
               <div className="flex justify-end gap-3 pt-6 mt-2 border-t border-gray-100">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50 text-sm">Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded text-sm flex items-center gap-2">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes</button>
+                <button type="submit" disabled={!isModifyAllowed || isSubmitting} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded text-sm flex items-center gap-2">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes</button>
               </div>
             </form>
           </div>

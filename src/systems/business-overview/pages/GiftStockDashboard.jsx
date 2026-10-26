@@ -24,7 +24,7 @@ function getTabLevels(user) {
   const levels = {};
   const userName = (user?.user_name || user?.username || '').toLowerCase();
   const role = (user?.role || '').toLowerCase();
-  if (userName === 'masteradmin' || role === 'admin') {
+  if (userName === 'masteradmin' || role === 'superadmin' || role === 'masteradmin') {
     TABS.forEach((t) => (levels[t] = 'modify'));
     return levels;
   }
@@ -1819,8 +1819,8 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
       container.removeEventListener('click', handleClick);
       window.removeEventListener('keydown', handleKeyDown);
       channels.forEach((ch) => {
-        if (ch && typeof ch.unsubscribe === 'function') {
-          ch.unsubscribe();
+        if (ch) {
+          supabase.removeChannel(ch);
         }
       });
     };

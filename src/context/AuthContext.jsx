@@ -12,7 +12,33 @@ const STORAGE_KEY = "drinqkart_user";
 
 export const parseChecklistAllowedPages = (userData) => {
   if (!userData) return [];
-  const pageSet = new Set();
+
+  const userRole = (userData.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") : "") || "").toLowerCase();
+  const userName = (userData.user_name || userData.username || (typeof localStorage !== "undefined" ? localStorage.getItem("user-name") : "") || "").toLowerCase();
+  const isSuper = userRole === "superadmin" || userRole === "masteradmin" || userName === "masteradmin" || userName === "admin";
+  const isAdmin = userRole === "admin" || userRole === "hod";
+
+  if (isSuper || isAdmin) {
+    return [
+      "Dashboard",
+      "Announcements",
+      "Quick Task",
+      "Assign Task",
+      "Work Records",
+      "Work Details",
+      "Delegation",
+      "Task",
+      "All Tasks",
+      "Calendar",
+      "Holiday List",
+      "Working Day Calendar",
+      "Admin Approval",
+      "MIS Report",
+      "Settings"
+    ];
+  }
+
+  const pageSet = new Set(["Dashboard", "Announcements", "Task", "All Tasks"]);
 
   const mapToRouteLabel = (rawName) => {
     if (!rawName || typeof rawName !== "string") return;
@@ -342,91 +368,140 @@ export const AuthProvider = ({ children }) => {
     refreshUser();
   }, []);
 
-  const tryChecklistLogin = async (trimmedInput, password) => {
+  const tryChecklistLogin = async (trimmedInput, password, selectedRole = null) => {
     const cleanDigits = trimmedInput.replace(/\D/g, "");
 
-    // 1. Resolve user_name or email_id by matching entered mobile number against 'number' column
-    let loginHandle = trimmedInput;
+    // 1. Resolve candidate user accounts by matching entered input against employee_id, user_name, email_id or number
+    let candidates = [];
     try {
-      const filterCond = cleanDigits
-        ? `number.eq.${trimmedInput},number.eq.${cleanDigits}`
-        : `number.eq.${trimmedInput}`;
+      const orConditions = [
+        `user_name.ilike.${trimmedInput}`,
+        `email_id.ilike.${trimmedInput}`,
+        `employee_id.eq.${trimmedInput}`,
+      ];
+      if (cleanDigits) {
+        orConditions.push(`employee_id.eq.${cleanDigits}`);
+        orConditions.push(`number.eq.${cleanDigits}`);
+        orConditions.push(`number.eq.${trimmedInput}`);
+      }
 
       const { data: matchedUsers } = await supabase
         .from("users")
-        .select("user_name, email_id, number, status")
-        .or(filterCond)
-        .limit(1);
+        .select("id, user_name, email_id, number, status, role, employee_id")
+        .or(orConditions.join(","));
 
       if (matchedUsers && matchedUsers.length > 0) {
-        const foundUser = matchedUsers[0];
-        const currentStatus = (foundUser.status || "active")
-          .toLowerCase()
-          .trim();
-        if (currentStatus !== "active") {
+        const activeUsers = matchedUsers.filter(
+          (u) => (u.status || "active").toLowerCase().trim() === "active"
+        );
+        if (activeUsers.length === 0) {
           return { success: false, isInactive: true };
         }
-        loginHandle = foundUser.user_name || foundUser.email_id || trimmedInput;
+
+        if (selectedRole) {
+          const targetRole = selectedRole.toLowerCase().trim();
+          const roleMatched = activeUsers.filter((u) => {
+            const uRole = (u.role || "").toLowerCase().trim();
+            if (targetRole === "hod") return uRole === "hod";
+            if (targetRole === "admin") return uRole === "admin" || uRole === "superadmin" || uRole === "masteradmin";
+            if (targetRole === "manager") return uRole === "manager";
+            if (targetRole === "user") return uRole === "user" || uRole === "employee";
+            return uRole === targetRole;
+          });
+          const others = activeUsers.filter((u) => !roleMatched.includes(u));
+          candidates = [...roleMatched, ...others];
+        } else {
+          candidates = activeUsers;
+        }
       }
     } catch (err) {
-      console.error("Error matching mobile number in users table:", err);
+      console.error("Error matching user in users table:", err);
     }
 
-    // 2. Pass resolved user handle to secure_login RPC for bcrypt password verification
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
-      "secure_login",
-      {
-        input_username: loginHandle,
-        input_password: password,
-      },
-    );
+    // Build candidate handles to attempt secure_login
+    const candidateHandles = [];
+    candidates.forEach((u) => {
+      if (u.user_name && !candidateHandles.includes(u.user_name)) candidateHandles.push(u.user_name);
+      if (u.email_id && !candidateHandles.includes(u.email_id)) candidateHandles.push(u.email_id);
+    });
+    if (!candidateHandles.includes(trimmedInput)) {
+      candidateHandles.push(trimmedInput);
+    }
 
-    if (
-      !rpcError &&
-      rpcData &&
-      (Array.isArray(rpcData) ? rpcData.length > 0 : rpcData)
-    ) {
-      let userObj = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    // Password variations to try:
+    // 1. As entered (e.g. "107" or "EMP-107")
+    // 2. Without "EMP-" / "emp-" prefix if user entered "EMP-107" -> "107"
+    // 3. With "EMP-" prefix if user entered "107" -> "EMP-107"
+    const passwordVariations = [password];
+    const strippedPass = password.replace(/^emp[-_ ]?/i, "");
+    if (strippedPass && strippedPass !== password) {
+      passwordVariations.push(strippedPass);
+    }
+    const empPrefixPass = `EMP-${strippedPass}`;
+    if (!passwordVariations.includes(empPrefixPass)) {
+      passwordVariations.push(empPrefixPass);
+    }
 
-      const userStatus = (userObj.status || "active").toLowerCase().trim();
-      if (userStatus !== "active") {
-        return { success: false, isInactive: true };
-      }
+    // 2. Try secure_login for each candidate handle and password variation until one succeeds
+    for (const handle of candidateHandles) {
+      for (const p of passwordVariations) {
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          "secure_login",
+          {
+            input_username: handle,
+            input_password: p,
+          },
+        );
 
-      // Fetch latest master_user_system_page_access, counter_access & status directly from users table
-      try {
-        const { data: dbUser } = await supabase
-          .from("users")
-          .select("master_user_system_page_access, status, counter_access")
-          .eq("id", userObj.id)
-          .maybeSingle();
+        if (
+          !rpcError &&
+          rpcData &&
+          (Array.isArray(rpcData) ? rpcData.length > 0 : rpcData)
+        ) {
+          let userObj = Array.isArray(rpcData) ? rpcData[0] : rpcData;
 
-        if (dbUser) {
-          const latestStatus = (dbUser.status || "active").toLowerCase().trim();
-          if (latestStatus !== "active") {
+          const userStatus = (userObj.status || "active").toLowerCase().trim();
+          if (userStatus !== "active") {
             return { success: false, isInactive: true };
           }
-          if (dbUser.master_user_system_page_access) {
-            userObj.master_user_system_page_access =
-              dbUser.master_user_system_page_access;
-          }
-          if (dbUser.counter_access) {
-            userObj.counter_access = dbUser.counter_access;
-          }
-        }
-      } catch (e) {
-        console.error("Master access fetch error:", e);
-      }
 
-      return { success: true, user: userObj };
+          // Fetch latest master_user_system_page_access, counter_access & status directly from users table
+          try {
+            const { data: dbUser } = await supabase
+              .from("users")
+              .select("master_user_system_page_access, status, counter_access")
+              .eq("id", userObj.id)
+              .maybeSingle();
+
+            if (dbUser) {
+              const latestStatus = (dbUser.status || "active").toLowerCase().trim();
+              if (latestStatus !== "active") {
+                return { success: false, isInactive: true };
+              }
+              if (dbUser.master_user_system_page_access) {
+                userObj.master_user_system_page_access =
+                  dbUser.master_user_system_page_access;
+              }
+              if (dbUser.counter_access) {
+                userObj.counter_access = dbUser.counter_access;
+              }
+            }
+          } catch (e) {
+            console.error("Master access fetch error:", e);
+          }
+
+          return { success: true, user: userObj };
+        }
+      }
     }
+
     return { success: false };
   };
 
   const login = async (identifier, password, selectedRole = "user") => {
     const trimmedInput = identifier.trim();
 
-    const checklistRes = await tryChecklistLogin(trimmedInput, password);
+    const checklistRes = await tryChecklistLogin(trimmedInput, password, selectedRole);
     if (checklistRes.success) {
       const userObj = { ...checklistRes.user, system: "checklist" };
       const userRole = (userObj.role || "user").toLowerCase().trim();
@@ -470,10 +545,20 @@ export const AuthProvider = ({ children }) => {
       };
     }
 
-    if (!trimmedInput.includes("@")) {
+    // Only attempt @gmail.com fallback if input is an alphabetic username (NOT a phone number or employee ID)
+    const isDigitsOnly = /^\d+$/.test(trimmedInput);
+    const isEmpId = /^emp[-_ ]?\d+$/i.test(trimmedInput);
+    const couldBeEmailUsername =
+      !trimmedInput.includes("@") &&
+      !isDigitsOnly &&
+      !isEmpId &&
+      /[a-zA-Z]/.test(trimmedInput);
+
+    if (couldBeEmailUsername) {
       const fallbackChecklistRes = await tryChecklistLogin(
         `${trimmedInput}@gmail.com`,
         password,
+        selectedRole,
       );
       if (fallbackChecklistRes.success) {
         const userObj = { ...fallbackChecklistRes.user, system: "checklist" };

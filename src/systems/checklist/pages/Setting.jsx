@@ -101,6 +101,11 @@ const Setting = () => {
   const { userData, shops, shopsOnly, givenBy, customDropdowns, masterTasks, levels, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
 
+  const userDataRef = useRef(userData);
+  useEffect(() => {
+    userDataRef.current = userData;
+  }, [userData]);
+
   const fetchDeviceLogsAndUpdateStatus = useCallback(async () => {
     // Set to true to enable background sync when the hardware API is online
     const ENABLE_DEVICE_SYNC = false;
@@ -170,9 +175,10 @@ const Setting = () => {
         }
       });
 
+      const currentUsers = userDataRef.current;
       const updatePromises = Object.entries(employeeStatus).map(async ([employeeCode, statusInfo]) => {
-        if (!userData || !Array.isArray(userData)) return;
-        const user = userData.find(u => u.employee_id === employeeCode);
+        if (!currentUsers || !Array.isArray(currentUsers)) return;
+        const user = currentUsers.find(u => u.employee_id === employeeCode);
         if (user && user.status !== statusInfo.status && user.status !== 'on leave' && user.status !== 'on_leave') {
           const { error } = await supabase
             .from('users')
@@ -190,10 +196,15 @@ const Setting = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [dispatch, userData]);
+  }, [dispatch]);
 
-  // Add real-time subscription
+  // Add real-time subscription & initial fetches on mount
   useEffect(() => {
+    // Fetch shops and dropdowns once on mount
+    dispatch(shopDetails());
+    dispatch(customDropdownDetails());
+    dispatch(givenByDetails());
+
     // Subscribe to users table changes
     const subscription = supabase
       .channel('users-changes')
@@ -204,8 +215,7 @@ const Setting = () => {
           schema: 'public',
           table: 'users'
         },
-        (payload) => {
-          // console.log('Real-time update received:', payload);
+        () => {
           // Refresh user data when any change occurs
           dispatch(userDetails());
         }
@@ -213,18 +223,15 @@ const Setting = () => {
       .subscribe();
 
     // Set up interval to check device logs every 60 seconds (reduced frequency)
-    const intervalId = setInterval(fetchDeviceLogsAndUpdateStatus, 60000);
+    const intervalId = setInterval(() => {
+      fetchDeviceLogsAndUpdateStatus();
+    }, 60000);
 
     // Initial fetch of device logs
     fetchDeviceLogsAndUpdateStatus();
 
-    // Fetch shops and dropdowns on mount
-    dispatch(shopDetails());
-    dispatch(customDropdownDetails());
-    dispatch(givenByDetails()); // Fetch givenBy details on mount
-
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
       clearInterval(intervalId);
     };
   }, [dispatch, fetchDeviceLogsAndUpdateStatus]);

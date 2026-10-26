@@ -22,7 +22,7 @@ import { fetchWorkRecords, saveAssignments } from "../redux/slice/workRecordsSli
 import { userDetails } from "../redux/slice/settingSlice";
 import { useMagicToast } from "../context/MagicToastContext";
 import { checkAndPromoteAssignmentsApi } from "../redux/api/workRecordsApi";
-import { ViewOnlyBanner, getPagePermission, getUserAssignedShops } from "../../../utils/permissionUtils";
+import { ViewOnlyBanner, getPagePermission, getUserAssignedShops, isUserShopScoped } from "../../../utils/permissionUtils";
 
 const getTaskStatusInfo = (item, isModified) => {
   if (isModified) {
@@ -74,23 +74,29 @@ export default function ScheduledWorkTasks() {
   const navigate = useNavigate();
   const { showToast } = useMagicToast();
 
+  const workPerm = getPagePermission(null, 'checklist', 'Work Records');
+  const isModifyAllowed = workPerm.canModify;
+
+  useEffect(() => {
+    if (!workPerm.canView) {
+      navigate("/dashboard/task", { replace: true });
+    }
+  }, [workPerm.canView, navigate]);
+
   const { tasks: masterTasks, assignments, loading, saving, error } = useSelector(state => state.workRecords);
   const { userData } = useSelector(state => state.setting);
 
   // User Role & Permissions Logic
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const username = (localStorage.getItem("user-name") || "").toLowerCase();
-  const isSuperAdmin = username === "admin" || username === "masteradmin";
-  const isAdmin = isSuperAdmin || role === "admin";
+  const isSuperAdmin = role === "superadmin" || role === "masteradmin" || username === "admin" || username === "masteradmin";
   const isHOD = role === "hod";
-
-  const workPerm = getPagePermission(null, 'checklist', 'Work Records');
-  const isModifyAllowed = workPerm.canModify;
+  const isAdmin = isSuperAdmin || isHOD || role === "admin";
 
   const assignedShops = useMemo(() => {
     return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
   }, []);
-  const hasGlobalShopAccess = (isSuperAdmin || isHOD) && assignedShops.length === 0;
+  const hasGlobalShopAccess = !isUserShopScoped();
 
   // UI States
   const [searchTerm, setSearchTerm] = useState("");
@@ -264,6 +270,7 @@ export default function ScheduledWorkTasks() {
   }, [mergedData, selectedShop, searchTerm, hasGlobalShopAccess, assignedShops]);
 
   const handleFieldChange = (taskId, field, value) => {
+    if (!isModifyAllowed) return;
     setModifiedRows(prev => ({
       ...prev,
       [taskId]: {
@@ -496,6 +503,10 @@ export default function ScheduledWorkTasks() {
   };
 
   const clearScheduledAssignment = (taskId) => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: Clearing assignments is restricted.", "error");
+      return;
+    }
     handleFieldChange(taskId, "next_manager_name", null);
     handleFieldChange(taskId, "next_employee_name", null);
     handleFieldChange(taskId, "next_start_datetime", null);
@@ -743,7 +754,8 @@ export default function ScheduledWorkTasks() {
                     <td className="px-2 py-3">
                       <input
                         type="date"
-                        className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
+                        disabled={!isModifyAllowed}
+                        className={`w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                         value={getDatePart(displayStart)}
                         onChange={(e) => handleFieldChange(item.taskId, "next_start_datetime", combineDateAndTime(e.target.value, getTimePart(displayStart)))}
                       />
@@ -753,7 +765,8 @@ export default function ScheduledWorkTasks() {
                     <td className="px-2 py-3">
                       <input
                         type="date"
-                        className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
+                        disabled={!isModifyAllowed}
+                        className={`w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                         value={getDatePart(displayEnd)}
                         onChange={(e) => handleFieldChange(item.taskId, "next_end_datetime", combineDateAndTime(e.target.value, getTimePart(displayEnd)))}
                       />
@@ -779,15 +792,16 @@ export default function ScheduledWorkTasks() {
                         <input
                           type="text"
                           placeholder="Select Manager..."
-                          className="w-full px-2 py-1.5 border border-gray-200 bg-gray-50 hover:bg-white rounded text-[10px] font-bold outline-none transition-all"
+                          disabled={!isModifyAllowed}
+                          className={`w-full px-2 py-1.5 border border-gray-200 bg-gray-50 hover:bg-white rounded text-[10px] font-bold outline-none transition-all ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                           value={item.next_manager_name || ""}
                           onChange={(e) => {
                             handleFieldChange(item.taskId, "next_manager_name", e.target.value);
                             setSearchDropdown({ type: "next_manager", id: item.taskId, term: e.target.value });
                           }}
-                          onFocus={() => setSearchDropdown({ type: "next_manager", id: item.taskId, term: item.next_manager_name || "" })}
+                          onFocus={() => isModifyAllowed && setSearchDropdown({ type: "next_manager", id: item.taskId, term: item.next_manager_name || "" })}
                         />
-                        {searchDropdown.type === "next_manager" && searchDropdown.id === item.taskId && (
+                        {isModifyAllowed && searchDropdown.type === "next_manager" && searchDropdown.id === item.taskId && (
                           <div className={`absolute z-50 left-0 min-w-[200px] bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"}`}>
                             {managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                               <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No managers found</div>
@@ -815,16 +829,18 @@ export default function ScheduledWorkTasks() {
                             {item.next_employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
                               <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm">
                                 {emp}
-                                <button
-                                  type="button"
-                                  className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px]"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleNextEmployee(item.taskId, emp, item.next_employee_name);
-                                  }}
-                                >
-                                  ×
-                                </button>
+                                {isModifyAllowed && (
+                                  <button
+                                    type="button"
+                                    className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px]"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleNextEmployee(item.taskId, emp, item.next_employee_name);
+                                    }}
+                                  >
+                                    ×
+                                  </button>
+                                )}
                               </span>
                             ))}
                           </div>
@@ -832,12 +848,13 @@ export default function ScheduledWorkTasks() {
                         <input
                           type="text"
                           placeholder={item.next_employee_name ? "Add doer..." : "Select doer.."}
-                          className="w-full px-2 py-1.5 border border-gray-200 bg-gray-50 hover:bg-white rounded text-[10px] font-bold outline-none"
+                          disabled={!isModifyAllowed}
+                          className={`w-full px-2 py-1.5 border border-gray-200 bg-gray-50 hover:bg-white rounded text-[10px] font-bold outline-none ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                           value={(searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
                           onChange={(e) => setSearchDropdown({ type: "next_employee", id: item.taskId, term: e.target.value })}
-                          onFocus={() => setSearchDropdown({ type: "next_employee", id: item.taskId, term: "" })}
+                          onFocus={() => isModifyAllowed && setSearchDropdown({ type: "next_employee", id: item.taskId, term: "" })}
                         />
-                        {searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId && (
+                        {isModifyAllowed && searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId && (
                           <div className={`absolute z-50 left-0 min-w-[200px] bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"}`}>
                             {employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                               <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No employees found</div>
@@ -864,8 +881,9 @@ export default function ScheduledWorkTasks() {
                     <td className="px-2 py-3 text-center">
                       <button
                         type="button"
+                        disabled={!isModifyAllowed}
                         onClick={() => clearScheduledAssignment(item.taskId)}
-                        className="text-[9.5px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest bg-red-50 hover:bg-red-100/60 px-2.5 py-1.5 rounded-lg border border-red-200 transition-colors"
+                        className={`text-[9.5px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors ${!isModifyAllowed ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed' : 'text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100/60 border-red-200'}`}
                       >
                         Clear
                       </button>
@@ -924,7 +942,8 @@ export default function ScheduledWorkTasks() {
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next Start Date</label>
                     <input
                       type="date"
-                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none"
+                      disabled={!isModifyAllowed}
+                      className={`w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                       value={getDatePart(displayStart)}
                       onChange={(e) => handleFieldChange(item.taskId, "next_start_datetime", combineDateAndTime(e.target.value, getTimePart(displayStart)))}
                     />
@@ -933,7 +952,8 @@ export default function ScheduledWorkTasks() {
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next End Date</label>
                     <input
                       type="date"
-                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none"
+                      disabled={!isModifyAllowed}
+                      className={`w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                       value={getDatePart(displayEnd)}
                       onChange={(e) => handleFieldChange(item.taskId, "next_end_datetime", combineDateAndTime(e.target.value, getTimePart(displayEnd)))}
                     />
@@ -962,15 +982,16 @@ export default function ScheduledWorkTasks() {
                   <input
                     type="text"
                     placeholder="Select Manager..."
-                    className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none"
+                    disabled={!isModifyAllowed}
+                    className={`w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                     value={item.next_manager_name || ""}
                     onChange={(e) => {
                       handleFieldChange(item.taskId, "next_manager_name", e.target.value);
                       setSearchDropdown({ type: "next_manager", id: item.taskId, term: e.target.value });
                     }}
-                    onFocus={() => setSearchDropdown({ type: "next_manager", id: item.taskId, term: item.next_manager_name || "" })}
+                    onFocus={() => isModifyAllowed && setSearchDropdown({ type: "next_manager", id: item.taskId, term: item.next_manager_name || "" })}
                   />
-                  {searchDropdown.type === "next_manager" && searchDropdown.id === item.taskId && (
+                  {isModifyAllowed && searchDropdown.type === "next_manager" && searchDropdown.id === item.taskId && (
                     <div className="absolute z-50 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-40 overflow-y-auto mt-1 top-full">
                       {managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
                         <button
@@ -995,16 +1016,18 @@ export default function ScheduledWorkTasks() {
                       {item.next_employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
                         <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm">
                           {emp}
-                          <button
-                            type="button"
-                            className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 text-[9px]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleNextEmployee(item.taskId, emp, item.next_employee_name);
-                            }}
-                          >
-                            ×
-                          </button>
+                          {isModifyAllowed && (
+                            <button
+                              type="button"
+                              className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 text-[9px]"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleNextEmployee(item.taskId, emp, item.next_employee_name);
+                              }}
+                            >
+                              ×
+                            </button>
+                          )}
                         </span>
                       ))}
                     </div>
@@ -1012,12 +1035,13 @@ export default function ScheduledWorkTasks() {
                   <input
                     type="text"
                     placeholder="Add employee..."
-                    className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none"
+                    disabled={!isModifyAllowed}
+                    className={`w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 outline-none ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                     value={(searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
                     onChange={(e) => setSearchDropdown({ type: "next_employee", id: item.taskId, term: e.target.value })}
-                    onFocus={() => setSearchDropdown({ type: "next_employee", id: item.taskId, term: "" })}
+                    onFocus={() => isModifyAllowed && setSearchDropdown({ type: "next_employee", id: item.taskId, term: "" })}
                   />
-                  {searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId && (
+                  {isModifyAllowed && searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId && (
                     <div className="absolute z-50 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-40 overflow-y-auto mt-1 top-full">
                       {employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
                         const isSelected = item.next_employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
@@ -1041,8 +1065,9 @@ export default function ScheduledWorkTasks() {
                 <div className="flex justify-end pt-2 border-t border-gray-50">
                   <button
                     type="button"
+                    disabled={!isModifyAllowed}
                     onClick={() => clearScheduledAssignment(item.taskId)}
-                    className="text-[9.5px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest bg-red-50 hover:bg-red-100/60 px-3 py-1.5 rounded-lg border border-red-200"
+                    className={`text-[9.5px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-colors ${!isModifyAllowed ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed' : 'text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100/60 border-red-200'}`}
                   >
                     Clear Schedule
                   </button>

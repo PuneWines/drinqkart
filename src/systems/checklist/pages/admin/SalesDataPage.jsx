@@ -31,7 +31,12 @@ export default function AccountDataPage({ showLayout = true, shopFilter = "" }) 
   const dispatch = useDispatch();
   const { checklist, loading, history, hasMore, currentPage } = useSelector((state) => state.checkList);
 
-  const userRole = localStorage.getItem("role") || "";
+  const userRole = localStorage.getItem("role") || sessionStorage.getItem("role") || "";
+
+  const isElevatedRole = (r) => {
+    const norm = (r || '').toLowerCase();
+    return norm === 'admin' || norm === 'hod' || norm === 'superadmin' || norm === 'masteradmin';
+  };
 
   useEffect(() => {
     dispatch(checklistData(1))
@@ -248,7 +253,7 @@ export default function AccountDataPage({ showLayout = true, shopFilter = "" }) 
               </button>
             )}
 
-            {showHistory && userRole === 'admin' && (
+            {showHistory && isElevatedRole(userRole) && (
               <button
                 onClick={handleMarkMultipleDone}
                 disabled={markingAsDone || selectedHistoryItems.length === 0}
@@ -318,7 +323,7 @@ export default function AccountDataPage({ showLayout = true, shopFilter = "" }) 
                           className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                         />
                       ) : (
-                        userRole === 'admin' && (
+                        isElevatedRole(userRole) && (
                           <input
                             type="checkbox"
                             checked={isHistorySelected}

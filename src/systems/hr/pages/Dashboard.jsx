@@ -3,6 +3,7 @@ import { Users, UserCheck, Clock, UserX, UserMinus, Briefcase, Calendar, Trendin
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 import useShopStore from '../../purchase/store/useShopStore'
+import { isUserShopScoped } from '../../../utils/permissionUtils'
 
 // Dynamic location ↔ shop resolver helper
 const getDynamicShopLocation = (shopName, details = []) => {
@@ -54,14 +55,10 @@ const resolveLocationToShop = (locStr, details = []) => {
 export default function Dashboard() {
     const { user: currentUserObj } = useAuth();
 
-    // Helper: Determine if current logged-in user is unrestricted admin
+    // Helper: Determine if current logged-in user is unrestricted (HOD & Superadmin hold global store access; Admin is scoped to assigned shops)
     const checkIsUnrestrictedAdmin = (u) => {
         if (!u) return false;
-        const uName = (u.user_name || u.username || '').trim().toLowerCase();
-        if (uName === 'masteradmin') return true;
-        const role = (u.role || '').trim().toLowerCase();
-        if (role === 'admin') return true;
-        return false;
+        return !isUserShopScoped(u);
     };
 
     const isUnrestrictedAdmin = checkIsUnrestrictedAdmin(currentUserObj);

@@ -65,7 +65,7 @@ export const getUserAssignedShops = (user) => {
   const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase().trim();
 
   // Superadmin and HOD have global authority across all enterprise shops
-  if (role === 'superadmin' || role === 'masteradmin' || role === 'hod' || username === 'masteradmin' || username === 'admin') {
+  if (role === 'superadmin' || role === 'masteradmin' || role === 'hod' || username === 'masteradmin') {
     return [];
   }
 
@@ -110,7 +110,7 @@ export const getUserAssignedShops = (user) => {
 export const getUserFromStorage = () => {
   if (typeof localStorage === 'undefined') return null;
   try {
-    const raw = localStorage.getItem('currentUser') || localStorage.getItem('drinqkart_user');
+    const raw = localStorage.getItem('drinqkart_user') || localStorage.getItem('currentUser');
     if (raw) return JSON.parse(raw);
   } catch {}
   return null;
@@ -121,7 +121,7 @@ export const PAGE_ALIASES = {
   // Purchase
   'indent': ['indent'],
   'po': ['po', 'purchaseorder', 'purchaseorders'],
-  'approval': ['approval', 'approvals'],
+  'approval': ['approval', 'adminapproval', 'admin_approval', 'admin approval', 'approvals'],
   'orderspipeline': ['orderspipeline', 'orderpipeline', 'pipeline'],
   'pohistory': ['pohistory', 'history'],
   'trader': ['trader', 'traderverification'],
@@ -153,15 +153,96 @@ export const PAGE_ALIASES = {
   'bankaudit': ['bankaudit', 'audit'],
 
   // Checklist
-  'task': ['task', 'alltasks', 'checklisttask', 'tasks', 'assigntask', 'all_task', 'all task'],
-  'assigntask': ['assigntask', 'task', 'checklisttask', 'assign_task', 'assign task'],
+  'task': ['task', 'alltasks', 'tasks', 'all_task', 'all task'],
+  'alltasks': ['task', 'alltasks', 'tasks', 'all_task', 'all task'],
+  'assigntask': ['assigntask', 'checklisttask', 'assign_task', 'assign task', 'maintenancetask', 'repairtask', 'eatask'],
+  'quicktask': ['quicktask', 'quick_task', 'quick task'],
   'workrecords': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],
   'workdetails': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],
   'scheduledworktasks': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],
   'scheduled': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],
-  'adminapproval': ['adminapproval', 'approval', 'stage3'],
+  'adminapproval': ['adminapproval', 'approval', 'stage3', 'admin_approval', 'admin approval', 'managerapproval', 'manager approval'],
   'usersmanagement': ['usersmanagement', 'users'],
   'mastersetting': ['mastersetting', 'userandsystemaccess']
+};
+
+// 1. SUPREME GLOBAL AUTHORITY: Superadmin / Masteradmin
+// Masteradmin/Superadmin holds full view and modify rights everywhere unconditionally.
+export const isUserSuperadmin = (user) => {
+  const userObj = user || getUserFromStorage() || {};
+  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') || localStorage.getItem('currentUserName') : '') || '').toLowerCase().trim();
+  const empId = String(userObj.employee_id || userObj.emp_code || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-id') : '') || '').trim();
+  return (
+    role === 'superadmin' ||
+    role === 'masteradmin' ||
+    username === 'masteradmin' ||
+    empId === '999'
+  );
+};
+
+// Centralized system key matching (handles hyphen, underscore, and alias variations)
+export const isSystemMatch = (sysA, sysB) => {
+  if (!sysA || !sysB) return false;
+  const a = normalizePermKey(sysA);
+  const b = normalizePermKey(sysB);
+  if (a === b) return true;
+  if ((a === 'checklist' || a === 'checklistdelegation') && (b === 'checklist' || b === 'checklistdelegation')) return true;
+  if ((a === 'saleanalytics' || a === 'salesanalytics') && (b === 'saleanalytics' || b === 'salesanalytics')) return true;
+  if ((a === 'stockreport' || a === 'stockbalance') && (b === 'stockreport' || b === 'stockbalance')) return true;
+  if ((a === 'mastersetting' || a === 'settings') && (b === 'mastersetting' || b === 'settings')) return true;
+  if ((a === 'pettycash' || a === 'pettycashform') && (b === 'pettycash' || b === 'pettycashform')) return true;
+  if ((a === 'businessoverview' || a === 'business') && (b === 'businessoverview' || b === 'business')) return true;
+  return false;
+};
+
+/**
+ * Check if a user has access to a specific subsystem
+ * 
+ * @param {Object} user 
+ * @param {string} systemId 
+ * @returns {boolean}
+ */
+export const hasSystemAccess = (user, systemId) => {
+  if (isUserSuperadmin(user)) return true;
+
+  const userObj = user || getUserFromStorage() || {};
+  const userRole = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+
+  const rawMaster = userObj.master_user_system_page_access;
+  const storedMaster = typeof localStorage !== 'undefined' ? localStorage.getItem('master_user_system_page_access') : null;
+
+  // Determine if master_user_system_page_access is explicitly defined on the user object or storage
+  const isMasterConfigured = (rawMaster !== undefined && rawMaster !== null) || (storedMaster !== undefined && storedMaster !== null);
+
+  const masterAccessList = [
+    ...parseAccessStrings(rawMaster),
+    ...parseAccessStrings(storedMaster),
+  ];
+
+  // If no custom masterAccessList configured at all (legacy account):
+  if (!isMasterConfigured || (masterAccessList.length === 0 && rawMaster === null)) {
+    if (userRole === 'admin' || userRole === 'hod') return true;
+    if (systemId === 'checklist') return true;
+    const legacyPages = [
+      ...parseAccessStrings(userObj.page_access),
+      ...parseAccessStrings(userObj.pages),
+      ...(typeof localStorage !== 'undefined' ? parseAccessStrings(localStorage.getItem('page_access')) : []),
+    ].map(normalizePermKey);
+    const normSys = normalizePermKey(systemId);
+    return legacyPages.some(item => isSystemMatch(item, normSys));
+  }
+
+  // When masterAccessList IS configured:
+  // User must have at least one valid granted page or blanket system entry for this system
+  return masterAccessList.some((rawPerm) => {
+    if (typeof rawPerm !== 'string') return false;
+    const parts = rawPerm.split('.');
+    if (parts.length >= 1) {
+      return isSystemMatch(parts[0], systemId);
+    }
+    return false;
+  });
 };
 
 /**
@@ -174,21 +255,11 @@ export const PAGE_ALIASES = {
  */
 export const getPagePermission = (user, systemId, pageName) => {
   const userObj = user || getUserFromStorage() || {};
-  const userRole = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase().trim();
-  const userName = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase().trim();
-  const empId = String(userObj.employee_id || userObj.emp_code || '').trim();
-
+  const userRole = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
   const assignedShops = getUserAssignedShops(userObj);
 
-  // 1. SUPREME GLOBAL AUTHORITY: Superadmin / Masteradmin
-  // Masteradmin/Superadmin holds full view and modify rights everywhere unconditionally.
-  const isSuperadmin =
-    userRole === 'superadmin' ||
-    userRole === 'masteradmin' ||
-    userName === 'masteradmin' ||
-    empId === '999';
-
-  if (isSuperadmin) {
+  // Supreme Global Authority check
+  if (isUserSuperadmin(userObj)) {
     return {
       canView: true,
       canModify: true,
@@ -198,15 +269,16 @@ export const getPagePermission = (user, systemId, pageName) => {
     };
   }
 
-  // 2. Collect all configured master access permission strings
+  const normPage = normalizePermKey(pageName);
+  const pageAliases = PAGE_ALIASES[normPage] || [normPage];
+
+  // Collect configured master access permissions
   const masterAccessList = [
     ...parseAccessStrings(userObj.master_user_system_page_access),
     ...(typeof localStorage !== 'undefined' ? parseAccessStrings(localStorage.getItem('master_user_system_page_access')) : []),
   ];
 
   const normSystem = normalizePermKey(systemId);
-  const normPage = normalizePermKey(pageName);
-  const pageAliases = PAGE_ALIASES[normPage] || [normPage];
 
   // If user has NO master_user_system_page_access list configured at all (legacy account)
   if (masterAccessList.length === 0) {
@@ -238,7 +310,7 @@ export const getPagePermission = (user, systemId, pageName) => {
     };
   }
 
-  // 3. Scan masterAccessList for explicit matches
+  // Scan masterAccessList for explicit matches
   let foundModify = false;
   let foundView = false;
 
@@ -248,15 +320,11 @@ export const getPagePermission = (user, systemId, pageName) => {
     
     // Format: <system>.<page>.<action> (e.g. purchase.Indent.modify)
     if (parts.length >= 3) {
-      const pSys = normalizePermKey(parts[0]);
       const pPage = normalizePermKey(parts[1]);
       const pAction = parts[2].toLowerCase().trim();
 
-      const systemMatches = pSys === normSystem || 
-        (normSystem === 'pettycash' && pSys === 'pettycash') ||
-        (normSystem === 'mastersetting' && (pSys === 'mastersetting' || pSys === 'settings'));
-
-      const pageMatches = pageAliases.includes(pPage) || pPage.includes(normPage) || normPage.includes(pPage);
+      const systemMatches = isSystemMatch(parts[0], systemId);
+      const pageMatches = pageAliases.includes(pPage);
 
       if (systemMatches && pageMatches) {
         if (pAction === 'modify') foundModify = true;
@@ -264,11 +332,10 @@ export const getPagePermission = (user, systemId, pageName) => {
       }
     } else if (parts.length === 2) {
       // Format: <system>.<page>
-      const pSys = normalizePermKey(parts[0]);
       const pPage = normalizePermKey(parts[1]);
 
-      const systemMatches = pSys === normSystem;
-      const pageMatches = pageAliases.includes(pPage) || pPage.includes(normPage) || normPage.includes(pPage);
+      const systemMatches = isSystemMatch(parts[0], systemId);
+      const pageMatches = pageAliases.includes(pPage);
 
       if (systemMatches && pageMatches) {
         // Direct assignment without action suffix defaults to view unless user has modify elsewhere
@@ -276,8 +343,7 @@ export const getPagePermission = (user, systemId, pageName) => {
       }
     } else if (parts.length === 1) {
       // Subsystem-wide blanket permission (e.g. "business-overview" or "whatsapp")
-      const pItem = normalizePermKey(parts[0]);
-      if (pItem === normSystem) {
+      if (isSystemMatch(parts[0], systemId)) {
         foundModify = true;
       }
     }
@@ -304,17 +370,7 @@ export const getPagePermission = (user, systemId, pageName) => {
     };
   }
 
-  // User has explicit master permissions configured, but this specific page is not granted
-  // HOD global administration fallback for unconfigured modules:
-  if (userRole === 'hod') {
-    return {
-      canView: true,
-      canModify: true,
-      state: 'modify',
-      isRestricted: false,
-      assignedShops: []
-    };
-  }
+  // User has explicit master permissions configured, but this specific page is not granted:
 
   return {
     canView: false,
@@ -345,8 +401,13 @@ export const isPageRestricted = (systemId, pageName, user) => {
 export const ViewOnlyBanner = ({ 
   message = "You are currently in View-Only mode. Creating, submitting, uploading, editing, or deleting records is restricted.", 
   pageTitle,
-  className = "" 
+  className = "",
+  isModifyAllowed = false
 }) => {
+  const storedRole = (typeof localStorage !== 'undefined' ? (localStorage.getItem('role') || '') : '').toLowerCase();
+  const storedUser = (typeof localStorage !== 'undefined' ? (localStorage.getItem('username') || '') : '').toLowerCase();
+  const isElevated = storedRole === 'superadmin' || storedRole === 'masteradmin' || storedUser === 'masteradmin';
+  if (isModifyAllowed || isElevated) return null;
   return React.createElement(
     'div',
     { className: `mb-5 p-4 rounded-xl border border-amber-300/80 bg-gradient-to-r from-amber-50 via-amber-50/70 to-orange-50/60 shadow-xs flex items-center justify-between gap-3 text-amber-950 ${className}` },
@@ -379,12 +440,50 @@ export const ViewOnlyBanner = ({
   );
 };
 
+/**
+ * Scopes a Supabase query so it only fetches data for the user's assigned shop(s).
+ * - Superadmin & HOD: Global scope (unfiltered).
+ * - Admin, Manager, User: Strictly filtered by assigned shop(s) using .in(shopColumn, assignedShops).
+ * - Scoped user with no shop assigned: Returns zero rows to prevent data leakage.
+ */
+export const scopeQueryToUserShops = (query, shopColumn = 'shop_name', user = null) => {
+  const userObj = user || getUserFromStorage() || {};
+  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase().trim();
+  const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase().trim();
+
+  // Superadmin and HOD have global multi-shop access across all shops
+  if (role === 'superadmin' || role === 'masteradmin' || role === 'hod' || username === 'masteradmin') {
+    return query;
+  }
+
+  const assignedShops = getUserAssignedShops(userObj);
+  if (assignedShops.length > 0) {
+    return query.in(shopColumn, assignedShops);
+  }
+
+  // Scoped user with no assigned shop: return non-matching dummy value to prevent data leakage
+  return query.eq(shopColumn, '__NO_ASSIGNED_SHOP__');
+};
+
+export const isUserShopScoped = (user = null) => {
+  const userObj = user || getUserFromStorage() || {};
+  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase().trim();
+  const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase().trim();
+
+  return !(role === 'superadmin' || role === 'masteradmin' || role === 'hod' || username === 'masteradmin');
+};
+
 export default {
   getPagePermission,
   canModifyPage,
   canViewPage,
   isPageRestricted,
   getUserAssignedShops,
+  scopeQueryToUserShops,
+  isUserShopScoped,
+  isUserSuperadmin,
+  hasSystemAccess,
+  isSystemMatch,
   parseAccessStrings,
   PAGE_ALIASES,
   ViewOnlyBanner

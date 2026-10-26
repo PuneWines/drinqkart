@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import SearchableDropdown from '../components/ui/SearchableDropdown';
 import Toast from '../components/ui/Toast';
+import { isUserShopScoped, getUserAssignedShops } from '../../../utils/permissionUtils';
 import PurchaseLogs from '../components/reports/PurchaseLogs';
 import CurrentStockItems from '../components/reports/ClosingStockItems';
 import ClosingStockLogs from '../components/reports/ClosingStockLogs';
@@ -177,22 +178,27 @@ export default function Inventory({ currentUser }) {
       const [items, vendors, shops] = await Promise.all([getItems(selectedShopId), getVendors(selectedShopId), getShops()]);
       setItemsList(items);
       setVendorsList(vendors);
-      setShopsList(shops);
-      if (shops && shops.length > 0) {
-        if (currentUser?.role === 'operator') {
-          const matched = shops.find(s =>
+
+      const isScoped = isUserShopScoped();
+      const assigned = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+      const visibleShops = (isScoped && assigned.length > 0)
+        ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
+        : (shops || []);
+      setShopsList(visibleShops);
+
+      if (visibleShops && visibleShops.length > 0) {
+        if (currentUser?.role === 'operator' || (isScoped && assigned.length > 0)) {
+          const matched = visibleShops.find(s =>
             (currentUser?.shop_id && s.id.toString() === currentUser.shop_id.toString()) ||
             (currentUser?.shop_name && s.shop_name?.trim().toLowerCase() === currentUser.shop_name.trim().toLowerCase())
           );
           if (matched) {
             setSelectedShopId(matched.id.toString());
-          } else if (currentUser?.shop_id) {
-            setSelectedShopId(currentUser.shop_id.toString());
-          } else if (!selectedShopId) {
-            setSelectedShopId(shops[0].id.toString());
+          } else {
+            setSelectedShopId(visibleShops[0].id.toString());
           }
         } else if (!selectedShopId) {
-          setSelectedShopId(shops[0].id.toString());
+          setSelectedShopId(visibleShops[0].id.toString());
         }
       }
     } catch (err) {
@@ -690,7 +696,7 @@ export default function Inventory({ currentUser }) {
               </div>
               <div className="md:ml-4 md:inline-block">
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                  {currentUser?.role === 'admin' ? 'Snacks Inventory System' : `${currentShopName.toUpperCase()} Snacks Inventory System`}
+                  {!isUserShopScoped(currentUser) ? 'Snacks Inventory System' : `${currentShopName.toUpperCase()} Snacks Inventory System`}
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">Daily operational entry desk</p>
               </div>
@@ -1296,7 +1302,7 @@ export default function Inventory({ currentUser }) {
                           <div>
                             <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wide">Sheet Mapping Note</h4>
                             <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                              Values submitted here map to <span className="font-semibold text-slate-800">{currentUser?.role === 'admin' ? 'Snacks Sheet' : `${currentShopName.toUpperCase()} Snacks Sheet`}</span>:
+                              Values submitted here map to <span className="font-semibold text-slate-800">{!isUserShopScoped(currentUser) ? 'Snacks Sheet' : `${currentShopName.toUpperCase()} Snacks Sheet`}</span>:
                             </p>
                             <ul className="text-xs text-indigo-900 mt-2 space-y-1 font-mono bg-indigo-50/30 p-2.5 rounded-lg border border-indigo-100/50">
                               <li>• G-Pay Balance → <span className="text-indigo-700 font-semibold">Column O</span></li>

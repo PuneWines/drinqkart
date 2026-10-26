@@ -34,8 +34,9 @@ export default function DashboardHeader({
         }
     }, [dateRange]);
     const normalizedRole = (userRole || "").toLowerCase();
-    const isAdmin = normalizedRole === "admin" || normalizedRole === "manager";
+    const isSuperAdmin = normalizedRole === "superadmin" || normalizedRole === "super_admin";
     const isHOD = normalizedRole === "hod";
+    const isAdmin = normalizedRole === "admin" || normalizedRole === "manager" || isHOD || isSuperAdmin;
 
     const userAccessStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
     const hasAllShopsAccess = userAccessStr.toLowerCase() === "all" || !userAccessStr;
@@ -211,7 +212,7 @@ export default function DashboardHeader({
                                         onChange={(e) => setDashboardStaffFilter(e.target.value)}
                                         className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
                                     >
-                                        <option value="all"> {isHOD ? "My Group" : "All Staff"} </option>
+                                        <option value="all">All Staff</option>
                                         {availableStaff.map((staffName) => (
                                             <option key={staffName} value={staffName}>
                                                 {staffName}
@@ -332,7 +333,7 @@ export default function DashboardHeader({
                                 onChange={(e) => setDashboardStaffFilter(e.target.value)}
                                 className="w-[140px] sm:w-[180px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                             >
-                                <option value="all">{isHOD ? "My Group" : "All Staff Members"}</option>
+                                <option value="all">All Staff Members</option>
                                 {availableStaff.map((staffName) => (
                                     <option key={staffName} value={staffName}>
                                         {staffName}

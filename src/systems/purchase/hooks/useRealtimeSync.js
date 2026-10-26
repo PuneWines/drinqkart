@@ -22,29 +22,21 @@ export function useRealtimeSync() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // ── Channel 1: indent_items ────────────────────────────────
-    // Covers: Approval page (pending batches list)
-    // Payload columns kept minimal — just the status fields needed to know
-    // whether the cache is stale.
-    const indentItemsChannel = supabase
-      .channel("realtime:indent_items")
+    // Multiplex all table change listeners on a single realtime channel
+    // to minimize WebSocket channels and connection pool overhead on Supabase
+    const syncChannel = supabase
+      .channel("realtime:purchase_sync")
       .on(
         "postgres_changes",
         {
-          event: "*", // INSERT | UPDATE | DELETE
+          event: "*",
           schema: "public",
           table: "purchase_indent_items",
         },
-        (_payload) => {
+        () => {
           queryClient.invalidateQueries({ queryKey: ["approvalsData"] });
         }
       )
-      .subscribe();
-
-    // ── Channel 2: approved_indent_items ───────────────────────
-    // Covers: Approval history tab + PurchaseOrder approved items list
-    const approvedItemsChannel = supabase
-      .channel("realtime:approved_indent_items")
       .on(
         "postgres_changes",
         {
@@ -52,18 +44,11 @@ export function useRealtimeSync() {
           schema: "public",
           table: "purchase_approved_indent_items",
         },
-        (_payload) => {
-          // Invalidate both caches that depend on this table
+        () => {
           queryClient.invalidateQueries({ queryKey: ["approvalsData"] });
           queryClient.invalidateQueries({ queryKey: ["purchaseOrderPageData"] });
         }
       )
-      .subscribe();
-
-    // ── Channel 3: purchase_orders ─────────────────────────────
-    // Covers: POHistory, OrdersPipeline stats + list, PurchaseOrder (PO dedup)
-    const purchaseOrdersChannel = supabase
-      .channel("realtime:purchase_orders")
       .on(
         "postgres_changes",
         {
@@ -71,7 +56,7 @@ export function useRealtimeSync() {
           schema: "public",
           table: "purchase_purchase_orders",
         },
-        (_payload) => {
+        () => {
           queryClient.invalidateQueries({ queryKey: ["pipelineOrders"] });
           queryClient.invalidateQueries({ queryKey: ["pipelineStats"] });
           queryClient.invalidateQueries({ queryKey: ["poHistory"] });
@@ -79,12 +64,6 @@ export function useRealtimeSync() {
           queryClient.invalidateQueries({ queryKey: ["purchaseOrderPageData"] });
         }
       )
-      .subscribe();
-
-    // ── Channel 4: purchase_dashboard ──────────────────────────
-    // Covers: Dashboard page lifecycle audit table
-    const dashboardChannel = supabase
-      .channel("realtime:purchase_dashboard")
       .on(
         "postgres_changes",
         {
@@ -92,18 +71,14 @@ export function useRealtimeSync() {
           schema: "public",
           table: "purchase_dashboard",
         },
-        (_payload) => {
+        () => {
           queryClient.invalidateQueries({ queryKey: ["purchaseDashboardLogs"] });
         }
       )
       .subscribe();
 
-    // ── Cleanup ────────────────────────────────────────────────
     return () => {
-      supabase.removeChannel(indentItemsChannel);
-      supabase.removeChannel(approvedItemsChannel);
-      supabase.removeChannel(purchaseOrdersChannel);
-      supabase.removeChannel(dashboardChannel);
+      supabase.removeChannel(syncChannel);
     };
   }, [queryClient]);
 }

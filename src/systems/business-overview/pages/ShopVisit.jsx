@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { scopeQueryToUserShops } from '../../../utils/permissionUtils';
 import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, Pencil, X, Store, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2pdf from 'html2pdf.js';
@@ -1508,15 +1509,21 @@ export default function ShopVisit() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => { supabase.from('shop').select('shop_name,full_name').order('shop_name').then(({ data }) => { if (data) setShops(data); }); }, []);
+  useEffect(() => {
+    let q = supabase.from('shop').select('shop_name,full_name').order('shop_name');
+    q = scopeQueryToUserShops(q, 'shop_name');
+    q.then(({ data }) => { if (data) setShops(data); });
+  }, []);
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from('shop_visit')
         .select('*')
         .order('created_at', { ascending: false });
+      q = scopeQueryToUserShops(q, 'shop_name');
+      const { data, error } = await q;
 
       if (error) throw error;
       setVisits(data || []);

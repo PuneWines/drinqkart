@@ -12,6 +12,7 @@ import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification, sendUrgentTaskNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
+import { ViewOnlyBanner, getPagePermission, getUserAssignedShops, isUserShopScoped } from "../../../../utils/permissionUtils";
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
 const formatDateISO = (date) => {
@@ -60,10 +61,11 @@ const defaultTask = () => ({
 // Single Maintenance Task Card
 const MaintenanceTaskCard = ({
     task, index, total, shops, doerName, givenBy,
-    customDropdowns, onUpdate, onRemove, dispatch
+    customDropdowns, onUpdate, onRemove, dispatch, isModifyAllowed = true
 }) => {
     const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
     const handleChange = (e) => {
+        if (!isModifyAllowed) return;
         const { name, value, type, checked } = e.target;
         onUpdate(task.id, {
             [name]: type === 'checkbox' ? checked : value,
@@ -95,19 +97,16 @@ const MaintenanceTaskCard = ({
                 }
             }
 
-            // HOD Restriction & Reporting Group Filter
-            const currentU = (localStorage.getItem("user-name") || "").toLowerCase().trim();
-            const currentR = (localStorage.getItem("role") || "").toLowerCase().trim();
-
-            if (currentR === "hod") {
-                const dName = (user.user_name || user.name || "").toLowerCase().trim();
-                const reportedBy = (user.reported_by || "").toLowerCase().trim();
-
-                // Only show themselves OR their direct reports
-                if (dName !== currentU && reportedBy !== currentU) return false;
-
-                // If it's themselves, check for explicit self-assign rights
-                if (dName === currentU && !user.can_self_assign) return false;
+            // Shop Scoping for Admin vs Global Multi-Shop for HOD/Superadmin
+            if (isUserShopScoped()) {
+                const assignedShops = getUserAssignedShops().map(s => s.toLowerCase());
+                if (assignedShops.length > 0) {
+                    const uShop = (user.shop_name || user.user_access || "").toLowerCase();
+                    const uShopsList = uShop.split(',').map(s => s.trim()).filter(Boolean);
+                    if (!uShopsList.some(s => assignedShops.includes(s) || assignedShops.some(as => s.includes(as)))) {
+                        return false;
+                    }
+                }
             }
 
             return true;
@@ -115,6 +114,7 @@ const MaintenanceTaskCard = ({
     };
 
     const handlePartToggle = (partValue) => {
+        if (!isModifyAllowed) return;
         const current = task.partName || [];
         onUpdate(task.id, {
             partName: current.includes(partValue)
@@ -177,7 +177,7 @@ const MaintenanceTaskCard = ({
                         <span className="text-sm font-bold text-purple-800">Maintenance Task {index + 1}</span>
                         {task.machineName && <span className="text-xs text-purple-500 font-medium">— {task.machineName}</span>}
                     </div>
-                    {total > 1 && (
+                    {total > 1 && isModifyAllowed && (
                         <button type="button" onClick={() => onRemove(task.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
                             <Trash2 className="w-4 h-4" />
                         </button>
@@ -192,8 +192,8 @@ const MaintenanceTaskCard = ({
                             name="givenBy"
                             value={task.givenBy}
                             onChange={handleChange}
-                            disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD")}
-                            className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD") ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            disabled={!isModifyAllowed || (localStorage.getItem("role")?.toUpperCase() === "HOD")}
+                            className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(!isModifyAllowed || localStorage.getItem("role")?.toUpperCase() === "HOD") ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
                             <option value="">Select Assign From</option>
                             {givenBy.map((g, i) => { const val = typeof g === 'object' ? (g.given_by || g.name) : g; return <option key={i} value={val}>{val}</option>; })}
@@ -204,14 +204,26 @@ const MaintenanceTaskCard = ({
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Machine Name</label>
-                            <select name="machineName" value={task.machineName} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <select
+                                name="machineName"
+                                value={task.machineName}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="">Select Machine</option>
                                 {getUniqueDropdownValues("Machine Name").map(item => <option key={item.id} value={item.value}>{item.value}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Machine Area</label>
-                            <select name="machineArea" value={task.machineArea} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <select
+                                name="machineArea"
+                                value={task.machineArea}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="">Select Area</option>
                                 {getUniqueDropdownValues("Machine Area").map(item => <option key={item.id} value={item.value}>{item.value}</option>)}
                             </select>
@@ -224,8 +236,8 @@ const MaintenanceTaskCard = ({
                         <div className="relative">
                             <button
                                 type="button"
-                                onClick={() => onUpdate(task.id, { showPartDropdown: !task.showPartDropdown })}
-                                disabled={!task.machineName}
+                                onClick={() => isModifyAllowed && onUpdate(task.id, { showPartDropdown: !task.showPartDropdown })}
+                                disabled={!isModifyAllowed || !task.machineName}
                                 className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 hover:bg-white transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                             >
                                 <span>{task.partName?.length === 0 ? (task.machineName ? 'Select Parts' : 'Select Machine First') : `${task.partName?.length} part(s) selected`}</span>
@@ -233,11 +245,11 @@ const MaintenanceTaskCard = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
-                            {task.showPartDropdown && task.machineName && (
+                            {task.showPartDropdown && task.machineName && isModifyAllowed && (
                                 <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
                                     {getUniqueDropdownValues("Part Name").filter(item => !item.parent || item.parent === task.machineName).map(item => (
                                         <label key={item.id} className="flex items-center gap-3 px-4 py-3 hover:bg-purple-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0">
-                                            <input type="checkbox" checked={task.partName?.includes(item.value)} onChange={() => handlePartToggle(item.value)} className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 flex-shrink-0" />
+                                            <input type="checkbox" disabled={!isModifyAllowed} checked={task.partName?.includes(item.value)} onChange={() => handlePartToggle(item.value)} className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 flex-shrink-0" />
                                             {item.image_url ? (
                                                 <img
                                                     src={item.image_url}
@@ -276,7 +288,9 @@ const MaintenanceTaskCard = ({
                                             ) : null;
                                         })()}
                                         {part}
-                                        <button type="button" onClick={() => handlePartToggle(part)} className="hover:bg-purple-200 rounded-full p-0.5 ml-0.5"><X className="w-3 h-3" /></button>
+                                        {isModifyAllowed && (
+                                            <button type="button" onClick={() => handlePartToggle(part)} className="hover:bg-purple-200 rounded-full p-0.5 ml-0.5"><X className="w-3 h-3" /></button>
+                                        )}
                                     </span>
                                 ))}
                             </div>
@@ -304,14 +318,16 @@ const MaintenanceTaskCard = ({
                                                 <div className="p-1.5 text-center">
                                                     <p className="text-[10px] font-bold text-gray-700 truncate leading-tight">{part}</p>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handlePartToggle(part)}
-                                                    className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-sm"
-                                                    title="Remove part"
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
+                                                {isModifyAllowed && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handlePartToggle(part)}
+                                                        className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-sm"
+                                                        title="Remove part"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -330,7 +346,8 @@ const MaintenanceTaskCard = ({
                                 handleChange(e);
                                 dispatch(uniqueDoerNameData(e.target.value));
                             }}
-                            className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
+                            disabled={!isModifyAllowed}
+                            className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
                             <option value="">Select Shop</option>
                             {shops.map((s, i) => { const val = typeof s === 'object' ? (s.shop || s.shop_name) : s; return <option key={i} value={val}>{val}</option>; })}
@@ -341,14 +358,26 @@ const MaintenanceTaskCard = ({
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Doer's Name <span className="text-red-500">*</span></label>
-                            <select name="doerName" value={task.doerName} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <select
+                                name="doerName"
+                                value={task.doerName}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="">Select Doer</option>
                                 {getFilteredDoers().map((d, i) => { const val = typeof d === 'object' ? (d.user_name || d.name) : d; return <option key={i} value={val}>{val}</option>; })}
                             </select>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Need Sound Test</label>
-                            <select name="needSoundTest" value={task.needSoundTest} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <select
+                                name="needSoundTest"
+                                value={task.needSoundTest}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="">Select</option>
                                 {customDropdowns.filter(item => item.category === "Sound Test").map(item => <option key={item.id} value={item.value}>{item.value}</option>)}
                                 {!customDropdowns.some(item => item.category === "Sound Test") && (<><option value="Yes">Yes</option><option value="No">No</option></>)}
@@ -360,7 +389,13 @@ const MaintenanceTaskCard = ({
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Temperature</label>
-                            <select name="temperature" value={task.temperature} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <select
+                                name="temperature"
+                                value={task.temperature}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="">Select</option>
                                 {customDropdowns.filter(item => item.category === "Temperature").map(item => <option key={item.id} value={item.value}>{item.value}</option>)}
                                 {!customDropdowns.some(item => item.category === "Temperature") && (<><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></>)}
@@ -368,7 +403,13 @@ const MaintenanceTaskCard = ({
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Priority</label>
-                            <select name="priority" value={task.priority} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <select
+                                name="priority"
+                                value={task.priority}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="">Select</option>
                                 {customDropdowns.filter(item => item.category === "Task Priority").map(item => <option key={item.id} value={item.value}>{item.value}</option>)}
                                 {!customDropdowns.some(item => item.category === "Task Priority") && (<><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></>)}
@@ -381,7 +422,7 @@ const MaintenanceTaskCard = ({
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Work Description</label>
                         <ReactMediaRecorder
                             audio
-                            onStop={(blobUrl, blob) => onUpdate(task.id, { recordedAudio: { blobUrl, blob } })}
+                            onStop={(blobUrl, blob) => isModifyAllowed && onUpdate(task.id, { recordedAudio: { blobUrl, blob } })}
                             render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
                                 <div>
                                     {status !== 'recording' && (
@@ -390,13 +431,17 @@ const MaintenanceTaskCard = ({
                                                 name="workDescription"
                                                 value={task.workDescription}
                                                 onChange={handleChange}
+                                                disabled={!isModifyAllowed}
+                                                readOnly={!isModifyAllowed}
                                                 rows="3"
                                                 placeholder="Enter work description..."
-                                                className="w-full p-3 pr-11 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm"
+                                                className={`w-full p-3 pr-11 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                                             />
-                                            <button type="button" onClick={startRecording} className="absolute bottom-2.5 right-2.5 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all" title="Record Voice Note">
-                                                <Mic className="w-4 h-4" />
-                                            </button>
+                                            {isModifyAllowed && (
+                                                <button type="button" onClick={startRecording} className="absolute bottom-2.5 right-2.5 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all" title="Record Voice Note">
+                                                    <Mic className="w-4 h-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                     {status === 'recording' && (
@@ -414,9 +459,11 @@ const MaintenanceTaskCard = ({
                                         <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
                                             <div className="flex items-center justify-between mb-2">
                                                 <span className="text-xs font-bold text-purple-700 flex items-center gap-1.5"><Mic className="w-3 h-3" /> Voice Note Attached</span>
-                                                <button type="button" onClick={() => { clearBlobUrl(); onUpdate(task.id, { recordedAudio: null }); }} className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1">
-                                                    <Trash2 className="w-3 h-3" /> Remove
-                                                </button>
+                                                {isModifyAllowed && (
+                                                    <button type="button" onClick={() => { clearBlobUrl(); onUpdate(task.id, { recordedAudio: null }); }} className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1">
+                                                        <Trash2 className="w-3 h-3" /> Remove
+                                                    </button>
+                                                )}
                                             </div>
                                             <AudioPlayer url={task.recordedAudio.blobUrl} />
                                         </div>
@@ -432,15 +479,16 @@ const MaintenanceTaskCard = ({
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Start Date <span className="text-red-500">*</span></label>
                             <button
                                 type="button"
-                                onClick={() => onUpdate(task.id, { showCalendar: !task.showCalendar })}
-                                className="w-full p-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-xs"
+                                disabled={!isModifyAllowed}
+                                onClick={() => isModifyAllowed && onUpdate(task.id, { showCalendar: !task.showCalendar })}
+                                className={`w-full p-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-xs ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
                                 <span className={task.startDate ? "text-gray-800" : "text-gray-400"}>
                                     {task.startDate ? formatDateLong(new Date(task.startDate)) : "Select date"}
                                 </span>
                                 <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                             </button>
-                            {task.showCalendar && (
+                            {task.showCalendar && isModifyAllowed && (
                                 <div className="absolute top-full left-0 mt-1 z-50">
                                     <CalendarComponent
                                         date={task.startDate ? new Date(task.startDate) : null}
@@ -452,11 +500,24 @@ const MaintenanceTaskCard = ({
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Time</label>
-                            <input type="time" name="startTime" value={task.startTime} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm" />
+                            <input
+                                type="time"
+                                name="startTime"
+                                value={task.startTime}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            />
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Frequency</label>
-                            <select name="frequency" value={task.frequency} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-xs">
+                            <select
+                                name="frequency"
+                                value={task.frequency}
+                                onChange={handleChange}
+                                disabled={!isModifyAllowed}
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-xs ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="one-time">One Time</option>
                                 <option value="alternate-day">Alternate Day</option>
                                 <option value="daily">Daily</option>
@@ -477,21 +538,32 @@ const MaintenanceTaskCard = ({
                                 name="duration"
                                 value={task.duration}
                                 onChange={handleChange}
+                                disabled={!isModifyAllowed}
                                 placeholder="e.g. 2 hours"
-                                className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm"
+                                className={`w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                             />
                         </div>
                     </div>
 
                     {/* Toggles */}
                     <div className="flex gap-3">
-                        <button type="button" onClick={() => onUpdate(task.id, { enableReminder: !task.enableReminder })} className={`flex-1 flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition-all ${task.enableReminder ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+                        <button
+                            type="button"
+                            disabled={!isModifyAllowed}
+                            onClick={() => isModifyAllowed && onUpdate(task.id, { enableReminder: !task.enableReminder })}
+                            className={`flex-1 flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition-all ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''} ${task.enableReminder ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}
+                        >
                             <span>Enable Reminder</span>
                             <div className={`w-8 h-4 flex items-center rounded-full p-0.5 transition-colors ${task.enableReminder ? 'bg-purple-600' : 'bg-gray-300'}`}>
                                 <div className={`bg-white w-3 h-3 rounded-full shadow transform transition-transform ${task.enableReminder ? 'translate-x-4' : ''}`} />
                             </div>
                         </button>
-                        <button type="button" onClick={() => onUpdate(task.id, { requireAttachment: !task.requireAttachment })} className={`flex-1 flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition-all ${task.requireAttachment ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+                        <button
+                            type="button"
+                            disabled={!isModifyAllowed}
+                            onClick={() => isModifyAllowed && onUpdate(task.id, { requireAttachment: !task.requireAttachment })}
+                            className={`flex-1 flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition-all ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''} ${task.requireAttachment ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}
+                        >
                             <span>Require Attachment</span>
                             <div className={`w-8 h-4 flex items-center rounded-full p-0.5 transition-colors ${task.requireAttachment ? 'bg-purple-600' : 'bg-gray-300'}`}>
                                 <div className={`bg-white w-3 h-3 rounded-full shadow transform transition-transform ${task.requireAttachment ? 'translate-x-4' : ''}`} />
@@ -508,6 +580,8 @@ export default function MaintenanceTask() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const { showToast } = useMagicToast();
+    const taskPerm = getPagePermission(null, 'checklist', 'Assign Task');
+    const isModifyAllowed = taskPerm.canModify;
     const { shops, doerName, givenBy } = useSelector((state) => state.assignTask);
     const { customDropdowns = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -631,6 +705,10 @@ export default function MaintenanceTask() {
         return generatedList;
     };
     const handlePreview = async () => {
+        if (!isModifyAllowed) {
+            showToast("View-Only Mode: You have read-only access to Tasks. Creating or assigning tasks is restricted.", "error");
+            return;
+        }
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
@@ -689,6 +767,10 @@ export default function MaintenanceTask() {
     };
 
     const confirmSubmission = async () => {
+        if (!isModifyAllowed) {
+            showToast("View-Only Mode: You have read-only access to Tasks. Creating or assigning tasks is restricted.", "error");
+            return;
+        }
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
@@ -798,6 +880,10 @@ export default function MaintenanceTask() {
     return (
         <AdminLayout>
             <div className="max-w-3xl mx-auto p-4 sm:p-6">
+                {!isModifyAllowed && (
+                    <ViewOnlyBanner isModifyAllowed={isModifyAllowed} pageName="Assign Task" message="You have read-only access to Tasks. Creating or modifying tasks is restricted." />
+                )}
+
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
@@ -840,19 +926,22 @@ export default function MaintenanceTask() {
                             onUpdate={updateTask}
                             onRemove={removeTask}
                             dispatch={dispatch}
+                            isModifyAllowed={isModifyAllowed}
                         />
                     ))}
                 </div>
 
                 {/* Add Another Task */}
-                <button
-                    type="button"
-                    onClick={addTask}
-                    className="mt-6 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-purple-300 text-purple-600 font-bold rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group"
-                >
-                    <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    Add Another Task
-                </button>
+                {isModifyAllowed && (
+                    <button
+                        type="button"
+                        onClick={addTask}
+                        className="mt-6 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-purple-300 text-purple-600 font-bold rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group"
+                    >
+                        <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        Add Another Task
+                    </button>
+                )}
 
                 {/* Summary & Submit */}
                 <div className="mt-5 bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
@@ -873,8 +962,8 @@ export default function MaintenanceTask() {
                         <button
                             type="button"
                             onClick={handlePreview}
-                            disabled={isSubmitting}
-                            className="flex-grow py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-md transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            disabled={isSubmitting || !isModifyAllowed}
+                            className={`flex-grow py-3 font-bold rounded-xl shadow-md transform transition-all flex items-center justify-center gap-2 ${!isModifyAllowed ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none' : 'bg-purple-600 hover:bg-purple-700 text-white active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed'}`}
                         >
                             {isSubmitting ? (
                                 <><Loader2 size={18} className="animate-spin" /> Generating...</>

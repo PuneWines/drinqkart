@@ -149,17 +149,23 @@ export default function WorkDetails() {
   const navigate = useNavigate();
   const { showToast } = useMagicToast();
 
+  const workPerm = getPagePermission(null, 'checklist', 'Work Records');
+  const isModifyAllowed = workPerm.canModify;
+
+  useEffect(() => {
+    if (!workPerm.canView) {
+      navigate("/dashboard/task", { replace: true });
+    }
+  }, [workPerm.canView, navigate]);
+
   const { tasks: masterTasks, assignments, loading, saving, error } = useSelector(state => state.workRecords);
   const { userData } = useSelector(state => state.setting);
 
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const username = (localStorage.getItem("user-name") || "").toLowerCase();
-  const isSuperAdmin = username === "admin" || username === "masteradmin";
-  const isAdmin = isSuperAdmin || role === "admin";
+  const isSuperAdmin = role === "superadmin" || role === "masteradmin" || username === "admin" || username === "masteradmin";
   const isHOD = role === "hod";
-
-  const workPerm = getPagePermission(null, 'checklist', 'Work Records');
-  const isModifyAllowed = workPerm.canModify;
+  const isAdmin = isSuperAdmin || isHOD || role === "admin";
 
   const userAccess = localStorage.getItem("user_access") || "";
   const managerShops = useMemo(() => {
@@ -554,6 +560,7 @@ export default function WorkDetails() {
   };
 
   const handleFieldChange = (taskId, field, value) => {
+    if (!isModifyAllowed) return;
     setModifiedRows(prev => ({
       ...prev,
       [taskId]: {
@@ -564,11 +571,16 @@ export default function WorkDetails() {
   };
 
   const handleUnlockTask = (taskId) => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: Modifying task status is restricted.", "error");
+      return;
+    }
     handleFieldChange(taskId, "status", "ACTIVE");
     showToast("Task unlocked! You can now edit its details.", "info");
   };
 
   const handleTimeChange = (item, field, time) => {
+    if (!isModifyAllowed) return;
     const bulkDate = field === "start_datetime" ? bulkStartDate : bulkEndDate;
     const existingVal = modifiedRows[item.taskId]?.[field] !== undefined 
       ? modifiedRows[item.taskId][field] 
@@ -584,6 +596,7 @@ export default function WorkDetails() {
   };
 
   const handleDateChange = (item, field, newDate) => {
+    if (!isModifyAllowed) return;
     const currentTask = mergedData.find(t => t.taskId === item.taskId) || item;
     const existingVal = modifiedRows[item.taskId]?.[field] !== undefined 
       ? modifiedRows[item.taskId][field] 
@@ -595,6 +608,10 @@ export default function WorkDetails() {
   };
 
   const applyBulkDates = () => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Work Records. Updating assignments is restricted.", "error");
+      return;
+    }
     if (!(isAdmin || isHOD)) {
       showToast("Only admins and managers can update task dates", "error");
       return;
@@ -647,6 +664,10 @@ export default function WorkDetails() {
 
 
   const handleSaveChanges = async () => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Work Records. Assigning or saving tasks is restricted.", "error");
+      return;
+    }
     // Collect IDs from both modified rows AND selected rows
     const selectedIds = Array.from(selectedRows);
     const modifiedIds = Object.keys(modifiedRows).map(id => parseInt(id));
@@ -794,6 +815,10 @@ export default function WorkDetails() {
   };
 
   const handleBulkGenerate = async () => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Work Records. Generating tasks is restricted.", "error");
+      return;
+    }
     const selectedAssignments = mergedData.filter(item => {
       if (!selectedRows.has(item.taskId) || !item.assignmentId) return false;
 
@@ -897,6 +922,10 @@ export default function WorkDetails() {
   };
 
   const handleBulkReset = async () => {
+    if (!isModifyAllowed) {
+      showToast("View-Only Mode: You have read-only access to Work Records. Unlocking tasks is restricted.", "error");
+      return;
+    }
     const selectedAsgnIds = mergedData
       .filter(item => selectedRows.has(item.taskId) && (item.status === 'LOCKED' || item.status === 'GENERATED') && item.assignmentId)
       .map(item => item.assignmentId);
@@ -1129,7 +1158,8 @@ export default function WorkDetails() {
                   </label>
                   <input
                     type="date"
-                    className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-emerald-50/30 transition-all"
+                    disabled={!isModifyAllowed}
+                    className={`w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-emerald-50/30 transition-all ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                     value={bulkStartDate}
                     onChange={(e) => setBulkStartDate(e.target.value)}
                   />
@@ -1141,7 +1171,8 @@ export default function WorkDetails() {
                   </label>
                   <input
                     type="date"
-                    className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-orange-50/30 transition-all"
+                    disabled={!isModifyAllowed}
+                    className={`w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-orange-50/30 transition-all ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                     value={bulkEndDate}
                     onChange={(e) => setBulkEndDate(e.target.value)}
                   />
@@ -1149,7 +1180,7 @@ export default function WorkDetails() {
 
                 <button
                   onClick={applyBulkDates}
-                  disabled={selectedRows.size === 0}
+                  disabled={selectedRows.size === 0 || !isModifyAllowed}
                   className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:grayscale text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-emerald-200 active:scale-95"
                 >
                   <CheckCircle2 size={14} /> Apply Bulk
@@ -1159,25 +1190,25 @@ export default function WorkDetails() {
 
             <button
               onClick={handleSaveChanges}
-              disabled={saving || Object.keys(modifiedRows).length === 0}
+              disabled={saving || Object.keys(modifiedRows).length === 0 || !isModifyAllowed}
               className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-blue-200 active:scale-95"
             >
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {saving ? "Saving..." : "Save All"}
+              {saving ? "Saving..." : !isModifyAllowed ? "View Only" : "Save All"}
             </button>
 
             {isAdmin && (
               <>
                 <button
                   onClick={handleBulkGenerate}
-                  disabled={selectedRows.size === 0}
+                  disabled={selectedRows.size === 0 || !isModifyAllowed}
                   className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-indigo-200 active:scale-95"
                 >
                   <CheckCircle2 size={14} /> Generate Tasks
                 </button>
                 <button
                   onClick={handleBulkReset}
-                  disabled={selectedRows.size === 0}
+                  disabled={selectedRows.size === 0 || !isModifyAllowed}
                   className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-red-200 active:scale-95"
                 >
                   <Clock size={14} /> Unlock Tasks
@@ -1309,7 +1340,7 @@ export default function WorkDetails() {
                             }`}
                             value={getDatePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
                             onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
-                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                           />
                         </div>
                       </td>
@@ -1321,13 +1352,13 @@ export default function WorkDetails() {
                             className={`w-28 px-1.5 py-1 border rounded text-[10px] font-bold outline-none transition-all ${
                               isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
                                 ? 'border-amber-300 bg-amber-50/50'
-                                : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                                : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                                   ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                   : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                             }`}
                             value={getDatePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
                             onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
-                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                           />
                         </div>
                       </td>
@@ -1348,7 +1379,7 @@ export default function WorkDetails() {
                             placeholder="Manager.."
                             className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId]?.manager_name
                               ? 'border-amber-300 bg-amber-50/50'
-                              : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                              : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                                 ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                 : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                               }`}
@@ -1357,10 +1388,10 @@ export default function WorkDetails() {
                               handleFieldChange(item.taskId, "manager_name", e.target.value);
                               setSearchDropdown({ type: "manager", id: item.taskId, term: e.target.value });
                             }}
-                            onFocus={() => setSearchDropdown({ type: "manager", id: item.taskId, term: item.manager_name || "" })}
-                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                            onFocus={() => isModifyAllowed && setSearchDropdown({ type: "manager", id: item.taskId, term: item.manager_name || "" })}
+                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                           />
-                          {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
+                          {isModifyAllowed && searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                             <div className={`absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"}`}>
                               {getManagersForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                                 <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No managers found</div>
@@ -1392,7 +1423,7 @@ export default function WorkDetails() {
                                   {item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
                                     <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm animate-in zoom-in-95 duration-150">
                                       {emp}
-                                      {item.status !== 'LOCKED' && item.status !== 'GENERATED' && (
+                                      {item.status !== 'LOCKED' && item.status !== 'GENERATED' && isModifyAllowed && (
                                         <button
                                           type="button"
                                           className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
@@ -1415,7 +1446,7 @@ export default function WorkDetails() {
                                 placeholder={item.employee_name ? "Add employee..." : "Employee.."}
                                 className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId]?.employee_name
                                   ? 'border-amber-300 bg-amber-50/50'
-                                  : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                                  : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                                     ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                     : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                                   }`}
@@ -1423,8 +1454,8 @@ export default function WorkDetails() {
                                 onChange={(e) => {
                                   setSearchDropdown({ type: "employee", id: item.taskId, term: e.target.value });
                                 }}
-                                onFocus={() => setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
-                                disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                                onFocus={() => isModifyAllowed && setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
+                                disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                               />
 
                               {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
@@ -1521,6 +1552,7 @@ export default function WorkDetails() {
                         }`}
                         value={modifiedRows[item.taskId]?.estimated_minutes !== undefined ? modifiedRows[item.taskId].estimated_minutes : (item.estimated_minutes || "")}
                         onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
+                        disabled={!isModifyAllowed}
                       />
                       <span className="text-[9px] font-bold text-gray-500">Mins</span>
                     </div>
@@ -1561,13 +1593,13 @@ export default function WorkDetails() {
                       className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
                         isModified && modifiedRows[item.taskId]?.start_datetime !== undefined
                           ? 'border-amber-300 bg-amber-50/50'
-                          : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                             ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                             : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                       }`}
                       value={getDatePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
                       onChange={(e) => handleDateChange(item, "start_datetime", e.target.value)}
-                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1577,13 +1609,13 @@ export default function WorkDetails() {
                       className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
                         isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
                           ? 'border-amber-300 bg-amber-50/50'
-                          : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                             ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                             : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                       }`}
                       value={getDatePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
                       onChange={(e) => handleDateChange(item, "end_datetime", e.target.value)}
-                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1593,13 +1625,13 @@ export default function WorkDetails() {
                       className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
                         isModified && modifiedRows[item.taskId]?.start_datetime !== undefined
                           ? 'border-amber-300 bg-amber-50/50'
-                          : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                             ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                             : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                       }`}
                       value={getTimePart(modifiedRows[item.taskId]?.start_datetime !== undefined ? modifiedRows[item.taskId].start_datetime : item.start_datetime) || ""}
                       onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1609,13 +1641,13 @@ export default function WorkDetails() {
                       className={`w-full px-2 py-1 border rounded-lg text-[10px] font-bold outline-none transition-all ${
                         isModified && modifiedRows[item.taskId]?.end_datetime !== undefined
                           ? 'border-amber-300 bg-amber-50/50'
-                          : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                             ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                             : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                       }`}
                       value={getTimePart(modifiedRows[item.taskId]?.end_datetime !== undefined ? modifiedRows[item.taskId].end_datetime : item.end_datetime) || ""}
                       onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                     />
                   </div>
                 </div>
@@ -1633,7 +1665,7 @@ export default function WorkDetails() {
                         placeholder="Assign Manager.."
                         className={`w-full px-2.5 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId]?.manager_name
                           ? 'border-amber-300 bg-amber-50/50'
-                          : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                             ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                             : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                           }`}
@@ -1642,10 +1674,10 @@ export default function WorkDetails() {
                           handleFieldChange(item.taskId, "manager_name", e.target.value);
                           setSearchDropdown({ type: "manager", id: item.taskId, term: e.target.value });
                         }}
-                        onFocus={() => setSearchDropdown({ type: "manager", id: item.taskId, term: item.manager_name || "" })}
-                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                        onFocus={() => isModifyAllowed && setSearchDropdown({ type: "manager", id: item.taskId, term: item.manager_name || "" })}
+                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                       />
-                      {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
+                      {isModifyAllowed && searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                         <div className="absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto mt-1">
                           {getManagersForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                             <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No managers found</div>
@@ -1680,7 +1712,7 @@ export default function WorkDetails() {
                         {item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
                           <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm animate-in zoom-in-95 duration-150">
                             {emp}
-                            {item.status !== 'LOCKED' && item.status !== 'GENERATED' && (
+                            {item.status !== 'LOCKED' && item.status !== 'GENERATED' && isModifyAllowed && (
                               <button
                                 type="button"
                                 className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
@@ -1703,7 +1735,7 @@ export default function WorkDetails() {
                         placeholder={item.employee_name ? "Add employee..." : "Assign Employee.."}
                         className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId]?.employee_name
                           ? 'border-amber-300 bg-amber-50/50'
-                          : (item.status === 'LOCKED' || item.status === 'GENERATED')
+                          : (item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed)
                             ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                             : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                           }`}
@@ -1711,8 +1743,8 @@ export default function WorkDetails() {
                         onChange={(e) => {
                           setSearchDropdown({ type: "employee", id: item.taskId, term: e.target.value });
                         }}
-                        onFocus={() => setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
-                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                        onFocus={() => isModifyAllowed && setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
+                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !isModifyAllowed}
                       />
 
                           {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (

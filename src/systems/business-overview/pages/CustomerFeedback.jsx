@@ -49,8 +49,8 @@ export default function CustomerFeedback() {
     const isMasterAdmin = (user.user_name || user.username || '').toLowerCase() === 'masteradmin';
     const userRole = (user.role || '').toLowerCase();
     
-    // Master admin and system administrators have full edit rights
-    if (isMasterAdmin || userRole === 'admin') {
+    // Master admin and superadmin have apex unconditional edit rights
+    if (isMasterAdmin || userRole === 'superadmin' || userRole === 'masteradmin') {
       return { canView: true, canModify: true };
     }
 

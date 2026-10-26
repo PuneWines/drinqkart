@@ -12,6 +12,7 @@ import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification } from "../../services/whatsappService";
 import { useMagicToast } from "../../context/MagicToastContext";
 import { fetchUniqueDoerNameDataApi, fetchUniqueGivenByDataApi } from "../../redux/api/assignTaskApi";
+import { ViewOnlyBanner, getPagePermission, getUserAssignedShops, isUserShopScoped } from "../../../../utils/permissionUtils";
 
 
 
@@ -45,8 +46,9 @@ const defaultTask = () => ({
 });
 
 // Single Task Card Component
-function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRemove }) {
+function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRemove, isModifyAllowed = true }) {
     const handleInputChange = (e) => {
+        if (!isModifyAllowed) return;
         const { name, value } = e.target;
         onUpdate(task.id, { [name]: value });
 
@@ -83,19 +85,16 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
 
             if (d.status === 'inactive') return false;
 
-            // HOD Restriction & Reporting Group Filter
-            const currentU = (localStorage.getItem("user-name") || "").toLowerCase().trim();
-            const currentR = (localStorage.getItem("role") || "").toLowerCase().trim();
-
-            if (currentR === "hod") {
-                const dName = (d.user_name || d.name || "").toLowerCase().trim();
-                const reportedBy = (d.reported_by || "").toLowerCase().trim();
-
-                // Only show themselves OR their direct reports
-                if (dName !== currentU && reportedBy !== currentU) return false;
-
-                // If it's themselves, check for explicit self-assign rights
-                if (dName === currentU && !d.can_self_assign) return false;
+            // Shop Scoping for Admin vs Global Multi-Shop for HOD/Superadmin
+            if (isUserShopScoped()) {
+                const assignedShops = getUserAssignedShops().map(s => s.toLowerCase());
+                if (assignedShops.length > 0) {
+                    const uShop = (d.shop_name || d.user_access || "").toLowerCase();
+                    const uShopsList = uShop.split(',').map(s => s.trim()).filter(Boolean);
+                    if (!uShopsList.some(s => assignedShops.includes(s) || assignedShops.some(as => s.includes(as)))) {
+                        return false;
+                    }
+                }
             }
 
             // Leave filter
@@ -136,7 +135,7 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                         <span className="text-xs text-purple-500 font-medium">— {task.doer_name}</span>
                     )}
                 </div>
-                {total > 1 && (
+                {total > 1 && isModifyAllowed && (
                     <button
                         type="button"
                         onClick={() => onRemove(task.id)}
@@ -158,16 +157,17 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                         value={task.given_by}
                         onChange={handleInputChange}
                         onFocus={() => {
+                            if (!isModifyAllowed) return;
                             const filtered = getFilteredAssignFrom(task.given_by);
                             onUpdate(task.id, { givenBySuggestions: filtered, showGivenBySuggestions: true });
                         }}
                         onBlur={() => setTimeout(() => onUpdate(task.id, { showGivenBySuggestions: false }), 200)}
-                        disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD")}
-                        className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD") ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        disabled={!isModifyAllowed || (localStorage.getItem("role")?.toUpperCase() === "HOD")}
+                        className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(!isModifyAllowed || localStorage.getItem("role")?.toUpperCase() === "HOD") ? 'opacity-70 cursor-not-allowed' : ''}`}
                         placeholder="Enter assigner name"
                         autoComplete="off"
                     />
-                    {task.showGivenBySuggestions && task.givenBySuggestions.length > 0 && (
+                    {isModifyAllowed && task.showGivenBySuggestions && task.givenBySuggestions.length > 0 && (
                         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                             {task.givenBySuggestions.map((name, i) => (
                                 <div
@@ -200,17 +200,19 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                             name="doer_name"
                             value={task.doer_name}
                             onChange={handleInputChange}
+                            disabled={!isModifyAllowed}
                             onFocus={() => {
+                                if (!isModifyAllowed) return;
                                 const filtered = getFilteredDoers(task.doer_name);
                                 onUpdate(task.id, { doerSuggestions: filtered, showSuggestions: true });
                             }}
                             onBlur={() => setTimeout(() => onUpdate(task.id, { showSuggestions: false }), 200)}
                             placeholder="Enter or select doer name"
-                            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
+                            className={`w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                             autoComplete="off"
                         />
                     </div>
-                    {task.showSuggestions && task.doerSuggestions.length > 0 && (
+                    {isModifyAllowed && task.showSuggestions && task.doerSuggestions.length > 0 && (
                         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                             {task.doerSuggestions.map((doer, i) => (
                                 <div
@@ -238,16 +240,16 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                         </label>
                         <button
                             type="button"
-                            onClick={() => !task.dateLocked && onUpdate(task.id, { showCalendar: !task.showCalendar })}
-                            className={`w-full px-3 py-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-sm ${task.dateLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-                            disabled={task.dateLocked}
+                            onClick={() => isModifyAllowed && !task.dateLocked && onUpdate(task.id, { showCalendar: !task.showCalendar })}
+                            className={`w-full px-3 py-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-sm ${(!isModifyAllowed || task.dateLocked) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            disabled={!isModifyAllowed || task.dateLocked}
                         >
                             <span className={task.planned_date ? "text-gray-800" : "text-gray-400"}>
                                 {task.planned_date ? formatDateLong(new Date(task.planned_date + 'T00:00:00')) : "Select date"}
                             </span>
                             <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         </button>
-                        {task.showCalendar && (
+                        {isModifyAllowed && task.showCalendar && (
                             <div className="absolute top-full left-0 mt-1 z-50">
                                 <CalendarComponent
                                     date={task.planned_date ? new Date(task.planned_date + 'T00:00:00') : null}
@@ -264,7 +266,8 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                             name="planned_time"
                             value={task.planned_time}
                             onChange={handleInputChange}
-                            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all text-sm"
+                            disabled={!isModifyAllowed}
+                            className={`w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                         />
                     </div>
                     <div className="col-span-2">
@@ -276,8 +279,9 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                             name="duration"
                             value={task.duration}
                             onChange={handleInputChange}
+                            disabled={!isModifyAllowed}
                             placeholder="e.g. 1 hour"
-                            className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm"
+                            className={`w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                         />
                     </div>
                 </div>
@@ -289,7 +293,7 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                     </label>
                     <ReactMediaRecorder
                         audio
-                        onStop={(blobUrl, blob) => onUpdate(task.id, { recordedAudio: { blobUrl, blob } })}
+                        onStop={(blobUrl, blob) => isModifyAllowed && onUpdate(task.id, { recordedAudio: { blobUrl, blob } })}
                         render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
                             <div>
                                 {status !== 'recording' && (
@@ -298,18 +302,22 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                                             name="task_description"
                                             value={task.task_description}
                                             onChange={handleInputChange}
+                                            disabled={!isModifyAllowed}
+                                            readOnly={!isModifyAllowed}
                                             rows="3"
                                             placeholder="Describe the task..."
-                                            className="w-full p-3 pr-11 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm"
+                                            className={`w-full p-3 pr-11 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''}`}
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={startRecording}
-                                            className="absolute bottom-2.5 right-2.5 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all"
-                                            title="Record Voice Note"
-                                        >
-                                            <Mic className="w-4 h-4" />
-                                        </button>
+                                        {isModifyAllowed && (
+                                            <button
+                                                type="button"
+                                                onClick={startRecording}
+                                                className="absolute bottom-2.5 right-2.5 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all"
+                                                title="Record Voice Note"
+                                            >
+                                                <Mic className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                                 {status === 'recording' && (
@@ -329,13 +337,15 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                                             <span className="text-xs font-bold text-purple-700 flex items-center gap-1.5">
                                                 <Mic className="w-3 h-3" /> Voice Note Attached
                                             </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => { clearBlobUrl(); onUpdate(task.id, { recordedAudio: null }); }}
-                                                className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
-                                            >
-                                                <Trash2 className="w-3 h-3" /> Remove
-                                            </button>
+                                            {isModifyAllowed && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { clearBlobUrl(); onUpdate(task.id, { recordedAudio: null }); }}
+                                                    className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                                >
+                                                    <Trash2 className="w-3 h-3" /> Remove
+                                                </button>
+                                            )}
                                         </div>
                                         <AudioPlayer url={task.recordedAudio.blobUrl} />
                                     </div>
@@ -349,8 +359,9 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                 <div className="pt-2">
                     <button
                         type="button"
-                        onClick={() => onUpdate(task.id, { attachment: !task.attachment })}
-                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-xs font-bold transition-all duration-200 ${task.attachment ? 'bg-purple-50 border-purple-200 text-purple-700 shadow-sm' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:border-gray-300'}`}
+                        disabled={!isModifyAllowed}
+                        onClick={() => isModifyAllowed && onUpdate(task.id, { attachment: !task.attachment })}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-xs font-bold transition-all duration-200 ${!isModifyAllowed ? 'opacity-70 cursor-not-allowed' : ''} ${task.attachment ? 'bg-purple-50 border-purple-200 text-purple-700 shadow-sm' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:border-gray-300'}`}
                     >
                         <div className="flex items-center gap-2">
                             <Plus className={`w-3.5 h-3.5 transition-transform ${task.attachment ? 'rotate-45' : ''}`} />
@@ -375,6 +386,8 @@ export default function EATask() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const { showToast } = useMagicToast();
+    const taskPerm = getPagePermission(null, 'checklist', 'Assign Task');
+    const isModifyAllowed = taskPerm.canModify;
     const { userData } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
@@ -460,6 +473,10 @@ export default function EATask() {
     };
 
     const handleSubmitAll = async () => {
+        if (!isModifyAllowed) {
+            showToast("View-Only Mode: You have read-only access to Tasks. Creating or assigning tasks is restricted.", "error");
+            return;
+        }
         if (isSubmitting) return;
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
@@ -582,6 +599,10 @@ export default function EATask() {
     return (
         <AdminLayout>
             <div className="max-w-3xl mx-auto p-4 sm:p-6">
+                {!isModifyAllowed && (
+                    <ViewOnlyBanner isModifyAllowed={isModifyAllowed} pageName="Assign Task" message="You have read-only access to Tasks. Creating or modifying tasks is restricted." />
+                )}
+
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
@@ -621,19 +642,22 @@ export default function EATask() {
                             allAssignFrom={allAssignFrom}
                             onUpdate={updateTask}
                             onRemove={removeTask}
+                            isModifyAllowed={isModifyAllowed}
                         />
                     ))}
                 </div>
 
                 {/* Add Another Task Button */}
-                <button
-                    type="button"
-                    onClick={addTask}
-                    className="mt-4 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-purple-300 text-purple-600 font-bold rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group"
-                >
-                    <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    Add Another Task
-                </button>
+                {isModifyAllowed && (
+                    <button
+                        type="button"
+                        onClick={addTask}
+                        className="mt-4 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-purple-300 text-purple-600 font-bold rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group"
+                    >
+                        <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        Add Another Task
+                    </button>
+                )}
 
                 {/* Summary & Submit */}
                 <div className="mt-5 bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
@@ -658,8 +682,8 @@ export default function EATask() {
                         <button
                             type="button"
                             onClick={handleSubmitAll}
-                            disabled={isSubmitting}
-                            className="flex-2 flex-grow py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-md transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            disabled={isSubmitting || !isModifyAllowed}
+                            className={`flex-2 flex-grow py-3 font-bold rounded-xl shadow-md transform transition-all flex items-center justify-center gap-2 ${!isModifyAllowed ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none' : 'bg-purple-600 hover:bg-purple-700 text-white active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed'}`}
                         >
                             {isSubmitting ? (
                                 <><Loader2 size={18} className="animate-spin" /> Submitting...</>

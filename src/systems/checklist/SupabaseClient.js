@@ -6,19 +6,9 @@
 
 // export default supabase;
 
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../../lib/supabase";
 
-const supabaseURL =
-  import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-const supabase = createClient(supabaseURL, supabaseKey, {
-  realtime: { params: { eventsPerSecond: 10 } },
-});
-
+export { supabase };
 export default supabase;
 
 // import { createClient } from "@supabase/supabase-js";

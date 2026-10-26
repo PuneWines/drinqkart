@@ -27,6 +27,10 @@ export default function BroadcastDashboard() {
     fetchMessageStats()
     useChatStore.getState().fetchWhatsAppConversations()
     useChatStore.getState().initGlobalWhatsAppRealtime()
+
+    return () => {
+      useChatStore.getState().cleanupGlobalWhatsAppRealtime()
+    }
   }, [loadShopsAndEmployees, fetchTemplates, fetchBroadcastHistory, fetchMessageStats])
 
   return (

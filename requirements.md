@@ -445,3 +445,36 @@ The implementation is broken down into 5 self-contained, sequential phases. Each
 - [x] View-only enforcement plan approved across all 6 systems
 - [x] Phased roadmap structured and ready for step-by-step execution
 
+---
+
+## 12. Universal Route Security, Shop-Scoped Supabase Query Engine & Collapsible UI Specification (October 2026 Extension)
+
+### 12.1 Objective
+Eliminate direct route traversal security vulnerabilities, restrict Supabase database queries to user's assigned shops across all sub-systems, and enhance the Master Setting permissions management interface with an accordion-based collapsible system hierarchy.
+
+### 12.2 Direct Route Security Architecture (`ConsoleRoute` Gate)
+1. **Zero-Trust URL Access**:
+   - `ConsoleRoute` in `src/App.jsx` dynamically checks the target system against `getVisibleSystems(user)`.
+   - If an authenticated user enters a URL directly (e.g., `/systems/master-setting`, `/systems/purchase`, `/systems/hr`) for which they lack system permissions, the route gate rejects access and redirects to the user's first authorized module or `/systems/profile`.
+2. **Component-Level Defense in Depth**:
+   - `MasterSetting.jsx` checks `getMasterSettingPagePermission("User & System Access")`. If `none` and user is not Superadmin or unconfigured HOD/Admin, access is immediately blocked.
+
+### 12.3 Universal Shop-Scoped Supabase Query Engine
+1. **Scoping Constraints**:
+   - **Superadmin (L5) & HOD (L4)**: Unfiltered global queries across all branches.
+   - **Admin (L3), Manager (L2), and User (L1)**: All Supabase `.select()` operations MUST filter by `.in('shop_name', assignedShops)` or `.eq('shop_name', assignedShops[0])`.
+   - If an account has no assigned shops, queries MUST NOT return unassigned or cross-branch data.
+2. **Universal Helper**:
+   - Standardized via `getUserAssignedShops(user)` in `src/utils/permissionUtils.js`.
+
+### 12.4 Master Setting Permission Accordion UI & Automated Elevation
+1. **Multi-Shop Access Placement (`user_access`)**:
+   - The **Shop Access (`user_access`)** selector (shop badges, "Select All Shops", and comma-separated text input) is decoupled from the Checklist Delegation system and placed directly **above** `master_user_system_page_access` for universal multi-system visibility.
+2. **Collapsible System Sections**:
+   - In the "Edit User Access" modal, all 11 system permission groups (`AVAILABLE_SYSTEMS`) are **collapsed (closed) by default**.
+   - Clicking any system header expands/collapses that group with smooth transitions, animated chevrons, and active permission counts.
+3. **Automated Role Elevation**:
+   - Selecting **Admin**, **HOD**, or **Superadmin** in the role dropdown automatically populates and selects `.modify` across all system pages.
+
+
+

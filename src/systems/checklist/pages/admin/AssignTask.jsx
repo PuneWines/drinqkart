@@ -68,14 +68,7 @@ export default function AssignTask() {
     }
   ];
 
-  const modules = allModules.filter(mod => {
-    if (role === "hod") {
-      if (mod.id === "checklist") return true;
-      if (mod.id === "repair" && isMachineOperator) return true;
-      return false;
-    }
-    return true;
-  });
+  const modules = allModules;
 
   return (
     <AdminLayout>

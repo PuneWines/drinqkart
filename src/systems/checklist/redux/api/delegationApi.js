@@ -1,6 +1,6 @@
-// delegationApiSlice.js
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import supabase from '../../SupabaseClient';
+import { getUserAssignedShops, isUserShopScoped, isUserSuperadmin } from '../../../../utils/permissionUtils';
 
 export const insertDelegationDoneAndUpdate = createAsyncThunk(
   'delegation/insertDelegationDoneAndUpdate',
@@ -148,17 +148,22 @@ export const fetchDelegationDataSortByDate = async () => {
       .or('submission_date.is.null,status.neq.done') // Fetch pending tasks (never submitted) OR tasks that are not 'done' (extended)
       .order('planned_date', { ascending: true });
 
-    const isMasterAdmin = (username || '').toLowerCase().trim() === 'admin' || (username || '').toLowerCase().trim() === 'masteradmin' || roleUpper === 'ADMIN';
+    const roleLower = (localStorage.getItem('role') || '').toLowerCase().trim();
 
-    if (roleUpper === 'USER' && username) {
+    if (roleLower === 'user' && username) {
       query = query.eq('name', username);
-    } else if (!isMasterAdmin && (roleUpper === 'HOD' || roleUpper === 'MANAGER')) {
-      const rawShops = userAccess.split(',').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'all' && s.toLowerCase() !== 'admin');
-      const allowedShops = [...new Set(rawShops.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
-      if (allowedShops.length > 0) {
+    } else if (isUserShopScoped()) {
+      // Admin: strictly limited to their assigned shop(s)
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
         query = query.in('shop_name', allowedShops);
+      } else {
+        query = query.eq('shop_name', '__NO_ASSIGNED_SHOP__');
       }
     }
+    // HOD & Superadmin: isUserShopScoped() is false -> Multi-shop access across ALL shops
+
 
     const { data, error } = await query;
     if (error) throw error;

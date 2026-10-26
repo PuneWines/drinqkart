@@ -31,7 +31,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
   // Permission calculation
   const isMasterAdmin =
     (userObj.username || userObj.user_name || '').toLowerCase() === 'masteradmin' ||
-    (userObj.role || '').toLowerCase() === 'admin' ||
+    (userObj.role || '').toLowerCase() === 'superadmin' ||
     (userObj.role || '').toLowerCase() === 'masteradmin';
 
   let accessKeys = [];

@@ -33,7 +33,33 @@ import { getPagePermission } from "../../../../utils/permissionUtils";
 
 const parseChecklistAllowedPages = (userData) => {
   if (!userData) return [];
-  const pageSet = new Set();
+
+  const userRole = (userData.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase();
+  const userName = (userData.user_name || userData.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase();
+  const isSuper = userRole === 'superadmin' || userRole === 'masteradmin' || userName === 'masteradmin' || userName === 'admin';
+  const isAdmin = userRole === 'admin' || userRole === 'hod';
+
+  if (isSuper || isAdmin) {
+    return [
+      "Dashboard",
+      "Announcements",
+      "Quick Task",
+      "Assign Task",
+      "Work Records",
+      "Work Details",
+      "Delegation",
+      "Task",
+      "All Tasks",
+      "Calendar",
+      "Holiday List",
+      "Working Day Calendar",
+      "Admin Approval",
+      "MIS Report",
+      "Settings"
+    ];
+  }
+
+  const pageSet = new Set(["Dashboard", "Announcements", "Task", "All Tasks"]);
 
   const mapToRouteLabel = (rawName) => {
     if (!rawName || typeof rawName !== 'string') return;
@@ -273,7 +299,15 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
     setPageAccess(allowedPages);
 
     const isPathAllowed = (path) => {
-      if (path === "/dashboard/admin" || path === "/dashboard/notifications") return true;
+      const userRoleLower = (storedRole || "user").toLowerCase();
+      const userClean = (storedUsername || "").toLowerCase();
+      const isSuper = userRoleLower === "superadmin" || userRoleLower === "masteradmin" || userClean === "masteradmin" || userClean === "admin";
+      const isAdminRole = userRoleLower === "admin" || userRoleLower === "hod";
+
+      // Superadmin and Admin/HOD roles have unrestricted access across all checklist pages
+      if (isSuper || isAdminRole) return true;
+
+      if (path === "/dashboard/admin" || path === "/dashboard/notifications" || path === "/dashboard/task") return true;
 
       const matchedRoute = routes.find(r => r.href === path || (r.subItems && r.subItems.some(s => s.href === path)));
       if (!matchedRoute) return true;
@@ -298,8 +332,13 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
     };
 
     if (!isPathAllowed(path)) {
-      console.warn(`🚫 Access denied to ${path}. Redirecting to dashboard.`);
-      navigate("/dashboard/admin");
+      console.warn(`🚫 Access denied to ${path}. Redirecting.`);
+      const userRoleLower = (storedRole || "user").toLowerCase();
+      if (userRoleLower === "user" || userRoleLower === "employee") {
+        navigate("/dashboard/task");
+      } else {
+        navigate("/dashboard/admin");
+      }
       return;
     }
 
@@ -363,9 +402,15 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
       syncUserData();
     }
 
-    // Check if this is the super admin (username = 'admin')
+    // Check if this is the super admin (username = 'admin'/'masteradmin' or role = 'superadmin'/'masteradmin')
     const normalizedUsername = (storedUsername || "").toLowerCase();
-    setIsSuperAdmin(normalizedUsername === "admin");
+    const currentRoleNormalized = (storedRole || "").toLowerCase();
+    setIsSuperAdmin(
+      normalizedUsername === "admin" ||
+      normalizedUsername === "masteradmin" ||
+      currentRoleNormalized === "superadmin" ||
+      currentRoleNormalized === "masteradmin"
+    );
   }, [navigate, location.pathname, hasDelegationTasks]);
 
   // Fetch notifications globally for badge count
@@ -423,6 +468,13 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
     const userRoleNormalized = (userRole || "user").toLowerCase();
+    const storedUsername = (localStorage.getItem("user-name") || "").toLowerCase();
+    const isSuper = userRoleNormalized === "superadmin" || userRoleNormalized === "masteradmin" || storedUsername === "masteradmin" || storedUsername === "admin";
+    const isAdminRole = userRoleNormalized === "admin" || userRoleNormalized === "hod";
+
+    if (isSuper || isAdminRole) {
+      return routes;
+    }
 
     return routes
       .filter((route) => {

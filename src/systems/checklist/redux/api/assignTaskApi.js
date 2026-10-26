@@ -1,4 +1,5 @@
 import supabase from "../../SupabaseClient";
+import { isUserShopScoped, getUserAssignedShops } from "../../../../utils/permissionUtils";
 
 export const fetchUniqueShopDataApi = async () => {
   try {
@@ -17,7 +18,13 @@ export const fetchUniqueShopDataApi = async () => {
       .filter(shop => shop && shop.trim() !== "")
     )].sort();
 
-    // console.log("✅ Unique shops found:", uniqueShops);
+    if (isUserShopScoped()) {
+      const assigned = getUserAssignedShops();
+      if (assigned.length > 0) {
+        uniqueShops = uniqueShops.filter(s => assigned.some(a => a.toLowerCase() === s.toLowerCase()));
+      }
+    }
+
     return uniqueShops;
   } catch (error) {
     console.error("❌ Error fetching shops from shop table:", error);
@@ -74,8 +81,8 @@ export const fetchUniqueDoerNameDataApi = async (shop) => {
       return [];
     }
 
-    const role = (localStorage.getItem('role') || "").toUpperCase();
-    const username = (localStorage.getItem('user-name') || "").toLowerCase();
+    const isScoped = isUserShopScoped();
+    const assignedShops = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
 
     const uniqueUsers = [];
     const seenNames = new Set();
@@ -83,10 +90,12 @@ export const fetchUniqueDoerNameDataApi = async (shop) => {
     data?.forEach(user => {
       const uName = (user.user_name || "").toLowerCase();
       if (uName && !seenNames.has(uName)) {
-        if (role === 'HOD' && username) {
-          const reportedBy = (user.reported_by || "").toLowerCase();
-          if (reportedBy !== username && uName !== username) return;
-          if (uName === username && !user.can_self_assign) return;
+        if (isScoped && assignedShops.length > 0) {
+          const uShop = (user.shop_name || user.user_access || "").toLowerCase();
+          const uShopsList = uShop.split(',').map(s => s.trim()).filter(Boolean);
+          if (!uShopsList.some(s => assignedShops.includes(s) || assignedShops.some(as => s.includes(as)))) {
+            return;
+          }
         }
 
         uniqueUsers.push({
