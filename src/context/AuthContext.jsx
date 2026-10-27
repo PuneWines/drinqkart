@@ -382,7 +382,6 @@ export const AuthProvider = ({ children }) => {
       if (cleanDigits) {
         orConditions.push(`employee_id.eq.${cleanDigits}`);
         orConditions.push(`number.eq.${cleanDigits}`);
-        orConditions.push(`number.eq.${trimmedInput}`);
       }
 
       const { data: matchedUsers } = await supabase
@@ -390,7 +389,7 @@ export const AuthProvider = ({ children }) => {
         .select("id, user_name, email_id, number, status, role, employee_id")
         .or(orConditions.join(","));
 
-      if (matchedUsers && matchedUsers.length > 0) {
+      if (matchedUsers && Array.isArray(matchedUsers) && matchedUsers.length > 0) {
         const activeUsers = matchedUsers.filter(
           (u) => (u.status || "active").toLowerCase().trim() === "active"
         );
