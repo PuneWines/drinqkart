@@ -29,7 +29,7 @@ import useShopStore from "../store/useShopStore";
 import useAuthStore from "../store/useAuthStore";
 import { getInLifecycleItemNames } from "../services/purchaseOrderService";
 import { dashboardSyncService } from "../services/dashboardSyncService";
-import { ViewOnlyBanner, getPagePermission } from "../../../utils/permissionUtils";
+import { ViewOnlyBanner, getPagePermission, canDeletePurchaseIndent } from "../../../utils/permissionUtils";
 
 // Accordion row for mobile view — must be a separate component so useState is not called inside .map()
 const AccordionItem = ({ item, calcs, handleInlineChange }) => {
@@ -117,6 +117,7 @@ const SubmissionViewModal = ({
   items,
   onDeleteItem,
   onRefresh,
+  canDelete = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -203,9 +204,11 @@ const SubmissionViewModal = ({
                 <th className="text-right py-2 px-3 text-xs font-semibold text-[#64748b]">
                   Order Qty
                 </th>
-                <th className="text-center py-2 px-3 text-xs font-semibold text-[#64748b]">
-                  Action
-                </th>
+                {canDelete && (
+                  <th className="text-center py-2 px-3 text-xs font-semibold text-[#64748b]">
+                    Action
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -229,20 +232,22 @@ const SubmissionViewModal = ({
                   <td className="py-2 px-3 text-right font-bold text-[#4338ca]">
                     {item.order_qty}
                   </td>
-                  <td className="py-2 px-3 text-center">
-                    <button
-                      onClick={() => onDeleteItem(item.id, submission.id)}
-                      className="p-1 text-[#ef4444] hover:bg-[#fee2e2] rounded transition-colors"
-                      title="Delete item"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
+                  {canDelete && (
+                    <td className="py-2 px-3 text-center">
+                      <button
+                        onClick={() => onDeleteItem(item.id, submission.id)}
+                        className="p-1 text-[#ef4444] hover:bg-[#fee2e2] rounded transition-colors"
+                        title="Delete item"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-[#94a3b8]">
+                  <td colSpan={canDelete ? 6 : 5} className="py-8 text-center text-[#94a3b8]">
                     No items found
                   </td>
                 </tr>
@@ -300,6 +305,7 @@ const Indent = () => {
   const { currentUser } = useAuthStore();
   const indentPerm = getPagePermission(currentUser, 'purchase', 'Indent');
   const isModifyAllowed = indentPerm.canModify;
+  const isDeleteAllowed = canDeletePurchaseIndent(currentUser);
   const [submittedHistory, setSubmittedHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [submissionItems, setSubmissionItems] = useState({});
@@ -1118,6 +1124,13 @@ const Indent = () => {
   };
 
   const handleDeleteIndent = (indentId) => {
+    if (!isDeleteAllowed) {
+      addToast(
+        "Permission Denied: Deletion of indents is restricted to Masteradmin, Admin, or HOD.",
+        "error",
+      );
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       title: "Delete Entire Indent?",
@@ -1128,6 +1141,13 @@ const Indent = () => {
   };
 
   const performDeleteIndent = async (indentId) => {
+    if (!isDeleteAllowed) {
+      addToast(
+        "Permission Denied: Deletion of indents is restricted to Masteradmin, Admin, or HOD.",
+        "error",
+      );
+      return;
+    }
     setConfirmModal((prev) => ({ ...prev, isOpen: false }));
     setIsProcessing(true);
     try {
@@ -1201,6 +1221,13 @@ const Indent = () => {
   };
 
   const handleDeleteItem = (itemId, indentId) => {
+    if (!isDeleteAllowed) {
+      addToast(
+        "Permission Denied: Deletion of indent items is restricted to Masteradmin, Admin, or HOD.",
+        "error",
+      );
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       title: "Delete Specific Item?",
@@ -1211,6 +1238,13 @@ const Indent = () => {
   };
 
   const performDeleteItem = async (itemId, indentId) => {
+    if (!isDeleteAllowed) {
+      addToast(
+        "Permission Denied: Deletion of indent items is restricted to Masteradmin, Admin, or HOD.",
+        "error",
+      );
+      return;
+    }
     setConfirmModal((prev) => ({ ...prev, isOpen: false }));
     setIsProcessing(true);
     try {
@@ -2136,13 +2170,15 @@ const Indent = () => {
                           >
                             <Eye size={16} />
                           </button>
-                          <button
-                            onClick={() => handleDeleteIndent(history.id)}
-                            className="p-1.5 text-[#ef4444] hover:bg-[#fee2e2] rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {isDeleteAllowed && (
+                            <button
+                              onClick={() => handleDeleteIndent(history.id)}
+                              className="p-1.5 text-[#ef4444] hover:bg-[#fee2e2] rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2333,6 +2369,7 @@ const Indent = () => {
           items={selectedSubmissionItems}
           onDeleteItem={handleDeleteItem}
           onRefresh={() => handleViewSubmission(selectedSubmission)}
+          canDelete={isDeleteAllowed}
         />
       )}
 

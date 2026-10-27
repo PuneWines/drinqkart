@@ -181,6 +181,44 @@ export const isUserSuperadmin = (user) => {
   );
 };
 
+/**
+ * Checks if the user is authorized to delete purchase indents/items.
+ * Allowed roles: masteradmin, superadmin, admin, hod.
+ * Disallowed roles: manager, user, or others.
+ */
+export const canDeletePurchaseIndent = (user) => {
+  const userObj = user || getUserFromStorage() || {};
+  const role = (
+    userObj.role ||
+    (typeof localStorage !== 'undefined'
+      ? localStorage.getItem('role') || localStorage.getItem('currentUserRole')
+      : '') ||
+    ''
+  ).toLowerCase().trim();
+  const username = (
+    userObj.user_name ||
+    userObj.username ||
+    (typeof localStorage !== 'undefined'
+      ? localStorage.getItem('user-name') || localStorage.getItem('currentUserName')
+      : '') ||
+    ''
+  ).toLowerCase().trim();
+
+  // Explicitly deny manager and standard users
+  if (role === 'manager' || role === 'user') {
+    return false;
+  }
+
+  return (
+    role === 'masteradmin' ||
+    role === 'superadmin' ||
+    role === 'admin' ||
+    role === 'hod' ||
+    username === 'masteradmin' ||
+    username === 'admin'
+  );
+};
+
 // Centralized system key matching (handles hyphen, underscore, and alias variations)
 export const isSystemMatch = (sysA, sysB) => {
   if (!sysA || !sysB) return false;
