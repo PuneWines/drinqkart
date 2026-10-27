@@ -58,6 +58,9 @@ import {
   Loader2,
   MessageSquare,
   LayoutGrid,
+  Store,
+  Calendar,
+  X,
 } from "lucide-react";
 import {
   sendTaskRejectionNotification,
@@ -901,13 +904,13 @@ export default function AdminApprovalPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-4 sm:space-y-6">
+      <div className="w-full space-y-4 sm:space-y-6">
         {!approvalPerm.canModify && (
           <ViewOnlyBanner message="You have view-only access to Admin Approvals. Approval and rejection actions are disabled." />
         )}
         {/* Sticky Header and Controls */}
-        <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-6 mb-3 sm:mb-6 border-b border-gray-100/50 shadow-sm transition-all duration-300">
-          <div className="max-w-7xl mx-auto space-y-3 sm:space-y-6">
+        <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-xl py-3 sm:py-4 mb-3 sm:mb-6 border-b border-gray-100/60 shadow-xs rounded-2xl px-2 sm:px-4 transition-all duration-300">
+          <div className="w-full space-y-3 sm:space-y-5">
             <div className="flex flex-row items-center justify-between gap-2 px-2 sm:px-0">
               <div className="flex flex-col sm:space-y-1">
                 <motion.div
@@ -1009,155 +1012,170 @@ export default function AdminApprovalPage() {
               </div>
             </div>
 
-            <div className="bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-3 border border-gray-100/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
-              {/* Tabs */}
-              <div className="flex bg-gray-100/80 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-full">
-                {approvalTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`
-                                            relative flex items-center justify-center gap-1.5 py-1.5 px-3 sm:px-6 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold transition-all duration-300 whitespace-nowrap min-w-[85px] sm:min-w-[110px] z-10
-                                            ${activeTab === tab.id ? "text-white" : "text-gray-500 hover:text-purple-600"}
-                                        `}
-                  >
-                    {activeTab === tab.id && (
-                      <motion.div
-                        layoutId="approvalTabPillMinimal"
-                        className={`absolute inset-0 rounded-md sm:rounded-lg shadow-md z-[-1] ${tab.color}`}
-                        transition={{
-                          type: "spring",
-                          bounce: 0.2,
-                          duration: 0.6,
-                        }}
-                      />
-                    )}
-                    <tab.icon size={12} className="sm:w-[15px] sm:h-[15px]" />
-                    <span>{tab.label}</span>
-                  </button>
-                ))}
+            {/* Workflow Category Tabs */}
+            <div className="bg-white rounded-2xl p-2 border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-1">
+                {approvalTabs.map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`
+                        relative flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap cursor-pointer select-none
+                        ${isActive ? "text-white shadow-md shadow-purple-500/20" : "text-gray-600 hover:text-purple-700 hover:bg-purple-50/60"}
+                      `}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="approvalActiveCategoryPill"
+                          className={`absolute inset-0 rounded-xl ${tab.color || "bg-purple-600"}`}
+                          transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+                        />
+                      )}
+                      <Icon size={16} className={`relative z-10 ${isActive ? "text-white" : "text-gray-400 group-hover:text-purple-600"}`} />
+                      <span className="relative z-10">{tab.label}</span>
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              {/* View Mode & Search */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
-                {!isManager && (
-                  <div className="flex flex-wrap items-center gap-2 border border-purple-100 bg-purple-50/50 rounded-lg p-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap">
-                        Store:
-                      </span>
-                      {isAdmin && assignedShops.length === 1 ? (
-                        <span className="text-[10px] sm:text-xs font-black text-purple-800 bg-white border border-purple-200 px-2 py-1 rounded-md uppercase tracking-wider">
-                          {availableShops[0] || assignedShops[0]}
-                        </span>
-                      ) : (
-                        <select
-                          value={historyShopFilter}
-                          onChange={(e) => setHistoryShopFilter(e.target.value)}
-                          className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium cursor-pointer"
-                        >
-                          <option value="All">
-                            {isAdmin ? "All Assigned Shops" : "All Shops"}
-                          </option>
-                          {availableShops.map((shopName) => (
-                            <option key={shopName} value={shopName}>
-                              {shopName}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-
-                    {viewMode === "history" && (
-                      <>
-                        <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap ml-1">
-                          Range:
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[9px] sm:text-[10px] text-gray-500">
-                            From
-                          </span>
-                          <input
-                            type="date"
-                            value={mgrStartDate}
-                            onChange={(e) => setMgrStartDate(e.target.value)}
-                            className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
-                          />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[9px] sm:text-[10px] text-gray-500">
-                            To
-                          </span>
-                          <input
-                            type="date"
-                            value={mgrEndDate}
-                            onChange={(e) => setMgrEndDate(e.target.value)}
-                            className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    {(mgrStartDate ||
-                      mgrEndDate ||
-                      (historyShopFilter !== "All" &&
-                        (!isAdmin || assignedShops.length > 1))) && (
-                        <button
-                          onClick={() => {
-                            setMgrStartDate("");
-                            setMgrEndDate("");
-                            if (!isAdmin || assignedShops.length > 1) {
-                              setHistoryShopFilter("All");
-                            }
-                          }}
-                          className="text-[10px] sm:text-xs text-red-500 hover:underline font-bold px-1"
-                        >
-                          Clear
-                        </button>
-                      )}
-                  </div>
-                )}
-                <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
+            {/* Operational Filters & Search Toolbar */}
+            <div className="bg-white rounded-2xl p-3 border border-gray-100 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Left Controls: Pending/History Switcher + Store + Dates */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* View Mode Segmented Control */}
+                <div className="flex items-center bg-gray-100/90 p-1 rounded-xl border border-gray-200/50 shrink-0">
                   <button
                     onClick={() => setViewMode("pending")}
-                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "pending"
-                      ? "bg-white text-gray-800 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
-                      }`}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      viewMode === "pending"
+                        ? "bg-white text-purple-700 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800"
+                    }`}
                   >
-                    <Clock size={12} className="sm:w-[14px] sm:h-[14px]" />
+                    <Clock size={13} className={viewMode === "pending" ? "text-purple-600" : "text-gray-400"} />
                     Pending
                   </button>
                   <button
                     onClick={() => setViewMode("history")}
-                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "history"
-                      ? "bg-white text-gray-800 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
-                      }`}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      viewMode === "history"
+                        ? "bg-white text-purple-700 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800"
+                    }`}
                   >
-                    <History size={12} className="sm:w-[14px] sm:h-[14px]" />
+                    <History size={13} className={viewMode === "history" ? "text-purple-600" : "text-gray-400"} />
                     History
                   </button>
                 </div>
-                <div className="relative flex-1 lg:w-64">
-                  <Search
-                    className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400"
-                    size={14}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 text-[11px] sm:text-sm font-medium shadow-none"
-                  />
-                </div>
+
+                {/* Store Filter */}
+                {!isManager && (
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 shadow-sm">
+                    <Store size={14} className="text-purple-600 shrink-0" />
+                    <span className="text-[11px] font-bold text-gray-500 whitespace-nowrap">
+                      Store:
+                    </span>
+                    {isAdmin && assignedShops.length === 1 ? (
+                      <span className="text-xs font-black text-purple-800 bg-purple-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                        {availableShops[0] || assignedShops[0]}
+                      </span>
+                    ) : (
+                      <select
+                        value={historyShopFilter}
+                        onChange={(e) => setHistoryShopFilter(e.target.value)}
+                        className="text-xs font-semibold text-gray-800 bg-transparent border-none outline-none cursor-pointer pr-1"
+                      >
+                        <option value="All">
+                          {isAdmin ? "All Assigned Shops" : "All Shops"}
+                        </option>
+                        {availableShops.map((shopName) => (
+                          <option key={shopName} value={shopName}>
+                            {shopName}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Date Range in History Mode */}
+                {viewMode === "history" && !isManager && (
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 shadow-sm">
+                    <Calendar size={13} className="text-purple-600 shrink-0" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">From</span>
+                      <input
+                        type="date"
+                        value={mgrStartDate}
+                        onChange={(e) => setMgrStartDate(e.target.value)}
+                        className="text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-0.5 outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                    </div>
+                    <span className="text-gray-300 font-bold">-</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">To</span>
+                      <input
+                        type="date"
+                        value={mgrEndDate}
+                        onChange={(e) => setMgrEndDate(e.target.value)}
+                        className="text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-0.5 outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Clear Filter Button */}
+                {(mgrStartDate ||
+                  mgrEndDate ||
+                  (historyShopFilter !== "All" &&
+                    (!isAdmin || assignedShops.length > 1))) && (
+                  <button
+                    onClick={() => {
+                      setMgrStartDate("");
+                      setMgrEndDate("");
+                      if (!isAdmin || assignedShops.length > 1) {
+                        setHistoryShopFilter("All");
+                      }
+                    }}
+                    className="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-100 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    <X size={12} />
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Right: Search Box */}
+              <div className="relative w-full lg:w-72">
+                <Search
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  size={14}
+                />
+                <input
+                  type="text"
+                  placeholder="Search by name, description, shop..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 text-xs font-medium transition-all"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="w-full bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1232,9 +1250,19 @@ export default function AdminApprovalPage() {
                   <tr>
                     <td
                       colSpan={10}
-                      className="px-6 py-10 text-center text-gray-500"
+                      className="px-6 py-16 text-center text-gray-500"
                     >
-                      No {viewMode} approvals found.
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-14 h-14 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 mb-3 shadow-inner">
+                          <CheckCircle2 size={26} />
+                        </div>
+                        <h4 className="text-sm font-bold text-gray-800 mb-1">
+                          No {viewMode} approvals found
+                        </h4>
+                        <p className="text-xs text-gray-400 max-w-sm">
+                          All tasks in this category have been processed or no submissions match your active filter.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -1639,7 +1667,7 @@ export default function AdminApprovalPage() {
 
           {/* Mobile view Toolbar */}
           {viewMode === "pending" && (
-            <div className="md:hidden sticky top-[header_height] z-30 transition-all duration-300">
+            <div className="md:hidden sticky top-0 z-30 transition-all duration-300">
               <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className="relative flex items-center">

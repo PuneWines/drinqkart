@@ -524,7 +524,7 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
 
   if (!showLayout || isEmbedded) {
     return (
-      <div className="flex-1 h-screen overflow-y-auto p-4 md:p-6 bg-gradient-to-br from-blue-50 to-purple-50">
+      <div className="w-full flex-1 rounded-2xl md:rounded-3xl overflow-hidden bg-white/90 border border-gray-200/80 shadow-xs p-3 sm:p-5 md:p-6">
         {children}
       </div>
     );
@@ -532,11 +532,11 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
 
   return (
     <div
-      className={`flex h-screen overflow-hidden bg-gradient-to-br from-blue-50 to-purple-50`}
+      className="w-full flex-1 min-h-0 rounded-2xl md:rounded-3xl overflow-hidden bg-white/90 border border-gray-200/80 shadow-xs flex flex-col"
     >
       {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-purple-50/50">
+      <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden min-h-0">
+        <main className="flex-1 p-3 sm:p-5 md:p-6">
           {children}
         </main>
 

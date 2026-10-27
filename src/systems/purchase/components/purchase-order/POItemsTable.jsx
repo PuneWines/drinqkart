@@ -1,4 +1,5 @@
-import { Trash2, PauseCircle } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Trash2, PauseCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 const inputCellStyle = {
   width: "100%",
@@ -15,8 +16,61 @@ const inputCellStyle = {
   boxSizing: "border-box"
 };
 
-const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onHoldItem, onUpdateItem, headerActions }) => {
-  const orderQtyRows = items;
+const POItemsTable = ({
+  partyName,
+  items = [],
+  isReceiver,
+  onRemoveItem,
+  onHoldItem,
+  onUpdateItem,
+  headerActions,
+  sortBy: externalSortBy,
+  sortDir: externalSortDir,
+  onSortChange,
+}) => {
+  const [internalSortBy, setInternalSortBy] = useState("name");
+  const [internalSortDir, setInternalSortDir] = useState("asc");
+
+  const currentSortBy = externalSortBy !== undefined ? externalSortBy : internalSortBy;
+  const currentSortDir = externalSortDir !== undefined ? externalSortDir : internalSortDir;
+
+  const handleToggleSort = (field) => {
+    let newDir = "asc";
+    if (currentSortBy === field) {
+      newDir = currentSortDir === "asc" ? "desc" : "asc";
+    }
+    if (onSortChange) {
+      onSortChange(field, newDir);
+    } else {
+      setInternalSortBy(field);
+      setInternalSortDir(newDir);
+    }
+  };
+
+  const orderQtyRows = useMemo(() => {
+    const list = [...items];
+    return list.sort((a, b) => {
+      if (currentSortBy === "name") {
+        const nameA = (a.itemName || a.item_name || "").trim().toLowerCase();
+        const nameB = (b.itemName || b.item_name || "").trim().toLowerCase();
+        const comp = nameA.localeCompare(nameB);
+        if (comp !== 0) return currentSortDir === "asc" ? comp : -comp;
+        const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+        const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+        return mlA - mlB;
+      }
+      if (currentSortBy === "size") {
+        const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+        const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+        const comp = mlA - mlB;
+        if (comp !== 0) return currentSortDir === "asc" ? comp : -comp;
+        const nameA = (a.itemName || a.item_name || "").trim().toLowerCase();
+        const nameB = (b.itemName || b.item_name || "").trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      }
+      return 0;
+    });
+  }, [items, currentSortBy, currentSortDir]);
 
   const totalPoBoxes = orderQtyRows.reduce((s, r) => {
     const boxVal = parseFloat(r.poBox !== undefined && r.poBox !== null ? r.poBox : (r.approvedBox ?? r.orderBox)) || 0;
@@ -36,17 +90,102 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onHoldI
 
   return (
     <div>
-      {headerActions && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }} className="no-print">
-          {headerActions}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }} className="no-print">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>
+            Sort:
+          </span>
+          <button
+            type="button"
+            onClick={() => handleToggleSort("name")}
+            style={{
+              padding: '5px 12px',
+              borderRadius: '6px',
+              border: currentSortBy === "name" ? '1px solid #4f46e5' : '1px solid #cbd5e1',
+              backgroundColor: currentSortBy === "name" ? '#eef2ff' : '#ffffff',
+              color: currentSortBy === "name" ? '#4338ca' : '#475569',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {currentSortBy === "name" ? (
+              currentSortDir === "asc" ? <ArrowUp size={13} color="#4338ca" /> : <ArrowDown size={13} color="#4338ca" />
+            ) : (
+              <ArrowUpDown size={13} />
+            )}
+            Sort by Name {currentSortBy === "name" ? (currentSortDir === "asc" ? "(A-Z)" : "(Z-A)") : ""}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleSort("size")}
+            style={{
+              padding: '5px 12px',
+              borderRadius: '6px',
+              border: currentSortBy === "size" ? '1px solid #4f46e5' : '1px solid #cbd5e1',
+              backgroundColor: currentSortBy === "size" ? '#eef2ff' : '#ffffff',
+              color: currentSortBy === "size" ? '#4338ca' : '#475569',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {currentSortBy === "size" ? (
+              currentSortDir === "asc" ? <ArrowUp size={13} color="#4338ca" /> : <ArrowDown size={13} color="#4338ca" />
+            ) : (
+              <ArrowUpDown size={13} />
+            )}
+            Sort by Size (MLS) {currentSortBy === "size" ? (currentSortDir === "asc" ? "(Low-High)" : "(High-Low)") : ""}
+          </button>
         </div>
-      )}
+        {headerActions && (
+          <div>
+            {headerActions}
+          </div>
+        )}
+      </div>
       <table className="po-items-table">
         <thead>
           <tr>
             <th className="po-text-center">S.No</th>
             <th>Shop Name</th>
-            <th>Item Name</th>
+            <th
+              onClick={() => handleToggleSort("name")}
+              style={{ cursor: "pointer", userSelect: "none" }}
+              title="Click to sort by Item Name"
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>Item Name</span>
+                {currentSortBy === "name" ? (
+                  currentSortDir === "asc" ? <ArrowUp size={13} color="#4f46e5" /> : <ArrowDown size={13} color="#4f46e5" />
+                ) : (
+                  <ArrowUpDown size={12} color="#94a3b8" />
+                )}
+              </div>
+            </th>
+            <th
+              className="po-text-center"
+              onClick={() => handleToggleSort("size")}
+              style={{ cursor: "pointer", userSelect: "none" }}
+              title="Click to sort by Size (MLS)"
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                <span>Size (mls)</span>
+                {currentSortBy === "size" ? (
+                  currentSortDir === "asc" ? <ArrowUp size={13} color="#4f46e5" /> : <ArrowDown size={13} color="#4f46e5" />
+                ) : (
+                  <ArrowUpDown size={12} color="#94a3b8" />
+                )}
+              </div>
+            </th>
             <th className="po-text-center">Per Day Sale</th>
             <th className="po-text-center">Closing Stock in Bottle</th>
             <th className="po-text-center">Order Box</th>
@@ -116,6 +255,9 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onHoldI
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className="po-text-center" style={{ fontWeight: "600", color: "#334155" }}>
+                    {item.mls || item.ml_s || "—"}
                   </td>
                   <td className="po-text-center" style={{ fontWeight: "600", color: "#0f172a" }}>
                     {perDaySaleVal}
@@ -226,7 +368,7 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onHoldI
 
             {orderQtyRows.length > 0 && (
               <tr style={{ fontWeight: "bold", borderTop: "2px solid #94a3b8", backgroundColor: "#f8fafc" }}>
-                <td colSpan={9} style={{ textAlign: "right", padding: "10px 16px" }}><strong>PO Total:</strong></td>
+                <td colSpan={10} style={{ textAlign: "right", padding: "10px 16px" }}><strong>PO Total:</strong></td>
                 <td className="po-text-center" style={{ padding: "10px 16px", fontWeight: "700", color: "#1e1b4b" }}>{displayTotalBoxes}</td>
                 <td className="po-text-center" style={{ padding: "10px 16px", fontWeight: "700", color: "#1e1b4b" }}>{displayTotalBottles}</td>
                 <td className="po-text-center" style={{ padding: "10px 16px" }}></td>
@@ -236,7 +378,7 @@ const POItemsTable = ({ partyName, items = [], isReceiver, onRemoveItem, onHoldI
           </>
         ) : (
           <tr>
-            <td colSpan={!isReceiver && onRemoveItem ? 13 : 12} className="po-text-center" style={{ padding: "24px", color: "#64748b", fontStyle: "italic" }}>
+            <td colSpan={!isReceiver && onRemoveItem ? 14 : 13} className="po-text-center" style={{ padding: "24px", color: "#64748b", fontStyle: "italic" }}>
               Please select a vendor above to view the items list.
             </td>
           </tr>

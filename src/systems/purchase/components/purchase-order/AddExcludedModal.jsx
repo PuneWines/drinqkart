@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, CheckSquare, Square, Plus, Search, AlertTriangle, XCircle } from "lucide-react";
+import { X, CheckSquare, Square, Plus, Search, AlertTriangle, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
 import { roundPoBox } from "../../utils/poTransformer";
@@ -16,6 +16,8 @@ const AddExcludedModal = ({
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState("name"); // "name" | "size"
+  const [sortDir, setSortDir] = useState("asc"); // "asc" | "desc"
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -114,7 +116,8 @@ const AddExcludedModal = ({
           brandName: row.brand_name,
           company_name: row.company_name || targetCompany || null,
           liquorType: row.liquor_type,
-          closingQty: row.closing_qty
+          closingQty: row.closing_qty,
+          mls: row.mls || row.ml_s || null,
         };
       });
 
@@ -158,11 +161,43 @@ const AddExcludedModal = ({
     });
   };
 
+  const filteredItems = items.filter(item => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (item.itemName || "").toLowerCase().includes(q) ||
+      (item.brandName || "").toLowerCase().includes(q) ||
+      (item.shopName || "").toLowerCase().includes(q)
+    );
+  });
+
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    if (sortField === "name") {
+      const nameA = (a.itemName || a.item_name || "").trim().toLowerCase();
+      const nameB = (b.itemName || b.item_name || "").trim().toLowerCase();
+      const comp = nameA.localeCompare(nameB);
+      if (comp !== 0) return sortDir === "asc" ? comp : -comp;
+      const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+      const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+      return mlA - mlB;
+    }
+    if (sortField === "size") {
+      const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+      const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+      const comp = mlA - mlB;
+      if (comp !== 0) return sortDir === "asc" ? comp : -comp;
+      const nameA = (a.itemName || a.item_name || "").trim().toLowerCase();
+      const nameB = (b.itemName || b.item_name || "").trim().toLowerCase();
+      return nameA.localeCompare(nameB);
+    }
+    return 0;
+  });
+
   const handleSelectAll = () => {
-    if (selectedIds.size === filteredItems.length) {
+    if (selectedIds.size === sortedItems.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredItems.map(i => i.id)));
+      setSelectedIds(new Set(sortedItems.map(i => i.id)));
     }
   };
 
@@ -174,16 +209,6 @@ const AddExcludedModal = ({
     onAddItems(selectedItems);
     onClose();
   };
-
-  const filteredItems = items.filter(item => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      (item.itemName || "").toLowerCase().includes(q) ||
-      (item.brandName || "").toLowerCase().includes(q) ||
-      (item.shopName || "").toLowerCase().includes(q)
-    );
-  });
 
   if (!isOpen) return null;
 
@@ -263,8 +288,8 @@ const AddExcludedModal = ({
         </div>
 
         {/* Toolbar & Search */}
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
+        <div style={{ padding: '14px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input
               type="text"
@@ -282,16 +307,89 @@ const AddExcludedModal = ({
               }}
             />
           </div>
-          {filteredItems.length > 0 && (
+
+          {/* Sort Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Sort:</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (sortField === "name") {
+                  setSortDir(prev => prev === "asc" ? "desc" : "asc");
+                } else {
+                  setSortField("name");
+                  setSortDir("asc");
+                }
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: sortField === "name" ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+                backgroundColor: sortField === "name" ? '#eff6ff' : '#ffffff',
+                color: sortField === "name" ? '#1d4ed8' : '#475569',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Sort by Item Name"
+            >
+              Name
+              {sortField === "name" ? (
+                sortDir === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+              ) : (
+                <ArrowUpDown size={14} style={{ opacity: 0.5 }} />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (sortField === "size") {
+                  setSortDir(prev => prev === "asc" ? "desc" : "asc");
+                } else {
+                  setSortField("size");
+                  setSortDir("asc");
+                }
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: sortField === "size" ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+                backgroundColor: sortField === "size" ? '#eff6ff' : '#ffffff',
+                color: sortField === "size" ? '#1d4ed8' : '#475569',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Sort by Size (MLS)"
+            >
+              Size (MLS)
+              {sortField === "size" ? (
+                sortDir === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+              ) : (
+                <ArrowUpDown size={14} style={{ opacity: 0.5 }} />
+              )}
+            </button>
+          </div>
+
+          {sortedItems.length > 0 && (
             <button
               onClick={handleSelectAll}
               style={{
-                padding: '8px 14px',
+                padding: '7px 14px',
                 borderRadius: '8px',
                 border: '1px solid #cbd5e1',
                 backgroundColor: '#f8fafc',
                 color: '#334155',
-                fontSize: '13px',
+                fontSize: '12px',
                 fontWeight: '600',
                 cursor: 'pointer',
                 display: 'flex',
@@ -299,8 +397,8 @@ const AddExcludedModal = ({
                 gap: '6px'
               }}
             >
-              {selectedIds.size === filteredItems.length ? <CheckSquare size={16} color={btnBgColor} /> : <Square size={16} />}
-              Select All ({filteredItems.length})
+              {selectedIds.size === sortedItems.length ? <CheckSquare size={16} color={btnBgColor} /> : <Square size={16} />}
+              Select All ({sortedItems.length})
             </button>
           )}
         </div>
@@ -319,16 +417,16 @@ const AddExcludedModal = ({
             </div>
           )}
 
-          {!isLoading && !error && filteredItems.length === 0 && (
+          {!isLoading && !error && sortedItems.length === 0 && (
             <div style={{ padding: '50px 0', textAlign: 'center', color: '#64748b' }}>
               <p style={{ margin: 0, fontSize: '15px', fontWeight: '500' }}>No {mode} indents found for this vendor.</p>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>All {mode} items have either been added or none were created.</p>
             </div>
           )}
 
-          {!isLoading && !error && filteredItems.length > 0 && (
+          {!isLoading && !error && sortedItems.length > 0 && (
             <div style={{ margin: '16px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {filteredItems.map((item) => {
+              {sortedItems.map((item) => {
                 const isSelected = selectedIds.has(item.id);
                 return (
                   <div
@@ -354,8 +452,9 @@ const AddExcludedModal = ({
                         <div style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b' }}>
                           {item.itemName}
                         </div>
-                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', display: 'flex', gap: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
                           <span>Shop: <strong>{item.shopName}</strong></span>
+                          <span>Size: <strong style={{ color: '#2563eb' }}>{item.mls || item.ml_s ? `${item.mls || item.ml_s} ml` : '—'}</strong></span>
                           <span>B/Cs: <strong>{item.bcs || "—"}</strong></span>
                           {isRejectedMode ? (
                             <span>Status: <strong style={{ color: '#dc2626' }}>Rejected</strong></span>

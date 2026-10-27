@@ -1,11 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useShopStore from "../store/useShopStore";
 import useCompanyStore from "../store/useCompanyStore";
 import useAuthStore from "../store/useAuthStore";
 import "../styles/Pages.css";
 import { supabase } from "../lib/supabase";
-import { Loader2, Archive, X, Eye, Search, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  Archive,
+  X,
+  Eye,
+  Search,
+  Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
 import { dashboardSyncService } from "../services/dashboardSyncService";
@@ -46,6 +56,12 @@ const Approval = () => {
   const [showInProcessModal, setShowInProcessModal] = useState(false);
   const [inProcessSearchQuery, setInProcessSearchQuery] = useState("");
   const [excludedSearchQuery, setExcludedSearchQuery] = useState("");
+  const [modalSortField, setModalSortField] = useState("name"); // "name" | "size"
+  const [modalSortDir, setModalSortDir] = useState("asc"); // "asc" | "desc"
+  const [excludedSortField, setExcludedSortField] = useState("name");
+  const [excludedSortDir, setExcludedSortDir] = useState("asc");
+  const [inProcessSortField, setInProcessSortField] = useState("name");
+  const [inProcessSortDir, setInProcessSortDir] = useState("asc");
   const [originalIndentItems, setOriginalIndentItems] = useState([]);
   const [originalStatuses, setOriginalStatuses] = useState(null);
   const [startDate, setStartDate] = useState(() => {
@@ -153,6 +169,32 @@ const Approval = () => {
   const pendingCount = activeBatchItems.filter(
     (item) => !indentStatuses[item.id] || indentStatuses[item.id] === "pending",
   ).length;
+
+  const sortedActiveBatchItems = useMemo(() => {
+    const list = [...activeBatchItems];
+    if (!modalSortField) return list;
+    return list.sort((a, b) => {
+      if (modalSortField === "name") {
+        const nameA = (a.item_name || a.itemName || "").trim().toLowerCase();
+        const nameB = (b.item_name || b.itemName || "").trim().toLowerCase();
+        const comp = nameA.localeCompare(nameB);
+        if (comp !== 0) return modalSortDir === "asc" ? comp : -comp;
+        const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+        const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+        return mlA - mlB;
+      }
+      if (modalSortField === "size") {
+        const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+        const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+        const comp = mlA - mlB;
+        if (comp !== 0) return modalSortDir === "asc" ? comp : -comp;
+        const nameA = (a.item_name || a.itemName || "").trim().toLowerCase();
+        const nameB = (b.item_name || b.itemName || "").trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      }
+      return 0;
+    });
+  }, [activeBatchItems, modalSortField, modalSortDir]);
 
   useEffect(() => {
     if (!selectedIndentId) {
@@ -2068,6 +2110,139 @@ const Approval = () => {
             </div>
 
             <div style={{ padding: "24px", overflowY: "auto" }}>
+              {/* Sort Controls Toolbar */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "14px",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      color: "#64748b",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    Sort Items:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (modalSortField === "name") {
+                        setModalSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                      } else {
+                        setModalSortField("name");
+                        setModalSortDir("asc");
+                      }
+                    }}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "8px",
+                      border:
+                        modalSortField === "name"
+                          ? "1px solid #6366f1"
+                          : "1px solid #cbd5e1",
+                      backgroundColor:
+                        modalSortField === "name" ? "#eef2ff" : "#ffffff",
+                      color: modalSortField === "name" ? "#4338ca" : "#475569",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      transition: "all 0.15s ease",
+                      boxShadow:
+                        modalSortField === "name"
+                          ? "0 1px 3px rgba(99,102,241,0.2)"
+                          : "none",
+                    }}
+                  >
+                    {modalSortField === "name" ? (
+                      modalSortDir === "asc" ? (
+                        <ArrowUp size={13} color="#4338ca" />
+                      ) : (
+                        <ArrowDown size={13} color="#4338ca" />
+                      )
+                    ) : (
+                      <ArrowUpDown size={13} />
+                    )}
+                    Sort by Name{" "}
+                    {modalSortField === "name"
+                      ? modalSortDir === "asc"
+                        ? "(A-Z)"
+                        : "(Z-A)"
+                      : ""}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (modalSortField === "size") {
+                        setModalSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                      } else {
+                        setModalSortField("size");
+                        setModalSortDir("asc");
+                      }
+                    }}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "8px",
+                      border:
+                        modalSortField === "size"
+                          ? "1px solid #6366f1"
+                          : "1px solid #cbd5e1",
+                      backgroundColor:
+                        modalSortField === "size" ? "#eef2ff" : "#ffffff",
+                      color: modalSortField === "size" ? "#4338ca" : "#475569",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      transition: "all 0.15s ease",
+                      boxShadow:
+                        modalSortField === "size"
+                          ? "0 1px 3px rgba(99,102,241,0.2)"
+                          : "none",
+                    }}
+                  >
+                    {modalSortField === "size" ? (
+                      modalSortDir === "asc" ? (
+                        <ArrowUp size={13} color="#4338ca" />
+                      ) : (
+                        <ArrowDown size={13} color="#4338ca" />
+                      )
+                    ) : (
+                      <ArrowUpDown size={13} />
+                    )}
+                    Sort by Size (MLS){" "}
+                    {modalSortField === "size"
+                      ? modalSortDir === "asc"
+                        ? "(Low-High)"
+                        : "(High-Low)"
+                      : ""}
+                  </button>
+                </div>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "#94a3b8",
+                    fontWeight: "600",
+                  }}
+                >
+                  Showing {sortedActiveBatchItems.length} items
+                </span>
+              </div>
+
               <div
                 style={{
                   overflowX: "auto",
@@ -2179,13 +2354,45 @@ const Approval = () => {
                         Shop{"\n"}Name
                       </th>
                       <th
+                        onClick={() => {
+                          if (modalSortField === "name") {
+                            setModalSortDir((prev) =>
+                              prev === "asc" ? "desc" : "asc",
+                            );
+                          } else {
+                            setModalSortField("name");
+                            setModalSortDir("asc");
+                          }
+                        }}
                         style={{
                           ...thStyle,
                           textAlign: "left",
                           minWidth: "160px",
+                          cursor: "pointer",
+                          userSelect: "none",
+                          backgroundColor:
+                            modalSortField === "name" ? "#f1f5f9" : undefined,
                         }}
+                        title="Click to sort by Item Name"
                       >
-                        Item Name
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <span>Item Name</span>
+                          {modalSortField === "name" ? (
+                            modalSortDir === "asc" ? (
+                              <ArrowUp size={13} color="#4f46e5" />
+                            ) : (
+                              <ArrowDown size={13} color="#4f46e5" />
+                            )
+                          ) : (
+                            <ArrowUpDown size={12} color="#94a3b8" />
+                          )}
+                        </div>
                       </th>
                       <th
                         style={{
@@ -2227,14 +2434,54 @@ const Approval = () => {
                         Closing{"\n"}Qty
                       </th>
                       <th style={{ ...thStyle, textAlign: "center" }}>B/Cs</th>
-                      <th style={{ ...thStyle, textAlign: "center" }}>Mls</th>
+                      <th
+                        onClick={() => {
+                          if (modalSortField === "size") {
+                            setModalSortDir((prev) =>
+                              prev === "asc" ? "desc" : "asc",
+                            );
+                          } else {
+                            setModalSortField("size");
+                            setModalSortDir("asc");
+                          }
+                        }}
+                        style={{
+                          ...thStyle,
+                          textAlign: "center",
+                          cursor: "pointer",
+                          userSelect: "none",
+                          backgroundColor:
+                            modalSortField === "size" ? "#f1f5f9" : undefined,
+                        }}
+                        title="Click to sort by Size (MLS)"
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <span>Mls</span>
+                          {modalSortField === "size" ? (
+                            modalSortDir === "asc" ? (
+                              <ArrowUp size={13} color="#4f46e5" />
+                            ) : (
+                              <ArrowDown size={13} color="#4f46e5" />
+                            )
+                          ) : (
+                            <ArrowUpDown size={12} color="#94a3b8" />
+                          )}
+                        </div>
+                      </th>
                       <th style={{ ...thStyle, textAlign: "center" }}>
                         Action
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {activeBatchItems.map((item, index) => {
+                    {sortedActiveBatchItems.map((item, index) => {
                       // Use nullish coalescing so a falsy but valid id (e.g. 0) is never
                       // replaced by the loop index, which would cause status key collisions.
                       const itemId =
@@ -2646,7 +2893,7 @@ const Approval = () => {
                       </button>
                     </div>
 
-                    {/* Search Field */}
+                    {/* Search Field & Sort Controls */}
                     <div
                       style={{
                         padding: "16px 24px",
@@ -2654,9 +2901,11 @@ const Approval = () => {
                         display: "flex",
                         gap: "12px",
                         alignItems: "center",
+                        flexWrap: "wrap",
+                        justifyContent: "space-between",
                       }}
                     >
-                      <div style={{ position: "relative", flex: 1 }}>
+                      <div style={{ position: "relative", flex: 1, minWidth: "260px" }}>
                         <Search
                           size={16}
                           style={{
@@ -2684,6 +2933,74 @@ const Approval = () => {
                             boxSizing: "border-box",
                           }}
                         />
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>
+                          Sort:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (excludedSortField === "name") {
+                              setExcludedSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                            } else {
+                              setExcludedSortField("name");
+                              setExcludedSortDir("asc");
+                            }
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                            border: excludedSortField === "name" ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                            backgroundColor: excludedSortField === "name" ? "#fef2f2" : "#ffffff",
+                            color: excludedSortField === "name" ? "#dc2626" : "#475569",
+                            fontSize: "12px",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                          }}
+                        >
+                          {excludedSortField === "name" ? (
+                            excludedSortDir === "asc" ? <ArrowUp size={13} color="#dc2626" /> : <ArrowDown size={13} color="#dc2626" />
+                          ) : (
+                            <ArrowUpDown size={13} />
+                          )}
+                          Name {excludedSortField === "name" ? (excludedSortDir === "asc" ? "(A-Z)" : "(Z-A)") : ""}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (excludedSortField === "size") {
+                              setExcludedSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                            } else {
+                              setExcludedSortField("size");
+                              setExcludedSortDir("asc");
+                            }
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                            border: excludedSortField === "size" ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                            backgroundColor: excludedSortField === "size" ? "#fef2f2" : "#ffffff",
+                            color: excludedSortField === "size" ? "#dc2626" : "#475569",
+                            fontSize: "12px",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                          }}
+                        >
+                          {excludedSortField === "size" ? (
+                            excludedSortDir === "asc" ? <ArrowUp size={13} color="#dc2626" /> : <ArrowDown size={13} color="#dc2626" />
+                          ) : (
+                            <ArrowUpDown size={13} />
+                          )}
+                          Size (MLS) {excludedSortField === "size" ? (excludedSortDir === "asc" ? "(Low-High)" : "(High-Low)") : ""}
+                        </button>
                       </div>
                     </div>
 
@@ -2739,14 +3056,32 @@ const Approval = () => {
                                 Shop{"\n"}Name
                               </th>
                               <th
+                                onClick={() => {
+                                  if (excludedSortField === "name") {
+                                    setExcludedSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                                  } else {
+                                    setExcludedSortField("name");
+                                    setExcludedSortDir("asc");
+                                  }
+                                }}
                                 style={{
                                   ...thStyle,
-                                  backgroundColor: "#fef2f2",
+                                  backgroundColor: excludedSortField === "name" ? "#fee2e2" : "#fef2f2",
                                   color: "#991b1b",
                                   borderBottom: "2px solid #fca5a5",
+                                  cursor: "pointer",
+                                  userSelect: "none",
                                 }}
+                                title="Click to sort by Item Name"
                               >
-                                Item Name
+                                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                  <span>Item Name</span>
+                                  {excludedSortField === "name" ? (
+                                    excludedSortDir === "asc" ? <ArrowUp size={13} color="#991b1b" /> : <ArrowDown size={13} color="#991b1b" />
+                                  ) : (
+                                    <ArrowUpDown size={12} color="#fca5a5" />
+                                  )}
+                                </div>
                               </th>
                               <th
                                 style={{
@@ -2814,14 +3149,32 @@ const Approval = () => {
                                 B/Cs
                               </th>
                               <th
+                                onClick={() => {
+                                  if (excludedSortField === "size") {
+                                    setExcludedSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                                  } else {
+                                    setExcludedSortField("size");
+                                    setExcludedSortDir("asc");
+                                  }
+                                }}
                                 style={{
                                   ...thStyle,
-                                  backgroundColor: "#fef2f2",
+                                  backgroundColor: excludedSortField === "size" ? "#fee2e2" : "#fef2f2",
                                   color: "#991b1b",
                                   borderBottom: "2px solid #fca5a5",
+                                  cursor: "pointer",
+                                  userSelect: "none",
                                 }}
+                                title="Click to sort by Size (MLS)"
                               >
-                                Mls
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                  <span>Mls</span>
+                                  {excludedSortField === "size" ? (
+                                    excludedSortDir === "asc" ? <ArrowUp size={13} color="#991b1b" /> : <ArrowDown size={13} color="#991b1b" />
+                                  ) : (
+                                    <ArrowUpDown size={12} color="#fca5a5" />
+                                  )}
+                                </div>
                               </th>
                             </tr>
                           </thead>
@@ -2873,7 +3226,29 @@ const Approval = () => {
                                 );
                               }
 
-                              return filteredItems.map((item, index) => {
+                              const sortedExcludedItems = [...filteredItems].sort((a, b) => {
+                                if (excludedSortField === "name") {
+                                  const nameA = (a.item_name || a.itemName || "").trim().toLowerCase();
+                                  const nameB = (b.item_name || b.itemName || "").trim().toLowerCase();
+                                  const comp = nameA.localeCompare(nameB);
+                                  if (comp !== 0) return excludedSortDir === "asc" ? comp : -comp;
+                                  const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+                                  const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+                                  return mlA - mlB;
+                                }
+                                if (excludedSortField === "size") {
+                                  const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+                                  const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+                                  const comp = mlA - mlB;
+                                  if (comp !== 0) return excludedSortDir === "asc" ? comp : -comp;
+                                  const nameA = (a.item_name || a.itemName || "").trim().toLowerCase();
+                                  const nameB = (b.item_name || b.itemName || "").trim().toLowerCase();
+                                  return nameA.localeCompare(nameB);
+                                }
+                                return 0;
+                              });
+
+                              return sortedExcludedItems.map((item, index) => {
                                 const itemId =
                                   item.id ??
                                   `fallback-excl-${selectedIndentId}-${index}`;
@@ -3094,7 +3469,7 @@ const Approval = () => {
                       </button>
                     </div>
 
-                    {/* Search Field */}
+                    {/* Search Field & Sort Controls */}
                     <div
                       style={{
                         padding: "16px 24px",
@@ -3102,9 +3477,11 @@ const Approval = () => {
                         display: "flex",
                         gap: "12px",
                         alignItems: "center",
+                        flexWrap: "wrap",
+                        justifyContent: "space-between",
                       }}
                     >
-                      <div style={{ position: "relative", flex: 1 }}>
+                      <div style={{ position: "relative", flex: 1, minWidth: "260px" }}>
                         <Search
                           size={16}
                           style={{
@@ -3132,6 +3509,74 @@ const Approval = () => {
                             boxSizing: "border-box",
                           }}
                         />
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>
+                          Sort:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (inProcessSortField === "name") {
+                              setInProcessSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                            } else {
+                              setInProcessSortField("name");
+                              setInProcessSortDir("asc");
+                            }
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                            border: inProcessSortField === "name" ? "1px solid #2563eb" : "1px solid #cbd5e1",
+                            backgroundColor: inProcessSortField === "name" ? "#eff6ff" : "#ffffff",
+                            color: inProcessSortField === "name" ? "#1e40af" : "#475569",
+                            fontSize: "12px",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                          }}
+                        >
+                          {inProcessSortField === "name" ? (
+                            inProcessSortDir === "asc" ? <ArrowUp size={13} color="#1e40af" /> : <ArrowDown size={13} color="#1e40af" />
+                          ) : (
+                            <ArrowUpDown size={13} />
+                          )}
+                          Name {inProcessSortField === "name" ? (inProcessSortDir === "asc" ? "(A-Z)" : "(Z-A)") : ""}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (inProcessSortField === "size") {
+                              setInProcessSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                            } else {
+                              setInProcessSortField("size");
+                              setInProcessSortDir("asc");
+                            }
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                            border: inProcessSortField === "size" ? "1px solid #2563eb" : "1px solid #cbd5e1",
+                            backgroundColor: inProcessSortField === "size" ? "#eff6ff" : "#ffffff",
+                            color: inProcessSortField === "size" ? "#1e40af" : "#475569",
+                            fontSize: "12px",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                          }}
+                        >
+                          {inProcessSortField === "size" ? (
+                            inProcessSortDir === "asc" ? <ArrowUp size={13} color="#1e40af" /> : <ArrowDown size={13} color="#1e40af" />
+                          ) : (
+                            <ArrowUpDown size={13} />
+                          )}
+                          Size (MLS) {inProcessSortField === "size" ? (inProcessSortDir === "asc" ? "(Low-High)" : "(High-Low)") : ""}
+                        </button>
                       </div>
                     </div>
 
@@ -3187,14 +3632,32 @@ const Approval = () => {
                                 Shop{"\n"}Name
                               </th>
                               <th
+                                onClick={() => {
+                                  if (inProcessSortField === "name") {
+                                    setInProcessSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                                  } else {
+                                    setInProcessSortField("name");
+                                    setInProcessSortDir("asc");
+                                  }
+                                }}
                                 style={{
                                   ...thStyle,
-                                  backgroundColor: "#eff6ff",
+                                  backgroundColor: inProcessSortField === "name" ? "#dbeafe" : "#eff6ff",
                                   color: "#1e40af",
                                   borderBottom: "2px solid #93c5fd",
+                                  cursor: "pointer",
+                                  userSelect: "none",
                                 }}
+                                title="Click to sort by Item Name"
                               >
-                                Item Name
+                                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                  <span>Item Name</span>
+                                  {inProcessSortField === "name" ? (
+                                    inProcessSortDir === "asc" ? <ArrowUp size={13} color="#1e40af" /> : <ArrowDown size={13} color="#1e40af" />
+                                  ) : (
+                                    <ArrowUpDown size={12} color="#93c5fd" />
+                                  )}
+                                </div>
                               </th>
                               <th
                                 style={{
@@ -3251,14 +3714,32 @@ const Approval = () => {
                                 B/Cs
                               </th>
                               <th
+                                onClick={() => {
+                                  if (inProcessSortField === "size") {
+                                    setInProcessSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+                                  } else {
+                                    setInProcessSortField("size");
+                                    setInProcessSortDir("asc");
+                                  }
+                                }}
                                 style={{
                                   ...thStyle,
-                                  backgroundColor: "#eff6ff",
+                                  backgroundColor: inProcessSortField === "size" ? "#dbeafe" : "#eff6ff",
                                   color: "#1e40af",
                                   borderBottom: "2px solid #93c5fd",
+                                  cursor: "pointer",
+                                  userSelect: "none",
                                 }}
+                                title="Click to sort by Size (MLS)"
                               >
-                                Mls
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                  <span>Mls</span>
+                                  {inProcessSortField === "size" ? (
+                                    inProcessSortDir === "asc" ? <ArrowUp size={13} color="#1e40af" /> : <ArrowDown size={13} color="#1e40af" />
+                                  ) : (
+                                    <ArrowUpDown size={12} color="#93c5fd" />
+                                  )}
+                                </div>
                               </th>
                             </tr>
                           </thead>
@@ -3310,7 +3791,29 @@ const Approval = () => {
                                 );
                               }
 
-                              return filteredInProcess.map((item, index) => (
+                              const sortedInProcess = [...filteredInProcess].sort((a, b) => {
+                                if (inProcessSortField === "name") {
+                                  const nameA = (a.item_name || a.itemName || "").trim().toLowerCase();
+                                  const nameB = (b.item_name || b.itemName || "").trim().toLowerCase();
+                                  const comp = nameA.localeCompare(nameB);
+                                  if (comp !== 0) return inProcessSortDir === "asc" ? comp : -comp;
+                                  const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+                                  const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+                                  return mlA - mlB;
+                                }
+                                if (inProcessSortField === "size") {
+                                  const mlA = parseFloat(a.mls !== undefined ? a.mls : a.ml_s) || 0;
+                                  const mlB = parseFloat(b.mls !== undefined ? b.mls : b.ml_s) || 0;
+                                  const comp = mlA - mlB;
+                                  if (comp !== 0) return inProcessSortDir === "asc" ? comp : -comp;
+                                  const nameA = (a.item_name || a.itemName || "").trim().toLowerCase();
+                                  const nameB = (b.item_name || b.itemName || "").trim().toLowerCase();
+                                  return nameA.localeCompare(nameB);
+                                }
+                                return 0;
+                              });
+
+                              return sortedInProcess.map((item, index) => (
                                 <tr
                                   key={item.id || index}
                                   style={{
