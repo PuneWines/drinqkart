@@ -47,6 +47,7 @@ const Approval = () => {
   });
   const { selectedShop, assignedShops, isShopAdmin } = useShopStore();
   const { companies, fetchCompanies } = useCompanyStore();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (fetchCompanies) fetchCompanies();
@@ -277,33 +278,37 @@ const Approval = () => {
         if (error) throw error;
       }
 
-      alert(`Batch ${displayLabel} successfully deleted!`);
+      // Sync batch deletion to purchase_dashboard so audit trail and dashboard retain deleted items
+      const currentUser = useAuthStore.getState().currentUser;
+      const approverEmpCode =
+        currentUser?.employee_id ||
+        currentUser?.emp_code ||
+        currentUser?.user_name ||
+        currentUser?.name ||
+        "Approver";
 
-      // Soft-delete in purchase_dashboard so audit trail and dashboard retain deleted items
-      const targetIndentId = items[0]?.indent_id || items[0]?.party_indent_id;
-      if (targetIndentId) {
-        const currentUser = useAuthStore.getState().currentUser;
-        const approverEmpCode =
-          currentUser?.employee_id ||
-          currentUser?.emp_code ||
-          currentUser?.user_name ||
-          "Approver";
-        const now = new Date().toISOString();
-        await supabase
-          .from("purchase_dashboard")
-          .update({
-            is_deleted: true,
-            deletion_stage: "approval",
-            deletion_reason: "Batch Deleted at Approval",
-            deleted_by_emp_code: approverEmpCode,
-            approver_emp_code: approverEmpCode,
-            approver_action: "delete",
-            deleted_at: now,
-            updated_at: now,
-          })
-          .eq("indent_id", String(targetIndentId))
-          .is("po_id", null);
+      const basePartyId = groupKey.includes("::")
+        ? groupKey.split("::")[1]
+        : groupKey;
+      const baseIndentId = groupKey.includes("::")
+        ? groupKey.split("::")[0]
+        : null;
+
+      await dashboardSyncService.syncBatchDeletedAtApproval({
+        indentId: items[0]?.indent_id || baseIndentId,
+        partyIndentId: items[0]?.party_indent_id || basePartyId,
+        items,
+        approverEmpCode,
+        shopName: items[0]?.shop_name || items[0]?.purchase_indents?.shop_name,
+        partyName: items[0]?.party_name,
+      });
+
+      if (queryClient) {
+        queryClient.invalidateQueries({ queryKey: ["purchase_dashboard_logs"] });
+        queryClient.invalidateQueries({ queryKey: ["approvalsData"] });
       }
+
+      alert(`Batch ${displayLabel} successfully deleted!`);
 
       // Update local state by removing the deleted group
       setGroupedApprovals((prev) => {
@@ -319,12 +324,15 @@ const Approval = () => {
     }
   };
 
-  const handleDeleteItem = async (itemId, itemName) => {
+  const handleDeleteItem = async (itemId, itemName, itemObj = null) => {
     const confirmMsg = `Are you sure you want to permanently delete item "${itemName}"? This action cannot be undone.`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
       setIsLoading(true);
+      const currentItemsList = groupedApprovals[selectedIndentId] || [];
+      const targetItem = itemObj || currentItemsList.find((item) => item.id === itemId);
+
       const targetTable =
         activeTab === "history"
           ? "purchase_approved_indent_items"
@@ -336,39 +344,39 @@ const Approval = () => {
 
       if (error) throw error;
 
-      alert(`Item "${itemName}" successfully deleted!`);
+      // Sync deletion to purchase_dashboard so audit trail and dashboard retain deleted items
+      const currentUser = useAuthStore.getState().currentUser;
+      const approverEmpCode =
+        currentUser?.employee_id ||
+        currentUser?.emp_code ||
+        currentUser?.user_name ||
+        currentUser?.name ||
+        "Approver";
 
-      // Soft-delete in purchase_dashboard so audit trail and dashboard retain deleted items
-      const currentItemsList = groupedApprovals[selectedIndentId] || [];
-      const targetItem = currentItemsList.find((item) => item.id === itemId);
-      if (targetItem && targetItem.item_name) {
-        const targetIndentId =
-          targetItem.indent_id || targetItem.party_indent_id;
-        if (targetIndentId) {
-          const currentUser = useAuthStore.getState().currentUser;
-          const approverEmpCode =
-            currentUser?.employee_id ||
-            currentUser?.emp_code ||
-            currentUser?.user_name ||
-            "Approver";
-          const now = new Date().toISOString();
-          await supabase
-            .from("purchase_dashboard")
-            .update({
-              is_deleted: true,
-              deletion_stage: "approval",
-              deletion_reason: "Item Deleted at Approval",
-              deleted_by_emp_code: approverEmpCode,
-              approver_emp_code: approverEmpCode,
-              approver_action: "delete",
-              deleted_at: now,
-              updated_at: now,
-            })
-            .eq("indent_id", String(targetIndentId))
-            .eq("item_name", targetItem.item_name)
-            .is("po_id", null);
-        }
+      const basePartyId = selectedIndentId?.includes("::")
+        ? selectedIndentId.split("::")[1]
+        : selectedIndentId;
+      const baseIndentId = selectedIndentId?.includes("::")
+        ? selectedIndentId.split("::")[0]
+        : null;
+
+      if (targetItem) {
+        await dashboardSyncService.syncItemDeletedAtApproval({
+          indentId: targetItem.indent_id || baseIndentId,
+          partyIndentId: targetItem.party_indent_id || basePartyId,
+          item: targetItem,
+          approverEmpCode,
+          shopName: targetItem.shop_name || targetItem.purchase_indents?.shop_name,
+          partyName: targetItem.party_name,
+        });
       }
+
+      if (queryClient) {
+        queryClient.invalidateQueries({ queryKey: ["purchase_dashboard_logs"] });
+        queryClient.invalidateQueries({ queryKey: ["approvalsData"] });
+      }
+
+      alert(`Item "${itemName}" successfully deleted!`);
 
       // Update groupedApprovals state
       setGroupedApprovals((prev) => {
@@ -481,7 +489,6 @@ const Approval = () => {
     color: "#4338ca",
     textAlign: "center",
   };
-  const queryClient = useQueryClient();
 
   // ── Supabase Realtime: auto-invalidate cache on DB changes ──
   useRealtimeSync();
@@ -2763,7 +2770,7 @@ const Approval = () => {
                           <td style={{ ...tdStyle, textAlign: "center" }}>
                             <button
                               onClick={() =>
-                                handleDeleteItem(item.id, item.item_name)
+                                handleDeleteItem(item.id, item.item_name, item)
                               }
                               style={{
                                 background: "#fee2e2",
@@ -3853,6 +3860,7 @@ const Approval = () => {
                                           handleDeleteItem(
                                             item.id,
                                             item.item_name,
+                                            item,
                                           )
                                         }
                                         style={{

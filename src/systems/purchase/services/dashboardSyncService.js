@@ -261,6 +261,157 @@ export const dashboardSyncService = {
   },
 
   /**
+   * 3.1. ITEM DELETION AT APPROVAL:
+   * Marks or records an individual item deleted during the approval stage in purchase_dashboard.
+   * Ensures the deleted item is preserved in audit history and displayed in the Purchase Dashboard.
+   */
+  async syncItemDeletedAtApproval({
+    indentId,
+    partyIndentId,
+    item,
+    approverEmpCode,
+    shopName,
+    partyName,
+  }) {
+    if (!item) return;
+    const now = new Date().toISOString();
+    const empCode = approverEmpCode || "Approver";
+    const itemName = (item.item_name || item.itemName || "").trim();
+    if (!itemName) return;
+
+    const normalize = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const targetNorm = normalize(itemName);
+
+    const candidateIndentIds = Array.from(
+      new Set(
+        [
+          item.indent_id,
+          indentId,
+          partyIndentId,
+          item.party_indent_id,
+        ]
+          .filter(Boolean)
+          .map(String)
+      )
+    );
+
+    // 1. Query dashboard for existing record for this item
+    let existingRow = null;
+    if (candidateIndentIds.length > 0) {
+      const { data: rows, error: qErr } = await supabase
+        .from("purchase_dashboard")
+        .select("id, item_name, indent_id")
+        .in("indent_id", candidateIndentIds);
+
+      if (!qErr && rows && rows.length > 0) {
+        existingRow = rows.find((r) => normalize(r.item_name) === targetNorm);
+      }
+    }
+
+    // 2. Fallback query by shop & party if indent_id didn't match
+    if (
+      !existingRow &&
+      (shopName || item.shop_name) &&
+      (partyName || item.party_name)
+    ) {
+      const sName = shopName || item.shop_name;
+      const pName = partyName || item.party_name;
+      const { data: fbRows, error: fbErr } = await supabase
+        .from("purchase_dashboard")
+        .select("id, item_name, indent_id")
+        .eq("shop_name", sName)
+        .eq("party_name", pName)
+        .is("po_id", null);
+
+      if (!fbErr && fbRows && fbRows.length > 0) {
+        existingRow = fbRows.find((r) => normalize(r.item_name) === targetNorm);
+      }
+    }
+
+    // 3. Update existing or insert new audit record
+    if (existingRow) {
+      const { error: updErr } = await supabase
+        .from("purchase_dashboard")
+        .update({
+          is_deleted: true,
+          deletion_stage: "approval",
+          deletion_reason: "Item Deleted at Approval",
+          deleted_by_emp_code: empCode,
+          approver_emp_code: empCode,
+          approver_action: `Deleted by (${empCode})`,
+          deleted_at: now,
+          updated_at: now,
+        })
+        .eq("id", existingRow.id);
+
+      if (updErr) {
+        console.error("Failed to update deleted item in purchase_dashboard:", updErr);
+        throw new Error(`Dashboard sync failed: ${updErr.message}`);
+      }
+    } else {
+      const fallbackIndentId =
+        candidateIndentIds[0] ||
+        (indentId ? String(indentId) : "UNKNOWN");
+
+      const { error: insErr } = await supabase
+        .from("purchase_dashboard")
+        .insert({
+          indent_id: fallbackIndentId,
+          shop_name: shopName || item.shop_name || "UNKNOWN",
+          party_name: partyName || item.party_name || "UNKNOWN",
+          company_name: item.company_name || null,
+          item_name: item.item_name,
+          order_box: parseFloat(item.order_box || 0),
+          order_qty: parseFloat(item.order_qty || 0),
+          indent_emp_code: item.created_by_emp_code || null,
+          indent_created_at: item.created_at || now,
+          approver_action: `Deleted by (${empCode})`,
+          approver_emp_code: empCode,
+          approved_at: now,
+          trader_status: "Pending",
+          transporter_status: "Pending",
+          receiver_status: "Pending",
+          is_deleted: true,
+          deletion_stage: "approval",
+          deletion_reason: "Item Deleted at Approval",
+          deleted_by_emp_code: empCode,
+          deleted_at: now,
+          updated_at: now,
+        });
+
+      if (insErr) {
+        console.error("Failed to insert deleted item into purchase_dashboard:", insErr);
+        throw new Error(`Dashboard sync failed: ${insErr.message}`);
+      }
+    }
+  },
+
+  /**
+   * 3.2. BATCH DELETION AT APPROVAL:
+   * Marks all items in a deleted approval batch in purchase_dashboard.
+   */
+  async syncBatchDeletedAtApproval({
+    indentId,
+    partyIndentId,
+    items,
+    approverEmpCode,
+    shopName,
+    partyName,
+  }) {
+    if (!items || items.length === 0) return;
+    for (const itm of items) {
+      await this.syncItemDeletedAtApproval({
+        indentId,
+        partyIndentId,
+        item: itm,
+        approverEmpCode,
+        shopName: shopName || itm.shop_name,
+        partyName: partyName || itm.party_name,
+      });
+    }
+  },
+
+  /**
    * 4. PO CREATION:
    * Links PO number, PO box/qty, marks removed items as deleted.
    */

@@ -433,12 +433,13 @@ const Dashboard = () => {
     let rejected = 0;
 
     baseFilteredData.forEach(r => {
+      const lowerApp = (r.approver_action || "").toLowerCase();
       const isCompleted = !r.is_deleted && r.po_qty > 0 && Boolean(r.po_number);
       const isApproved = !r.is_deleted && !isCompleted && (
         (r.approved_qty != null && r.approved_qty > 0) ||
-        (r.approver_action && !r.approver_action.includes("delete") && !r.approver_action.includes("Reject"))
+        (r.approver_action && !lowerApp.includes("delete") && !lowerApp.includes("reject"))
       );
-      const isRejected = r.is_deleted || (r.approver_action && (r.approver_action.includes("delete") || r.approver_action.includes("Reject")));
+      const isRejected = r.is_deleted || (r.approver_action && (lowerApp.includes("delete") || lowerApp.includes("reject")));
       const isPending = !r.is_deleted && !isCompleted && !isApproved && !isRejected;
 
       if (isCompleted) completed++;
@@ -467,10 +468,13 @@ const Dashboard = () => {
       if (filterStatus === "PendingApproval") {
         result = result.filter(r => !r.is_deleted && !r.po_number && (r.approved_qty == null || r.approved_qty === 0) && (!r.approver_action || r.approver_action.includes("pending")));
       } else if (filterStatus === "ApprovedReady") {
-        result = result.filter(r => !r.is_deleted && !r.po_number && (
-          (r.approved_qty != null && r.approved_qty > 0) ||
-          (r.approver_action && !r.approver_action.includes("delete") && !r.approver_action.includes("Reject"))
-        ));
+        result = result.filter(r => {
+          const lowerApp = (r.approver_action || "").toLowerCase();
+          return !r.is_deleted && !r.po_number && (
+            (r.approved_qty != null && r.approved_qty > 0) ||
+            (r.approver_action && !lowerApp.includes("delete") && !lowerApp.includes("reject"))
+          );
+        });
       } else if (filterStatus === "Completed") {
         result = result.filter(r => !r.is_deleted && r.po_qty > 0 && r.po_number);
       } else if (filterStatus === "Modified") {
@@ -551,13 +555,19 @@ const Dashboard = () => {
       // Lifecycle counts for this party (using displayedRows)
       const ordCount = displayedRows.filter(r => r.order_box != null || r.order_qty != null).length;
       const appCount = displayedRows.filter(
-        r => !r.is_deleted && (r.approved_box != null || r.approved_qty != null || (r.approver_action && !r.approver_action.includes("delete") && !r.approver_action.includes("Reject")))
+        r => {
+          const lowerApp = (r.approver_action || "").toLowerCase();
+          return !r.is_deleted && (r.approved_box != null || r.approved_qty != null || (r.approver_action && !lowerApp.includes("delete") && !lowerApp.includes("reject")));
+        }
       ).length;
       const poCount = displayedRows.filter(
         r => !r.is_deleted && ((r.po_box != null && r.po_box > 0) || Boolean(r.po_number))
       ).length;
       const rejCount = displayedRows.filter(
-        r => r.is_deleted || (r.approver_action && (r.approver_action.includes("delete") || r.approver_action.includes("Reject")))
+        r => {
+          const lowerApp = (r.approver_action || "").toLowerCase();
+          return r.is_deleted || (r.approver_action && (lowerApp.includes("delete") || lowerApp.includes("reject")));
+        }
       ).length;
 
       // Box totals
@@ -828,7 +838,7 @@ const Dashboard = () => {
     const appAction = (row.approver_action || "").trim();
     const lower = appAction.toLowerCase();
 
-    if (lower === "delete" || lower.includes("reject") || (row.is_deleted && row.deletion_stage === "approval")) {
+    if (lower === "delete" || lower.includes("delete") || lower.includes("reject") || (row.is_deleted && row.deletion_stage === "approval")) {
       const isRej = lower.includes("reject") || (row.deletion_reason && row.deletion_reason.toLowerCase().includes("reject"));
       return (
         <div className="space-y-1">
