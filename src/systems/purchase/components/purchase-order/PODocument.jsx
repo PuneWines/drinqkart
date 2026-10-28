@@ -36,7 +36,6 @@ const PODocument = ({
   setSelectedReceiver,
   shippingError,
   companyScope,
-  filteredCompanyName,
   isMissingVendorLedger,
   cleanVendorName,
   availableDistricts = [],
@@ -73,8 +72,7 @@ const PODocument = ({
           partyName={partyName}
           onPartyChange={onPartyChange}
           vendorDetails={vendorDetails}
-          companyScope={companyScope || filteredCompanyName}
-          filteredCompanyName={filteredCompanyName}
+          companyScope={companyScope}
           isMissingVendorLedger={isMissingVendorLedger}
           cleanVendorName={cleanVendorName}
           availableDistricts={availableDistricts}

@@ -46,11 +46,10 @@ export default function CustomerFeedback() {
   // Access Control: Determine if user can add, edit, or delete
   const { canView, canModify } = useMemo(() => {
     if (!user) return { canView: false, canModify: false };
-    const isMasterAdmin = (user.user_name || user.username || '').toLowerCase() === 'masteradmin';
-    const userRole = (user.role || '').toLowerCase();
+    const userRole = (user.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
     
-    // Master admin and superadmin have apex unconditional edit rights
-    if (isMasterAdmin || userRole === 'superadmin' || userRole === 'masteradmin') {
+    // Master admin, superadmin, and hod have apex unconditional edit rights
+    if (userRole === 'superadmin' || userRole === 'masteradmin' || userRole === 'hod') {
       return { canView: true, canModify: true };
     }
 

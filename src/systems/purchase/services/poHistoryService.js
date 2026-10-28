@@ -32,12 +32,11 @@ const BASE_PO_COLUMNS = [
 export const PO_LIGHT_COLUMNS_WITH_SCOPE = [
   ...BASE_PO_COLUMNS,
   "company_scope",
-  "filtered_company_name",
 ].join(", ");
 
 export const PO_LIGHT_COLUMNS = [
   ...BASE_PO_COLUMNS,
-  "filtered_company_name",
+  "company_scope",
 ].join(", ");
 
 /**

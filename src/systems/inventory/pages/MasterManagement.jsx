@@ -16,8 +16,9 @@ import {
 } from '../services/dbService';
 
 export default function MasterManagement({ currentUser }) {
-  const isMasterAdmin = (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'masteradmin';
-  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+  const userRole = (currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isMasterAdmin = userRole === 'superadmin' || userRole === 'masteradmin';
+  const isAdmin = userRole === 'admin' || userRole === 'hod' || isMasterAdmin;
 
   const masterAccessList = useMemo(() => {
     let list = [];

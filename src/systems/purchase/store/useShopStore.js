@@ -23,18 +23,17 @@ export const getEffectiveUserShops = () => {
     user?.user_name ||
     user?.username ||
     localStorage.getItem("user-name") ||
+    localStorage.getItem("currentUserName") ||
     ""
   )
     .toLowerCase()
     .trim();
 
-  // Superadmin (L5) and HOD (L4) hold supreme global store authority across all shops.
-  // Backward compatibility with legacy masteradmin username/role.
+  // Superadmin and HOD hold supreme global store authority across all shops.
   const isGlobalSuperOrHod =
     role === "superadmin" ||
     role === "masteradmin" ||
-    role === "hod" ||
-    userName === "masteradmin";
+    role === "hod";
 
   if (isGlobalSuperOrHod) {
     return { isAdmin: true, isGlobal: true, assignedShops: [] };

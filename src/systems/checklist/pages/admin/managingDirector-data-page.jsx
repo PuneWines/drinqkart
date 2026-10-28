@@ -205,7 +205,7 @@ function AccountDataPage() {
   };
 
   const getFilteredMembersList = () => {
-    if (isElevatedRole(userRole) || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin") {
+    if (isElevatedRole(userRole)) {
       return membersList
     } else {
       return membersList.filter(member => member.toLowerCase() === username.toLowerCase())
@@ -279,7 +279,7 @@ function AccountDataPage() {
         const assignedTo = rowValues[4] || "Unassigned"
         membersSet.add(assignedTo)
 
-        const isElevatedUser = isElevatedRole(currentUserRole) || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+        const isElevatedUser = isElevatedRole(currentUserRole);
         const isUserMatch = isElevatedUser || assignedTo.toLowerCase() === currentUsername.toLowerCase()
         if (!isUserMatch && !isElevatedUser) return
 
@@ -350,7 +350,7 @@ function AccountDataPage() {
             pendingAccounts.push(rowData)
           }
         } else if (hasColumnG && !isColumnKEmpty) {
-          const isElevatedUser = isElevatedRole(currentUserRole) || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+          const isElevatedUser = isElevatedRole(currentUserRole);
           const isUserHistoryMatch = isElevatedUser || assignedTo.toLowerCase() === currentUsername.toLowerCase()
           if (isUserHistoryMatch) {
             historyRows.push(rowData)

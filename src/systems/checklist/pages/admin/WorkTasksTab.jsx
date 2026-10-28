@@ -495,8 +495,7 @@ const WorkTasksTab = ({
         console.error("Error parsing currentUser from localStorage:", e);
       }
 
-      const userShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
-      const isSuperAdmin = currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+      const isSuperAdmin = currentUserRole === "superadmin" || currentUserRole === "masteradmin";
 
       let reportingUsers = [currentUsername];
       let applyNameFilter = true;
@@ -861,9 +860,8 @@ const WorkTasksTab = ({
       if (!isModifyAllowed) return;
       if (e.target.checked) {
         const submittableTasks = filteredPendingTasks.filter(t => {
-          const ds = getWorkTaskDynamicStatus(t, currentTime);
-          const role = (userRole || "").toLowerCase();
-          const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+          const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
+          const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
           const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
           return ds !== "UPCOMING" && !isAssignedByMe;
         });
@@ -998,7 +996,7 @@ const WorkTasksTab = ({
       
       const currentUsername = (username || "");
       const currentUserRole = (userRole || "").toLowerCase();
-      const isSuperAdmin = currentUsername.toLowerCase() === "admin";
+      const isSuperAdmin = currentUserRole === "superadmin" || currentUserRole === "masteradmin";
 
       let reportingUsers = [currentUsername];
       let applyNameFilter = true;
@@ -1362,9 +1360,8 @@ const WorkTasksTab = ({
                             type="checkbox"
                             checked={(() => {
                               const submittableTasks = filteredPendingTasks.filter(t => {
-                                const ds = getWorkTaskDynamicStatus(t, currentTime);
-                                const role = (userRole || "").toLowerCase();
-                                const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                                const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
+                                const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
                                 const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
                                 return ds !== "UPCOMING" && !isAssignedByMe;
                               });
@@ -1428,9 +1425,8 @@ const WorkTasksTab = ({
                                     checked={selectedItems.has(task.id)}
                                     onChange={(e) => handleSelectItem(task.id, e.target.checked)}
                                     disabled={!isModifyAllowed || (() => {
-                                      const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                      const role = (userRole || "").toLowerCase();
-                                      const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                                      const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
+                                      const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
                                       const isAssignedByMe = !isAdmin && role === "manager" && task.manager_name === username && task.name !== username;
                                       return ds === "UPCOMING" || isAssignedByMe;
                                     })()}
@@ -1625,9 +1621,8 @@ const WorkTasksTab = ({
                           type="checkbox"
                           checked={(() => {
                             const submittableTasks = filteredPendingTasks.filter(t => {
-                              const ds = getWorkTaskDynamicStatus(t, currentTime);
-                              const role = (userRole || "").toLowerCase();
-                              const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                              const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
+                              const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
                               const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
                               return ds !== "UPCOMING" && !isAssignedByMe;
                             });
@@ -1685,9 +1680,8 @@ const WorkTasksTab = ({
                                   checked={selectedItems.has(task.id)}
                                   onChange={(e) => handleSelectItem(task.id, e.target.checked)}
                                   disabled={!isModifyAllowed || (() => {
-                                    const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                    const role = (userRole || "").toLowerCase();
-                                    const isAdmin = role === "admin" || (username || "").toLowerCase() === "admin" || (username || "").toLowerCase() === "masteradmin";
+                                    const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
+                                    const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
                                     const isAssignedByMe = !isAdmin && role === "manager" && task.manager_name === username && task.name !== username;
                                     return ds === "UPCOMING" || isAssignedByMe;
                                   })()}

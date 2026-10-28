@@ -28,9 +28,9 @@ const UserDashboard = () => {
   const loadStats = useCallback(async () => {
     setLoading(true)
     try {
-      const role = (localStorage.getItem("role") || "").toLowerCase()
+      const role = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim()
       const userAccess = localStorage.getItem("shop_name") || localStorage.getItem("user_access") || ""
-      const isMasterAdmin = currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin"
+      const isMasterAdmin = role === "superadmin" || role === "masteradmin" || role === "admin" || role === "hod"
       const assignedShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
       
       let data = []

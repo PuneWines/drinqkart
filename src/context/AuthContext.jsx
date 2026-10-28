@@ -1,5 +1,6 @@
 import { createContext, useState, useContext, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { getUserAssignedShops } from "../utils/permissionUtils";
 
 const AuthContext = createContext();
 
@@ -13,9 +14,8 @@ const STORAGE_KEY = "drinqkart_user";
 export const parseChecklistAllowedPages = (userData) => {
   if (!userData) return [];
 
-  const userRole = (userData.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") : "") || "").toLowerCase();
-  const userName = (userData.user_name || userData.username || (typeof localStorage !== "undefined" ? localStorage.getItem("user-name") : "") || "").toLowerCase();
-  const isSuper = userRole === "superadmin" || userRole === "masteradmin" || userName === "masteradmin" || userName === "admin";
+  const userRole = (userData.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") || localStorage.getItem("currentUserRole") : "") || "").toLowerCase().trim();
+  const isSuper = userRole === "superadmin" || userRole === "masteradmin";
   const isAdmin = userRole === "admin" || userRole === "hod";
 
   if (isSuper || isAdmin) {
@@ -219,17 +219,28 @@ const syncSubsystemSessions = (userObj) => {
   // 2. HR System Key (hr_user)
   localStorage.setItem("hr_user", JSON.stringify(userObj));
 
+  const roleLower = (userObj.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") || localStorage.getItem("currentUserRole") : "") || "").toLowerCase().trim();
+  const isSuperadmin = roleLower === "superadmin" || roleLower === "masteradmin";
+  const isElevated = isSuperadmin || roleLower === "admin" || roleLower === "hod";
+  const assignedShops = isSuperadmin ? [] : getUserAssignedShops(userObj);
+  localStorage.setItem("assigned_shops", JSON.stringify(assignedShops));
+
   // 3. Inventory key (vishal_snacks_user)
   const mappedInventoryUser = {
     id: userObj.id,
     username: userObj.user_name || userObj.username,
-    role: userObj.role?.toLowerCase() === "admin" ? "admin" : "operator",
-    shop_id: userObj.shop_id || null,
-    shop_name: userObj.shop_name || userObj.user_access || null,
+    user_name: userObj.user_name || userObj.username,
+    role: isSuperadmin ? "superadmin" : (roleLower === "admin" ? "admin" : (userObj.role || "operator")),
+    shop_id: isSuperadmin ? null : (userObj.shop_id || null),
+    shop_name: isSuperadmin ? null : (userObj.shop_name || userObj.user_access || null),
+    user_access: isSuperadmin ? null : (userObj.user_access || userObj.shop_name || null),
+    assigned_shops: isSuperadmin ? [] : assignedShops,
+    shops: isSuperadmin ? [] : assignedShops,
+    master_user_system_page_access: userObj.master_user_system_page_access,
     is_approved: true,
     page_access:
       userObj.page_access ||
-      (userObj.role?.toLowerCase() === "admin"
+      (isElevated
         ? [
             "entry_dashboard",
             "entry_purchases",

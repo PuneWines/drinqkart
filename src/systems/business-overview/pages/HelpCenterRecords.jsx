@@ -29,10 +29,11 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
   const activeTab = propActiveTab;
 
   // Permission calculation
+  const roleLower = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
   const isMasterAdmin =
-    (userObj.username || userObj.user_name || '').toLowerCase() === 'masteradmin' ||
-    (userObj.role || '').toLowerCase() === 'superadmin' ||
-    (userObj.role || '').toLowerCase() === 'masteradmin';
+    roleLower === 'superadmin' ||
+    roleLower === 'masteradmin' ||
+    roleLower === 'hod';
 
   let accessKeys = [];
   if (userObj.master_user_system_page_access) {

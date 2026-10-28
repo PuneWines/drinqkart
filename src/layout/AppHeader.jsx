@@ -65,14 +65,12 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
 
   const userObj = user || {};
   const userName = userObj.user_name || userObj.username || 'User';
-  const role = (userObj.role || localStorage.getItem('role') || 'User').toLowerCase();
+  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || 'User').toLowerCase().trim();
   const isAdmin =
     role === 'admin' ||
     role === 'masteradmin' ||
     role === 'superadmin' ||
-    role === 'hod' ||
-    userName.toLowerCase() === 'admin' ||
-    userName.toLowerCase() === 'masteradmin';
+    role === 'hod';
 
   return (
     <header className="w-full max-w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20 min-w-0 overflow-hidden">

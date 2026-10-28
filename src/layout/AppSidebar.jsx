@@ -220,15 +220,12 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                   </div>
                   {systems.map((sys) => {
                     const sysNameLower = sys.label.toLowerCase().trim();
-                    const role = (user?.role || localStorage.getItem('role') || '').toLowerCase();
-                    const userName = (user?.user_name || user?.username || '').toLowerCase();
+                    const role = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
                     const isAdmin =
                       role === 'admin' ||
                       role === 'masteradmin' ||
                       role === 'superadmin' ||
-                      role === 'hod' ||
-                      userName === 'admin' ||
-                      userName === 'masteradmin';
+                      role === 'hod';
 
                     if (!isAdmin) {
                       let rawAccess = user?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];
@@ -451,15 +448,12 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                   )}
                   {systems.map((sys) => {
                     const sysNameLower = sys.label.toLowerCase().trim();
-                    const role = (user?.role || localStorage.getItem('role') || '').toLowerCase();
-                    const userName = (user?.user_name || user?.username || '').toLowerCase();
+                    const role = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
                     const isAdmin =
                       role === 'admin' ||
                       role === 'masteradmin' ||
                       role === 'superadmin' ||
-                      role === 'hod' ||
-                      userName === 'admin' ||
-                      userName === 'masteradmin';
+                      role === 'hod';
 
                     if (!isAdmin) {
                       let rawAccess = user?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];

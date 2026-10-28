@@ -187,6 +187,10 @@ const AVAILABLE_SYSTEMS = [
           "Trader Master",
         ],
       },
+      {
+        title: "DOCUMENT MANAGER MODULE",
+        pages: ["Document Manager"],
+      },
     ],
   },
   {
@@ -286,15 +290,13 @@ export default function MasterSetting() {
     .toLowerCase()
     .trim();
 
-  // Superadmin check: either role is superadmin/masteradmin OR username is masteradmin (during transition)
+  // Superadmin check: role is superadmin or masteradmin
   const isSuperadmin =
     currentRole === "superadmin" ||
-    currentRole === "masteradmin" ||
-    currentUserName === "masteradmin";
+    currentRole === "masteradmin";
 
   const isHod = currentRole === "hod";
-  const isShopAdmin =
-    (currentRole === "admin" || currentUserName === "admin") && !isSuperadmin;
+  const isShopAdmin = currentRole === "admin" && !isSuperadmin;
 
   // Determine if logged-in user has modify access vs view-only access on Master Settings
   const isMasterSettingModifyAllowed = useMemo(() => {
@@ -1911,7 +1913,6 @@ export default function MasterSetting() {
     const role = (currentUserObj.role || "").toLowerCase().trim();
 
     if (
-      userName === "masteradmin" ||
       role === "superadmin" ||
       role === "masteradmin"
     ) {

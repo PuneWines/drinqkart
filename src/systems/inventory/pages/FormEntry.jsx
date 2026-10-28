@@ -19,8 +19,9 @@ import {
 const toDateStr = (d) => d.toISOString().split('T')[0];
 
 export default function FormEntry({ currentUser }) {
-  const isMasterAdmin = (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'masteradmin';
-  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+  const userRole = (currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isMasterAdmin = userRole === 'superadmin' || userRole === 'masteradmin';
+  const isAdmin = userRole === 'admin' || userRole === 'hod' || isMasterAdmin;
 
   const masterAccessList = useMemo(() => {
     let list = [];
@@ -72,13 +73,6 @@ export default function FormEntry({ currentUser }) {
     cashTallyPerm.canView || (allowedPermissions.includes('entry_cashtally') && !masterAccessList.length)
   ), [cashTallyPerm, allowedPermissions, masterAccessList]);
 
-  const isCurrentTypeModifyAllowed = useMemo(() => {
-    if (quantityType === 'Purchase Quantity') return purchasePerm.canModify;
-    if (quantityType === 'Closing Quantity') return closingPerm.canModify;
-    if (quantityType === 'Sale Amount') return cashTallyPerm.canModify;
-    return false;
-  }, [quantityType, purchasePerm, closingPerm, cashTallyPerm]);
-
   const allowedTypes = useMemo(() => {
     const types = [];
     if (isPurchaseAllowed) types.push('Purchase Quantity');
@@ -94,6 +88,13 @@ export default function FormEntry({ currentUser }) {
     if (isCashTallyAllowed) return 'Sale Amount';
     return 'Purchase Quantity';
   });
+
+  const isCurrentTypeModifyAllowed = useMemo(() => {
+    if (quantityType === 'Purchase Quantity') return purchasePerm.canModify;
+    if (quantityType === 'Closing Quantity') return closingPerm.canModify;
+    if (quantityType === 'Sale Amount') return cashTallyPerm.canModify;
+    return false;
+  }, [quantityType, purchasePerm, closingPerm, cashTallyPerm]);
 
   useEffect(() => {
     if (allowedTypes.length > 0 && !allowedTypes.includes(quantityType)) {
@@ -115,9 +116,7 @@ export default function FormEntry({ currentUser }) {
 
   const [shopsList, setShopsList] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState(
-    currentUser?.role === 'operator' && currentUser?.shop_id
-      ? currentUser.shop_id.toString()
-      : ''
+    currentUser?.shop_id ? currentUser.shop_id.toString() : ''
   );
   const [isLoadingShops, setIsLoadingShops] = useState(true);
 
@@ -155,27 +154,28 @@ export default function FormEntry({ currentUser }) {
       setItemsList(items);
       setVendorsList(vendors);
 
-      const isScoped = isUserShopScoped();
-      const assigned = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
+      const isScoped = isUserShopScoped(currentUser);
+      const assigned = isScoped ? getUserAssignedShops(currentUser).map(s => s.toLowerCase()) : [];
       const visibleShops = (isScoped && assigned.length > 0)
         ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
         : (shops || []);
       setShopsList(visibleShops);
 
       if (visibleShops && visibleShops.length > 0) {
-        if (currentUser?.role === 'operator' || (isScoped && assigned.length > 0)) {
-          const matched = visibleShops.find(s =>
-            (currentUser?.shop_id && s.id.toString() === currentUser.shop_id.toString()) ||
-            (currentUser?.shop_name && s.shop_name?.trim().toLowerCase() === currentUser.shop_name.trim().toLowerCase())
-          );
-          if (matched) {
-            setSelectedShopId(matched.id.toString());
-          } else {
-            setSelectedShopId(visibleShops[0].id.toString());
+        setSelectedShopId(prev => {
+          if (prev && visibleShops.some(s => s.id.toString() === prev.toString())) {
+            return prev;
           }
-        } else if (!selectedShopId) {
-          setSelectedShopId(visibleShops[0].id.toString());
-        }
+          if (currentUser?.shop_id) {
+            const matchedById = visibleShops.find(s => s.id.toString() === currentUser.shop_id.toString());
+            if (matchedById) return matchedById.id.toString();
+          }
+          if (currentUser?.shop_name) {
+            const matchedByName = visibleShops.find(s => s.shop_name?.trim().toLowerCase() === currentUser.shop_name.trim().toLowerCase());
+            if (matchedByName) return matchedByName.id.toString();
+          }
+          return visibleShops[0].id.toString();
+        });
       }
     } catch (err) {
       console.error('Failed to load initial data in FormEntry:', err);
@@ -655,8 +655,8 @@ export default function FormEntry({ currentUser }) {
                 <select
                   value={selectedShopId}
                   onChange={(e) => { setSelectedShopId(e.target.value); setErrors({}); }}
-                  disabled={currentUser?.role === 'operator'}
-                  className={`w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${currentUser?.role === 'operator'
+                  disabled={isUserShopScoped(currentUser) && shopsList.length <= 1}
+                  className={`w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${isUserShopScoped(currentUser) && shopsList.length <= 1
                     ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
                     : 'bg-white cursor-pointer'
                     }`}

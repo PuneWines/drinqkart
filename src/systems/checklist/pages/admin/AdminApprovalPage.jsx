@@ -159,9 +159,8 @@ export default function AdminApprovalPage() {
     return null;
   }, []);
 
-  const currentRole = (currentUserObj?.role || localStorage.getItem("role") || "").toLowerCase();
-  const currentUsername = (currentUserObj?.user_name || localStorage.getItem("user-name") || "").toLowerCase();
-  const isSuperAdmin = currentRole === "superadmin" || currentUsername === "masteradmin";
+  const currentRole = (currentUserObj?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem("role") || localStorage.getItem("currentUserRole") : "") || "").toLowerCase().trim();
+  const isSuperAdmin = currentRole === "superadmin" || currentRole === "masteradmin";
   const isHOD = currentRole === "hod";
   const isGlobalAuthority = isSuperAdmin || isHOD;
   const isAdmin = currentRole === "admin" && !isGlobalAuthority;
@@ -359,9 +358,9 @@ export default function AdminApprovalPage() {
     const userRole = localStorage.getItem("role") || currentUserObj?.role || "";
     const username = localStorage.getItem("user-name") || currentUserObj?.user_name || "";
     const currentUsername = (username || "").toLowerCase();
-    const currentUserRole = (userRole || "").toLowerCase();
+    const currentUserRole = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem("role") || localStorage.getItem("currentUserRole") : "") || "").toLowerCase().trim();
     const isSuperAdmin =
-      currentUserRole === "superadmin" || currentUsername === "masteradmin";
+      currentUserRole === "superadmin" || currentUserRole === "masteradmin";
     const isHOD = currentUserRole === "hod";
     const isGlobalAuthority = isSuperAdmin || isHOD;
     const isAdmin = currentUserRole === "admin" && !isGlobalAuthority;

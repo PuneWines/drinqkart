@@ -87,9 +87,8 @@ export default function ScheduledWorkTasks() {
   const { userData } = useSelector(state => state.setting);
 
   // User Role & Permissions Logic
-  const role = (localStorage.getItem("role") || "").toLowerCase();
-  const username = (localStorage.getItem("user-name") || "").toLowerCase();
-  const isSuperAdmin = role === "superadmin" || role === "masteradmin" || username === "admin" || username === "masteradmin";
+  const role = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+  const isSuperAdmin = role === "superadmin" || role === "masteradmin";
   const isHOD = role === "hod";
   const isAdmin = isSuperAdmin || isHOD || role === "admin";
 

@@ -16,7 +16,33 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const storedUser = localStorage.getItem('vishal_snacks_user');
-      return storedUser ? JSON.parse(storedUser) : null;
+      let user = storedUser ? JSON.parse(storedUser) : null;
+      if (!user) {
+        const rootRaw = localStorage.getItem('drinqkart_user');
+        if (rootRaw) {
+          user = JSON.parse(rootRaw);
+        }
+      }
+      if (user) {
+        const rootRole = (localStorage.getItem('role') || localStorage.getItem('currentUserRole') || user.role || '').toLowerCase().trim();
+        const isSuperadmin = rootRole === 'superadmin' || rootRole === 'masteradmin';
+        const isElevated = isSuperadmin || rootRole === 'admin' || rootRole === 'hod';
+        if (isSuperadmin) {
+          user.role = 'superadmin';
+          user.assigned_shops = [];
+          user.shop_name = '';
+          user.shop_id = '';
+        } else if (isElevated) {
+          user.role = 'admin';
+        }
+        if (!user.assigned_shops) {
+          try {
+            const rawAssigned = localStorage.getItem('assigned_shops');
+            if (rawAssigned) user.assigned_shops = JSON.parse(rawAssigned);
+          } catch {}
+        }
+      }
+      return user;
     } catch (e) {
       console.error('Error parsing stored user in inventory:', e);
       return null;
@@ -57,8 +83,8 @@ function App() {
   useEffect(() => {
     if (currentUser) {
       const allowed = currentUser.page_access || [];
-      const userRole = (currentUser.role || '').toLowerCase();
-      const isMasterAdmin = userRole === 'superadmin' || userRole === 'masteradmin' || (currentUser.user_name || currentUser.username || '').toLowerCase() === 'masteradmin';
+      const userRole = (currentUser.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+      const isMasterAdmin = userRole === 'superadmin' || userRole === 'masteradmin';
 
       let masterAccessList = [];
       try {

@@ -34,9 +34,8 @@ import { getPagePermission } from "../../../../utils/permissionUtils";
 const parseChecklistAllowedPages = (userData) => {
   if (!userData) return [];
 
-  const userRole = (userData.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase();
-  const userName = (userData.user_name || userData.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase();
-  const isSuper = userRole === 'superadmin' || userRole === 'masteradmin' || userName === 'masteradmin' || userName === 'admin';
+  const userRole = (userData.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isSuper = userRole === 'superadmin' || userRole === 'masteradmin';
   const isAdmin = userRole === 'admin' || userRole === 'hod';
 
   if (isSuper || isAdmin) {
@@ -300,8 +299,7 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
 
     const isPathAllowed = (path) => {
       const userRoleLower = (storedRole || "user").toLowerCase();
-      const userClean = (storedUsername || "").toLowerCase();
-      const isSuper = userRoleLower === "superadmin" || userRoleLower === "masteradmin" || userClean === "masteradmin" || userClean === "admin";
+      const isSuper = userRoleLower === "superadmin" || userRoleLower === "masteradmin";
       const isAdminRole = userRoleLower === "admin" || userRoleLower === "hod";
 
       // Superadmin and Admin/HOD roles have unrestricted access across all checklist pages
@@ -403,11 +401,8 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
     }
 
     // Check if this is the super admin (username = 'admin'/'masteradmin' or role = 'superadmin'/'masteradmin')
-    const normalizedUsername = (storedUsername || "").toLowerCase();
-    const currentRoleNormalized = (storedRole || "").toLowerCase();
+    const currentRoleNormalized = (storedRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
     setIsSuperAdmin(
-      normalizedUsername === "admin" ||
-      normalizedUsername === "masteradmin" ||
       currentRoleNormalized === "superadmin" ||
       currentRoleNormalized === "masteradmin"
     );
@@ -466,10 +461,9 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
 
   // Filter routes strictly based on pageAccess and getPagePermission for all users
   const getAccessibleRoutes = () => {
-    const userRole = localStorage.getItem("role") || "user";
-    const userRoleNormalized = (userRole || "user").toLowerCase();
-    const storedUsername = (localStorage.getItem("user-name") || "").toLowerCase();
-    const isSuper = userRoleNormalized === "superadmin" || userRoleNormalized === "masteradmin" || storedUsername === "masteradmin" || storedUsername === "admin";
+    const userRole = localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "user";
+    const userRoleNormalized = (userRole || "user").toLowerCase().trim();
+    const isSuper = userRoleNormalized === "superadmin" || userRoleNormalized === "masteradmin";
     const isAdminRole = userRoleNormalized === "admin" || userRoleNormalized === "hod";
 
     if (isSuper || isAdminRole) {

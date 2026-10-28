@@ -834,7 +834,6 @@ const Approval = () => {
             brand_name: item.brand_name,
             company_name: item.company_name || null,
             company_scope: effectiveCompany,
-            filtered_company_name: effectiveCompany,
             bcs: item.bcs,
             mls: item.mls,
             liquor_type: item.liquor_type,

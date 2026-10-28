@@ -409,7 +409,7 @@ function AccountDataPage() {
         const assignedTo = getCellValue(row, 4) || 'Unassigned';
         membersSet.add(assignedTo); // Add to members list for dropdown
 
-        const isElevated = isElevatedRole(userRole) || (username || '').toLowerCase() === 'admin' || (username || '').toLowerCase() === 'masteradmin';
+        const isElevated = isElevatedRole(userRole);
         const isUserMatch = isElevated ||
           assignedTo.toLowerCase() === username.toLowerCase();
 

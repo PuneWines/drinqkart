@@ -170,7 +170,7 @@ const AllTasks = () => {
     const role = (userRole || "").toLowerCase();
     const currentUsername = username || "";
 
-    if (role === "superadmin" || role === "masteradmin" || role === "hod" || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin") {
+    if (role === "superadmin" || role === "masteradmin" || role === "hod") {
       return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
     } else if (role === "admin" || role === "manager") {
       const isScoped = isUserShopScoped();
@@ -505,7 +505,7 @@ const AllTasks = () => {
 
       const currentUsername = (username || "");
       const currentUserRole = (userRole || "").toLowerCase();
-      const isSuperAdmin = currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin" || currentUserRole === "superadmin" || currentUserRole === "masteradmin";
+      const isSuperAdmin = currentUserRole === "superadmin" || currentUserRole === "masteradmin";
 
       let reportingUsers = [currentUsername];
       let applyNameFilter = true;

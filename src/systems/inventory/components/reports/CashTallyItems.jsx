@@ -7,19 +7,19 @@ import {
   deleteDailySalesSummaryRow,
   getTodayTotalSales
 } from '../../services/dbService';
+import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
 
 export default function CashTallyItems({ hideHeader = false, currentUser, showActions = false }) {
 
   const [shopsList, setShopsList] = useState([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
 
+  const isScoped = isUserShopScoped(currentUser);
+  const assigned = isScoped ? getUserAssignedShops(currentUser).map(s => s.toLowerCase()) : [];
+
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [selectedShopId, setSelectedShopId] = useState(
-    currentUser?.role === 'operator' && currentUser?.shop_id
-      ? currentUser.shop_id.toString()
-      : ''
-  );
+  const [selectedShopId, setSelectedShopId] = useState('');
 
   // Data state
   const [records, setRecords] = useState([]);
@@ -205,7 +205,13 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
     async function loadMetadata() {
       try {
         const shops = await getShops();
-        setShopsList(shops);
+        const visibleShops = (isScoped && assigned.length > 0)
+          ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
+          : (shops || []);
+        setShopsList(visibleShops);
+        if (isScoped && visibleShops.length === 1) {
+          setSelectedShopId(visibleShops[0].id.toString());
+        }
       } catch (err) {
         console.error('Failed to load shops:', err);
       } finally {
@@ -213,14 +219,16 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
       }
     }
     loadMetadata();
-  }, []);
+  }, [currentUser]);
 
   // 2. Load today's sales
   const loadTodaySales = async () => {
     setIsLoadingTodaySales(true);
     try {
-      const shopId = selectedShopId || (currentUser?.role === 'operator' ? currentUser.shop_id : null);
-      const totals = await getTodayTotalSales(shopId);
+      const effectiveShopId = selectedShopId
+        ? selectedShopId
+        : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
+      const totals = await getTodayTotalSales(effectiveShopId);
       setTodaySales(totals);
     } catch (err) {
       console.error('Failed to fetch today\'s sales:', err);
@@ -235,10 +243,13 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
     async function loadRecords() {
       setIsLoadingRecords(true);
       try {
+        const effectiveShopId = selectedShopId
+          ? selectedShopId
+          : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
         const data = await getDailySalesSummary({
           fromDate,
           toDate,
-          shopId: selectedShopId || null
+          shopId: effectiveShopId
         });
         setRecords(data);
       } catch (err) {
@@ -250,7 +261,7 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
     }
     loadRecords();
     loadTodaySales();
-  }, [fromDate, toDate, selectedShopId]);
+  }, [fromDate, toDate, selectedShopId, shopsList, isScoped]);
 
   // Summary Metrics calculations for filtered records
   const summary = useMemo(() => {
@@ -325,13 +336,15 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
               <select
                 value={selectedShopId}
                 onChange={(e) => setSelectedShopId(e.target.value)}
-                disabled={currentUser?.role === 'operator'}
-                className={`flex-1 border rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${currentUser?.role === 'operator'
+                disabled={isScoped && shopsList.length === 1}
+                className={`flex-1 border rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isScoped && shopsList.length === 1
                   ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
                   : 'bg-slate-50/70 border-slate-300 cursor-pointer'
                   }`}
               >
-                {currentUser?.role !== 'operator' && <option value="">-- All Outlets --</option>}
+                {(!isScoped || shopsList.length > 1) && (
+                  <option value="">{isScoped ? '-- All Assigned Outlets --' : '-- All Outlets --'}</option>
+                )}
                 {shopsList.map(s => (
                   <option key={s.id} value={s.id}>{s.shop_name}</option>
                 ))}

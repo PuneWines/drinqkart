@@ -166,7 +166,8 @@ export const systems = [
           { label: 'Item Master', to: '/systems/business-overview/gift-stock/item-master' },
           { label: 'Trader Master', to: '/systems/business-overview/gift-stock/trader-master' }
         ]
-      }
+      },
+      { label: 'Document Manager', to: '/systems/business-overview/document-manager' }
     ]
   },
   {
@@ -336,6 +337,9 @@ export const getVisibleSystems = (user) => {
       if (systemId === 'business-overview') {
         if (sub.label === 'Scheme Discussions') {
           labelsToCheck.push('Scheme Discussions', 'Scheme Discussion', 'scheme-discussions', 'scheme_discussions', 'Business overview');
+        }
+        if (sub.label === 'Document Manager') {
+          labelsToCheck.push('Document Manager', 'Document manager', 'document-manager', 'document_manager', 'Business overview');
         }
       }
       if (systemId === 'sale-analytics' || systemId === 'sale_analytics') {

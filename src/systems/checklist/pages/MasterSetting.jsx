@@ -98,7 +98,7 @@ const AVAILABLE_SYSTEMS = [
   {
     id: "business-overview",
     name: "Business overview",
-    pages: ["Trader Invoices", "Shop Visit", "Customer Feedback", "Assigned Complaints", "Complaint Resolution", "All Tickets", "Follow-Up", "Completed", "Dashboard", "Stock In", "Stock Out", "Current Stock", "Item Master", "Trader Master"],
+    pages: ["Trader Invoices", "Shop Visit", "Customer Feedback", "Assigned Complaints", "Complaint Resolution", "All Tickets", "Follow-Up", "Completed", "Dashboard", "Stock In", "Stock Out", "Current Stock", "Item Master", "Trader Master", "Document Manager"],
   },
   {
     id: "sale-analytics",

@@ -161,9 +161,8 @@ export default function WorkDetails() {
   const { tasks: masterTasks, assignments, loading, saving, error } = useSelector(state => state.workRecords);
   const { userData } = useSelector(state => state.setting);
 
-  const role = (localStorage.getItem("role") || "").toLowerCase();
-  const username = (localStorage.getItem("user-name") || "").toLowerCase();
-  const isSuperAdmin = role === "superadmin" || role === "masteradmin" || username === "admin" || username === "masteradmin";
+  const role = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+  const isSuperAdmin = role === "superadmin" || role === "masteradmin";
   const isHOD = role === "hod";
   const isAdmin = isSuperAdmin || isHOD || role === "admin";
 
@@ -295,9 +294,8 @@ export default function WorkDetails() {
     return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
   });
   const [hasAllShopsAccess, setHasAllShopsAccess] = useState(() => {
-    const userRole = (localStorage.getItem("role") || "").toLowerCase();
-    const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
-    const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod" || currentUsername === "admin" || currentUsername === "masteradmin";
+    const userRole = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+    const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod";
     const universalAssigned = getUserAssignedShops();
     return isSuperadminOrHOD && universalAssigned.length === 0;
   });
@@ -324,8 +322,8 @@ export default function WorkDetails() {
       }
 
       const universalAssigned = getUserAssignedShops();
-      const userRole = (role || localStorage.getItem("role") || "").toLowerCase();
-      const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod" || currentUsername.toLowerCase() === "admin" || currentUsername.toLowerCase() === "masteradmin";
+      const userRole = (role || localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+      const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod";
 
       if (!isSuperadminOrHOD && (universalAssigned.length > 0 || (rawShopStr && rawShopStr.toLowerCase() !== "all"))) {
         const combined = Array.from(new Set([

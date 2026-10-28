@@ -34,7 +34,7 @@ export const transformActivePartyItems = (filteredApprovedItems, activeParty) =>
       if (!pMatch) return false;
 
       // Resolve item's company scope (strictly explicit scope, not product manufacturer company_name)
-      const itemComp = (item.company_scope || item.filtered_company_name || "").trim().toLowerCase();
+      const itemComp = (item.company_scope || "").trim().toLowerCase();
 
       if (!isKey) {
         // If activeParty has no company key, match only items that also have no company

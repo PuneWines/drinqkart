@@ -7,17 +7,17 @@ import {
   deleteItem,
   getShops
 } from '../../services/dbService';
+import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
 
 export default function CurrentStockItems({ hideHeader = false, currentUser, showActions = false }) {
   const [itemsList, setItemsList] = useState([]);
   const [shopsList, setShopsList] = useState([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
 
-  const [selectedShopId, setSelectedShopId] = useState(
-    currentUser?.role === 'operator' && currentUser?.shop_id
-      ? currentUser.shop_id.toString()
-      : ''
-  );
+  const isScoped = isUserShopScoped(currentUser);
+  const assigned = isScoped ? getUserAssignedShops(currentUser).map(s => s.toLowerCase()) : [];
+
+  const [selectedShopId, setSelectedShopId] = useState('');
   const [selectedItemName, setSelectedItemName] = useState('');
   const [selectedItemId, setSelectedItemId] = useState('');
 
@@ -96,7 +96,13 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
       try {
         const [items, shops] = await Promise.all([getCurrentStockItems(), getShops()]);
         setItemsList(items);
-        setShopsList(shops);
+        const visibleShops = (isScoped && assigned.length > 0)
+          ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
+          : (shops || []);
+        setShopsList(visibleShops);
+        if (isScoped && visibleShops.length === 1) {
+          setSelectedShopId(visibleShops[0].id.toString());
+        }
       } catch (err) {
         console.error('Failed to load metadata for filters:', err);
       } finally {
@@ -104,28 +110,34 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
       }
     }
     loadMetadata();
-  }, []);
+  }, [currentUser]);
 
   // 1b. Re-filter item list when shop selection changes
   useEffect(() => {
     async function loadItemsForShop() {
       try {
-        const items = await getCurrentStockItems({ shopId: selectedShopId || null });
+        const effectiveShopId = selectedShopId
+          ? selectedShopId
+          : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
+        const items = await getCurrentStockItems({ shopId: effectiveShopId });
         setItemsList(items);
       } catch (err) {
         console.error('Failed to load items for selected shop:', err);
       }
     }
     loadItemsForShop();
-  }, [selectedShopId]);
+  }, [selectedShopId, shopsList, isScoped]);
 
   // 2. Fetch stock items
   const loadRecords = async () => {
     setIsLoadingRecords(true);
     try {
+      const effectiveShopId = selectedShopId
+        ? selectedShopId
+        : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
       const records = await getCurrentStockItems({
         itemId: selectedItemId || null,
-        shopId: selectedShopId || null
+        shopId: effectiveShopId
       });
       setStockItems(records);
     } catch (err) {
@@ -138,7 +150,7 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
 
   useEffect(() => {
     loadRecords();
-  }, [selectedItemId, selectedShopId]);
+  }, [selectedItemId, selectedShopId, shopsList, isScoped]);
 
   // Client side search text filter
   const filteredStockItems = useMemo(() => {
@@ -267,13 +279,15 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
             <select
               value={selectedShopId}
               onChange={(e) => setSelectedShopId(e.target.value)}
-              disabled={currentUser?.role === 'operator'}
-              className={`w-full border rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all ${currentUser?.role === 'operator'
+              disabled={isScoped && shopsList.length === 1}
+              className={`w-full border rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all ${isScoped && shopsList.length === 1
                 ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
                 : 'bg-slate-50/70 border-slate-300 cursor-pointer'
                 }`}
             >
-              {currentUser?.role !== 'operator' && <option value="">-- All Outlets --</option>}
+              {(!isScoped || shopsList.length > 1) && (
+                <option value="">{isScoped ? '-- All Assigned Outlets --' : '-- All Outlets --'}</option>
+              )}
               {shopsList.map(s => (
                 <option key={s.id} value={s.id}>{s.shop_name}</option>
               ))}

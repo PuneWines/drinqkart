@@ -15,7 +15,7 @@ const getOptionParts = (option) => {
 
   if (typeof option === "object") {
     let vendor = (option.partyName || option.name || "").trim();
-    let comp = (option.filteredCompanyName || option.companyName || "").trim();
+    let comp = (option.companyScope || option.companyName || "").trim();
 
     if (vendor) {
       if (!comp) {

@@ -173,7 +173,7 @@ const POHistory = () => {
         (o) =>
           (o.po_number || "").toLowerCase().includes(q) ||
           (o.vendor_name || "").toLowerCase().includes(q) ||
-          (o.company_scope || o.filtered_company_name || "").toLowerCase().includes(q) ||
+          (o.company_scope || "").toLowerCase().includes(q) ||
           (o.company_name || "").toLowerCase().includes(q) ||
           (o.first_brand_name || "").toLowerCase().includes(q) ||
           (o.indent_id || "").toLowerCase().includes(q) ||
@@ -526,7 +526,7 @@ const POHistory = () => {
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                           <span className="poh-vendor-name">{order.vendor_name || "—"}</span>
-                          {(order.company_scope || order.filtered_company_name) && (
+                          {order.company_scope && (
                             <span style={{
                               display: "inline-block",
                               padding: "2px 6px",
@@ -537,7 +537,7 @@ const POHistory = () => {
                               border: "1px solid #bfdbfe",
                               borderRadius: "4px"
                             }}>
-                              {order.company_scope || order.filtered_company_name}
+                              {order.company_scope}
                             </span>
                           )}
                         </div>

@@ -58,14 +58,41 @@ export const normalizePermKey = (str) => {
   return str.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
 };
 
+// Read active user safely from localStorage fallback
+export const getUserFromStorage = () => {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('drinqkart_user') || localStorage.getItem('currentUser');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+};
+
+export const isUserSuperadmin = (user = null) => {
+  const userObj = user || getUserFromStorage() || {};
+  const storedRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '' : '').toLowerCase().trim();
+  const userRole = (userObj.role || '').toLowerCase().trim();
+
+  return (
+    userRole === 'superadmin' ||
+    userRole === 'masteradmin' ||
+    userRole === 'hod' ||
+    storedRole === 'superadmin' ||
+    storedRole === 'masteradmin' ||
+    storedRole === 'hod'
+  );
+};
+
+export const isUserShopScoped = (user = null) => {
+  return !isUserSuperadmin(user);
+};
+
 // Retrieve assigned shops for a user
 export const getUserAssignedShops = (user) => {
   const userObj = user || getUserFromStorage() || {};
-  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase().trim();
-  const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase().trim();
 
   // Superadmin and HOD have global authority across all enterprise shops
-  if (role === 'superadmin' || role === 'masteradmin' || role === 'hod' || username === 'masteradmin') {
+  if (isUserSuperadmin(userObj)) {
     return [];
   }
 
@@ -104,16 +131,6 @@ export const getUserAssignedShops = (user) => {
   }
 
   return [];
-};
-
-// Read active user safely from localStorage fallback
-export const getUserFromStorage = () => {
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem('drinqkart_user') || localStorage.getItem('currentUser');
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
 };
 
 // Known alias mappings for pages across subsystems
@@ -163,23 +180,13 @@ export const PAGE_ALIASES = {
   'scheduled': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],
   'adminapproval': ['adminapproval', 'approval', 'stage3', 'admin_approval', 'admin approval', 'managerapproval', 'manager approval'],
   'usersmanagement': ['usersmanagement', 'users'],
-  'mastersetting': ['mastersetting', 'userandsystemaccess']
+  'mastersetting': ['mastersetting', 'userandsystemaccess'],
+
+  // Business Overview
+  'documentmanager': ['documentmanager', 'document_manager', 'document manager', 'documents', 'docmanager']
 };
 
-// 1. SUPREME GLOBAL AUTHORITY: Superadmin / Masteradmin
-// Masteradmin/Superadmin holds full view and modify rights everywhere unconditionally.
-export const isUserSuperadmin = (user) => {
-  const userObj = user || getUserFromStorage() || {};
-  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
-  const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') || localStorage.getItem('currentUserName') : '') || '').toLowerCase().trim();
-  const empId = String(userObj.employee_id || userObj.emp_code || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-id') : '') || '').trim();
-  return (
-    role === 'superadmin' ||
-    role === 'masteradmin' ||
-    username === 'masteradmin' ||
-    empId === '999'
-  );
-};
+
 
 /**
  * Checks if the user is authorized to delete purchase indents/items.
@@ -195,14 +202,6 @@ export const canDeletePurchaseIndent = (user) => {
       : '') ||
     ''
   ).toLowerCase().trim();
-  const username = (
-    userObj.user_name ||
-    userObj.username ||
-    (typeof localStorage !== 'undefined'
-      ? localStorage.getItem('user-name') || localStorage.getItem('currentUserName')
-      : '') ||
-    ''
-  ).toLowerCase().trim();
 
   // Explicitly deny manager and standard users
   if (role === 'manager' || role === 'user') {
@@ -213,9 +212,7 @@ export const canDeletePurchaseIndent = (user) => {
     role === 'masteradmin' ||
     role === 'superadmin' ||
     role === 'admin' ||
-    role === 'hod' ||
-    username === 'masteradmin' ||
-    username === 'admin'
+    role === 'hod'
   );
 };
 
@@ -442,9 +439,8 @@ export const ViewOnlyBanner = ({
   className = "",
   isModifyAllowed = false
 }) => {
-  const storedRole = (typeof localStorage !== 'undefined' ? (localStorage.getItem('role') || '') : '').toLowerCase();
-  const storedUser = (typeof localStorage !== 'undefined' ? (localStorage.getItem('username') || '') : '').toLowerCase();
-  const isElevated = storedRole === 'superadmin' || storedRole === 'masteradmin' || storedUser === 'masteradmin';
+  const storedRole = (typeof localStorage !== 'undefined' ? (localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '') : '').toLowerCase().trim();
+  const isElevated = storedRole === 'superadmin' || storedRole === 'masteradmin' || storedRole === 'admin' || storedRole === 'hod';
   if (isModifyAllowed || isElevated) return null;
   return React.createElement(
     'div',
@@ -486,11 +482,9 @@ export const ViewOnlyBanner = ({
  */
 export const scopeQueryToUserShops = (query, shopColumn = 'shop_name', user = null) => {
   const userObj = user || getUserFromStorage() || {};
-  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase().trim();
-  const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase().trim();
 
   // Superadmin and HOD have global multi-shop access across all shops
-  if (role === 'superadmin' || role === 'masteradmin' || role === 'hod' || username === 'masteradmin') {
+  if (isUserSuperadmin(userObj)) {
     return query;
   }
 
@@ -501,14 +495,6 @@ export const scopeQueryToUserShops = (query, shopColumn = 'shop_name', user = nu
 
   // Scoped user with no assigned shop: return non-matching dummy value to prevent data leakage
   return query.eq(shopColumn, '__NO_ASSIGNED_SHOP__');
-};
-
-export const isUserShopScoped = (user = null) => {
-  const userObj = user || getUserFromStorage() || {};
-  const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') : '') || '').toLowerCase().trim();
-  const username = (userObj.user_name || userObj.username || (typeof localStorage !== 'undefined' ? localStorage.getItem('user-name') : '') || '').toLowerCase().trim();
-
-  return !(role === 'superadmin' || role === 'masteradmin' || role === 'hod' || username === 'masteradmin');
 };
 
 export default {

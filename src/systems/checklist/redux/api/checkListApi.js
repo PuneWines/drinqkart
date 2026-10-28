@@ -5,10 +5,10 @@ import { getUserAssignedShops, isUserShopScoped, isUserSuperadmin } from "../../
 // 1. COMPLETE API FUNCTIONS - checkListApi.js
 
 export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchTerm = '') => {
-  const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
+  const roleUpper = (localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '').toUpperCase().trim();
   const username = (localStorage.getItem('user-name') || '').trim();
   const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
-  const isMasterAdmin = username.toLowerCase() === 'admin' || username.toLowerCase() === 'masteradmin';
+  const isMasterAdmin = roleUpper === 'SUPERADMIN' || roleUpper === 'MASTERADMIN' || roleUpper === 'ADMIN' || roleUpper === 'HOD';
 
   try {
     const today = new Date();
@@ -80,10 +80,10 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
   const itemsPerPage = 50;
   const start = (page - 1) * itemsPerPage;
 
-  const roleUpper = (localStorage.getItem('role') || '').toUpperCase().trim();
+  const roleUpper = (localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '').toUpperCase().trim();
   const username = (localStorage.getItem('user-name') || '').trim();
   const userAccess = (localStorage.getItem('user_access') || localStorage.getItem('shop_name') || '').trim();
-  const isMasterAdmin = username.toLowerCase() === 'admin' || username.toLowerCase() === 'masteradmin';
+  const isMasterAdmin = roleUpper === 'SUPERADMIN' || roleUpper === 'MASTERADMIN' || roleUpper === 'ADMIN' || roleUpper === 'HOD';
 
   try {
     let query = supabase

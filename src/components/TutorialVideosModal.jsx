@@ -11,8 +11,8 @@ export default function TutorialVideosModal({ isOpen, onClose, currentUser }) {
   const [activeVideo, setActiveVideo] = useState(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
 
-  const role = (currentUser?.role || localStorage.getItem('role') || 'User').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'masteradmin' || (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'admin';
+  const role = (currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || 'User').toLowerCase().trim();
+  const isAdmin = role === 'admin' || role === 'masteradmin' || role === 'superadmin' || role === 'hod';
 
   let rawAccess = currentUser?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];
   if (typeof rawAccess === 'string') {

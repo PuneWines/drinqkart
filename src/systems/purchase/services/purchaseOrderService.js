@@ -126,19 +126,9 @@ export const fetchPageData = async () => {
     // Query 3: Fetch recent purchase orders to check for existing POs (avoiding full table scan)
     supabase
       .from("purchase_purchase_orders")
-      .select("indent_id, vendor_name, company_scope, filtered_company_name, company_name")
+      .select("indent_id, vendor_name, company_scope, company_name")
       .order("created_at", { ascending: false })
-      .limit(500)
-      .then(res => {
-        if (res.error) {
-          return supabase
-            .from("purchase_purchase_orders")
-            .select("indent_id, vendor_name, filtered_company_name, company_name")
-            .order("created_at", { ascending: false })
-            .limit(500);
-        }
-        return res;
-      }),
+      .limit(500),
 
     // Query 4: Fetch all vendors
     supabase
@@ -229,7 +219,7 @@ export const fetchPageData = async () => {
     heldItemIdsSet.add(row.id);
 
     const cleanVendor = (row.party_name || "Unspecified Vendor").trim();
-    const cleanScope = (row.company_scope || row.filtered_company_name || "").trim();
+    const cleanScope = (row.company_scope || "").trim();
     const cleanShop = (row.shop_name || "").trim();
     // Group PO key based on vendor + company scope + shop
     const bId = cleanScope 
@@ -246,7 +236,6 @@ export const fetchPageData = async () => {
         partyKey: cleanScope ? `${cleanVendor} (${cleanScope})` : cleanVendor,
         partyName: cleanVendor,
         companyScope: cleanScope || null,
-        filteredCompanyName: cleanScope || null,
         companyName: cleanScope || null,
         shopName: cleanShop || row.shop_name,
         heldAt: row.held_at ? new Date(row.held_at).toLocaleString() : new Date().toLocaleString(),
@@ -273,7 +262,6 @@ export const fetchPageData = async () => {
       brand_name: row.brand_name || row.item_name,
       company_name: row.company_name,
       company_scope: row.company_scope,
-      filtered_company_name: row.filtered_company_name,
       partyName: row.party_name,
       party_name: row.party_name,
       shopName: row.shop_name,
@@ -320,11 +308,11 @@ export const fetchPageData = async () => {
   };
 };
 
-export const generateVendorId = async (activeParty, filteredCompanyName) => {
+export const generateVendorId = async (activeParty, companyScope) => {
   if (!activeParty) return "VN-000";
   const parsed = parsePartyAndCompany(activeParty);
   const cleanParty = parsed.party;
-  const comp = filteredCompanyName || parsed.company || null;
+  const comp = companyScope || parsed.company || null;
 
   let query = supabase
     .from('purchase_vendors')
@@ -352,7 +340,6 @@ const ALLOWED_PO_COLUMNS = [
   'vendor_name',
   'company_name',
   'company_scope',
-  'filtered_company_name',
   'total_order_qty',
   'total_order_box',
   'total_approved_qty',
@@ -432,11 +419,11 @@ export const insertPurchaseOrder = async (poData) => {
   return data;
 };
 
-export const getOrCreateVendorPortalLink = async (activeParty, filteredCompanyName, baseUrl) => {
+export const getOrCreateVendorPortalLink = async (activeParty, companyScope, baseUrl) => {
   if (!activeParty) return "";
   const parsed = parsePartyAndCompany(activeParty);
   const cleanParty = parsed.party;
-  const comp = filteredCompanyName || parsed.company || null;
+  const comp = companyScope || parsed.company || null;
 
   let query = supabase
     .from("purchase_vendors")
@@ -545,23 +532,13 @@ export const resolveSubIncrementIndentId = async (currentUniqueIndentId, partyNa
 
   const parsedParty = parsePartyAndCompany(partyName);
   const cleanParty = parsedParty.party.toLowerCase();
-  const cleanFilteredComp = (companyScope || parsedParty.company || "").trim().toLowerCase();
+  const cleanScope = (companyScope || parsedParty.company || "").trim().toLowerCase();
 
   let { data: existingPos, error: poErr } = await supabase
     .from("purchase_purchase_orders")
-    .select("indent_id, vendor_name, company_scope, filtered_company_name")
+    .select("indent_id, vendor_name, company_scope")
     .order("created_at", { ascending: false })
     .limit(500);
-
-  if (poErr) {
-    const fallback = await supabase
-      .from("purchase_purchase_orders")
-      .select("indent_id, vendor_name, filtered_company_name")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    existingPos = fallback.data;
-    poErr = fallback.error;
-  }
 
   if (poErr || !existingPos) return currentUniqueIndentId;
 
@@ -596,17 +573,16 @@ export const resolveSubIncrementIndentId = async (currentUniqueIndentId, partyNa
 
       if (poVendor !== cleanParty) return false;
 
-      const poFilteredComp = (
+      const poScope = (
         po.company_scope ||
-        po.filtered_company_name ||
         parsedPoVendor.company ||
         ""
       ).trim().toLowerCase();
 
-      if (cleanFilteredComp) {
-        return poFilteredComp === cleanFilteredComp;
+      if (cleanScope) {
+        return poScope === cleanScope;
       }
-      return !poFilteredComp;
+      return !poScope;
     });
   };
 
@@ -678,8 +654,7 @@ export const holdItemsToHoldTable = async ({
       hold_type: holdType,
       party_key: partyKey || (companyScope ? `${partyName} (${companyScope})` : partyName),
       party_name: partyName || item.partyName || item.party_name || "Unspecified Vendor",
-      company_scope: companyScope || item.company_scope || item.filtered_company_name || null,
-      filtered_company_name: companyScope || item.company_scope || item.filtered_company_name || null,
+      company_scope: companyScope || item.company_scope || null,
       company_name: companyName || item.company_name || null,
       shop_name: itemShop,
 
@@ -791,7 +766,7 @@ export const fetchHeldFromHoldTable = async (assignedShops = [], isShopAdmin = t
   const batchMap = {};
   rawHoldRows.forEach(row => {
     const cleanVendor = (row.party_name || "Unspecified Vendor").trim();
-    const cleanScope = (row.company_scope || row.filtered_company_name || "").trim();
+    const cleanScope = (row.company_scope || "").trim();
     const cleanShop = (row.shop_name || "").trim();
     // Group PO key based on vendor + company scope + shop
     const bId = cleanScope 
@@ -808,7 +783,6 @@ export const fetchHeldFromHoldTable = async (assignedShops = [], isShopAdmin = t
         partyKey: cleanScope ? `${cleanVendor} (${cleanScope})` : cleanVendor,
         partyName: cleanVendor,
         companyScope: cleanScope || null,
-        filteredCompanyName: cleanScope || null,
         companyName: cleanScope || null,
         shopName: cleanShop || row.shop_name,
         heldAt: row.held_at ? new Date(row.held_at).toLocaleString() : new Date().toLocaleString(),
@@ -835,7 +809,6 @@ export const fetchHeldFromHoldTable = async (assignedShops = [], isShopAdmin = t
       brand_name: row.brand_name || row.item_name,
       company_name: row.company_name,
       company_scope: row.company_scope,
-      filtered_company_name: row.filtered_company_name,
       partyName: row.party_name,
       party_name: row.party_name,
       shopName: row.shop_name,
@@ -893,7 +866,7 @@ export const restoreHeldFromHoldTable = async ({
 
   const sampleRow = rowsToRestore[0];
   const partyName = sampleRow.party_name;
-  const companyScope = sampleRow.company_scope || sampleRow.filtered_company_name || null;
+  const companyScope = sampleRow.company_scope || null;
   const originalUniqueIndentId = sampleRow.original_unique_indent_id || "IN-1";
 
   // 1. Resolve new unique sub-increment indent ID (e.g. IN-670-1 or IN-670-2)
@@ -915,7 +888,6 @@ export const restoreHeldFromHoldTable = async ({
     brand_name: row.brand_name || row.item_name,
     company_name: row.company_name,
     company_scope: row.company_scope,
-    filtered_company_name: row.filtered_company_name,
     party_name: row.party_name,
     bcs: row.bcs,
     mls: row.mls,
@@ -999,7 +971,6 @@ export const restoreHeldFromHoldTable = async ({
         party_name: row.party_name,
         company_name: row.company_name,
         company_scope: row.company_scope,
-        filtered_company_name: row.filtered_company_name,
         item_name: row.item_name,
         order_box: row.order_box,
         order_qty: row.order_qty,

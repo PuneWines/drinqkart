@@ -418,7 +418,7 @@ const OrdersPipeline = () => {
   // Company Scope is strictly the scope selected at creation, NOT the brand catalog manufacturer
   const getEffectiveCompanyName = (po) => {
     if (!po) return "";
-    const scope = po.company_scope || po.filtered_company_name;
+    const scope = po.company_scope;
     if (scope && scope.trim()) {
       return scope.trim();
     }

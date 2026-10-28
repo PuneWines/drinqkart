@@ -13,8 +13,8 @@ export default function ProfileTutorialVideosSection({ currentUser }) {
   const [expandedSystem, setExpandedSystem] = useState('checklist');
 
   // Filter allowed pages for current employee if permission restricted
-  const role = (currentUser?.role || localStorage.getItem('role') || 'User').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'masteradmin' || (currentUser?.userName || '').toLowerCase() === 'admin';
+  const role = (currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || 'User').toLowerCase().trim();
+  const isAdmin = role === 'admin' || role === 'masteradmin' || role === 'superadmin' || role === 'hod';
 
   let rawAccess = currentUser?.accessStrings || currentUser?.master_user_system_page_access || localStorage.getItem('master_user_system_page_access') || [];
   if (typeof rawAccess === 'string') {

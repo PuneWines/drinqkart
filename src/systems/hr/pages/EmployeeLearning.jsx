@@ -105,7 +105,7 @@ export default function EmployeeLearning() {
   const userNameClean = (currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim();
 
   // Explicit Admin / Master / MasterAdmin / HOD check
-  const isAdminUser = userRole === 'admin' || userRole === 'master' || userRole === 'hod' || userRole === 'superadmin' || userNameClean === 'masteradmin' || userNameClean === 'testadmin';
+  const isAdminUser = userRole === 'admin' || userRole === 'master' || userRole === 'hod' || userRole === 'superadmin' || userRole === 'masteradmin';
   const isManagerUser = userRole === 'manager';
 
   // Check if Manager has explicit modify permission for Employee Learning or HR system

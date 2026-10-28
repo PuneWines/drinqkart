@@ -41,7 +41,7 @@ export const isTransporterSkippedForOrder = (order, companies = []) => {
 
   // 3. Check shop / company setting from purchase_company_settings (for orders without transporter details)
   const shopName = (order.shop_name || "").trim().toLowerCase();
-  const compName = (order.company_scope || order.company_name || order.filtered_company_name || "").trim().toLowerCase();
+  const compName = (order.company_scope || order.company_name || "").trim().toLowerCase();
 
   const matched = (companies || []).find((c) => {
     const cName = (c.name || "").trim().toLowerCase();

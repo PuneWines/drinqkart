@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getManagerReports, getShops } from '../../services/dbService';
+import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
 import Toast from '../ui/Toast';
 import {
   Chart as ChartJS,
@@ -28,7 +29,7 @@ ChartJS.register(
   Legend
 );
 
-export default function ManagerReport() {
+export default function ManagerReport({ currentUser }) {
   const [shopsList, setShopsList] = useState([]);
   const [selectedShopName, setSelectedShopName] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -37,27 +38,39 @@ export default function ManagerReport() {
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
 
+  const isScoped = isUserShopScoped(currentUser);
+  const assigned = isScoped ? getUserAssignedShops(currentUser).map(s => s.toLowerCase()) : [];
+
   // Load shops for filters
   useEffect(() => {
     async function loadShops() {
       try {
         const shops = await getShops();
-        setShopsList(shops || []);
+        const visibleShops = (isScoped && assigned.length > 0)
+          ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
+          : (shops || []);
+        setShopsList(visibleShops);
+        if (isScoped && visibleShops.length === 1) {
+          setSelectedShopName(visibleShops[0].shop_name);
+        }
       } catch (err) {
         console.error('Failed to load shops:', err);
       }
     }
     loadShops();
-  }, []);
+  }, [currentUser]);
 
   // Fetch report data
   const fetchReports = async () => {
     setIsLoading(true);
     try {
+      const effectiveShopName = selectedShopName
+        ? selectedShopName
+        : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.shop_name) : null);
       const data = await getManagerReports({
         fromDate,
         toDate,
-        shopName: selectedShopName || null
+        shopName: effectiveShopName
       });
       setReportsData(data || []);
     } catch (err) {
@@ -70,7 +83,7 @@ export default function ManagerReport() {
 
   useEffect(() => {
     fetchReports();
-  }, [fromDate, toDate, selectedShopName]);
+  }, [fromDate, toDate, selectedShopName, shopsList, isScoped]);
 
   const showToast = (message, type = 'success') => {
     setNotification({ message, type });
@@ -253,9 +266,15 @@ export default function ManagerReport() {
             <select
               value={selectedShopName}
               onChange={(e) => setSelectedShopName(e.target.value)}
-              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-slate-50/50 cursor-pointer"
+              disabled={isScoped && shopsList.length === 1}
+              className={`w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${isScoped && shopsList.length === 1
+                ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-50/50 cursor-pointer'
+              }`}
             >
-              <option value="">-- All Locations --</option>
+              {(!isScoped || shopsList.length > 1) && (
+                <option value="">{isScoped ? '-- All Assigned Locations --' : '-- All Locations --'}</option>
+              )}
               {shopsList.map(s => (
                 <option key={s.id} value={s.shop_name}>{s.shop_name}</option>
               ))}

@@ -252,14 +252,12 @@ const PurchaseOrder = () => {
           const comp = (item.company_name || "").trim();
           const scope = (
             item.company_scope ||
-            item.filtered_company_name ||
             ""
           ).trim();
           return {
             ...item,
             company_name: comp || null,
             company_scope: scope || null,
-            filtered_company_name: scope || null,
           };
         },
       );
@@ -272,7 +270,6 @@ const PurchaseOrder = () => {
         const itemParty = (item.party_name || "").trim().toLowerCase();
         const itemFilteredComp = (
           item.company_scope ||
-          item.filtered_company_name ||
           ""
         )
           .trim()
@@ -289,7 +286,6 @@ const PurchaseOrder = () => {
 
           const poFilteredComp = (
             po.company_scope ||
-            po.filtered_company_name ||
             parsedPoVendor.company ||
             ""
           )
@@ -427,7 +423,6 @@ const PurchaseOrder = () => {
           partyName: v.party_name,
           companyName: v.company_name || "",
           companyScope: v.company_name || null,
-          filteredCompanyName: v.company_name || null,
           label,
         };
       });
@@ -439,7 +434,6 @@ const PurchaseOrder = () => {
       let party = (item.party_name || "").trim();
       let scope = (
         item.company_scope ||
-        item.filtered_company_name ||
         ""
       ).trim();
       const parsedParty = parsePartyAndCompany(party);
@@ -456,7 +450,6 @@ const PurchaseOrder = () => {
           partyName: party,
           companyName: scope || "",
           companyScope: scope || null,
-          filteredCompanyName: scope || null,
           originalCompanyName: origComp || null,
           label: scope ? `${party} (${scope})` : party,
         });
@@ -663,7 +656,6 @@ const PurchaseOrder = () => {
       activeVendorInfo.filteredCompany ||
       parsedComp ||
       itemToHold.company_scope ||
-      itemToHold.filtered_company_name ||
       null;
 
     const empCode =
@@ -941,7 +933,6 @@ const PurchaseOrder = () => {
       ).trim();
       targetCompany = (
         vendorOption.companyScope ||
-        vendorOption.filteredCompanyName ||
         vendorOption.companyName ||
         ""
       ).trim();
@@ -979,7 +970,7 @@ const PurchaseOrder = () => {
         (item.party_name || "").trim().toLowerCase() === targetPartyLower;
       if (!pMatch) return false;
 
-      const itemScope = (item.company_scope || item.filtered_company_name || "")
+      const itemScope = (item.company_scope || "")
         .trim()
         .toLowerCase();
 
@@ -1183,7 +1174,7 @@ const PurchaseOrder = () => {
         : p === activeParty,
     );
     if (found && typeof found === "object") {
-      const scope = found.companyScope || found.filteredCompanyName || null;
+      const scope = found.companyScope || null;
       return {
         vendorName: found.partyName || activeParty,
         companyScope: scope,
@@ -1607,7 +1598,6 @@ const PurchaseOrder = () => {
         <TraderPDF
           partyName={activeVendorInfo.vendorName}
           companyScope={targetScope}
-          filteredCompanyName={targetScope}
           companyName={targetCompanyName}
           items={itemsForActiveParty}
           poNumber={freshPoNumber}
@@ -1621,7 +1611,6 @@ const PurchaseOrder = () => {
         <ReceiverPDF
           partyName={activeVendorInfo.vendorName}
           companyScope={targetScope}
-          filteredCompanyName={targetScope}
           companyName={targetCompanyName}
           items={itemsForActiveParty}
           poNumber={freshPoNumber}
@@ -1763,7 +1752,6 @@ const PurchaseOrder = () => {
         vendor_id: activeVendorDetails?.id ? String(activeVendorDetails.id) : null,
         company_name: currentOrigCompany,
         company_scope: currentFilteredComp,
-        filtered_company_name: currentFilteredComp,
         trader_pdf_url: traderUrl,
         receiver_pdf_url: receiverUrl,
         indent_id: currentIndentId,
@@ -2037,7 +2025,7 @@ const PurchaseOrder = () => {
       const traderDoc = (
         <TraderPDF
           partyName={activeVendorInfo.vendorName}
-          filteredCompanyName={activeVendorInfo.filteredCompany}
+          companyScope={activeVendorInfo.companyScope || activeVendorInfo.filteredCompany}
           companyName={targetCompanyName}
           items={itemsForActiveParty}
           poNumber={nextPoNumber || "Loading..."}
@@ -2329,7 +2317,7 @@ const PurchaseOrder = () => {
               </div>
             ) : (
               filteredHeldPOs.map((batch) => {
-                const scope = batch.companyScope || batch.filteredCompanyName;
+                const scope = batch.companyScope;
                 return (
                   <div
                     key={batch.batchId}
@@ -2411,8 +2399,7 @@ const PurchaseOrder = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {batch.items.map((item) => {
-                            const itemScope =
-                              item.company_scope || item.filtered_company_name;
+                            const itemScope = item.company_scope;
                             return (
                               <tr
                                 key={item.id}
@@ -2521,10 +2508,6 @@ const PurchaseOrder = () => {
                 onPartyChange={setActiveParty}
                 vendorDetails={activeVendorDetails}
                 companyScope={
-                  activeVendorInfo.companyScope ||
-                  activeVendorInfo.filteredCompany
-                }
-                filteredCompanyName={
                   activeVendorInfo.companyScope ||
                   activeVendorInfo.filteredCompany
                 }

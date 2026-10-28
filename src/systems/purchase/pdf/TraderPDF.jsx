@@ -228,7 +228,6 @@ const styles = StyleSheet.create({
 const TraderPDF = ({
   partyName,
   companyScope,
-  filteredCompanyName,
   companyName,
   items = [],
   poNumber,
@@ -238,7 +237,6 @@ const TraderPDF = ({
 }) => {
   const effectiveCompany = (
     companyScope ||
-    filteredCompanyName ||
     companyName ||
     (items && items.length > 0 ? (items[0]?.company_name || items[0]?.companyName) : null) ||
     ""

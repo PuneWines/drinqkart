@@ -236,7 +236,8 @@ export default function CashTally({
         }
       }
 
-      const isMasterOrAdmin = isAdmin() || (user?.username || user?.name || '').toLowerCase() === 'masteradmin' || (user?.role || '').toLowerCase() === 'admin' || (user?.role || '').toLowerCase() === 'masteradmin';
+      const roleLower = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+      const isMasterOrAdmin = isAdmin() || roleLower === 'admin' || roleLower === 'masteradmin' || roleLower === 'superadmin' || roleLower === 'hod';
 
       if (!isMasterOrAdmin && user?.shops && user.shops !== "all") {
         const filtered = uniqueShops.filter((shop) => hasShopAccess(shop));

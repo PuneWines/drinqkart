@@ -170,9 +170,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isAdmin = (): boolean => {
-    const roleLower = (user?.role || '').toLowerCase();
-    const nameLower = (user?.username || user?.name || '').toLowerCase();
-    return roleLower === 'admin' || roleLower === 'masteradmin' || nameLower === 'masteradmin';
+    const roleLower = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+    return roleLower === 'admin' || roleLower === 'masteradmin' || roleLower === 'superadmin' || roleLower === 'hod';
   };
 
   /** 
@@ -380,10 +379,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isSuperadminUser = (): boolean => {
-    const roleLower = (user?.role || localStorage.getItem('role') || '').toLowerCase();
-    const nameLower = (user?.username || user?.name || localStorage.getItem('user-name') || '').toLowerCase();
-    const empId = String(user?.employee_id || '').trim();
-    return roleLower === 'superadmin' || roleLower === 'masteradmin' || nameLower === 'masteradmin' || empId === '999';
+    const roleLower = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+    return roleLower === 'superadmin' || roleLower === 'masteradmin' || roleLower === 'hod';
   };
 
   const hasPageAccess = (pageName: string): boolean => {

@@ -17,6 +17,7 @@ const UserLayout = ({ children }) => {
   // Check authentication on component mount
   useEffect(() => {
     const storedUsername = localStorage.getItem('user-name')
+    const storedRole = (localStorage.getItem('role') || '').toLowerCase()
 
     if (!storedUsername) {
       navigate('/login')
@@ -24,7 +25,7 @@ const UserLayout = ({ children }) => {
     }
 
     setUsername(storedUsername)
-    setIsAdmin(storedUsername.toLowerCase() === 'admin')
+    setIsAdmin(storedRole === 'admin' || storedRole === 'superadmin' || storedRole === 'masteradmin' || storedRole === 'hod')
 
     // Initial load from localStorage
     const cachedImage = localStorage.getItem('profile_image');

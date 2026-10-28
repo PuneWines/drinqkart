@@ -34,7 +34,7 @@ export const fetchPipelineOrders = async ({
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;
     query = query.or(
-      `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q},company_name.ilike.${q},company_scope.ilike.${q},filtered_company_name.ilike.${q}`
+      `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q},company_name.ilike.${q},company_scope.ilike.${q}`
     );
     hasSearchQuery = true;
   }
@@ -102,7 +102,7 @@ export const fetchPipelineOrders = async ({
       retryQuery = retryQuery.eq("shop_name", shop);
     }
     retryQuery = retryQuery.or(
-      `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q},company_name.ilike.${q},filtered_company_name.ilike.${q}`
+      `po_number.ilike.${q},vendor_name.ilike.${q},shop_name.ilike.${q},first_brand_name.ilike.${q},company_name.ilike.${q},company_scope.ilike.${q}`
     );
     if (startDate) {
       const startLocal = new Date(`${startDate}T00:00:00`);

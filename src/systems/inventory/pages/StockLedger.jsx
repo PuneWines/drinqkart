@@ -25,8 +25,9 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 const toDateStr = (d) => d.toISOString().split('T')[0];
 
 export default function StockLedger({ currentUser }) {
-  const isMasterAdmin = (currentUser?.user_name || currentUser?.username || '').toLowerCase() === 'masteradmin';
-  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+  const userRole = (currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isMasterAdmin = userRole === 'superadmin' || userRole === 'masteradmin';
+  const isAdmin = userRole === 'admin' || userRole === 'hod' || isMasterAdmin;
 
   const masterAccessList = useMemo(() => {
     let list = [];
@@ -83,14 +84,13 @@ export default function StockLedger({ currentUser }) {
   const [shopsList, setShopsList] = useState([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
 
+  const isScoped = isUserShopScoped(currentUser);
+  const assigned = isScoped ? getUserAssignedShops(currentUser).map(s => s.toLowerCase()) : [];
+
   // Filters
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [selectedShopId, setSelectedShopId] = useState(
-    currentUser?.role === 'operator' && currentUser?.shop_id
-      ? currentUser.shop_id.toString()
-      : ''
-  );
+  const [selectedShopId, setSelectedShopId] = useState('');
   const [selectedItemName, setSelectedItemName] = useState('');
   const [selectedItemId, setSelectedItemId] = useState('');
 
@@ -138,16 +138,12 @@ export default function StockLedger({ currentUser }) {
     async function loadMetadata() {
       try {
         const shops = await getShops();
-        const isScoped = isUserShopScoped();
-        const assigned = isScoped ? getUserAssignedShops().map(s => s.toLowerCase()) : [];
-        if (isScoped && assigned.length > 0) {
-          const filteredShops = (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()));
-          setShopsList(filteredShops);
-          if (filteredShops.length > 0 && !selectedShopId) {
-            setSelectedShopId(filteredShops[0].id.toString());
-          }
-        } else {
-          setShopsList(shops);
+        const visibleShops = (isScoped && assigned.length > 0)
+          ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
+          : (shops || []);
+        setShopsList(visibleShops);
+        if (isScoped && visibleShops.length === 1) {
+          setSelectedShopId(visibleShops[0].id.toString());
         }
       } catch (err) {
         console.error('Failed to load shops for filters:', err);
@@ -156,13 +152,16 @@ export default function StockLedger({ currentUser }) {
       }
     }
     loadMetadata();
-  }, []);
+  }, [currentUser]);
 
   // 1b. Fetch items dynamically based on selectedShopId
   useEffect(() => {
     async function loadItems() {
       try {
-        const items = await getStockLedgerItems(selectedShopId || null);
+        const effectiveShopId = selectedShopId
+          ? selectedShopId
+          : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
+        const items = await getStockLedgerItems(effectiveShopId);
         setItemsList(items);
         // Clear selected item if it's not in the new shop's items list
         if (selectedItemId) {
@@ -177,18 +176,21 @@ export default function StockLedger({ currentUser }) {
       }
     }
     loadItems();
-  }, [selectedShopId]);
+  }, [selectedShopId, shopsList, isScoped]);
 
   // 2. Load ledger data whenever filters or mode change
   useEffect(() => {
     async function loadData() {
       setIsLoadingLedger(true);
       try {
+        const effectiveShopId = selectedShopId
+          ? selectedShopId
+          : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
         // Sales history is fetched separately for the Sales sub-tab (not used for ledger table)
         const salesData = await getSaleHistory({
           fromDate,
           toDate,
-          shopId: selectedShopId || null
+          shopId: effectiveShopId
         });
         setSalesHistoryData(salesData);
 
@@ -752,13 +754,15 @@ export default function StockLedger({ currentUser }) {
               <select
                 value={selectedShopId}
                 onChange={(e) => setSelectedShopId(e.target.value)}
-                disabled={currentUser?.role === 'operator'}
-                className={`w-full border rounded-sm px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${currentUser?.role === 'operator'
+                disabled={isScoped && shopsList.length === 1}
+                className={`w-full border rounded-sm px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${isScoped && shopsList.length === 1
                   ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
                   : 'bg-slate-50/70 border-slate-300 cursor-pointer'
                   }`}
               >
-                {currentUser?.role !== 'operator' && <option value="">-- All Outlets --</option>}
+                {(!isScoped || shopsList.length > 1) && (
+                  <option value="">{isScoped ? '-- All Assigned Outlets --' : '-- All Outlets --'}</option>
+                )}
                 {shopsList.map(s => (
                   <option key={s.id} value={s.id}>{s.shop_name}</option>
                 ))}

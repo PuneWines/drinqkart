@@ -45,9 +45,8 @@ const ProtectedRoute = ({ children }) => {
 }
 
 const SuperAdminRoute = ({ children }) => {
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-    const username = (localStorage.getItem("user-name") || "").toLowerCase();
-    const isElevated = role === "admin" || role === "hod" || role === "superadmin" || role === "masteradmin" || username === "admin" || username === "masteradmin";
+    const role = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+    const isElevated = role === "admin" || role === "hod" || role === "superadmin" || role === "masteradmin";
     if (isElevated) {
         return children;
     }

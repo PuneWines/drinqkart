@@ -8,7 +8,6 @@ const POVendorBox = ({
   vendorDetails,
   onDeleteVendor,
   companyScope,
-  filteredCompanyName,
   isMissingVendorLedger,
   cleanVendorName,
   availableDistricts = [],
@@ -18,7 +17,7 @@ const POVendorBox = ({
   selectedArea = "",
   onAreaChange,
 }) => {
-  const activeCompanyScope = companyScope || filteredCompanyName;
+  const activeCompanyScope = companyScope;
   return (
     <div className="po-box">
       <div className="po-box-header">Vendor</div>

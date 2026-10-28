@@ -9,6 +9,7 @@ import ShopVisit from './pages/ShopVisit';
 import StockBalance from './pages/StockBalance';
 import StockBalanceDashboard from './pages/StockBalanceDashboard';
 import GiftStockDashboard from './pages/GiftStockDashboard';
+import DocumentManager from './pages/DocumentManager';
 import { Toaster } from 'react-hot-toast';
 
 function BusinessOverviewApp({ onCollapseSidebar }) {
@@ -25,6 +26,8 @@ function BusinessOverviewApp({ onCollapseSidebar }) {
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
             <Route path="shop-visit" element={<ShopVisit />} />
+            <Route path="document-manager" element={<DocumentManager />} />
+            <Route path="document-manager/*" element={<DocumentManager />} />
             <Route path="sales-analytics" element={<Navigate to="/systems/sales-analytics" replace />} />
             <Route path="stock-report" element={<Navigate to="/systems/stock-report" replace />} />
             <Route path="stock-balance" element={<Navigate to="/systems/sales-analytics" replace />} />

@@ -44,17 +44,12 @@ const ShopFilter = ({ isCollapsed = false }) => {
   const { user } = useAuth();
   const { shops, shopsDetails, selectedShop, setSelectedShop } = useShopStore();
 
-  const userRole = (user?.role || "").toLowerCase().trim();
-  const userName = (user?.user_name || user?.username || "")
-    .toLowerCase()
-    .trim();
+  const userRole = (user?.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") || localStorage.getItem("currentUserRole") : "") || "").toLowerCase().trim();
   const isAdmin =
-    !userRole ||
     userRole === "admin" ||
     userRole === "superadmin" ||
-    userRole === "hod" ||
-    userName === "masteradmin" ||
-    userName === "admin";
+    userRole === "masteradmin" ||
+    userRole === "hod";
 
   // 1. If not admin and no assigned shop, hide filter
   if (!isAdmin && (!shops || shops.length === 0)) {

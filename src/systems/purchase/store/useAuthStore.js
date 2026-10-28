@@ -211,10 +211,8 @@ const useAuthStore = create((set, get) => ({
   hasPermission: (permission) => {
     const { currentUser } = get();
     if (!currentUser) return false;
-    const role = (currentUser.role || localStorage.getItem('role') || '').toLowerCase().trim();
-    const username = (currentUser.user_name || currentUser.username || localStorage.getItem('user-name') || '').toLowerCase().trim();
-    const empId = String(currentUser.employee_id || currentUser.emp_code || '').trim();
-    if (role === 'superadmin' || role === 'masteradmin' || username === 'masteradmin' || empId === '999') {
+    const role = (currentUser.role || localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '').toLowerCase().trim();
+    if (role === 'superadmin' || role === 'masteradmin' || role === 'hod') {
       return true;
     }
     if (permission.endsWith(':modify')) {
@@ -231,10 +229,8 @@ const useAuthStore = create((set, get) => ({
   canModify: (permKey) => {
     const { currentUser } = get();
     if (!currentUser) return false;
-    const role = (currentUser.role || localStorage.getItem('role') || '').toLowerCase().trim();
-    const username = (currentUser.user_name || currentUser.username || localStorage.getItem('user-name') || '').toLowerCase().trim();
-    const empId = String(currentUser.employee_id || currentUser.emp_code || '').trim();
-    if (role === 'superadmin' || role === 'masteradmin' || username === 'masteradmin' || empId === '999') {
+    const role = (currentUser.role || localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '').toLowerCase().trim();
+    if (role === 'superadmin' || role === 'masteradmin' || role === 'hod') {
       return true;
     }
     const perm = getPagePermission(currentUser, 'purchase', permKey);
@@ -244,10 +240,8 @@ const useAuthStore = create((set, get) => ({
   canView: (permKey) => {
     const { currentUser } = get();
     if (!currentUser) return false;
-    const role = (currentUser.role || localStorage.getItem('role') || '').toLowerCase().trim();
-    const username = (currentUser.user_name || currentUser.username || localStorage.getItem('user-name') || '').toLowerCase().trim();
-    const empId = String(currentUser.employee_id || currentUser.emp_code || '').trim();
-    if (role === 'superadmin' || role === 'masteradmin' || username === 'masteradmin' || empId === '999') {
+    const role = (currentUser.role || localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '').toLowerCase().trim();
+    if (role === 'superadmin' || role === 'masteradmin' || role === 'hod') {
       return true;
     }
     const perm = getPagePermission(currentUser, 'purchase', permKey);

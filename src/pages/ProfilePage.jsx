@@ -354,8 +354,8 @@ export default function ProfilePage() {
       if (userRaw) {
         try { localRole = JSON.parse(userRaw)?.role || localRole; } catch (e) {}
       }
-      const currentRole = (profile?.role || localRole || localStorage.getItem('role') || 'User').toLowerCase();
-      const isAdmin = currentRole === 'admin' || currentRole === 'masteradmin' || userName.toLowerCase() === 'admin' || userName.toLowerCase() === 'masteradmin';
+      const currentRole = (profile?.role || localRole || localStorage.getItem('role') || localStorage.getItem('currentUserRole') || 'User').toLowerCase().trim();
+      const isAdmin = currentRole === 'admin' || currentRole === 'masteradmin' || currentRole === 'superadmin' || currentRole === 'hod';
 
       if (isAdmin) {
         supabase.from('users').select('user_name').then(({ data: uData }) => {
@@ -759,8 +759,8 @@ export default function ProfilePage() {
   const formattedShops = [...new Set([...formattedPrimaryShops, ...formattedUserAccess])];
   const formattedCounters = [...new Set(formatList(profile.counterAccess))];
 
-  const role = (profile.role || localStorage.getItem('role') || 'User').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'masteradmin' || profile.userName?.toLowerCase() === 'admin';
+  const role = (profile.role || localStorage.getItem('role') || localStorage.getItem('currentUserRole') || 'User').toLowerCase().trim();
+  const isAdmin = role === 'admin' || role === 'masteradmin' || role === 'superadmin' || role === 'hod';
 
   let rawAccess = profile.accessStrings || localStorage.getItem('master_user_system_page_access') || [];
   if (typeof rawAccess === 'string') {

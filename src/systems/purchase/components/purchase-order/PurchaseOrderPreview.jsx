@@ -40,7 +40,6 @@ const PurchaseOrderPreview = ({
   onAddItem,
   headerActions,
   companyScope,
-  filteredCompanyName,
   isMissingVendorLedger,
   cleanVendorName,
   availableDistricts = [],
@@ -76,8 +75,7 @@ const PurchaseOrderPreview = ({
           onPartyChange={onPartyChange}
           vendorDetails={vendorDetails}
           onDeleteVendor={onDeleteVendor}
-          companyScope={companyScope || filteredCompanyName}
-          filteredCompanyName={filteredCompanyName}
+          companyScope={companyScope}
           isMissingVendorLedger={isMissingVendorLedger}
           cleanVendorName={cleanVendorName}
           availableDistricts={availableDistricts}

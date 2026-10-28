@@ -126,7 +126,7 @@ const TraderVerification = () => {
           }
 
           const parsed = parsePartyAndCompany(item.vendor_name);
-          const effectiveCompany = (item.company_scope || item.company_name || item.filtered_company_name || parsed.company || "").trim();
+          const effectiveCompany = (item.company_scope || item.company_name || parsed.company || "").trim();
           const cleanVendor = parsed.party || item.vendor_name || "";
 
           return {
@@ -191,7 +191,7 @@ const TraderVerification = () => {
         sortable: true,
         render: (vendor, row) => {
           const cleanVendor = row.clean_vendor_name || parsePartyAndCompany(vendor || "").party || "—";
-          const comp = row.company_scope || row.company_name || row.filtered_company_name;
+          const comp = row.company_scope || row.company_name;
           return (
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
               <span style={{ fontWeight: 600 }}>{cleanVendor}</span>

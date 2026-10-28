@@ -16,7 +16,14 @@ export async function getItems(shopId = null) {
         shop:Inventory_shop(id, shop_name)
       `);
 
-    if (shopId) {
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        const idList = shopId.map(id => parseInt(id, 10)).filter(Boolean);
+        if (idList.length > 0) {
+          query = query.or(`shop_id.in.(${idList.join(',')}),shop_id.is.null`);
+        }
+      }
+    } else if (shopId) {
       query = query.or(`shop_id.eq.${parseInt(shopId, 10)},shop_id.is.null`);
     }
 
@@ -68,7 +75,14 @@ export async function getVendors(shopId = null) {
         shop:Inventory_shop(id, shop_name)
       `);
 
-    if (shopId) {
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        const idList = shopId.map(id => parseInt(id, 10)).filter(Boolean);
+        if (idList.length > 0) {
+          query = query.or(`shop_id.in.(${idList.join(',')}),shop_id.is.null`);
+        }
+      }
+    } else if (shopId) {
       query = query.or(`shop_id.eq.${parseInt(shopId, 10)},shop_id.is.null`);
     }
 
@@ -259,7 +273,13 @@ export async function getSaleHistory({ fromDate, toDate, shopId, itemName, limit
 
     if (fromDate) query = query.gte('transaction_date', fromDate);
     if (toDate) query = query.lte('transaction_date', toDate);
-    if (shopId) query = query.eq('shop_id', parseInt(shopId, 10));
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        query = query.in('shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
+      query = query.eq('shop_id', parseInt(shopId, 10));
+    }
     if (itemName) query = query.eq('item_name', itemName);
 
     const { data, error } = await query;
@@ -519,7 +539,11 @@ export async function getStockLedgerItems(shopId = null) {
       .from('Inventory_stock_ledger')
       .select('item_id, item_name, items:Inventory_items!inner(shop_id)');
 
-    if (shopId) {
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        query = query.in('Inventory_items.shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
       query = query.eq('Inventory_items.shop_id', parseInt(shopId, 10));
     }
 
@@ -583,14 +607,83 @@ export async function getStockLedgerView({ fromDate, toDate, itemName } = {}) {
 
 export async function getShops() {
   try {
-    const { data, error } = await supabase
-      .from('Inventory_shop')
-      .select('*')
-      .neq('shop_name', 'TEST Shop')
+    // 1. Fetch from master 'shop' table (master source used across Master Setting, HR, Purchase, Petty Cash)
+    const { data: masterShops, error: masterError } = await supabase
+      .from('shop')
+      .select('id, shop_name, full_name, contact, address')
       .order('shop_name', { ascending: true });
 
-    if (error) throw error;
-    return data || [];
+    // 2. Fetch from 'Inventory_shop' table
+    const { data: invShops } = await supabase
+      .from('Inventory_shop')
+      .select('*')
+      .order('shop_name', { ascending: true });
+
+    // Build unified map of shops by shop_name (case-insensitive)
+    const shopMap = new Map();
+
+    // Add all master shops from 'shop' table
+    if (masterShops && Array.isArray(masterShops)) {
+      masterShops.forEach((s) => {
+        if (s?.shop_name) {
+          const key = s.shop_name.trim().toLowerCase();
+          shopMap.set(key, {
+            id: s.id,
+            shop_name: s.shop_name.trim(),
+            full_name: s.full_name || null,
+            contact: s.contact || null,
+            address: s.address || null
+          });
+        }
+      });
+    }
+
+    // Add any additional shops from 'Inventory_shop' table if not already present
+    if (invShops && Array.isArray(invShops)) {
+      invShops.forEach((s) => {
+        if (s?.shop_name) {
+          const key = s.shop_name.trim().toLowerCase();
+          if (!shopMap.has(key)) {
+            shopMap.set(key, {
+              id: s.id,
+              shop_name: s.shop_name.trim(),
+              ...s
+            });
+          }
+        }
+      });
+    }
+
+    // Auto-sync: if any master shops from 'shop' are missing in 'Inventory_shop',
+    // insert them into 'Inventory_shop' so foreign keys and legacy joins don't fail
+    if (masterShops && invShops) {
+      const existingInvNames = new Set(invShops.map((s) => (s?.shop_name || '').trim().toLowerCase()));
+      const missingInInv = masterShops.filter((s) => s?.shop_name && !existingInvNames.has(s.shop_name.trim().toLowerCase()));
+      if (missingInInv.length > 0) {
+        try {
+          const toInsert = missingInInv.map((s) => ({
+            id: s.id,
+            shop_name: s.shop_name.trim()
+          }));
+          await supabase.from('Inventory_shop').upsert(toInsert, { onConflict: 'id', ignoreDuplicates: true });
+        } catch (syncErr) {
+          console.warn('Non-fatal: auto-sync missing shop to Inventory_shop:', syncErr.message);
+        }
+      }
+    }
+
+    const combined = Array.from(shopMap.values()).sort((a, b) =>
+      a.shop_name.localeCompare(b.shop_name)
+    );
+
+    if (combined.length > 0) {
+      return combined;
+    }
+
+    if (invShops && invShops.length > 0) return invShops;
+    if (masterShops && masterShops.length > 0) return masterShops;
+    if (masterError) throw masterError;
+    return [];
   } catch (err) {
     console.error('Failed to fetch shops:', err.message);
     throw err;
@@ -598,18 +691,31 @@ export async function getShops() {
 }
 
 export async function addShop(shopName) {
+  const cleanName = (shopName || '').trim();
+  if (!cleanName) throw new Error('Shop name cannot be empty');
   if (!supabase) {
-    return { id: Date.now(), shop_name: shopName.trim() };
+    return { id: Date.now(), shop_name: cleanName };
   }
   try {
-    const { data, error } = await supabase
-      .from('Inventory_shop')
-      .insert([{ shop_name: shopName.trim() }])
+    // 1. Insert into master 'shop' table
+    const { data: masterData, error: masterErr } = await supabase
+      .from('shop')
+      .insert([{ shop_name: cleanName }])
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    // 2. Also sync into 'Inventory_shop'
+    const invPayload = masterData?.id
+      ? { id: masterData.id, shop_name: cleanName }
+      : { shop_name: cleanName };
+
+    const { data: invData } = await supabase
+      .from('Inventory_shop')
+      .upsert([invPayload], { onConflict: 'id', ignoreDuplicates: false })
+      .select()
+      .maybeSingle();
+
+    return masterData || invData || { id: Date.now(), shop_name: cleanName };
   } catch (err) {
     console.error('Failed to add shop:', err.message);
     throw err;
@@ -617,19 +723,24 @@ export async function addShop(shopName) {
 }
 
 export async function updateShop(shopId, shopName) {
+  const cleanName = (shopName || '').trim();
   if (!supabase) {
-    return { id: shopId, shop_name: shopName.trim() };
+    return { id: shopId, shop_name: cleanName };
   }
   try {
-    const { data, error } = await supabase
+    await supabase
+      .from('shop')
+      .update({ shop_name: cleanName })
+      .eq('id', shopId);
+
+    const { data } = await supabase
       .from('Inventory_shop')
-      .update({ shop_name: shopName.trim() })
+      .update({ shop_name: cleanName })
       .eq('id', shopId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    return data || { id: shopId, shop_name: cleanName };
   } catch (err) {
     console.error('Failed to update shop:', err.message);
     throw err;
@@ -641,12 +752,8 @@ export async function deleteShop(shopId) {
     return { success: true };
   }
   try {
-    const { error } = await supabase
-      .from('Inventory_shop')
-      .delete()
-      .eq('id', shopId);
-
-    if (error) throw error;
+    await supabase.from('shop').delete().eq('id', shopId);
+    await supabase.from('Inventory_shop').delete().eq('id', shopId);
     return { success: true };
   } catch (err) {
     console.error('Failed to delete shop:', err.message);
@@ -724,7 +831,13 @@ export async function getPurchasedItems({ fromDate, toDate, itemId, vendorId, sh
     if (toDate) query = query.lte('Inventory_inventory_transactions.transaction_date', toDate);
     if (itemId) query = query.eq('item_id', itemId);
     if (vendorId) query = query.eq('vendor_id', vendorId);
-    if (shopId) query = query.eq('Inventory_inventory_transactions.shop_id', shopId);
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        query = query.in('Inventory_inventory_transactions.shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
+      query = query.eq('Inventory_inventory_transactions.shop_id', parseInt(shopId, 10));
+    }
 
     const { data, error } = await query;
     if (error) throw error;
@@ -780,7 +893,13 @@ export async function getClosingStockItems({ fromDate, toDate, itemId, shopId, l
     if (fromDate) query = query.gte('Inventory_inventory_transactions.transaction_date', fromDate);
     if (toDate) query = query.lte('Inventory_inventory_transactions.transaction_date', toDate);
     if (itemId) query = query.eq('item_id', itemId);
-    if (shopId) query = query.eq('Inventory_inventory_transactions.shop_id', shopId);
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        query = query.in('Inventory_inventory_transactions.shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
+      query = query.eq('Inventory_inventory_transactions.shop_id', parseInt(shopId, 10));
+    }
 
     const { data, error } = await query;
     if (error) throw error;
@@ -1024,7 +1143,13 @@ export async function getCurrentStockItems({ shopId, itemId } = {}) {
     let itemQuery = supabase
       .from('Inventory_items')
       .select('*, shop:Inventory_shop(id, shop_name)');
-    if (shopId) itemQuery = itemQuery.eq('shop_id', parseInt(shopId, 10));
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        itemQuery = itemQuery.in('shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
+      itemQuery = itemQuery.eq('shop_id', parseInt(shopId, 10));
+    }
     if (itemId) itemQuery = itemQuery.eq('id', parseInt(itemId, 10));
     const { data: items, error: itemsErr } = await itemQuery.order('item_name', { ascending: true });
     if (itemsErr) throw itemsErr;
@@ -1205,7 +1330,13 @@ export async function getDailySalesSummary({ fromDate, toDate, shopId, limit = 5
 
     if (fromDate) query = query.gte('Inventory_inventory_transactions.transaction_date', fromDate);
     if (toDate) query = query.lte('Inventory_inventory_transactions.transaction_date', toDate);
-    if (shopId) query = query.eq('Inventory_inventory_transactions.shop_id', shopId);
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        query = query.in('Inventory_inventory_transactions.shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
+      query = query.eq('Inventory_inventory_transactions.shop_id', parseInt(shopId, 10));
+    }
 
     const { data, error } = await query;
     if (error) throw error;
@@ -1853,7 +1984,11 @@ export async function getTodayTotalSales(shopId = null) {
       .eq('Inventory_inventory_transactions.transaction_date', today);
 
     // Filter by shop if provided
-    if (shopId) {
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        query = query.in('Inventory_inventory_transactions.shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
       query = query.eq('Inventory_inventory_transactions.shop_id', parseInt(shopId, 10));
     }
 
@@ -1898,9 +2033,12 @@ export async function getSalesByDate(date, shopId = null) {
 
     const filteredSummary = (summaryData || []).filter(row => {
       const tx = row.inventory_transactions;
+      const matchesShop = Array.isArray(shopId)
+        ? (shopId.length === 0 || shopId.map(Number).includes(Number(tx?.shop_id)))
+        : (!shopId || tx?.shop_id === Number(shopId));
       return (
         tx?.transaction_date === date &&
-        (!shopId || tx?.shop_id === Number(shopId))
+        matchesShop
       );
     });
 
@@ -1921,7 +2059,11 @@ export async function getSalesByDate(date, shopId = null) {
       .from('Inventory_items')
       .select('id, item_name, mrp, shop_id');
 
-    if (shopId) {
+    if (Array.isArray(shopId)) {
+      if (shopId.length > 0) {
+        itemsQuery = itemsQuery.in('shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+      }
+    } else if (shopId) {
       itemsQuery = itemsQuery.eq('shop_id', Number(shopId));
     }
 
@@ -1972,7 +2114,11 @@ export async function getSalesByDate(date, shopId = null) {
         .select('item_name, sale_qty, shop_id, transaction_date')
         .eq('transaction_date', date);
 
-      if (shopId) {
+      if (Array.isArray(shopId)) {
+        if (shopId.length > 0) {
+          historyQuery = historyQuery.in('shop_id', shopId.map(id => parseInt(id, 10)).filter(Boolean));
+        }
+      } else if (shopId) {
         historyQuery = historyQuery.eq('shop_id', Number(shopId));
       }
 
@@ -2017,7 +2163,11 @@ export async function getManagerReports({ fromDate, toDate, shopName }) {
 
   if (fromDate) query = query.gte("report_date", fromDate);
   if (toDate) query = query.lte("report_date", toDate);
-  if (shopName) query = query.eq("shop_name", shopName);
+  if (Array.isArray(shopName)) {
+    if (shopName.length > 0) query = query.in("shop_name", shopName);
+  } else if (shopName) {
+    query = query.eq("shop_name", shopName);
+  }
 
   const { data, error } = await query;
   if (error) throw error;

@@ -8,6 +8,7 @@ import {
   updateClosingStockItemRow,
   deleteClosingStockItemRow
 } from '../../services/dbService';
+import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
 
 const formatTimestamp = (isoString) => {
   if (!isoString) return '—';
@@ -26,13 +27,12 @@ export default function ClosingStockLogs({ hideHeader = false, currentUser, show
   const [itemsList, setItemsList] = useState([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
 
+  const isScoped = isUserShopScoped(currentUser);
+  const assigned = isScoped ? getUserAssignedShops(currentUser).map(s => s.toLowerCase()) : [];
+
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [selectedShopId, setSelectedShopId] = useState(
-    currentUser?.role === 'operator' && currentUser?.shop_id
-      ? currentUser.shop_id.toString()
-      : ''
-  );
+  const [selectedShopId, setSelectedShopId] = useState('');
   const [selectedItemName, setSelectedItemName] = useState('');
   const [selectedItemId, setSelectedItemId] = useState('');
 
@@ -129,7 +129,13 @@ export default function ClosingStockLogs({ hideHeader = false, currentUser, show
     async function loadMetadata() {
       try {
         const [shops, items] = await Promise.all([getShops(), getItems()]);
-        setShopsList(shops);
+        const visibleShops = (isScoped && assigned.length > 0)
+          ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
+          : (shops || []);
+        setShopsList(visibleShops);
+        if (isScoped && visibleShops.length === 1) {
+          setSelectedShopId(visibleShops[0].id.toString());
+        }
         setItemsList(items);
       } catch (err) {
         console.error('Failed to load metadata:', err);
@@ -138,31 +144,37 @@ export default function ClosingStockLogs({ hideHeader = false, currentUser, show
       }
     }
     loadMetadata();
-  }, []);
+  }, [currentUser]);
 
   // 1b. Re-filter item list when shop selection changes
   useEffect(() => {
     async function loadItemsForShop() {
       try {
-        const items = await getItems(selectedShopId || null);
+        const effectiveShopId = selectedShopId
+          ? selectedShopId
+          : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
+        const items = await getItems(effectiveShopId);
         setItemsList(items);
       } catch (err) {
         console.error('Failed to load items for selected shop:', err);
       }
     }
     loadItemsForShop();
-  }, [selectedShopId]);
+  }, [selectedShopId, shopsList, isScoped]);
 
   // 2. Fetch records
   useEffect(() => {
     async function loadRecords() {
       setIsLoadingRecords(true);
       try {
+        const effectiveShopId = selectedShopId
+          ? selectedShopId
+          : (isScoped && shopsList.length > 0 ? shopsList.map(s => s.id) : null);
         const data = await getClosingStockItems({
           fromDate,
           toDate,
           itemId: selectedItemId || null,
-          shopId: selectedShopId || null
+          shopId: effectiveShopId
         });
         setRecords(data);
       } catch (err) {
@@ -173,7 +185,7 @@ export default function ClosingStockLogs({ hideHeader = false, currentUser, show
       }
     }
     loadRecords();
-  }, [fromDate, toDate, selectedItemId, selectedShopId]);
+  }, [fromDate, toDate, selectedItemId, selectedShopId, shopsList, isScoped]);
 
   // Client side search text filter
   const filteredRecords = useMemo(() => {
@@ -351,13 +363,15 @@ export default function ClosingStockLogs({ hideHeader = false, currentUser, show
             <select
               value={selectedShopId}
               onChange={(e) => setSelectedShopId(e.target.value)}
-              disabled={currentUser?.role === 'operator'}
-              className={`w-full border rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all ${currentUser?.role === 'operator'
+              disabled={isScoped && shopsList.length === 1}
+              className={`w-full border rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all ${isScoped && shopsList.length === 1
                   ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
                   : 'bg-slate-50/70 border-slate-300 cursor-pointer'
                 }`}
             >
-              {currentUser?.role !== 'operator' && <option value="">-- All Outlets --</option>}
+              {(!isScoped || shopsList.length > 1) && (
+                <option value="">{isScoped ? '-- All Assigned Outlets --' : '-- All Outlets --'}</option>
+              )}
               {shopsList.map(s => (
                 <option key={s.id} value={s.id}>{s.shop_name}</option>
               ))}

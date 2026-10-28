@@ -258,21 +258,12 @@ const Settings = ({ readOnly = false }) => {
   const fetchAvailableParties = async () => {
     try {
       const fetchWithFallback = async (table) => {
-        let res = await supabase
+        return await supabase
           .from(table)
           .select(
-            "party_name, company_name, company_scope, filtered_company_name, purchase_indents(shop_name)",
+            "party_name, company_name, company_scope, purchase_indents(shop_name)",
           )
           .not("party_name", "is", null);
-        if (res.error) {
-          res = await supabase
-            .from(table)
-            .select(
-              "party_name, company_name, filtered_company_name, purchase_indents(shop_name)",
-            )
-            .not("party_name", "is", null);
-        }
-        return res;
       };
 
       const [res1, res2] = await Promise.all([
@@ -305,7 +296,6 @@ const Settings = ({ readOnly = false }) => {
         }
         const compScope = (
           item.company_scope ||
-          item.filtered_company_name ||
           ""
         ).trim();
         if (compScope) {

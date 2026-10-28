@@ -22,9 +22,8 @@ const TAB_PAGES = {
 // Returns { tab: 'none' | 'view' | 'modify' } for the given user
 function getTabLevels(user) {
   const levels = {};
-  const userName = (user?.user_name || user?.username || '').toLowerCase();
-  const role = (user?.role || '').toLowerCase();
-  if (userName === 'masteradmin' || role === 'superadmin' || role === 'masteradmin') {
+  const role = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  if (role === 'superadmin' || role === 'masteradmin' || role === 'hod') {
     TABS.forEach((t) => (levels[t] = 'modify'));
     return levels;
   }

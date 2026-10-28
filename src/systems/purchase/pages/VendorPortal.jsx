@@ -443,51 +443,26 @@ const VendorPortal = () => {
           const safeParty = targetParty.replace(/"/g, '""');
           const safeComp = targetCompany.replace(/"/g, '""');
           poQuery = poQuery.or(
-            `and(vendor_name.eq."${safeParty}",company_scope.eq."${safeComp}"),and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty} (${safeComp})",vendor_name.eq."${safeParty}::${safeComp}"`
+            `and(vendor_name.eq."${safeParty}",company_scope.eq."${safeComp}"),vendor_name.eq."${safeParty} (${safeComp})",vendor_name.eq."${safeParty}::${safeComp}"`
           );
         } else {
           const safeParty = targetParty.replace(/"/g, '""');
           poQuery = poQuery
             .eq("vendor_name", safeParty)
-            .or("company_scope.is.null,company_scope.eq.'',filtered_company_name.is.null,filtered_company_name.eq.''");
+            .or("company_scope.is.null,company_scope.eq.''");
         }
 
         const res = await poQuery;
         if (res.error) {
-          console.warn("Scoped PO query with company_scope warning, attempting legacy column fallback:", res.error.message);
-          let fallbackQuery = supabase
+          console.warn("Scoped PO query warning, using relaxed fallback:", res.error.message);
+          const cleanPartyPart = targetParty.includes("(") ? targetParty.split("(")[0].trim() : (targetParty.includes("::") ? targetParty.split("::")[0].trim() : targetParty);
+          const fallbackRes = await supabase
             .from("purchase_purchase_orders")
             .select("*")
+            .ilike("vendor_name", `%${cleanPartyPart}%`)
             .order("created_at", { ascending: false })
             .limit(100);
-
-          if (targetCompany) {
-            const safeParty = targetParty.replace(/"/g, '""');
-            const safeComp = targetCompany.replace(/"/g, '""');
-            fallbackQuery = fallbackQuery.or(
-              `and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty} (${safeComp})",vendor_name.eq."${safeParty}::${safeComp}"`
-            );
-          } else {
-            const safeParty = targetParty.replace(/"/g, '""');
-            fallbackQuery = fallbackQuery
-              .eq("vendor_name", safeParty)
-              .or("filtered_company_name.is.null,filtered_company_name.eq.''");
-          }
-
-          const fbRes = await fallbackQuery;
-          if (fbRes.error) {
-            console.warn("Legacy column query warning, using relaxed fallback:", fbRes.error.message);
-            const cleanPartyPart = targetParty.includes("(") ? targetParty.split("(")[0].trim() : (targetParty.includes("::") ? targetParty.split("::")[0].trim() : targetParty);
-            const fallbackRes = await supabase
-              .from("purchase_purchase_orders")
-              .select("*")
-              .ilike("vendor_name", `%${cleanPartyPart}%`)
-              .order("created_at", { ascending: false })
-              .limit(100);
-            pos = fallbackRes.data || [];
-          } else {
-            pos = fbRes.data || [];
-          }
+          pos = fallbackRes.data || [];
         } else {
           pos = res.data || [];
         }
@@ -498,8 +473,8 @@ const VendorPortal = () => {
 
       setPoList(pos || []);
 
-      if (!targetCompany && (pos?.[0]?.company_scope || pos?.[0]?.filtered_company_name)) {
-        setCompanyName(pos[0].company_scope || pos[0].filtered_company_name);
+      if (!targetCompany && pos?.[0]?.company_scope) {
+        setCompanyName(pos[0].company_scope);
       }
 
       // Initialize form fields for submitted POs
@@ -1300,9 +1275,9 @@ const VendorPortal = () => {
                       <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-lg text-xs font-bold">
                         {shopName}
                       </span>
-                      {(po.company_scope || po.filtered_company_name || companyName) && (
+                      {(po.company_scope || companyName) && (
                         <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-lg text-xs font-bold">
-                          {po.company_scope || po.filtered_company_name || companyName}
+                          {po.company_scope || companyName}
                         </span>
                       )}
                       {poAreaTag && (
@@ -1991,9 +1966,9 @@ const SubmissionPreview = ({ po, items, vendorName, companyName, submittedAt, on
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Supplier Name</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <strong className="text-slate-900 font-bold text-sm block">{vendorName}</strong>
-                  {(companyName || po.company_scope || po.filtered_company_name) && (
+                  {(companyName || po.company_scope) && (
                     <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-md text-xs font-bold">
-                      {companyName || po.company_scope || po.filtered_company_name}
+                      {companyName || po.company_scope}
                     </span>
                   )}
                 </div>
