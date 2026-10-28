@@ -34,7 +34,6 @@ import {
   X,
   ExternalLink,
   Copy,
-  Database,
   Calendar,
   Building,
   User,
@@ -184,7 +183,6 @@ export default function DocumentManager() {
   const [renewalModalDoc, setRenewalModalDoc] = useState(null);
   const [editingDoc, setEditingDoc] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
-  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
 
   // Masters Management state
   const [masterTab, setMasterTab] = useState('categories'); // 'categories' | 'types'
@@ -583,9 +581,16 @@ export default function DocumentManager() {
       if (editingDoc) {
         // Edit mode
         const entry = formEntries[0];
+        const cat = categories.find((c) => c.id === entry.categoryId);
+        const typ = documentTypes.find((t) => t.id === entry.typeId);
+        const preparedEntry = {
+          ...entry,
+          categoryName: entry.categoryName || cat?.name || '',
+          typeName: entry.typeName || typ?.name || ''
+        };
         const res = await dbService.updateDocument(
           editingDoc.id,
-          entry,
+          preparedEntry,
           entry.newFiles,
           entry.removedFileIds,
           user
@@ -600,11 +605,12 @@ export default function DocumentManager() {
         // Generate serial numbers for each entry based on existing category count
         const docsToInsert = formEntries.map((entry) => {
           const cat = categories.find((c) => c.id === entry.categoryId);
+          const typ = documentTypes.find((t) => t.id === entry.typeId);
           const prefix = (cat?.prefix || 'DOC').toUpperCase();
 
           // Calculate next serial
           const existingMax = documents
-            .filter((d) => d.category_id === entry.categoryId)
+            .filter((d) => d.category_id === entry.categoryId || (cat && d.category_name === cat.name))
             .reduce((max, d) => {
               const numPart = parseInt((d.serial || '').split('-')[1] || '0', 10);
               return Math.max(max, isNaN(numPart) ? 0 : numPart);
@@ -614,6 +620,8 @@ export default function DocumentManager() {
 
           return {
             ...entry,
+            categoryName: entry.categoryName || cat?.name || '',
+            typeName: entry.typeName || typ?.name || '',
             serial
           };
         });
@@ -690,118 +698,7 @@ export default function DocumentManager() {
 
 
 
-  // --------------------------------------------------------------------------
-  // SQL Schema Script for Modal
-  // --------------------------------------------------------------------------
-  const SQL_SCHEMA = `-- ============================================================================
--- DRINQKART DOCUMENT MANAGER DATABASE SCHEMA FOR SUPABASE
--- Execute this entire script in Supabase Dashboard -> SQL Editor -> Run
--- ============================================================================
 
--- 1. Document Categories Master Table
-CREATE TABLE IF NOT EXISTS public.bis_doc_manager_categories (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL UNIQUE,
-  prefix TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 2. Document Types Master Table
-CREATE TABLE IF NOT EXISTS public.bis_doc_manager_types (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL UNIQUE,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 3. Main Document Manager Repository Table (bis_doc_manager)
-CREATE TABLE IF NOT EXISTS public.bis_doc_manager (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  serial TEXT,
-  type_id UUID REFERENCES public.bis_doc_manager_types(id) ON DELETE SET NULL,
-  type_name TEXT,
-  category_id UUID REFERENCES public.bis_doc_manager_categories(id) ON DELETE SET NULL,
-  category_name TEXT,
-  person_name TEXT,
-  needs_renewal BOOLEAN DEFAULT FALSE,
-  renewal_date DATE,
-  files JSONB DEFAULT '[]'::jsonb,
-  status TEXT DEFAULT 'active',
-  created_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 4. Shared Documents Log Table
-CREATE TABLE IF NOT EXISTS public.bis_doc_manager_shares (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  doc_id UUID REFERENCES public.bis_doc_manager(id) ON DELETE CASCADE,
-  doc_name TEXT,
-  serial TEXT,
-  category_name TEXT,
-  person_name TEXT,
-  channel TEXT NOT NULL, -- 'email' or 'whatsapp'
-  recipient TEXT NOT NULL,
-  message TEXT,
-  shared_by TEXT,
-  shared_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 5. Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_bis_doc_mgr_category ON public.bis_doc_manager(category_id);
-CREATE INDEX IF NOT EXISTS idx_bis_doc_mgr_renewal_date ON public.bis_doc_manager(renewal_date);
-CREATE INDEX IF NOT EXISTS idx_bis_doc_mgr_created_at ON public.bis_doc_manager(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_bis_doc_mgr_shares_created_at ON public.bis_doc_manager_shares(shared_at DESC);
-
--- 6. Enable Row Level Security (RLS)
-ALTER TABLE public.bis_doc_manager_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bis_doc_manager_types ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bis_doc_manager ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bis_doc_manager_shares ENABLE ROW LEVEL SECURITY;
-
--- 7. RLS Policies (Allows Authenticated and Anon users full access to view and manage)
-CREATE POLICY "Allow all access to bis_doc_manager_categories" ON public.bis_doc_manager_categories FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to bis_doc_manager_types" ON public.bis_doc_manager_types FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to bis_doc_manager" ON public.bis_doc_manager FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to bis_doc_manager_shares" ON public.bis_doc_manager_shares FOR ALL USING (true) WITH CHECK (true);
-
--- 8. Seed Default Categories
-INSERT INTO public.bis_doc_manager_categories (name, prefix) VALUES
-('Personal Document – ID List', 'PN'),
-('Company', 'CN'),
-('Director', 'DN'),
-('Employee', 'EN'),
-('Madhura Wines Bavdhan', 'MN'),
-('Friends Wines Wagholi', 'FN'),
-('MML Spirits Pvt Ltd (Office)', 'ML'),
-('Balaji Wines Akole', 'BW'),
-('The Liquor Story (Vishal Wines) Hinjewadi', 'TN'),
-('Kunal Fine Wine (Amber Dist)', 'KA'),
-('Kunal Fine Wine (South Seas Dist)', 'KS'),
-('Own Property Document List', 'OP'),
-('Shop Rent Document List', 'SR'),
-('Excise License Document List', 'EL')
-ON CONFLICT (name) DO NOTHING;
-
--- 9. Seed Default Document Types
-INSERT INTO public.bis_doc_manager_types (name) VALUES
-('Invoice'), ('Contract'), ('Report'), ('Presentation'), ('Proposal'),
-('Minutes'), ('Plan'), ('Tax Document'), ('Resume'), ('Other'),
-('PAN Card'), ('Aadhaar Card'), ('Food License'), ('Liquors License'),
-('Shop Act'), ('Expenses Bill'), ('ITR & Balance Sheet'), ('Property Document'),
-('TDS Challan & Certificate'), ('VAT'), ('VAT Certificate'), ('Fire Extinguisher'),
-('Shop Insurance'), ('Vehicle Document'), ('Sale Deed / Conveyance Deed (बिक्री विलेख)'),
-('Possession Letter (कब्ज़ा पत्र)'), ('Police Verification Receipt / Acknowledgement'),
-('Electricity Bill'), ('Water Bill'), ('Maintenance Bill / Receipt'),
-('Rent Escalation Clause Copy'), ('Monthly Rent Receipts'), ('Lock-in Period Details'),
-('Signature Specimen'), ('Affidavit / Self Declaration'), ('Email ID & Mobile Number Proof'),
-('Birth Certificate'), ('School Leaving Certificate'), ('Passport'),
-('Passport Size Photo (White Background)'), ('Stamp Size Photo (If Required)'),
-('Cancelled Cheque'), ('Bank Passbook Copy'), ('Bank Statement (Latest)'),
-('Income Tax Return (ITR)'), ('Form 16 (If Applicable)'), ('GST Registration')
-ON CONFLICT (name) DO NOTHING;
-`;
 
   // --------------------------------------------------------------------------
   // Render
@@ -857,15 +754,7 @@ ON CONFLICT (name) DO NOTHING;
             <span>Refresh</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setIsSqlModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition cursor-pointer"
-            title="View PostgreSQL / Supabase Table Schema"
-          >
-            <Database size={13} className="text-[#C9A84C]" />
-            <span>SQL Schema</span>
-          </button>
+
 
 
 
@@ -2456,75 +2345,7 @@ ON CONFLICT (name) DO NOTHING;
         />
       )}
 
-      {/* ==================================================================== */}
-      {/* MODAL 6: SUPABASE SQL SCHEMA MODAL */}
-      {/* ==================================================================== */}
-      {isSqlModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Database size={18} className="text-[#C9A84C]" />
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Supabase Database Tables Schema</h3>
-                  <p className="text-xs text-slate-500">
-                    Run this SQL script in Supabase to enable cloud persistence & multi-user syncing
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSqlModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <div className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-900 flex items-start gap-2.5">
-                <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">How to activate in 30 seconds:</p>
-                  <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-[11px]">
-                    <li>Copy the SQL script below.</li>
-                    <li>Open your Supabase Dashboard and go to the <b>SQL Editor</b>.</li>
-                    <li>Paste the script and click <b>Run</b>.</li>
-                    <li>Done! All documents, categories, and shares will sync across all devices in real time.</li>
-                  </ol>
-                </div>
-              </div>
-
-              <div className="relative">
-                <pre className="p-4 bg-slate-900 text-slate-100 rounded-xl text-[11px] font-mono overflow-x-auto max-h-[380px] leading-relaxed">
-                  {SQL_SCHEMA}
-                </pre>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(SQL_SCHEMA);
-                    toast.success('SQL schema copied to clipboard!');
-                  }}
-                  className="absolute top-3 right-3 px-3 py-1.5 bg-[#C9A84C] text-[#1c120c] font-bold rounded-lg text-xs hover:bg-[#b8953d] transition flex items-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <Copy size={13} />
-                  <span>Copy SQL</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsSqlModalOpen(false)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg text-xs cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

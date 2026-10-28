@@ -374,9 +374,11 @@ export async function insertDocuments(docsArray, currentUser) {
 
   // Local storage save
   const existing = readLS(LS_DOCS_KEY, []);
-  const localInserted = preparedDocs.map((d) => ({
+  const localInserted = preparedDocs.map((d, idx) => ({
     ...d,
-    id: 'doc_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36)
+    id: 'doc_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36),
+    category_id: docsArray[idx]?.categoryId || d.category_id,
+    type_id: docsArray[idx]?.typeId || d.type_id
   }));
   const updated = [...localInserted, ...existing];
   writeLS(LS_DOCS_KEY, updated);
@@ -450,7 +452,12 @@ export async function updateDocument(docId, docData, newFiles = [], removedFileI
   let localUpdated = null;
   const updatedList = allDocs.map(d => {
     if (d.id === docId) {
-      localUpdated = { ...d, ...payload };
+      localUpdated = {
+        ...d,
+        ...payload,
+        category_id: docData.categoryId || payload.category_id,
+        type_id: docData.typeId || payload.type_id
+      };
       return localUpdated;
     }
     return d;
