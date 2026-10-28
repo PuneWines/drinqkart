@@ -688,98 +688,7 @@ export default function DocumentManager() {
     }
   };
 
-  // --------------------------------------------------------------------------
-  // Load Sample Data (When empty)
-  // --------------------------------------------------------------------------
-  const handleLoadSampleData = async () => {
-    if (!canModify) {
-      toast.error('View-only access. Modification restricted.');
-      return;
-    }
-    const sampleItems = [
-      {
-        name: 'Indian Visa 2',
-        typeName: 'Passport',
-        categoryName: 'Personal Document – ID List',
-        personName: 'Roshan Kondle',
-        needsRenewal: true,
-        renewalDate: addDaysToDateStr(-15),
-        serial: 'PN-003'
-      },
-      {
-        name: 'Aadhaar Card',
-        typeName: 'Aadhaar Card',
-        categoryName: 'Personal Document – ID List',
-        personName: 'Raghav Chhadda',
-        needsRenewal: false,
-        renewalDate: null,
-        serial: 'PN-002'
-      },
-      {
-        name: 'MML License Paid Challan',
-        typeName: 'TDS Challan & Certificate',
-        categoryName: 'Company',
-        personName: 'Licence Challan',
-        needsRenewal: true,
-        renewalDate: getTodayDateStr(),
-        serial: 'CN-010'
-      },
-      {
-        name: 'Madhura Wines Shop Act',
-        typeName: 'Shop Act',
-        categoryName: 'Madhura Wines Bavdhan',
-        personName: 'Shop Act',
-        needsRenewal: true,
-        renewalDate: addDaysToDateStr(45),
-        serial: 'MN-004'
-      },
-      {
-        name: 'Vishal Wine & Dine FSSI License',
-        typeName: 'Food License',
-        categoryName: 'The Liquor Story (Vishal Wines) Hinjewadi',
-        personName: 'Vishal Wine and Dine',
-        needsRenewal: true,
-        renewalDate: addDaysToDateStr(520),
-        serial: 'TN-005'
-      },
-      {
-        name: 'Own Property Sale Deed',
-        typeName: 'Sale Deed / Conveyance Deed (बिक्री विलेख)',
-        categoryName: 'Own Property Document List',
-        personName: 'Property Office',
-        needsRenewal: false,
-        renewalDate: null,
-        serial: 'OP-001'
-      }
-    ];
 
-    const prepared = sampleItems.map((s) => {
-      const cat = categories.find((c) => c.name === s.categoryName) || categories[0];
-      const typ = documentTypes.find((t) => t.name === s.typeName) || documentTypes[0];
-      return {
-        ...makeBlankEntry(),
-        name: s.name,
-        typeId: typ?.id || '',
-        typeName: s.typeName,
-        categoryId: cat?.id || '',
-        categoryName: s.categoryName,
-        personName: s.personName,
-        needsRenewal: s.needsRenewal,
-        renewalDate: s.renewalDate,
-        serial: s.serial
-      };
-    });
-
-    try {
-      const res = await dbService.insertDocuments(prepared, user);
-      if (res.data) {
-        setDocuments((prev) => [...res.data, ...prev]);
-        toast.success('Sample documents loaded');
-      }
-    } catch {
-      toast.error('Could not load sample data');
-    }
-  };
 
   // --------------------------------------------------------------------------
   // SQL Schema Script for Modal
@@ -958,16 +867,7 @@ ON CONFLICT (name) DO NOTHING;
             <span>SQL Schema</span>
           </button>
 
-          {canModify && documents.length === 0 && (
-            <button
-              type="button"
-              onClick={handleLoadSampleData}
-              className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-semibold rounded-lg transition cursor-pointer"
-            >
-              <Sparkles size={13} />
-              <span>Load Sample</span>
-            </button>
-          )}
+
 
           {canModify && (
             <button

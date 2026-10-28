@@ -20,6 +20,9 @@ interface BankAuditRecord {
   audit_phonepe: number;
   phonepay_diff: number;
   bank_phone_pay_date: string | null;
+  audit_card: number;
+  card_diff: number;
+  bank_card_date: string | null;
   total_diff: number;
   narration: string | null;
 }
@@ -34,6 +37,7 @@ interface GroupedTally {
   totalGpay: number;
   totalPaytm: number;
   totalPhonePe: number;
+  totalCard: number;
   recordCount: number;
   audit: BankAuditRecord;
 }
@@ -94,6 +98,15 @@ const getRowTotalPaytm = (rec: any) => {
     (Number(rec.retail_paytm) || 0) +
     (Number(rec.ws_paytm) || Number(rec.ws_patym) || 0) +
     (Number(rec.hd_paytm) || 0)
+  );
+};
+
+const getRowTotalCard = (rec: any) => {
+  if (!rec) return 0;
+  return (
+    (Number(rec.retail_card) || 0) +
+    (Number(rec.ws_card) || 0) +
+    (Number(rec.hd_card) || 0)
   );
 };
 
@@ -162,6 +175,9 @@ export default function BankAudit() {
             audit_phonepe: Number(item.audit_phonepe) || 0,
             phonepay_diff: Number(item.phonepay_diff) || 0,
             bank_phone_pay_date: item.bank_phone_pay_date || null,
+            audit_card: Number(item.audit_card) || 0,
+            card_diff: Number(item.card_diff ?? item.card_diff_audit) || 0,
+            bank_card_date: item.bank_card_date || item.card_date || null,
             total_diff: Number(item.total_diff) || 0,
             narration: item.narration || ""
           };
@@ -178,6 +194,7 @@ export default function BankAudit() {
         totalGpay: number;
         totalPaytm: number;
         totalPhonePe: number;
+        totalCard: number;
         count: number;
       }> = {};
 
@@ -193,6 +210,7 @@ export default function BankAudit() {
             totalGpay: 0,
             totalPaytm: 0,
             totalPhonePe: 0,
+            totalCard: 0,
             count: 0
           };
         }
@@ -206,6 +224,7 @@ export default function BankAudit() {
         group.totalGpay += getRowTotalGpay(t);
         group.totalPaytm += getRowTotalPaytm(t);
         group.totalPhonePe += getRowTotalPhonePe(t);
+        group.totalCard += getRowTotalCard(t);
         group.count += 1;
       });
 
@@ -225,6 +244,9 @@ export default function BankAudit() {
           audit_phonepe: 0,
           phonepay_diff: 0,
           bank_phone_pay_date: null,
+          audit_card: 0,
+          card_diff: 0,
+          bank_card_date: null,
           total_diff: 0,
           narration: ""
         };
@@ -239,6 +261,7 @@ export default function BankAudit() {
           totalGpay: grp.totalGpay,
           totalPaytm: grp.totalPaytm,
           totalPhonePe: grp.totalPhonePe,
+          totalCard: grp.totalCard,
           recordCount: grp.count,
           audit: existingAudit
         };
@@ -360,6 +383,7 @@ export default function BankAudit() {
       const totalGpay = targetGroup?.totalGpay || 0;
       const totalPaytm = targetGroup?.totalPaytm || 0;
       const totalPhonePe = targetGroup?.totalPhonePe || 0;
+      const totalCard = targetGroup?.totalCard || 0;
 
       // Auto-compute diffs if user changes audit values (while keeping diff fields editable)
       if (field === "audit_cash") {
@@ -370,13 +394,16 @@ export default function BankAudit() {
         updated.paytm_diff = totalPaytm - (Number(val) || 0);
       } else if (field === "audit_phonepe") {
         updated.phonepay_diff = totalPhonePe - (Number(val) || 0);
+      } else if (field === "audit_card") {
+        updated.card_diff = totalCard - (Number(val) || 0);
       }
 
       // Auto-update total_diff sum
       updated.total_diff = (Number(updated.cash_diff_audit) || 0) +
         (Number(updated.gpay_diff) || 0) +
         (Number(updated.paytm_diff) || 0) +
-        (Number(updated.phonepay_diff) || 0);
+        (Number(updated.phonepay_diff) || 0) +
+        (Number(updated.card_diff) || 0);
 
       return {
         ...prev,
@@ -414,6 +441,10 @@ export default function BankAudit() {
       "Audit PhonePe",
       "PhonePe Diff",
       "Bank PhonePe Date",
+      "Card Amount",
+      "Audit Card",
+      "Card Difference",
+      "Card Date",
       "Total Diff",
       "Narration"
     ];
@@ -442,6 +473,10 @@ export default function BankAudit() {
         draft.audit_phonepe ?? 0,
         draft.phonepay_diff ?? 0,
         draft.bank_phone_pay_date || '',
+        g.totalCard,
+        draft.audit_card ?? 0,
+        draft.card_diff ?? 0,
+        draft.bank_card_date || '',
         draft.total_diff ?? 0,
         draft.narration || ''
       ];
@@ -492,6 +527,9 @@ export default function BankAudit() {
         audit_phonepe: Number(draft.audit_phonepe) || 0,
         phonepay_diff: Number(draft.phonepay_diff) || 0,
         bank_phone_pay_date: draft.bank_phone_pay_date || null,
+        audit_card: Number(draft.audit_card) || 0,
+        card_diff: Number(draft.card_diff) || 0,
+        bank_card_date: draft.bank_card_date || null,
         total_diff: Number(draft.total_diff) || 0,
         narration: draft.narration || null,
         updated_at: new Date().toISOString()
@@ -501,9 +539,22 @@ export default function BankAudit() {
         .from("petty_cash_bank_audit")
         .upsert([payload], { onConflict: "tally_id" });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message && (error.message.includes('audit_card') || error.message.includes('card_diff') || error.message.includes('bank_card_date'))) {
+          const fallbackPayload = { ...payload };
+          delete (fallbackPayload as any).audit_card;
+          delete (fallbackPayload as any).card_diff;
+          delete (fallbackPayload as any).bank_card_date;
+          const retryRes = await supabase.from("petty_cash_bank_audit").upsert([fallbackPayload], { onConflict: "tally_id" });
+          if (retryRes.error) throw retryRes.error;
+          showToast(`Saved core fields for Tally ${tallyId}. (Run SQL alter table to add card audit columns).`);
+        } else {
+          throw error;
+        }
+      } else {
+        showToast(`Saved audit record for Tally ${tallyId}`);
+      }
 
-      showToast(`Saved audit record for Tally ${tallyId}`);
       // Refresh local state
       setGroupedTallies((prev) =>
         prev.map((g) => (g.tally_id === tallyId ? { ...g, audit: { ...draft } } : g))
@@ -545,6 +596,9 @@ export default function BankAudit() {
           audit_phonepe: Number(draft.audit_phonepe) || 0,
           phonepay_diff: Number(draft.phonepay_diff) || 0,
           bank_phone_pay_date: draft.bank_phone_pay_date || null,
+          audit_card: Number(draft.audit_card) || 0,
+          card_diff: Number(draft.card_diff) || 0,
+          bank_card_date: draft.bank_card_date || null,
           total_diff: Number(draft.total_diff) || 0,
           narration: draft.narration || null,
           updated_at: new Date().toISOString()
@@ -555,9 +609,25 @@ export default function BankAudit() {
         .from("petty_cash_bank_audit")
         .upsert(payloads, { onConflict: "tally_id" });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message && (error.message.includes('audit_card') || error.message.includes('card_diff') || error.message.includes('bank_card_date'))) {
+          const fallbackPayloads = payloads.map(p => {
+            const cp = { ...p };
+            delete (cp as any).audit_card;
+            delete (cp as any).card_diff;
+            delete (cp as any).bank_card_date;
+            return cp;
+          });
+          const retryRes = await supabase.from("petty_cash_bank_audit").upsert(fallbackPayloads, { onConflict: "tally_id" });
+          if (retryRes.error) throw retryRes.error;
+          showToast(`Bulk saved ${selectedTallyIds.size} record(s). (Run SQL alter table to add card audit columns).`);
+        } else {
+          throw error;
+        }
+      } else {
+        showToast(`Successfully bulk saved ${selectedTallyIds.size} audit record(s)`);
+      }
 
-      showToast(`Successfully bulk saved ${selectedTallyIds.size} audit record(s)`);
       // Refresh local state
       setGroupedTallies((prev) =>
         prev.map((g) =>
@@ -725,7 +795,7 @@ export default function BankAudit() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[1950px] divide-y divide-gray-200 border-collapse">
+            <table className="w-full text-xs min-w-[2350px] divide-y divide-gray-200 border-collapse">
               <thead className="bg-[#2a5298] text-white text-left font-sans sticky top-0 z-10 shadow-sm">
                 <tr>
                   {/* Select Checkbox & Inline Save Column - Only if Modify Allowed */}
@@ -775,6 +845,12 @@ export default function BankAudit() {
                   <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[80px]">PhonePe<br/>Diff</th>
                   <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[105px]">Bank Phone<br/>Pay Date</th>
 
+                  {/* Card Section */}
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-semibold uppercase tracking-wider border-r border-blue-800 bg-blue-900/60 min-w-[85px]">Card<br/>Amount</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[85px]">Audit<br/>Card</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[80px]">Card<br/>Difference</th>
+                  <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-red-900/80 text-yellow-300 min-w-[105px]">Card<br/>Date</th>
+
                   {/* Totals & Narration */}
                   <th className="px-2 py-2 text-center text-[11px] leading-tight font-bold uppercase tracking-wider border-r border-blue-800 bg-slate-900 min-w-[85px]">Total<br/>Diff</th>
                   <th className="px-2 py-2 text-left text-[11px] leading-tight font-bold uppercase tracking-wider bg-blue-950 text-cyan-300 min-w-[160px]">Narration</th>
@@ -784,7 +860,7 @@ export default function BankAudit() {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={isModifyAllowed ? 24 : 23} className="text-center py-16 text-gray-400">
+                    <td colSpan={isModifyAllowed ? 28 : 27} className="text-center py-16 text-gray-400">
                       <div className="flex flex-col items-center gap-2">
                         <FaFileAlt className="text-4xl text-gray-300" />
                         <p className="font-medium">No records found</p>
@@ -1019,6 +1095,47 @@ export default function BankAudit() {
                           disabled={!isModifyAllowed || !isChecked}
                           value={draft.bank_phone_pay_date || ""}
                           onChange={(e) => handleDraftChange(tId, "bank_phone_pay_date", e.target.value)}
+                          className="w-full px-0.5 py-0.5 text-[11px] border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                        />
+                      </td>
+
+                      {/* Card Amount (Calculated sum across tally_id rows in petty_cash_tallies) */}
+                      <td className="px-1.5 py-1 font-bold text-gray-900 text-center whitespace-nowrap border-r border-gray-200 bg-gray-50/50">
+                        {fmt(group.totalCard)}
+                      </td>
+
+                      {/* Audit Card (Editable Input) */}
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
+                        <input
+                          type="number"
+                          disabled={!isModifyAllowed || !isChecked}
+                          value={draft.audit_card ?? ""}
+                          onChange={(e) => handleDraftChange(tId, "audit_card", e.target.value)}
+                          placeholder="0"
+                          className="w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
+                        />
+                      </td>
+
+                      {/* Card Difference (Editable Input) */}
+                      <td className="px-1 py-1 border-r border-gray-200 bg-yellow-50/30">
+                        <input
+                          type="number"
+                          disabled={!isModifyAllowed || !isChecked}
+                          value={draft.card_diff ?? ""}
+                          onChange={(e) => handleDraftChange(tId, "card_diff", e.target.value)}
+                          placeholder="0"
+                          className={`w-full px-1 py-0.5 text-xs border border-amber-300 rounded font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent text-center ${Number(draft.card_diff) < 0 ? 'text-red-600' : Number(draft.card_diff) > 0 ? 'text-blue-600' : 'text-gray-700'
+                            }`}
+                        />
+                      </td>
+
+                      {/* Card Date (Editable Date Picker) */}
+                      <td className="px-0.5 py-1 border-r border-gray-200 bg-yellow-50/30">
+                        <input
+                          type="date"
+                          disabled={!isModifyAllowed || !isChecked}
+                          value={draft.bank_card_date || ""}
+                          onChange={(e) => handleDraftChange(tId, "bank_card_date", e.target.value)}
                           className="w-full px-0.5 py-0.5 text-[11px] border border-amber-300 rounded text-rose-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-transparent disabled:border-transparent disabled:text-gray-700 text-center"
                         />
                       </td>

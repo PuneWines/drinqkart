@@ -1,6 +1,12 @@
 import { supabase } from '../../../lib/supabase';
 
 // ============================================================================
+// Helper: UUID Check
+// ============================================================================
+export const isUUID = (str) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
+
+// ============================================================================
 // IndexedDB for local binary attachments cache / fallback
 // ============================================================================
 const IDB_NAME = 'bis_doc_manager_storage';
@@ -66,48 +72,6 @@ export async function deleteLocalFile(fileId) {
   }
 }
 
-// ============================================================================
-// Master Seed Data (Used when tables are initially empty)
-// ============================================================================
-export const SEED_DOCUMENT_TYPES = [
-  'Invoice', 'Contract', 'Report', 'Presentation', 'Proposal', 'Minutes', 'Plan',
-  'Tax Document', 'Resume', 'Other', 'PAN Card', 'Aadhaar Card', 'Food License',
-  'Liquors License', 'Shop Act', 'Expenses Bill', 'ITR & Balance Sheet', 'Property Document',
-  'TDS Challan & Certificate', 'VAT', 'VAT Certificate', 'Fire Extinguisher', 'Shop Insurance',
-  'Vehicle Document', 'Sale Deed / Conveyance Deed (बिक्री विलेख)', 'Possession Letter (कब्ज़ा पत्र)',
-  'Police Verification Receipt / Acknowledgement', 'Electricity Bill', 'Water Bill',
-  'Maintenance Bill / Receipt', 'Rent Escalation Clause Copy', 'Monthly Rent Receipts',
-  'Lock-in Period Details', 'Signature Specimen', 'Affidavit / Self Declaration',
-  'Email ID & Mobile Number Proof', 'Birth Certificate', 'School Leaving Certificate',
-  'Passport', 'Passport Size Photo (White Background)', 'Stamp Size Photo (If Required)',
-  'Cancelled Cheque', 'Bank Passbook Copy', 'Bank Statement (Latest)',
-  'Income Tax Return (ITR)', 'Form 16 (If Applicable)', 'GST Registration'
-];
-
-export const SEED_CATEGORIES = [
-  { name: 'Personal Document – ID List', prefix: 'PN' },
-  { name: 'Company', prefix: 'CN' },
-  { name: 'Director', prefix: 'DN' },
-  { name: 'Employee', prefix: 'EN' },
-  { name: 'Madhura Wines Bavdhan', prefix: 'MN' },
-  { name: 'Friends Wines Wagholi', prefix: 'FN' },
-  { name: 'MML Spirits Pvt Ltd (Office)', prefix: 'ML' },
-  { name: 'Balaji Wines Akole', prefix: 'BW' },
-  { name: 'The Liquor Story (Vishal Wines) Hinjewadi', prefix: 'TN' },
-  { name: 'Kunal Fine Wine (Amber Dist)', prefix: 'KA' },
-  { name: 'Kunal Fine Wine (South Seas Dist)', prefix: 'KS' },
-  { name: 'Own Property Document List', prefix: 'OP' },
-  { name: 'Shop Rent Document List', prefix: 'SR' },
-  { name: 'Excise License Document List', prefix: 'EL' }
-];
-
-export const SEED_RENEWAL_FILTERS = [
-  { name: 'Needs Renewal', rule: 'needs' },
-  { name: 'Upcoming', rule: 'upcoming' },
-  { name: 'Today', rule: 'today' },
-  { name: 'Overdue', rule: 'overdue' }
-];
-
 // Local storage backup keys
 const LS_DOCS_KEY = 'bis_doc_manager_local_docs';
 const LS_CATS_KEY = 'bis_doc_manager_local_cats';
@@ -134,7 +98,7 @@ function writeLS(key, data) {
 // ============================================================================
 
 /**
- * Fetch all categories
+ * Fetch all categories directly from database
  */
 export async function fetchCategories() {
   try {
@@ -143,47 +107,42 @@ export async function fetchCategories() {
       .select('*')
       .order('name', { ascending: true });
 
-    if (error) throw error;
-    if (data && data.length > 0) {
+    if (!error && data) {
       writeLS(LS_CATS_KEY, data);
       return { data, fromCloud: true };
     }
   } catch (err) {
-    // console.warn('Supabase fetchCategories fallback:', err.message);
+    console.warn('fetchCategories error:', err);
   }
 
-  // Fallback to local storage or seed
-  let local = readLS(LS_CATS_KEY, []);
-  if (local.length === 0) {
-    local = SEED_CATEGORIES.map((c, i) => ({
-      id: `cat-${i + 1}`,
-      name: c.name,
-      prefix: c.prefix
-    }));
-    writeLS(LS_CATS_KEY, local);
-  }
+  const local = readLS(LS_CATS_KEY, []);
   return { data: local, fromCloud: false };
 }
 
 /**
- * Save / Update category
+ * Save / Update category in Supabase
  */
 export async function saveCategory(category) {
-  const isNew = !category.id || category.id.startsWith('cat-');
-  try {
-    const payload = {
-      name: category.name.trim(),
-      prefix: (category.prefix || '').trim().toUpperCase(),
-      updated_at: new Date().toISOString()
-    };
+  const isNew = !category.id || !isUUID(category.id);
+  const payload = {
+    name: category.name.trim(),
+    prefix: (category.prefix || '').trim().toUpperCase(),
+    updated_at: new Date().toISOString()
+  };
 
+  try {
     if (isNew) {
       const { data, error } = await supabase
         .from('bis_doc_manager_categories')
         .insert([payload])
         .select()
         .single();
-      if (!error && data) return data;
+      if (!error && data) {
+        const cats = readLS(LS_CATS_KEY, []);
+        writeLS(LS_CATS_KEY, [...cats, data]);
+        return data;
+      }
+      if (error) console.error('[saveCategory] Supabase insert error:', error.message);
     } else {
       const { data, error } = await supabase
         .from('bis_doc_manager_categories')
@@ -191,16 +150,21 @@ export async function saveCategory(category) {
         .eq('id', category.id)
         .select()
         .single();
-      if (!error && data) return data;
+      if (!error && data) {
+        const cats = readLS(LS_CATS_KEY, []).map(c => c.id === category.id ? data : c);
+        writeLS(LS_CATS_KEY, cats);
+        return data;
+      }
+      if (error) console.error('[saveCategory] Supabase update error:', error.message);
     }
   } catch (err) {
-    // console.warn('Supabase saveCategory fallback:', err.message);
+    console.warn('[saveCategory] Exception:', err);
   }
 
   // Fallback local update
   const cats = readLS(LS_CATS_KEY, []);
   let savedCat;
-  if (!category.id) {
+  if (!category.id || !isUUID(category.id)) {
     savedCat = { ...category, id: `cat-${Date.now()}` };
     cats.push(savedCat);
   } else {
@@ -217,10 +181,12 @@ export async function saveCategory(category) {
  * Delete category
  */
 export async function deleteCategory(id) {
-  try {
-    await supabase.from('bis_doc_manager_categories').delete().eq('id', id);
-  } catch (err) {
-    // fallback
+  if (isUUID(id)) {
+    try {
+      await supabase.from('bis_doc_manager_categories').delete().eq('id', id);
+    } catch (err) {
+      console.warn('[deleteCategory] Supabase delete error:', err);
+    }
   }
   const cats = readLS(LS_CATS_KEY, []).filter(c => c.id !== id);
   writeLS(LS_CATS_KEY, cats);
@@ -228,7 +194,7 @@ export async function deleteCategory(id) {
 }
 
 /**
- * Fetch all document types
+ * Fetch all document types directly from database
  */
 export async function fetchDocumentTypes() {
   try {
@@ -237,41 +203,40 @@ export async function fetchDocumentTypes() {
       .select('*')
       .order('name', { ascending: true });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       writeLS(LS_TYPES_KEY, data);
       return { data, fromCloud: true };
     }
   } catch (err) {
-    // fallback
+    console.warn('fetchDocumentTypes error:', err);
   }
 
-  let local = readLS(LS_TYPES_KEY, []);
-  if (local.length === 0) {
-    local = SEED_DOCUMENT_TYPES.map((name, i) => ({
-      id: `type-${i + 1}`,
-      name
-    }));
-    writeLS(LS_TYPES_KEY, local);
-  }
+  const local = readLS(LS_TYPES_KEY, []);
   return { data: local, fromCloud: false };
 }
 
 /**
- * Save document type
+ * Save document type in Supabase
  */
 export async function saveDocumentType(docType) {
-  const isNew = !docType.id || docType.id.startsWith('type-');
+  const isNew = !docType.id || !isUUID(docType.id);
+  const payload = {
+    name: docType.name.trim()
+  };
+
   try {
-    const payload = {
-      name: docType.name.trim()
-    };
     if (isNew) {
       const { data, error } = await supabase
         .from('bis_doc_manager_types')
         .insert([payload])
         .select()
         .single();
-      if (!error && data) return data;
+      if (!error && data) {
+        const types = readLS(LS_TYPES_KEY, []);
+        writeLS(LS_TYPES_KEY, [...types, data]);
+        return data;
+      }
+      if (error) console.error('[saveDocumentType] Supabase insert error:', error.message);
     } else {
       const { data, error } = await supabase
         .from('bis_doc_manager_types')
@@ -279,13 +244,20 @@ export async function saveDocumentType(docType) {
         .eq('id', docType.id)
         .select()
         .single();
-      if (!error && data) return data;
+      if (!error && data) {
+        const types = readLS(LS_TYPES_KEY, []).map(t => t.id === docType.id ? data : t);
+        writeLS(LS_TYPES_KEY, types);
+        return data;
+      }
+      if (error) console.error('[saveDocumentType] Supabase update error:', error.message);
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[saveDocumentType] Exception:', err);
+  }
 
   const types = readLS(LS_TYPES_KEY, []);
   let saved;
-  if (!docType.id) {
+  if (!docType.id || !isUUID(docType.id)) {
     saved = { ...docType, id: `type-${Date.now()}` };
     types.push(saved);
   } else {
@@ -302,9 +274,13 @@ export async function saveDocumentType(docType) {
  * Delete document type
  */
 export async function deleteDocumentType(id) {
-  try {
-    await supabase.from('bis_doc_manager_types').delete().eq('id', id);
-  } catch {}
+  if (isUUID(id)) {
+    try {
+      await supabase.from('bis_doc_manager_types').delete().eq('id', id);
+    } catch (err) {
+      console.warn('[deleteDocumentType] Supabase delete error:', err);
+    }
+  }
   const types = readLS(LS_TYPES_KEY, []).filter(t => t.id !== id);
   writeLS(LS_TYPES_KEY, types);
   return true;
@@ -324,8 +300,11 @@ export async function fetchDocuments() {
       writeLS(LS_DOCS_KEY, data);
       return { data, fromCloud: true };
     }
+    if (error) {
+      console.warn('[fetchDocuments] Supabase error:', error.message);
+    }
   } catch (err) {
-    // fallback
+    console.warn('[fetchDocuments] Exception:', err);
   }
 
   const local = readLS(LS_DOCS_KEY, []);
@@ -359,10 +338,10 @@ export async function insertDocuments(docsArray, currentUser) {
 
     preparedDocs.push({
       name: doc.name.trim(),
-      serial: doc.serial,
-      type_id: doc.typeId || null,
+      serial: doc.serial || null,
+      type_id: isUUID(doc.typeId) ? doc.typeId : null,
       type_name: doc.typeName || '',
-      category_id: doc.categoryId || null,
+      category_id: isUUID(doc.categoryId) ? doc.categoryId : null,
       category_name: doc.categoryName || '',
       person_name: (doc.personName || '').trim(),
       needs_renewal: !!doc.needsRenewal,
@@ -386,8 +365,11 @@ export async function insertDocuments(docsArray, currentUser) {
       writeLS(LS_DOCS_KEY, [...data, ...existing]);
       return { data, fromCloud: true };
     }
+    if (error) {
+      console.error('[insertDocuments] Supabase insert error:', error.message);
+    }
   } catch (err) {
-    // fallback
+    console.error('[insertDocuments] Exception:', err);
   }
 
   // Local storage save
@@ -432,9 +414,9 @@ export async function updateDocument(docId, docData, newFiles = [], removedFileI
 
   const payload = {
     name: docData.name.trim(),
-    type_id: docData.typeId || null,
+    type_id: isUUID(docData.typeId) ? docData.typeId : null,
     type_name: docData.typeName || '',
-    category_id: docData.categoryId || null,
+    category_id: isUUID(docData.categoryId) ? docData.categoryId : null,
     category_name: docData.categoryName || '',
     person_name: (docData.personName || '').trim(),
     needs_renewal: !!docData.needsRenewal,
@@ -443,20 +425,25 @@ export async function updateDocument(docId, docData, newFiles = [], removedFileI
     updated_at: now
   };
 
-  try {
-    const { data, error } = await supabase
-      .from('bis_doc_manager')
-      .update(payload)
-      .eq('id', docId)
-      .select()
-      .single();
+  if (isUUID(docId)) {
+    try {
+      const { data, error } = await supabase
+        .from('bis_doc_manager')
+        .update(payload)
+        .eq('id', docId)
+        .select()
+        .single();
 
-    if (!error && data) {
-      const allDocs = readLS(LS_DOCS_KEY, []).map(d => d.id === docId ? data : d);
-      writeLS(LS_DOCS_KEY, allDocs);
-      return { data, fromCloud: true };
+      if (!error && data) {
+        const allDocs = readLS(LS_DOCS_KEY, []).map(d => d.id === docId ? data : d);
+        writeLS(LS_DOCS_KEY, allDocs);
+        return { data, fromCloud: true };
+      }
+      if (error) console.error('[updateDocument] Supabase update error:', error.message);
+    } catch (err) {
+      console.error('[updateDocument] Exception:', err);
     }
-  } catch {}
+  }
 
   // Local fallback
   const allDocs = readLS(LS_DOCS_KEY, []);
@@ -483,20 +470,24 @@ export async function renewDocument(docId, newRenewalDate) {
     updated_at: now
   };
 
-  try {
-    const { data, error } = await supabase
-      .from('bis_doc_manager')
-      .update(payload)
-      .eq('id', docId)
-      .select()
-      .single();
+  if (isUUID(docId)) {
+    try {
+      const { data, error } = await supabase
+        .from('bis_doc_manager')
+        .update(payload)
+        .eq('id', docId)
+        .select()
+        .single();
 
-    if (!error && data) {
-      const allDocs = readLS(LS_DOCS_KEY, []).map(d => d.id === docId ? data : d);
-      writeLS(LS_DOCS_KEY, allDocs);
-      return { data, fromCloud: true };
+      if (!error && data) {
+        const allDocs = readLS(LS_DOCS_KEY, []).map(d => d.id === docId ? data : d);
+        writeLS(LS_DOCS_KEY, allDocs);
+        return { data, fromCloud: true };
+      }
+    } catch (err) {
+      console.warn('[renewDocument] Supabase error:', err);
     }
-  } catch {}
+  }
 
   const allDocs = readLS(LS_DOCS_KEY, []);
   let updatedDoc = null;
@@ -526,9 +517,14 @@ export async function deleteDocuments(docIds) {
     }
   }
 
-  try {
-    await supabase.from('bis_doc_manager').delete().in('id', docIds);
-  } catch {}
+  const uuidDocIds = docIds.filter(isUUID);
+  if (uuidDocIds.length > 0) {
+    try {
+      await supabase.from('bis_doc_manager').delete().in('id', uuidDocIds);
+    } catch (err) {
+      console.warn('[deleteDocuments] Supabase error:', err);
+    }
+  }
 
   const remaining = allDocs.filter(d => !docIds.includes(d.id));
   writeLS(LS_DOCS_KEY, remaining);
@@ -549,7 +545,9 @@ export async function fetchShares() {
       writeLS(LS_SHARES_KEY, data);
       return { data, fromCloud: true };
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[fetchShares] error:', err);
+  }
 
   const local = readLS(LS_SHARES_KEY, []);
   return { data: local, fromCloud: false };
@@ -563,7 +561,7 @@ export async function logShares(shareRecords, currentUser) {
   const now = new Date().toISOString();
 
   const prepared = shareRecords.map(s => ({
-    doc_id: s.docId || null,
+    doc_id: isUUID(s.docId) ? s.docId : null,
     doc_name: s.docName || '',
     serial: s.serial || '',
     category_name: s.categoryName || '',
@@ -586,7 +584,9 @@ export async function logShares(shareRecords, currentUser) {
       writeLS(LS_SHARES_KEY, [...data, ...existing]);
       return { data, fromCloud: true };
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[logShares] error:', err);
+  }
 
   const existing = readLS(LS_SHARES_KEY, []);
   const localInserted = prepared.map(p => ({
@@ -601,9 +601,13 @@ export async function logShares(shareRecords, currentUser) {
  * Delete a share history record
  */
 export async function deleteShareRecord(shareId) {
-  try {
-    await supabase.from('bis_doc_manager_shares').delete().eq('id', shareId);
-  } catch {}
+  if (isUUID(shareId)) {
+    try {
+      await supabase.from('bis_doc_manager_shares').delete().eq('id', shareId);
+    } catch (err) {
+      console.warn('[deleteShareRecord] error:', err);
+    }
+  }
   const remaining = readLS(LS_SHARES_KEY, []).filter(s => s.id !== shareId);
   writeLS(LS_SHARES_KEY, remaining);
   return true;
