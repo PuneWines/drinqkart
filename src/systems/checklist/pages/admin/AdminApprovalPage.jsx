@@ -161,6 +161,10 @@ export default function AdminApprovalPage() {
 
   const currentRole = (currentUserObj?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem("role") || localStorage.getItem("currentUserRole") : "") || "").toLowerCase().trim();
   const isSuperAdmin = currentRole === "superadmin" || currentRole === "masteradmin";
+  const currentUsername = useMemo(() => {
+    const raw = currentUserObj?.user_name || currentUserObj?.username || (typeof localStorage !== 'undefined' ? localStorage.getItem("user-name") || localStorage.getItem("username") : "") || "";
+    return raw.toLowerCase().trim();
+  }, [currentUserObj]);
   const isHOD = currentRole === "hod";
   const isGlobalAuthority = isSuperAdmin || isHOD;
   const isAdmin = currentRole === "admin" && !isGlobalAuthority;
@@ -551,6 +555,7 @@ export default function AdminApprovalPage() {
     isManager,
     isSuperAdmin,
     currentUserObj,
+    currentUsername,
   ]);
 
   useEffect(() => {
