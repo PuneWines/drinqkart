@@ -162,6 +162,7 @@ export default function WorkDetails() {
   const { userData } = useSelector(state => state.setting);
 
   const role = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+  const username = (localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
   const isSuperAdmin = role === "superadmin" || role === "masteradmin";
   const isHOD = role === "hod";
   const isAdmin = isSuperAdmin || isHOD || role === "admin";
@@ -186,6 +187,18 @@ export default function WorkDetails() {
   const [searchDropdown, setSearchDropdown] = useState({ type: null, id: null, term: "" });
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [assignedShops, setAssignedShops] = useState(() => {
+    return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
+  });
+  const [hasAllShopsAccess, setHasAllShopsAccess] = useState(() => {
+    const userRole = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+    const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod";
+    const universalAssigned = getUserAssignedShops();
+    return isSuperadminOrHOD && universalAssigned.length === 0;
+  });
+  const [allDbShops, setAllDbShops] = useState([]);
+  const [modifiedRows, setModifiedRows] = useState({});
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -227,12 +240,6 @@ export default function WorkDetails() {
       return accessList.includes(targetShopLower);
     });
   }, [userData]);
-
-  // Local state for modified fields (spreadsheet-style editing)
-  const [modifiedRows, setModifiedRows] = useState({});
-
-  // Real-time Timer: Update every 5 minutes to trigger auto-reset
-  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -290,15 +297,7 @@ export default function WorkDetails() {
     dispatch(userDetails());
   }, [dispatch]);
 
-  const [assignedShops, setAssignedShops] = useState(() => {
-    return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
-  });
-  const [hasAllShopsAccess, setHasAllShopsAccess] = useState(() => {
-    const userRole = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
-    const isSuperadminOrHOD = userRole === "superadmin" || userRole === "masteradmin" || userRole === "hod";
-    const universalAssigned = getUserAssignedShops();
-    return isSuperadminOrHOD && universalAssigned.length === 0;
-  });
+
 
   // Fetch assigned shop access for logged in user directly from DB
   useEffect(() => {
@@ -340,7 +339,7 @@ export default function WorkDetails() {
     fetchUserAssignedShops();
   }, [username, role]);
 
-  const [allDbShops, setAllDbShops] = useState([]);
+
 
   // Fetch all shop names directly from database
   useEffect(() => {

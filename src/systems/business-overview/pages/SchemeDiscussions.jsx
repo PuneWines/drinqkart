@@ -247,7 +247,11 @@ async function delFile(id) {
 }
 
 async function prepImage(file) {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+  if (!file) return file;
+  const isImage =
+    (file.type || "").startsWith("image/") ||
+    /\.(jpe?g|png|webp|gif|bmp|heic|jfif)$/i.test(file.name || "");
+  if (!isImage) return file;
   try {
     const bmp = await createImageBitmap(file);
     const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
@@ -255,11 +259,78 @@ async function prepImage(file) {
     c.width = Math.round(bmp.width * s);
     c.height = Math.round(bmp.height * s);
     c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
-    const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.82));
-    if (blob && blob.size < file.size)
-      return new File([blob], (file.name || "photo").replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
-  } catch (e) {}
+    const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.85));
+    if (blob) {
+      const cleanName = (file.name || "photo").replace(/\.\w+$/, "") + ".jpg";
+      return new File([blob], cleanName, { type: "image/jpeg" });
+    }
+  } catch (e) {
+    console.warn("createImageBitmap compression skipped, using original file:", e);
+  }
   return file;
+}
+
+/* Helper to reliably store an image/file and get a persistent public URL */
+async function uploadSchemeAttachment(file, id) {
+  const fileExt = (file.name || "photo.jpg").split(".").pop().toLowerCase() || "jpg";
+  const cleanExt = /^(jpe?g|png|webp|gif|bmp)$/.test(fileExt) ? fileExt : "jpg";
+  const mimeType = file.type || (cleanExt === "png" ? "image/png" : "image/jpeg");
+  const filePath = `schemes/${Date.now()}_${id}.${cleanExt}`;
+
+  let publicUrl = "";
+
+  // 1. Primary: Try scheme_attachments bucket
+  try {
+    const { data: uploadData, error: uploadErr } = await supabase.storage
+      .from("scheme_attachments")
+      .upload(filePath, file, {
+        upsert: true,
+        contentType: mimeType,
+      });
+
+    if (!uploadErr && uploadData?.path) {
+      const { data: urlData } = supabase.storage
+        .from("scheme_attachments")
+        .getPublicUrl(uploadData.path);
+      if (urlData?.publicUrl) publicUrl = urlData.publicUrl;
+    }
+  } catch (err) {
+    console.warn("Storage upload to scheme_attachments failed, trying fallback:", err);
+  }
+
+  // 2. Secondary fallback: task-proofs bucket
+  if (!publicUrl) {
+    try {
+      const fallbackPath = `scheme_discussions/${Date.now()}_${id}.${cleanExt}`;
+      const { data: uploadData2, error: uploadErr2 } = await supabase.storage
+        .from("task-proofs")
+        .upload(fallbackPath, file, {
+          upsert: true,
+          contentType: mimeType,
+        });
+
+      if (!uploadErr2 && uploadData2?.path) {
+        const { data: urlData2 } = supabase.storage
+          .from("task-proofs")
+          .getPublicUrl(uploadData2.path);
+        if (urlData2?.publicUrl) publicUrl = urlData2.publicUrl;
+      }
+    } catch (err) {
+      console.warn("Storage fallback upload to task-proofs failed:", err);
+    }
+  }
+
+  // 3. Fallback: Base64 data URL for images up to 2.5MB so image is NEVER lost
+  if (!publicUrl && file.size <= 2.5 * 1024 * 1024) {
+    publicUrl = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result || "");
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    });
+  }
+
+  return publicUrl;
 }
 
 /* ================= ATTACHMENTS ================= */
@@ -291,28 +362,45 @@ function useFileUrl(attachment) {
 
 function AttachItem({ a, onOpen }) {
   const url = useFileUrl(a);
-  const isImg = (a.type || "").indexOf("image/") === 0;
+  const effectiveUrl = url || a.url || "";
+  const isImg =
+    (a.type || "").startsWith("image/") ||
+    /\.(jpe?g|png|webp|gif|bmp|heic|jfif)($|\?)/i.test(a.name || "") ||
+    /\.(jpe?g|png|webp|gif|bmp|heic|jfif)($|\?)/i.test(effectiveUrl) ||
+    effectiveUrl.startsWith("data:image/");
+
   if (isImg) {
     return (
       <button
         type="button"
-        className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 hover:opacity-90 transition-opacity cursor-pointer shrink-0"
-        aria-label={"View " + a.name}
-        onClick={() => url && onOpen(url, a.name)}
+        className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 hover:opacity-90 hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer shrink-0 shadow-2xs group relative flex items-center justify-center"
+        aria-label={"View " + (a.name || "Attachment")}
+        onClick={() => effectiveUrl && onOpen(effectiveUrl, a.name)}
+        title={a.name ? `Click to view ${a.name}` : "Click to view image"}
       >
-        {url ? <img src={url} alt={a.name || "Attachment"} className="w-full h-full object-cover" /> : null}
+        {effectiveUrl ? (
+          <img
+            src={effectiveUrl}
+            alt={a.name || "Attachment"}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center text-slate-400">
+            <ImageIcon size={20} />
+          </div>
+        )}
       </button>
     );
   }
   return (
     <a
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors max-w-full truncate"
-      href={url || undefined}
+      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors max-w-full truncate shadow-2xs"
+      href={effectiveUrl || undefined}
       target="_blank"
       rel="noopener noreferrer"
       download={a.name}
     >
-      <FileText size={14} className="shrink-0 text-slate-400" />
+      <FileText size={15} className="shrink-0 text-slate-400" />
       <span className="truncate">{a.name || "File"}</span>
     </a>
   );
@@ -791,7 +879,7 @@ const emptyForm = () => ({
   selected: [],
 });
 
-function CreateModal({ initialData, stores, setStores, onClose, onSave, tradersList, companiesList, brandsList }) {
+function CreateModal({ initialData, stores, setStores, onClose, onSave, onOpen, tradersList, companiesList, brandsList }) {
   const [f, setF] = useState(() => {
     if (!initialData) return emptyForm();
     return {
@@ -994,34 +1082,26 @@ function CreateModal({ initialData, stores, setStores, onClose, onSave, tradersL
       for (let i = 0; i < pend.length; i++) {
         setSaving(`Saving file ${i + 1} of ${pend.length}...`);
         const id = "f" + uid();
-        let publicUrl = "";
+        const pFile = pend[i].file;
+
+        let publicUrl = await uploadSchemeAttachment(pFile, id);
 
         try {
-          const fileExt = (pend[i].name || "").split(".").pop() || "jpg";
-          const filePath = `${Date.now()}_${id}.${fileExt}`;
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from("scheme_attachments")
-            .upload(filePath, pend[i].file, { upsert: true });
+          await putFile(id, pFile);
+        } catch (idbErr) {
+          console.warn("IndexedDB putFile skipped:", idbErr);
+        }
 
-          if (!uploadErr && uploadData?.path) {
-            const { data: urlData } = supabase.storage
-              .from("scheme_attachments")
-              .getPublicUrl(uploadData.path);
-            if (urlData?.publicUrl) publicUrl = urlData.publicUrl;
-          }
-        } catch (e) {}
-
-        await putFile(id, pend[i].file);
         atts.push({
           id,
           name: pend[i].name,
-          type: pend[i].type,
-          size: pend[i].size,
+          type: pend[i].type || pFile.type || "image/jpeg",
+          size: pend[i].size || pFile.size,
           url: publicUrl,
         });
       }
     } catch (x) {
-      atts.forEach((a) => delFile(a.id));
+      console.error("Error saving attachment files:", x);
       setSaving("");
       return setErr({ msg: "A file could not be saved. Remove it or try again.", field: "files" });
     }
@@ -1458,6 +1538,7 @@ function CreateModal({ initialData, stores, setStores, onClose, onSave, tradersL
               <input
                 ref={fileRef}
                 type="file"
+                accept="image/*,application/pdf"
                 multiple
                 hidden
                 onChange={(e) => {
@@ -1471,25 +1552,49 @@ function CreateModal({ initialData, stores, setStores, onClose, onSave, tradersL
                 <div className="space-y-1.5 pt-1">
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Attached Files:</span>
                   <ul className="space-y-1.5">
-                    {existingAtts.map((att, idx) => (
-                      <li key={att.id || idx} className="flex items-center gap-2.5 p-2 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs">
-                        <FileText size={16} className="text-indigo-600 shrink-0" />
-                        <span className="flex-1 min-w-0 font-medium text-slate-800 truncate">{att.name || "Attachment"}</span>
-                        {att.url && (
-                          <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-semibold shrink-0">
-                            View
-                          </a>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setExistingAtts((prev) => prev.filter((_, j) => j !== idx))}
-                          className="text-slate-400 hover:text-red-600 font-bold p-1 cursor-pointer"
-                          title="Remove attached file"
-                        >
-                          ✕
-                        </button>
-                      </li>
-                    ))}
+                    {existingAtts.map((att, idx) => {
+                      const isImg =
+                        (att.type || "").startsWith("image/") ||
+                        /\.(jpe?g|png|webp|gif|bmp)($|\?)/i.test(att.name || att.url || "") ||
+                        (att.url || "").startsWith("data:image/");
+                      return (
+                        <li key={att.id || idx} className="flex items-center gap-2.5 p-2 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs">
+                          {isImg && att.url ? (
+                            <img
+                              src={att.url}
+                              alt=""
+                              className="w-10 h-10 rounded object-cover shrink-0 border border-indigo-200 cursor-pointer hover:opacity-90"
+                              onClick={() => onOpen && onOpen(att.url, att.name)}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded bg-indigo-100 flex items-center justify-center shrink-0">
+                              <FileText size={18} className="text-indigo-600" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-slate-800 truncate">{att.name || "Attachment"}</div>
+                            {att.size && <div className="text-[11px] text-slate-400">{bytes(att.size)}</div>}
+                          </div>
+                          {att.url && (
+                            <button
+                              type="button"
+                              onClick={() => onOpen && onOpen(att.url, att.name)}
+                              className="text-indigo-600 hover:underline font-semibold shrink-0 cursor-pointer text-xs"
+                            >
+                              View
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setExistingAtts((prev) => prev.filter((_, j) => j !== idx))}
+                            className="text-slate-400 hover:text-red-600 font-bold p-1 cursor-pointer"
+                            title="Remove attached file"
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
@@ -1499,7 +1604,12 @@ function CreateModal({ initialData, stores, setStores, onClose, onSave, tradersL
                   {pend.map((p, i) => (
                     <li key={p.name + i} className="flex items-center gap-3 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                       {p.preview ? (
-                        <img src={p.preview} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
+                        <img
+                          src={p.preview}
+                          alt=""
+                          className="w-10 h-10 rounded object-cover shrink-0 cursor-pointer hover:opacity-90"
+                          onClick={() => onOpen && onOpen(p.preview, p.name)}
+                        />
                       ) : (
                         <div className="w-10 h-10 rounded bg-slate-200 flex items-center justify-center shrink-0">
                           <FileText size={18} className="text-slate-500" />
@@ -2124,6 +2234,7 @@ export default function SchemeDiscussions() {
               setEditingRecord(null);
             }}
             onSave={saveRecord}
+            onOpen={(url, name) => setLb({ url, name })}
             tradersList={traders}
             companiesList={companies}
             brandsList={brands}
