@@ -42,6 +42,10 @@ import {
   deleteIndentAfterPO,
   markApprovedItemsAsOrdered,
   fetchItemList,
+  holdItemsToHoldTable,
+  fetchHeldFromHoldTable,
+  restoreHeldFromHoldTable,
+  deleteHeldFromHoldTable,
   holdIndentItems,
   restoreHeldIndentItems,
   resolveSubIncrementIndentId,
@@ -63,6 +67,19 @@ import { dashboardSyncService } from "../services/dashboardSyncService";
 // Utilities
 import { transformActivePartyItems, roundPoBox } from "../utils/poTransformer";
 import { today } from "../utils/poHelpers";
+
+const parsePartyAndCompany = (str) => {
+  if (!str || typeof str !== "string") return { party: "", company: "" };
+  if (str.includes("::")) {
+    const parts = str.split("::");
+    return { party: (parts[0] || "").trim(), company: (parts[1] || "").trim() };
+  }
+  const match = str.match(/^(.*?)\s*\((.*?)\)$/);
+  if (match) {
+    return { party: (match[1] || "").trim(), company: (match[2] || "").trim() };
+  }
+  return { party: str.trim(), company: "" };
+};
 
 const PurchaseOrder = () => {
   const { companies, companySettings, fetchCompanySettings } =
@@ -113,45 +130,16 @@ const PurchaseOrder = () => {
   const [removedItemIds, setRemovedItemIds] = useState(new Set());
 
   // Held PO states: Standard PO held items persist in Supabase DB (cross-device), Manual PO held items use localStorage
-  const [heldItemIds, setHeldItemIds] = useState(() => {
-    try {
-      const saved = localStorage.getItem("drinqkart_held_item_ids");
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch (e) {
-      return new Set();
-    }
-  });
+  const [heldItemIds, setHeldItemIds] = useState(new Set());
+  const [heldPOs, setHeldPOs] = useState([]);
 
-  const [heldPOs, setHeldPOs] = useState(() => {
-    try {
-      const saved = localStorage.getItem("drinqkart_held_pos");
-      const list = saved ? JSON.parse(saved) : [];
-      return list.filter(
-        (b) => b.batchId && b.batchId.startsWith("manual-hold-"),
-      );
-    } catch (e) {
-      return [];
-    }
-  });
-
+  // Clean legacy local storage keys on mount
   useEffect(() => {
     try {
-      localStorage.setItem(
-        "drinqkart_held_item_ids",
-        JSON.stringify(Array.from(heldItemIds)),
-      );
-    } catch (e) {
-      console.error("Failed to save held item ids to localStorage", e);
-    }
-  }, [heldItemIds]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("drinqkart_held_pos", JSON.stringify(heldPOs));
-    } catch (e) {
-      console.error("Failed to save held POs to localStorage", e);
-    }
-  }, [heldPOs]);
+      localStorage.removeItem("drinqkart_held_pos");
+      localStorage.removeItem("drinqkart_held_item_ids");
+    } catch (e) {}
+  }, []);
 
   // Manual PO states
   const [poMode, setPoMode] = useState(() => {
@@ -343,99 +331,21 @@ const PurchaseOrder = () => {
 
       setApprovedItems(filteredIndentData);
 
-      // Process database held items from pageDataResponse
-      let dbHeldItems = pageDataResponse.heldIndentData || [];
+      // Process held batches directly from purchase_hold
+      let batches = pageDataResponse.heldBatches || [];
       if (!isShopAdmin) {
         if (!assignedShops || assignedShops.length === 0) {
-          dbHeldItems = [];
+          batches = [];
         } else {
-          dbHeldItems = dbHeldItems.filter((i) =>
+          batches = batches.filter((b) =>
             assignedShops.some(
-              (as) => as.toLowerCase() === (i.shop_name || "").toLowerCase(),
+              (as) => as.toLowerCase() === (b.shopName || "").toLowerCase(),
             ),
           );
         }
       }
-      const dbHeldItemIds = new Set(dbHeldItems.map((i) => i.id));
-
-      setHeldItemIds((prev) => {
-        const manualIds = Array.from(prev).filter(
-          (id) => typeof id === "string" && id.startsWith("manual-"),
-        );
-        return new Set([...Array.from(dbHeldItemIds), ...manualIds]);
-      });
-
-      // Group DB held items by vendor name (party_name) with company scope (company_scope)
-      const groupedBatches = {};
-      dbHeldItems.forEach((rawItem) => {
-        let party = (rawItem.party_name || "Unspecified Vendor").trim();
-        let scope = (
-          rawItem.company_scope ||
-          rawItem.filtered_company_name ||
-          ""
-        ).trim();
-
-        if (party.includes("::")) {
-          const parts = party.split("::");
-          party = parts[0].trim();
-          if (!scope) scope = parts[1].trim();
-        }
-
-        const groupKey = scope ? `${party}::${scope}` : party;
-        if (!groupedBatches[groupKey]) {
-          groupedBatches[groupKey] = {
-            partyKey: groupKey,
-            partyName: party,
-            companyScope: scope || null,
-            companyName: scope || null,
-            items: [],
-          };
-        }
-
-        groupedBatches[groupKey].items.push({
-          id: rawItem.id,
-          itemName: rawItem.item_name,
-          brandName: rawItem.item_name,
-          poBox:
-            rawItem.po_box ?? rawItem.approved_box ?? rawItem.order_box ?? 0,
-          poQty:
-            rawItem.po_qty ?? rawItem.approved_qty ?? rawItem.order_qty ?? 0,
-          orderBox: rawItem.order_box,
-          orderQty: rawItem.order_qty,
-          shopName: rawItem.shop_name,
-          partyName: party,
-          unique_indent_id: rawItem.unique_indent_id,
-          indent_id: rawItem.indent_id,
-          company_name: rawItem.company_name, // Liquor item manufacturer/brand
-          company_scope: scope || null, // Vendor company scope
-          filtered_company_name: scope || null,
-          is_on_hold: true,
-        });
-      });
-
-      const dbBatches = Object.values(groupedBatches).map((group) => {
-        const uniqueShops = [
-          ...new Set(group.items.map((i) => i.shopName).filter(Boolean)),
-        ];
-        return {
-          batchId: `db-hold-${group.partyKey.replace(/[^a-zA-Z0-9-_]/g, "-")}`,
-          type: "complete_po",
-          partyKey: group.partyKey,
-          partyName: group.partyName,
-          companyScope: group.companyScope,
-          companyName: group.companyName,
-          shopName: uniqueShops.join(", ") || "",
-          heldAt: new Date().toLocaleDateString(),
-          items: group.items,
-        };
-      });
-
-      setHeldPOs((prev) => {
-        const manualBatches = prev.filter(
-          (b) => b.batchId && b.batchId.startsWith("manual-hold-"),
-        );
-        return [...dbBatches, ...manualBatches];
-      });
+      setHeldPOs(batches);
+      setHeldItemIds(pageDataResponse.heldItemIds || new Set());
     }
   }, [pageDataResponse]);
 
@@ -547,6 +457,12 @@ const PurchaseOrder = () => {
         const parts = party.split("::");
         party = parts[0].trim();
         if (!scope) scope = parts[1].trim();
+      } else {
+        const pMatch = party.match(/^(.*?)\s*\((.*?)\)$/);
+        if (pMatch) {
+          party = pMatch[1].trim();
+          if (!scope) scope = pMatch[2].trim();
+        }
       }
       if (!party) return;
       const origComp = (item.company_name || "").trim();
@@ -752,277 +668,162 @@ const PurchaseOrder = () => {
     }
   };
 
-  // Hold a single item from active PO
+  // Hold a single item from active PO into dedicated purchase_hold table
   const handleHoldItem = async (itemId) => {
     const itemToHold = itemsForActiveParty.find((i) => i.id === itemId);
     if (!itemToHold) return;
 
-    if (poMode !== "manual" && itemToHold.id) {
-      try {
-        await holdIndentItems([itemToHold.id]);
-        addToast(
-          `Placed "${itemToHold.itemName}" on hold in database.`,
-          "info",
-        );
-        await loadPageData(false);
-      } catch (err) {
-        console.error("Error holding item in database:", err);
-      }
-      return;
+    const { party: parsedParty, company: parsedComp } = parsePartyAndCompany(activeParty);
+    const cleanParty = activeVendorInfo.vendorName || parsedParty;
+    const cleanComp =
+      activeVendorInfo.companyScope ||
+      activeVendorInfo.filteredCompany ||
+      parsedComp ||
+      itemToHold.company_scope ||
+      itemToHold.filtered_company_name ||
+      null;
+
+    const empCode =
+      currentUser?.employee_id ||
+      currentUser?.emp_code ||
+      currentUser?.name ||
+      "User";
+
+    try {
+      await holdItemsToHoldTable({
+        items: [itemToHold],
+        partyKey: activeParty,
+        partyName: cleanParty,
+        companyScope: cleanComp,
+        companyName: cleanComp,
+        shopName:
+          selectedShop !== "All" ? selectedShop : itemToHold.shopName || "",
+        holdType: "single_item",
+        empCode,
+      });
+
+      addToast(`Placed "${itemToHold.itemName}" on hold.`, "info");
+      await loadPageData(false);
+    } catch (err) {
+      console.error("Error holding item:", err);
+      addToast("Failed to place item on hold: " + err.message, "error");
     }
-
-    setHeldItemIds((prev) => {
-      const next = new Set(prev);
-      next.add(itemId);
-      return next;
-    });
-
-    const holdBatchId = `manual-hold-item-${Date.now()}`;
-    const cleanParty = activeParty.includes("::")
-      ? activeParty.split("::")[0].trim()
-      : activeParty;
-    const cleanComp = activeParty.includes("::")
-      ? activeParty.split("::")[1].trim()
-      : activeVendorInfo.companyScope ||
-        activeVendorInfo.filteredCompany ||
-        itemToHold.company_scope ||
-        itemToHold.filtered_company_name ||
-        null;
-    const newHeldRecord = {
-      batchId: holdBatchId,
-      type: "single_item",
-      partyKey: activeParty,
-      partyName: cleanParty,
-      companyScope: cleanComp,
-      companyName: cleanComp,
-      shopName:
-        selectedShop !== "All" ? selectedShop : itemToHold.shopName || "",
-      heldAt: new Date().toLocaleString(),
-      items: [{ ...itemToHold, is_on_hold: true }],
-    };
-
-    setHeldPOs((prev) => [newHeldRecord, ...prev]);
-    addToast(`Placed "${itemToHold.itemName}" on hold.`, "info");
   };
 
-  // Hold complete Purchase Order for active vendor
+  // Hold complete Purchase Order for active vendor into dedicated purchase_hold table
   const handleHoldCompletePO = async () => {
     if (!activeParty || itemsForActiveParty.length === 0) {
       addToast("No items available to hold for this vendor.", "warning");
       return;
     }
 
-    const itemIdsToHold = itemsForActiveParty.map((i) => i.id);
+    const { party: parsedParty, company: parsedComp } = parsePartyAndCompany(activeParty);
+    const cleanParty = activeVendorInfo.vendorName || parsedParty;
+    const cleanComp =
+      activeVendorInfo.companyScope ||
+      activeVendorInfo.filteredCompany ||
+      parsedComp ||
+      null;
 
-    if (poMode !== "manual") {
-      try {
-        await holdIndentItems(itemIdsToHold);
-        addToast(
-          `Complete Purchase Order for "${activeParty}" placed on hold in database.`,
-          "success",
-        );
-        await loadPageData(false);
-      } catch (err) {
-        console.error("Error holding PO in database:", err);
-      }
-      return;
+    const empCode =
+      currentUser?.employee_id ||
+      currentUser?.emp_code ||
+      currentUser?.name ||
+      "User";
+
+    try {
+      await holdItemsToHoldTable({
+        items: itemsForActiveParty,
+        partyKey: activeParty,
+        partyName: cleanParty,
+        companyScope: cleanComp,
+        companyName: cleanComp,
+        shopName:
+          selectedShop !== "All"
+            ? selectedShop
+            : itemsForActiveParty[0]?.shopName || "",
+        holdType: "complete_po",
+        empCode,
+      });
+
+      addToast(
+        `Complete Purchase Order for "${activeParty}" placed on hold.`,
+        "success",
+      );
+      await loadPageData(false);
+    } catch (err) {
+      console.error("Error holding complete PO:", err);
+      addToast("Failed to place PO on hold: " + err.message, "error");
     }
-
-    setHeldItemIds((prev) => {
-      const next = new Set(prev);
-      itemIdsToHold.forEach((id) => next.add(id));
-      return next;
-    });
-
-    const holdBatchId = `manual-hold-po-${Date.now()}`;
-    const cleanParty = activeParty.includes("::")
-      ? activeParty.split("::")[0].trim()
-      : activeParty;
-    const cleanComp = activeParty.includes("::")
-      ? activeParty.split("::")[1].trim()
-      : activeVendorInfo.companyScope ||
-        activeVendorInfo.filteredCompany ||
-        null;
-    const newHeldRecord = {
-      batchId: holdBatchId,
-      type: "complete_po",
-      partyKey: activeParty,
-      partyName: cleanParty,
-      companyScope: cleanComp,
-      companyName: cleanComp,
-      shopName: selectedShop !== "All" ? selectedShop : "",
-      heldAt: new Date().toLocaleString(),
-      items: itemsForActiveParty.map((item) => ({ ...item, is_on_hold: true })),
-    };
-
-    setHeldPOs((prev) => [newHeldRecord, ...prev]);
-    addToast(
-      `Complete Purchase Order for "${activeParty}" placed on hold.`,
-      "success",
-    );
   };
 
-  // Restore held batch or item
+  // Restore held batch from dedicated purchase_hold table under a new unique Indent ID
   const handleRestoreHeldBatch = async (batchId) => {
     const targetBatch = heldPOs.find((b) => b.batchId === batchId);
     if (!targetBatch) return;
 
-    const itemIdsToRestore = targetBatch.items.map((i) => i.id);
-    const sampleItem = targetBatch.items[0];
-    const originalUniqueId =
-      sampleItem?.unique_indent_id || sampleItem?.indent_id;
+    const empCode =
+      currentUser?.employee_id ||
+      currentUser?.emp_code ||
+      currentUser?.name ||
+      "User";
 
-    let newIndentId = originalUniqueId;
     try {
-      newIndentId = await resolveSubIncrementIndentId(
-        originalUniqueId,
-        targetBatch.partyName,
-        sampleItem?.company_scope ||
-          sampleItem?.filtered_company_name ||
-          targetBatch.companyName,
-      );
-      await restoreHeldIndentItems(itemIdsToRestore, newIndentId);
+      const res = await restoreHeldFromHoldTable({
+        batchId,
+        empCode,
+      });
 
-      // Synchronize purchase_dashboard if indent ID changed
-      if (newIndentId && originalUniqueId && newIndentId !== originalUniqueId) {
-        const oldCleanId = (originalUniqueId || "").split("::")[0].trim();
-        const newCleanId = (newIndentId || "").split("::")[0].trim();
-        const itemNames = targetBatch.items
-          .map((i) => (i.itemName || i.item_name || "").trim())
-          .filter(Boolean);
-        if (oldCleanId && newCleanId && itemNames.length > 0) {
-          try {
-            await supabase
-              .from("purchase_dashboard")
-              .update({
-                indent_id: newCleanId,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("indent_id", oldCleanId)
-              .in("item_name", itemNames);
-          } catch (dashErr) {
-            console.warn(
-              "Could not sync purchase_dashboard for restored items:",
-              dashErr,
-            );
-          }
+      if (res && res.newUniqueIndentId) {
+        const displayId = (res.newUniqueIndentId || "").split("::")[0].trim();
+        addToast(
+          `Restored held items under Unique Indent "${displayId}". Ready for PO generation.`,
+          "success",
+        );
+        if (res.partyKey) {
+          setActiveParty(res.partyKey);
         }
+      } else {
+        addToast(
+          `Restored held items for "${targetBatch.partyName || "PO"}" back to Purchase Order.`,
+          "success",
+        );
       }
+      setPoMode("standard");
+      await loadPageData(false);
     } catch (err) {
-      console.error("Error restoring held batch in database:", err);
+      console.error("Error restoring held batch:", err);
+      addToast("Failed to restore held batch: " + err.message, "error");
     }
-
-    setHeldItemIds((prev) => {
-      const next = new Set(prev);
-      itemIdsToRestore.forEach((id) => next.delete(id));
-      return next;
-    });
-
-    setHeldPOs((prev) => prev.filter((b) => b.batchId !== batchId));
-    if (targetBatch.partyKey || targetBatch.partyName) {
-      setActiveParty(targetBatch.partyKey || targetBatch.partyName);
-    }
-    setPoMode("standard");
-
-    if (newIndentId && originalUniqueId && newIndentId !== originalUniqueId) {
-      const displayId = (newIndentId || "").split("::")[0].trim();
-      addToast(
-        `Restored held items under Sub-Indent "${displayId}". Ready for new PO generation.`,
-        "success",
-      );
-    } else {
-      addToast(
-        `Restored held items for "${targetBatch.partyName || "PO"}" back to Purchase Order.`,
-        "success",
-      );
-    }
-
-    await loadPageData(false);
   };
 
+  // Restore a single held item from dedicated purchase_hold table
   const handleRestoreHeldItem = async (batchId, itemId) => {
-    const targetBatch = heldPOs.find((b) => b.batchId === batchId);
-    const itemToRestore = targetBatch?.items.find((i) => i.id === itemId);
-    const originalUniqueId =
-      itemToRestore?.unique_indent_id || itemToRestore?.indent_id;
+    const empCode =
+      currentUser?.employee_id ||
+      currentUser?.emp_code ||
+      currentUser?.name ||
+      "User";
 
-    let newIndentId = originalUniqueId;
     try {
-      newIndentId = await resolveSubIncrementIndentId(
-        originalUniqueId,
-        targetBatch?.partyName || itemToRestore?.partyName,
-        itemToRestore?.company_scope ||
-          itemToRestore?.filtered_company_name ||
-          targetBatch?.companyName,
-      );
-      await restoreHeldIndentItems([itemId], newIndentId);
+      const res = await restoreHeldFromHoldTable({
+        holdItemId: itemId,
+        empCode,
+      });
 
-      // Synchronize purchase_dashboard if indent ID changed
-      if (newIndentId && originalUniqueId && newIndentId !== originalUniqueId) {
-        const oldCleanId = (originalUniqueId || "").split("::")[0].trim();
-        const newCleanId = (newIndentId || "").split("::")[0].trim();
-        const itemTitle = (
-          itemToRestore?.itemName ||
-          itemToRestore?.item_name ||
-          ""
-        ).trim();
-        if (oldCleanId && newCleanId && itemTitle) {
-          try {
-            await supabase
-              .from("purchase_dashboard")
-              .update({
-                indent_id: newCleanId,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("indent_id", oldCleanId)
-              .eq("item_name", itemTitle);
-          } catch (dashErr) {
-            console.warn(
-              "Could not sync purchase_dashboard for restored item:",
-              dashErr,
-            );
-          }
-        }
+      if (res && res.partyKey) {
+        setActiveParty(res.partyKey);
       }
-    } catch (err) {
-      console.error("Error restoring held item in database:", err);
-    }
-
-    setHeldItemIds((prev) => {
-      const next = new Set(prev);
-      next.delete(itemId);
-      return next;
-    });
-
-    setHeldPOs((prev) => {
-      return prev
-        .map((batch) => {
-          if (batch.batchId !== batchId) return batch;
-          const remaining = batch.items.filter((i) => i.id !== itemId);
-          if (remaining.length === 0) return null;
-          return { ...batch, items: remaining };
-        })
-        .filter(Boolean);
-    });
-
-    if (targetBatch?.partyKey || targetBatch?.partyName) {
-      setActiveParty(targetBatch.partyKey || targetBatch.partyName);
-    }
-    setPoMode("standard");
-
-    if (newIndentId && originalUniqueId && newIndentId !== originalUniqueId) {
-      const displayId = (newIndentId || "").split("::")[0].trim();
-      addToast(
-        `Restored "${itemToRestore?.itemName || "item"}" under Sub-Indent "${displayId}". Ready for new PO.`,
-        "success",
-      );
-    } else {
+      setPoMode("standard");
       addToast("Restored held item back to active Purchase Order.", "success");
+      await loadPageData(false);
+    } catch (err) {
+      console.error("Error restoring held item:", err);
+      addToast("Failed to restore held item: " + err.message, "error");
     }
-
-    await loadPageData(false);
   };
 
+  // Delete held batch from purchase_hold
   const handleDeleteHeldBatch = async (batchId) => {
     if (
       !window.confirm(
@@ -1030,19 +831,15 @@ const PurchaseOrder = () => {
       )
     )
       return;
-    const targetBatch = heldPOs.find((b) => b.batchId === batchId);
-    if (targetBatch) {
-      const itemIdsToDelete = targetBatch.items.map((i) => i.id);
-      try {
-        await excludeIndentItems(itemIdsToDelete, "deleted_from_hold");
-      } catch (err) {
-        console.error("Error excluding held items in database:", err);
-      }
-    }
 
-    setHeldPOs((prev) => prev.filter((b) => b.batchId !== batchId));
-    addToast("Held item/PO deleted.", "info");
-    await loadPageData(false);
+    try {
+      await deleteHeldFromHoldTable(batchId);
+      addToast("Held item/PO deleted.", "info");
+      await loadPageData(false);
+    } catch (err) {
+      console.error("Error deleting held batch:", err);
+      addToast("Failed to delete held batch: " + err.message, "error");
+    }
   };
 
   const handleItemSelection = (item) => {
@@ -1277,17 +1074,12 @@ const PurchaseOrder = () => {
       addToast(`"${displayLabel}" removed from PO selection.`, "success");
 
       // Check if current activeParty matches this specific (party, company) pair
-      const currentActivePartyName = activeParty.includes("::")
-        ? activeParty.split("::")[0].trim()
-        : activeParty.trim();
-      const currentActiveCompany = activeParty.includes("::")
-        ? activeParty.split("::")[1].trim()
-        : "";
+      const { party: currentParty, company: currentComp } = parsePartyAndCompany(activeParty);
       const isCurrentOptionDeleted =
-        currentActivePartyName.toLowerCase() === targetPartyLower &&
+        currentParty.toLowerCase() === targetPartyLower &&
         (isCompanyScoped
-          ? currentActiveCompany.toLowerCase() === targetCompanyLower
-          : !currentActiveCompany);
+          ? currentComp.toLowerCase() === targetCompanyLower
+          : !currentComp);
 
       if (isCurrentOptionDeleted) {
         setActiveParty("");
@@ -1403,6 +1195,15 @@ const PurchaseOrder = () => {
         filteredCompany: scope,
       };
     }
+    const match = activeParty.match(/^(.*?)\s*\((.*?)\)$/);
+    if (match) {
+      const scope = match[2].trim() || null;
+      return {
+        vendorName: match[1].trim(),
+        companyScope: scope,
+        filteredCompany: scope,
+      };
+    }
     const found = (dbParties || []).find((p) =>
       typeof p === "object"
         ? p.key === activeParty ||
@@ -1437,16 +1238,26 @@ const PurchaseOrder = () => {
 
     if (effectiveScope) {
       const searchComp = effectiveScope.toLowerCase();
-      return vendorsList.find(
+      const scopedMatch = vendorsList.find(
         (v) =>
           (v.party_name || "").trim().toLowerCase() === searchName &&
           (v.company_name || "").trim().toLowerCase() === searchComp,
       );
-    } else {
+      if (scopedMatch) return scopedMatch;
+      // Fallback: match by party_name if no company-specific record exists in purchase_vendors
       return vendorsList.find(
-        (v) =>
-          (v.party_name || "").trim().toLowerCase() === searchName &&
-          (!v.company_name || v.company_name.trim() === ""),
+        (v) => (v.party_name || "").trim().toLowerCase() === searchName,
+      );
+    } else {
+      return (
+        vendorsList.find(
+          (v) =>
+            (v.party_name || "").trim().toLowerCase() === searchName &&
+            (!v.company_name || v.company_name.trim() === ""),
+        ) ||
+        vendorsList.find(
+          (v) => (v.party_name || "").trim().toLowerCase() === searchName,
+        )
       );
     }
   }, [activeVendorInfo, vendorsList]);

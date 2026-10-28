@@ -25,7 +25,8 @@ import {
   CheckCircle2,
   X,
   Activity,
-  Filter
+  Filter,
+  PauseCircle
 } from "lucide-react";
 import "../styles/Dashboard.css";
 
@@ -939,6 +940,25 @@ const Dashboard = () => {
               reason={row.deletion_reason}
             />
           </div>
+        </div>
+      );
+    }
+
+    if (lower.includes("hold") || poAction === "On Hold") {
+      return (
+        <div className="space-y-1">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-300 shadow-2xs">
+            <PauseCircle size={10} /> On Hold
+          </span>
+          {row.po_emp_code && (
+            <div>
+              <EmployeeBadge
+                empCode={row.po_emp_code}
+                stage="Placed On Hold"
+                timestamp={row.updated_at}
+              />
+            </div>
+          )}
         </div>
       );
     }

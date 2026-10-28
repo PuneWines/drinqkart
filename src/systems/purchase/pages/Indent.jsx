@@ -1185,11 +1185,12 @@ const Indent = () => {
       // 4. Delete ungenerated records from purchase_dashboard (before PO generated)
       await dashboardSyncService.syncIndentDeleted(indentId);
 
-      // 5. Delete approved indent items
+      // 5. Delete approved indent items (protecting any held items)
       const { error: delApprovedError } = await supabase
         .from("purchase_approved_indent_items")
         .delete()
-        .eq("indent_id", indentId);
+        .eq("indent_id", indentId)
+        .neq("po_status", "on_hold");
       if (delApprovedError) throw delApprovedError;
 
       // 6. Delete pending indent items

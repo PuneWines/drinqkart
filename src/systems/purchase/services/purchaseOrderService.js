@@ -107,13 +107,14 @@ export const fetchPageData = async () => {
     { data: rawPoData, error: poError },
     { data: vendorsData, error: vendorsError },
     { data: transpData, error: transpError },
-    { data: recvData, error: recvError }
+    { data: recvData, error: recvError },
+    { data: rawHoldRows, error: holdError }
   ] = await Promise.all([
     // Query 1: Fetch approved items (pending, null, or on_hold po_status)
     supabase
       .from("purchase_approved_indent_items")
       .select("*")
-      .or("po_status.eq.pending,po_status.is.null,po_status.eq.on_hold")
+      .or("po_status.eq.pending,po_status.is.null")
       .order("id", { ascending: false }),
 
     // Query 2: Fetch indents to resolve shop_name reliably
@@ -153,7 +154,13 @@ export const fetchPageData = async () => {
     supabase
       .from("purchase_receivers")
       .select("*")
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false }),
+
+    // Query 7: Fetch held items from dedicated purchase_hold table
+    supabase
+      .from("purchase_hold")
+      .select("*")
+      .order("held_at", { ascending: false })
   ]);
 
   if (indentError) console.error("Error fetching approved indent items:", indentError);
@@ -162,21 +169,117 @@ export const fetchPageData = async () => {
   if (vendorsError) console.error("Error fetching vendors:", vendorsError);
   if (transpError) console.error("Error fetching transporters:", transpError);
   if (recvError) console.error("Error fetching receivers:", recvError);
+  if (holdError) console.error("Error fetching held items from purchase_hold:", holdError);
 
   const indentMap = (indentsData || []).reduce((acc, ind) => {
     if (ind.id && ind.shop_name) acc[ind.id] = ind.shop_name;
     return acc;
   }, {});
 
-  const enrichedAllItems = (rawIndentItems || []).map(item => ({
-    ...item,
-    approval_status: "approved",
-    is_excluded: item.po_status === "excluded",
-    shop_name: indentMap[item.indent_id] || item.purchase_indents?.shop_name || "Unknown"
-  }));
+  // For items without indent_id (e.g. unheld items), resolve shop_name from purchase_dashboard
+  const nullIndentItems = (rawIndentItems || []).filter(item => !item.indent_id && (item.unique_indent_id || item.item_name));
+  let dashboardShopMap = {};
+  if (nullIndentItems.length > 0) {
+    try {
+      const uniqueIds = [...new Set(nullIndentItems.map(i => (i.unique_indent_id || "").split("::")[0].trim()).filter(Boolean))];
+      if (uniqueIds.length > 0) {
+        const { data: dashRows } = await supabase
+          .from("purchase_dashboard")
+          .select("indent_id, item_name, shop_name")
+          .in("indent_id", uniqueIds);
+        if (dashRows) {
+          dashRows.forEach(r => {
+            if (r.indent_id && r.item_name && r.shop_name) {
+              dashboardShopMap[`${r.indent_id}::${r.item_name}`] = r.shop_name;
+              dashboardShopMap[r.indent_id] = r.shop_name;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Could not query dashboard for null indent shops:", e);
+    }
+  }
+
+  const enrichedAllItems = (rawIndentItems || []).map(item => {
+    const cleanUniqueId = (item.unique_indent_id || "").split("::")[0].trim();
+    const resolvedShop = 
+      indentMap[item.indent_id] || 
+      item.purchase_indents?.shop_name || 
+      dashboardShopMap[`${cleanUniqueId}::${item.item_name}`] || 
+      dashboardShopMap[cleanUniqueId] || 
+      "Unknown";
+
+    return {
+      ...item,
+      approval_status: "approved",
+      is_excluded: item.po_status === "excluded",
+      shop_name: resolvedShop
+    };
+  });
 
   const pendingItems = enrichedAllItems.filter(item => item.po_status !== "on_hold");
-  const heldItems = enrichedAllItems.filter(item => item.po_status === "on_hold");
+
+  // Format purchase_hold rows into batches and item IDs
+  const batchMap = {};
+  const heldItemIdsSet = new Set();
+  (rawHoldRows || []).forEach(row => {
+    if (row.original_item_id) heldItemIdsSet.add(row.original_item_id);
+    heldItemIdsSet.add(row.id);
+
+    const bId = row.hold_batch_id || `batch-${row.party_key || row.party_name}`;
+    if (!batchMap[bId]) {
+      batchMap[bId] = {
+        batchId: bId,
+        type: row.hold_type || "complete_po",
+        partyKey: row.party_key || (row.company_scope ? `${row.party_name}::${row.company_scope}` : row.party_name),
+        partyName: row.party_name,
+        companyScope: row.company_scope || row.filtered_company_name || null,
+        companyName: row.company_name || null,
+        shopName: row.shop_name,
+        heldAt: row.held_at ? new Date(row.held_at).toLocaleString() : new Date().toLocaleString(),
+        heldByEmpCode: row.held_by_emp_code,
+        items: []
+      };
+    }
+
+    batchMap[bId].items.push({
+      id: row.id,
+      hold_id: row.id,
+      original_item_id: row.original_item_id,
+      itemName: row.item_name,
+      item_name: row.item_name,
+      brandName: row.brand_name || row.item_name,
+      brand_name: row.brand_name || row.item_name,
+      company_name: row.company_name,
+      company_scope: row.company_scope,
+      filtered_company_name: row.filtered_company_name,
+      partyName: row.party_name,
+      party_name: row.party_name,
+      shopName: row.shop_name,
+      shop_name: row.shop_name,
+      bcs: row.bcs,
+      mls: row.mls,
+      liquor_type: row.liquor_type,
+      orderBox: row.order_box,
+      orderQty: row.order_qty,
+      approvedBox: row.approved_box,
+      approvedQty: row.approved_qty,
+      poBox: row.po_box != null ? row.po_box : row.approved_box,
+      poQty: row.po_qty != null ? row.po_qty : row.approved_qty,
+      unique_indent_id: row.original_unique_indent_id,
+      original_unique_indent_id: row.original_unique_indent_id,
+      party_indent_id: row.party_indent_id,
+      indent_emp_code: row.indent_emp_code,
+      indent_created_at: row.indent_created_at,
+      approver_emp_code: row.approver_emp_code,
+      approved_at: row.approved_at,
+      approver_action: row.approver_action,
+      is_on_hold: true
+    });
+  });
+
+  const heldBatches = Object.values(batchMap);
 
   // Create a minimal indents list compatible with any other parts expecting it
   const formattedIndentsData = pendingItems.map(item => ({
@@ -186,7 +289,9 @@ export const fetchPageData = async () => {
 
   return {
     indentData: pendingItems,
-    heldIndentData: heldItems,
+    heldBatches: heldBatches,
+    heldItemIds: heldItemIdsSet,
+    heldIndentData: heldBatches,
     poData: rawPoData || [],
     indentsData: formattedIndentsData,
     vendorsData: vendorsData || [],
@@ -496,6 +601,441 @@ export const resolveSubIncrementIndentId = async (currentUniqueIndentId, partyNa
       return partySuffix ? `${candidateMain}::${partySuffix}` : candidateMain;
     }
     nextSubIndex++;
+  }
+};
+
+/**
+ * Move items from active PO into dedicated purchase_hold table, preserving full lifecycle and company scopes.
+ */
+export const holdItemsToHoldTable = async ({
+  items = [],
+  partyKey,
+  partyName,
+  companyScope,
+  companyName,
+  shopName,
+  holdType = "complete_po",
+  holdReason = null,
+  empCode = null,
+}) => {
+  if (!items || items.length === 0) return [];
+
+  const holdBatchId = `hold-batch-${Date.now()}`;
+  const now = new Date().toISOString();
+
+  // Query purchase_dashboard to enrich lifecycle info (indent & approval metadata)
+  const itemNames = items.map(i => i.itemName || i.item_name).filter(Boolean);
+  let dashboardMap = {};
+  if (itemNames.length > 0) {
+    try {
+      const { data: dashRows } = await supabase
+        .from("purchase_dashboard")
+        .select("item_name, indent_emp_code, indent_created_at, approver_emp_code, approver_action, approved_at, shop_name")
+        .in("item_name", itemNames)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (dashRows) {
+        dashRows.forEach(r => {
+          if (!dashboardMap[r.item_name]) {
+            dashboardMap[r.item_name] = r;
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Could not query dashboard for hold lifecycle enrichment:", e);
+    }
+  }
+
+  const holdPayload = items.map(item => {
+    const itemName = item.itemName || item.item_name;
+    const dashInfo = dashboardMap[itemName] || {};
+    const itemShop = shopName || item.shopName || item.shop_name || dashInfo.shop_name || "Unknown";
+
+    return {
+      hold_batch_id: holdBatchId,
+      hold_type: holdType,
+      party_key: partyKey || (companyScope ? `${partyName}::${companyScope}` : partyName),
+      party_name: partyName || item.partyName || item.party_name || "Unspecified Vendor",
+      company_scope: companyScope || item.company_scope || item.filtered_company_name || null,
+      filtered_company_name: companyScope || item.company_scope || item.filtered_company_name || null,
+      company_name: companyName || item.company_name || null,
+      shop_name: itemShop,
+
+      original_item_id: item.id || null,
+      original_unique_indent_id: item.unique_indent_id || item.indent_id || null,
+      party_indent_id: item.party_indent_id || null,
+      item_name: itemName,
+      brand_name: item.brandName || item.brand_name || itemName,
+      bcs: item.bcs != null ? parseFloat(item.bcs) : null,
+      mls: item.mls != null ? parseFloat(item.mls) : (item.ml_s != null ? parseFloat(item.ml_s) : null),
+      liquor_type: item.liquorType || item.liquor_type || null,
+      qty_out: item.qtyOut != null ? parseFloat(item.qtyOut) : (item.qty_out != null ? parseFloat(item.qty_out) : 0),
+      closing_qty: item.closingQty != null ? parseFloat(item.closingQty) : (item.closing_qty != null ? parseFloat(item.closing_qty) : 0),
+
+      order_box: item.orderBox != null ? parseFloat(item.orderBox) : (item.order_box != null ? parseFloat(item.order_box) : 0),
+      order_qty: item.orderQty != null ? parseFloat(item.orderQty) : (item.order_qty != null ? parseFloat(item.order_qty) : 0),
+      indent_emp_code: item.indent_emp_code || dashInfo.indent_emp_code || null,
+      indent_created_at: item.indent_created_at || dashInfo.indent_created_at || null,
+
+      approved_box: item.approvedBox != null ? parseFloat(item.approvedBox) : (item.approved_box != null ? parseFloat(item.approved_box) : (item.orderBox || item.order_box || 0)),
+      approved_qty: item.approvedQty != null ? parseFloat(item.approvedQty) : (item.approved_qty != null ? parseFloat(item.approved_qty) : (item.orderQty || item.order_qty || 0)),
+      approver_emp_code: item.approved_by_emp_code || dashInfo.approver_emp_code || null,
+      approver_action: dashInfo.approver_action || "Approved",
+      approved_at: dashInfo.approved_at || null,
+
+      po_box: item.poBox != null ? parseFloat(item.poBox) : (item.po_box != null ? parseFloat(item.po_box) : null),
+      po_qty: item.poQty != null ? parseFloat(item.poQty) : (item.po_qty != null ? parseFloat(item.po_qty) : null),
+
+      held_by_emp_code: empCode,
+      held_at: now,
+      hold_reason: holdReason,
+    };
+  });
+
+  // 1. Insert into purchase_hold in chunks of 50
+  const chunkSize = 50;
+  let insertedHoldItems = [];
+  for (let i = 0; i < holdPayload.length; i += chunkSize) {
+    const chunk = holdPayload.slice(i, i + chunkSize);
+    const { data: inserted, error: insertErr } = await supabase
+      .from("purchase_hold")
+      .insert(chunk)
+      .select();
+    if (insertErr) throw insertErr;
+    if (inserted) insertedHoldItems = [...insertedHoldItems, ...inserted];
+  }
+
+  // 2. Delete those items from purchase_approved_indent_items
+  const idsToDelete = items.map(i => i.id).filter(Boolean);
+  if (idsToDelete.length > 0) {
+    for (let i = 0; i < idsToDelete.length; i += chunkSize) {
+      const chunk = idsToDelete.slice(i, i + chunkSize);
+      await supabase
+        .from("purchase_approved_indent_items")
+        .delete()
+        .in("id", chunk);
+    }
+  }
+
+  // 3. Update purchase_dashboard with po_action = 'On Hold'
+  if (itemNames.length > 0) {
+    try {
+      const uniqueIndentIds = [...new Set(items.map(i => (i.unique_indent_id || i.indent_id || "").split("::")[0].trim()).filter(Boolean))];
+      for (const indId of uniqueIndentIds) {
+        await supabase
+          .from("purchase_dashboard")
+          .update({
+            po_action: "On Hold",
+            po_emp_code: empCode,
+            updated_at: now
+          })
+          .eq("indent_id", indId)
+          .in("item_name", itemNames)
+          .is("po_id", null);
+      }
+    } catch (dashErr) {
+      console.warn("Could not sync dashboard hold status:", dashErr);
+    }
+  }
+
+  return insertedHoldItems;
+};
+
+/**
+ * Fetch held items from purchase_hold, grouped into vendor/company batches.
+ */
+export const fetchHeldFromHoldTable = async (assignedShops = [], isShopAdmin = true) => {
+  let query = supabase
+    .from("purchase_hold")
+    .select("*")
+    .order("held_at", { ascending: false });
+
+  if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
+    query = query.in("shop_name", assignedShops);
+  }
+
+  const { data: rawHoldRows, error } = await query;
+  if (error) {
+    console.error("Error fetching held items from purchase_hold:", error);
+    return { batches: [], heldItemIds: new Set() };
+  }
+
+  if (!rawHoldRows || rawHoldRows.length === 0) {
+    return { batches: [], heldItemIds: new Set() };
+  }
+
+  const heldItemIds = new Set(rawHoldRows.map(r => r.original_item_id || r.id));
+
+  const batchMap = {};
+  rawHoldRows.forEach(row => {
+    const bId = row.hold_batch_id || `batch-${row.party_key || row.party_name}`;
+    if (!batchMap[bId]) {
+      batchMap[bId] = {
+        batchId: bId,
+        type: row.hold_type || "complete_po",
+        partyKey: row.party_key || (row.company_scope ? `${row.party_name}::${row.company_scope}` : row.party_name),
+        partyName: row.party_name,
+        companyScope: row.company_scope || row.filtered_company_name || null,
+        companyName: row.company_name || null,
+        shopName: row.shop_name,
+        heldAt: row.held_at ? new Date(row.held_at).toLocaleString() : new Date().toLocaleString(),
+        heldByEmpCode: row.held_by_emp_code,
+        items: []
+      };
+    }
+
+    batchMap[bId].items.push({
+      id: row.id,
+      hold_id: row.id,
+      original_item_id: row.original_item_id,
+      itemName: row.item_name,
+      item_name: row.item_name,
+      brandName: row.brand_name || row.item_name,
+      brand_name: row.brand_name || row.item_name,
+      company_name: row.company_name,
+      company_scope: row.company_scope,
+      filtered_company_name: row.filtered_company_name,
+      partyName: row.party_name,
+      party_name: row.party_name,
+      shopName: row.shop_name,
+      shop_name: row.shop_name,
+      bcs: row.bcs,
+      mls: row.mls,
+      liquor_type: row.liquor_type,
+      orderBox: row.order_box,
+      orderQty: row.order_qty,
+      approvedBox: row.approved_box,
+      approvedQty: row.approved_qty,
+      poBox: row.po_box != null ? row.po_box : row.approved_box,
+      poQty: row.po_qty != null ? row.po_qty : row.approved_qty,
+      unique_indent_id: row.original_unique_indent_id,
+      original_unique_indent_id: row.original_unique_indent_id,
+      party_indent_id: row.party_indent_id,
+      indent_emp_code: row.indent_emp_code,
+      indent_created_at: row.indent_created_at,
+      approver_emp_code: row.approver_emp_code,
+      approved_at: row.approved_at,
+      approver_action: row.approver_action,
+      is_on_hold: true
+    });
+  });
+
+  return {
+    batches: Object.values(batchMap),
+    heldItemIds
+  };
+};
+
+/**
+ * Restore held batch or single item from purchase_hold back to active PO pipeline under a new unique Indent ID.
+ */
+export const restoreHeldFromHoldTable = async ({
+  batchId = null,
+  holdItemId = null,
+  empCode = null
+}) => {
+  let query = supabase.from("purchase_hold").select("*");
+  if (holdItemId) {
+    query = query.eq("id", holdItemId);
+  } else if (batchId) {
+    query = query.eq("hold_batch_id", batchId);
+  } else {
+    return null;
+  }
+
+  const { data: rowsToRestore, error: fetchErr } = await query;
+  if (fetchErr) throw fetchErr;
+  if (!rowsToRestore || rowsToRestore.length === 0) return null;
+
+  const sampleRow = rowsToRestore[0];
+  const partyName = sampleRow.party_name;
+  const companyScope = sampleRow.company_scope || sampleRow.filtered_company_name || null;
+  const originalUniqueIndentId = sampleRow.original_unique_indent_id || "IN-1";
+
+  // 1. Resolve new unique sub-increment indent ID (e.g. IN-670-1 or IN-670-2)
+  const newUniqueIndentId = await resolveSubIncrementIndentId(
+    originalUniqueIndentId,
+    partyName,
+    companyScope
+  );
+
+  const now = new Date().toISOString();
+
+  // 2. Prepare payload for purchase_approved_indent_items
+  const approvedPayload = rowsToRestore.map(row => ({
+    id: row.original_item_id || undefined,
+    indent_id: null, // Detached so Indent page remains 100% unlocked for new submissions
+    party_indent_id: row.party_indent_id,
+    unique_indent_id: newUniqueIndentId,
+    item_name: row.item_name,
+    brand_name: row.brand_name || row.item_name,
+    company_name: row.company_name,
+    company_scope: row.company_scope,
+    filtered_company_name: row.filtered_company_name,
+    party_name: row.party_name,
+    bcs: row.bcs,
+    mls: row.mls,
+    liquor_type: row.liquor_type,
+    qty_out: row.qty_out || 0,
+    closing_qty: row.closing_qty || 0,
+    order_box: row.order_box || 0,
+    order_qty: row.order_qty || 0,
+    approved_box: row.approved_box != null ? row.approved_box : row.order_box,
+    approved_qty: row.approved_qty != null ? row.approved_qty : row.order_qty,
+    po_box: row.po_box != null ? row.po_box : row.approved_box,
+    po_qty: row.po_qty != null ? row.po_qty : row.approved_qty,
+    po_status: "pending",
+    approval_status: "approved",
+    approved_by_emp_code: row.approver_emp_code || null,
+    created_at: now,
+    updated_at: now
+  }));
+
+  // Delete any existing rows with matching id to prevent duplicates
+  const existingIdsToDelete = approvedPayload.map((p) => p.id).filter(Boolean);
+  if (existingIdsToDelete.length > 0) {
+    for (let i = 0; i < existingIdsToDelete.length; i += chunkSize) {
+      const chunk = existingIdsToDelete.slice(i, i + chunkSize);
+      await supabase
+        .from("purchase_approved_indent_items")
+        .delete()
+        .in("id", chunk);
+    }
+  }
+
+  // Insert into purchase_approved_indent_items
+  for (let i = 0; i < approvedPayload.length; i += chunkSize) {
+    const chunk = approvedPayload.slice(i, i + chunkSize);
+    const { error: insErr } = await supabase
+      .from("purchase_approved_indent_items")
+      .insert(chunk);
+    if (insErr) {
+      console.warn("Direct insert failed on restore, retrying with upsert:", insErr.message);
+      const { error: upsertErr } = await supabase
+        .from("purchase_approved_indent_items")
+        .upsert(chunk, { onConflict: "id" });
+      if (upsertErr) throw upsertErr;
+    }
+  }
+
+  // 3. Update or recreate dashboard record with new unique Indent ID and full preserved lifecycle
+  const newCleanId = (newUniqueIndentId || "").split("::")[0].trim();
+  const oldCleanId = (originalUniqueIndentId || "").split("::")[0].trim();
+  const itemNames = rowsToRestore.map(r => r.item_name).filter(Boolean);
+
+  try {
+    const { data: existingDash } = await supabase
+      .from("purchase_dashboard")
+      .select("id, item_name")
+      .eq("indent_id", oldCleanId)
+      .in("item_name", itemNames)
+      .is("po_id", null);
+
+    if (existingDash && existingDash.length > 0) {
+      const existingItemNames = existingDash.map(d => d.item_name);
+      await supabase
+        .from("purchase_dashboard")
+        .update({
+          indent_id: newCleanId,
+          po_action: "Pending PO",
+          is_deleted: false,
+          deleted_at: null,
+          deletion_stage: null,
+          deletion_reason: null,
+          updated_at: now
+        })
+        .eq("indent_id", oldCleanId)
+        .in("item_name", existingItemNames);
+    } else {
+      // If the old indent was deleted from purchase_dashboard, restore with full lifecycle
+      const dashPayload = rowsToRestore.map(row => ({
+        indent_id: newCleanId,
+        shop_name: row.shop_name,
+        party_name: row.party_name,
+        company_name: row.company_name,
+        company_scope: row.company_scope,
+        filtered_company_name: row.filtered_company_name,
+        item_name: row.item_name,
+        order_box: row.order_box,
+        order_qty: row.order_qty,
+        indent_emp_code: row.indent_emp_code,
+        indent_created_at: row.indent_created_at,
+        approved_box: row.approved_box,
+        approved_qty: row.approved_qty,
+        approver_emp_code: row.approver_emp_code,
+        approver_action: row.approver_action || "Approved",
+        approved_at: row.approved_at,
+        po_action: "Pending PO",
+        is_deleted: false,
+        created_at: now,
+        updated_at: now
+      }));
+      await supabase.from("purchase_dashboard").insert(dashPayload);
+    }
+  } catch (dashSyncErr) {
+    console.warn("Could not sync dashboard during unhold:", dashSyncErr);
+  }
+
+  // 4. Delete the rows from purchase_hold
+  const holdIdsToDelete = rowsToRestore.map(r => r.id);
+  for (let i = 0; i < holdIdsToDelete.length; i += chunkSize) {
+    const chunk = holdIdsToDelete.slice(i, i + chunkSize);
+    await supabase.from("purchase_hold").delete().in("id", chunk);
+  }
+
+  return {
+    newUniqueIndentId,
+    partyKey: sampleRow.party_key,
+    partyName: sampleRow.party_name,
+    companyScope: sampleRow.company_scope,
+    restoredCount: rowsToRestore.length
+  };
+};
+
+/**
+ * Permanently delete held batch or single item from purchase_hold and mark in dashboard.
+ */
+export const deleteHeldFromHoldTable = async (batchId, holdItemId = null) => {
+  let query = supabase.from("purchase_hold").select("*");
+  if (holdItemId) {
+    query = query.eq("id", holdItemId);
+  } else if (batchId) {
+    query = query.eq("hold_batch_id", batchId);
+  } else {
+    return;
+  }
+
+  const { data: rows } = await query;
+  if (!rows || rows.length === 0) return;
+
+  const itemNames = rows.map(r => r.item_name);
+  const indentIds = [...new Set(rows.map(r => (r.original_unique_indent_id || "").split("::")[0].trim()).filter(Boolean))];
+
+  // Mark in dashboard as deleted from hold
+  try {
+    for (const indId of indentIds) {
+      await supabase
+        .from("purchase_dashboard")
+        .update({
+          is_deleted: true,
+          deletion_stage: "po",
+          deletion_reason: "Deleted from On Hold",
+          deleted_at: new Date().toISOString()
+        })
+        .eq("indent_id", indId)
+        .in("item_name", itemNames)
+        .is("po_id", null);
+    }
+  } catch (e) {
+    console.warn("Could not mark dashboard deleted from hold:", e);
+  }
+
+  // Delete from purchase_hold
+  const ids = rows.map(r => r.id);
+  const chunkSize = 50;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    await supabase.from("purchase_hold").delete().in("id", chunk);
   }
 };
 

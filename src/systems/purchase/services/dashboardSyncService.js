@@ -82,7 +82,8 @@ export const dashboardSyncService = {
       .from("purchase_dashboard")
       .delete()
       .eq("indent_id", String(indentId))
-      .is("po_id", null);
+      .is("po_id", null)
+      .neq("po_action", "On Hold");
 
     if (error) {
       console.error("Failed to delete ungenerated records from purchase_dashboard:", error);

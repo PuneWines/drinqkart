@@ -7,19 +7,42 @@ export const roundPoBox = (val) => {
 
 export const transformActivePartyItems = (filteredApprovedItems, activeParty) => {
   if (!activeParty) return [];
-  const isKey = typeof activeParty === "string" && activeParty.includes("::");
-  const [targetParty, targetCompany] = isKey ? activeParty.split("::") : [activeParty, ""];
+  let targetParty = "";
+  let targetCompany = "";
+  if (typeof activeParty === "string" && activeParty.includes("::")) {
+    const parts = activeParty.split("::");
+    targetParty = (parts[0] || "").trim();
+    targetCompany = (parts[1] || "").trim();
+  } else if (typeof activeParty === "string") {
+    const match = activeParty.match(/^(.*?)\s*\((.*?)\)$/);
+    if (match) {
+      targetParty = match[1].trim();
+      targetCompany = match[2].trim();
+    } else {
+      targetParty = activeParty.trim();
+    }
+  }
+  const isKey = Boolean(targetCompany);
 
-  return filteredApprovedItems
+  // De-duplicate items by id to guard against duplicate entries
+  const seenIds = new Set();
+  const dedupedItems = [];
+  for (const item of filteredApprovedItems) {
+    if (item.id && seenIds.has(item.id)) continue;
+    if (item.id) seenIds.add(item.id);
+    dedupedItems.push(item);
+  }
+
+  return dedupedItems
     .filter(item => {
       const pMatch = (item.party_name || "").trim().toLowerCase() === (targetParty || "").trim().toLowerCase();
       if (!pMatch) return false;
 
-      // Resolve item's company scope (or fallback to company_name for legacy records)
-      const itemComp = (item.company_scope || item.filtered_company_name || (isKey ? item.company_name : "") || "").trim().toLowerCase();
+      // Resolve item's company scope (strictly explicit scope, not product manufacturer company_name)
+      const itemComp = (item.company_scope || item.filtered_company_name || "").trim().toLowerCase();
 
       if (!isKey) {
-        // If activeParty has no company key, match items that also have no filtered company
+        // If activeParty has no company key, match only items that also have no company
         return !itemComp;
       }
       const tgtComp = (targetCompany || "").trim().toLowerCase();
