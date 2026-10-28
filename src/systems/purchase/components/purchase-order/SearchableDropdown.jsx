@@ -3,10 +3,6 @@ import { Search, ChevronDown, Check, Trash2 } from "lucide-react";
 
 const parseStringParts = (str) => {
   if (!str) return { vendorName: "", companyName: "" };
-  if (str.includes("::")) {
-    const [party, comp] = str.split("::");
-    return { vendorName: (party || "").trim(), companyName: (comp || "").trim() };
-  }
   const match = str.match(/^(.*?)\s*\((.*?)\)$/);
   if (match) {
     return { vendorName: match[1].trim(), companyName: match[2].trim() };
@@ -22,11 +18,7 @@ const getOptionParts = (option) => {
     let comp = (option.filteredCompanyName || option.companyName || "").trim();
 
     if (vendor) {
-      if (vendor.includes("::")) {
-        const parts = vendor.split("::");
-        vendor = parts[0].trim();
-        if (!comp) comp = (parts[1] || "").trim();
-      } else if (!comp) {
+      if (!comp) {
         const match = vendor.match(/^(.*?)\s*\((.*?)\)$/);
         if (match) {
           vendor = match[1].trim();

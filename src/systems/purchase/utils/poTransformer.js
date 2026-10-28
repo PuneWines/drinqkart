@@ -5,23 +5,18 @@ export const roundPoBox = (val) => {
   return parseFloat(rounded.toFixed(4));
 };
 
+export const parsePartyAndCompany = (str) => {
+  if (!str || typeof str !== "string") return { party: "", company: "" };
+  const match = str.match(/^(.*?)\s*\((.*?)\)$/);
+  if (match) {
+    return { party: (match[1] || "").trim(), company: (match[2] || "").trim() };
+  }
+  return { party: str.trim(), company: "" };
+};
+
 export const transformActivePartyItems = (filteredApprovedItems, activeParty) => {
   if (!activeParty) return [];
-  let targetParty = "";
-  let targetCompany = "";
-  if (typeof activeParty === "string" && activeParty.includes("::")) {
-    const parts = activeParty.split("::");
-    targetParty = (parts[0] || "").trim();
-    targetCompany = (parts[1] || "").trim();
-  } else if (typeof activeParty === "string") {
-    const match = activeParty.match(/^(.*?)\s*\((.*?)\)$/);
-    if (match) {
-      targetParty = match[1].trim();
-      targetCompany = match[2].trim();
-    } else {
-      targetParty = activeParty.trim();
-    }
-  }
+  const { party: targetParty, company: targetCompany } = parsePartyAndCompany(activeParty);
   const isKey = Boolean(targetCompany);
 
   // De-duplicate items by id to guard against duplicate entries

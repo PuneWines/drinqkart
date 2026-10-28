@@ -3,6 +3,7 @@ import Table from "../components/Table";
 import { supabase } from "../lib/supabase";
 import { FileText } from "lucide-react";
 import useShopStore from "../store/useShopStore";
+import { parsePartyAndCompany } from "../utils/poTransformer";
 import "../styles/Pages.css";
 
 const TraderVerification = () => {
@@ -124,8 +125,9 @@ const TraderVerification = () => {
             shopName = parentIndentId ? (indentMap[parentIndentId] || "Unknown") : "Unknown";
           }
 
-          const effectiveCompany = (item.company_scope || item.company_name || item.filtered_company_name || (item.vendor_name && item.vendor_name.includes("::") ? item.vendor_name.split("::")[1] : "") || "").trim();
-          const cleanVendor = (item.vendor_name && item.vendor_name.includes("::") ? item.vendor_name.split("::")[0] : item.vendor_name || "").trim();
+          const parsed = parsePartyAndCompany(item.vendor_name);
+          const effectiveCompany = (item.company_scope || item.company_name || item.filtered_company_name || parsed.company || "").trim();
+          const cleanVendor = parsed.party || item.vendor_name || "";
 
           return {
             ...item,
@@ -188,7 +190,7 @@ const TraderVerification = () => {
         label: "Vendor Name", 
         sortable: true,
         render: (vendor, row) => {
-          const cleanVendor = row.clean_vendor_name || (vendor && vendor.includes("::") ? vendor.split("::")[0] : vendor) || "—";
+          const cleanVendor = row.clean_vendor_name || parsePartyAndCompany(vendor || "").party || "—";
           const comp = row.company_scope || row.company_name || row.filtered_company_name;
           return (
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>

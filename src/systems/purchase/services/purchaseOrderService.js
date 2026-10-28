@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { parsePartyAndCompany } from "../utils/poTransformer";
 
 export const fetchNextPoNumber = async () => {
   const yr = new Date().getFullYear();
@@ -67,7 +68,7 @@ export const resolvePoNumberForItems = async (items, defaultNextPoNumber) => {
   const subIndex = subMatch[2];
 
   // Look up the parent PO in purchase_purchase_orders
-  const cleanParty = (sample.partyName || sample.party_name || "").split("::")[0].trim().toLowerCase();
+  const cleanParty = parsePartyAndCompany(sample.partyName || sample.party_name || "").party.toLowerCase();
 
   const { data: pos, error } = await supabase
     .from("purchase_purchase_orders")
@@ -80,7 +81,7 @@ export const resolvePoNumberForItems = async (items, defaultNextPoNumber) => {
   // Find the parent PO that matches the root indent and vendor
   const parentPo = pos.find(p => {
     const pIndentMain = (p.indent_id || "").split("::")[0].trim().toLowerCase();
-    const pVendor = (p.vendor_name || "").split("::")[0].trim().toLowerCase();
+    const pVendor = parsePartyAndCompany(p.vendor_name || "").party.toLowerCase();
     return pIndentMain === rootMainIndent.toLowerCase() && (!cleanParty || pVendor === cleanParty);
   });
 
@@ -227,20 +228,39 @@ export const fetchPageData = async () => {
     if (row.original_item_id) heldItemIdsSet.add(row.original_item_id);
     heldItemIdsSet.add(row.id);
 
-    const bId = row.hold_batch_id || `batch-${row.party_key || row.party_name}`;
+    const cleanVendor = (row.party_name || "Unspecified Vendor").trim();
+    const cleanScope = (row.company_scope || row.filtered_company_name || "").trim();
+    const cleanShop = (row.shop_name || "").trim();
+    // Group PO key based on vendor + company scope + shop
+    const bId = cleanScope 
+      ? `${cleanVendor} (${cleanScope})::${cleanShop}`.toLowerCase()
+      : `${cleanVendor}::${cleanShop}`.toLowerCase();
+
     if (!batchMap[bId]) {
       batchMap[bId] = {
         batchId: bId,
+        groupKey: bId,
+        holdBatchIds: [],
+        itemIds: [],
         type: row.hold_type || "complete_po",
-        partyKey: row.party_key || (row.company_scope ? `${row.party_name}::${row.company_scope}` : row.party_name),
-        partyName: row.party_name,
-        companyScope: row.company_scope || row.filtered_company_name || null,
-        companyName: row.company_name || null,
-        shopName: row.shop_name,
+        partyKey: cleanScope ? `${cleanVendor} (${cleanScope})` : cleanVendor,
+        partyName: cleanVendor,
+        companyScope: cleanScope || null,
+        filteredCompanyName: cleanScope || null,
+        companyName: cleanScope || null,
+        shopName: cleanShop || row.shop_name,
         heldAt: row.held_at ? new Date(row.held_at).toLocaleString() : new Date().toLocaleString(),
         heldByEmpCode: row.held_by_emp_code,
         items: []
       };
+    }
+
+    if (row.hold_batch_id && !batchMap[bId].holdBatchIds.includes(row.hold_batch_id)) {
+      batchMap[bId].holdBatchIds.push(row.hold_batch_id);
+    }
+    batchMap[bId].itemIds.push(row.id);
+    if (row.hold_type === "complete_po") {
+      batchMap[bId].type = "complete_po";
     }
 
     batchMap[bId].items.push({
@@ -302,8 +322,9 @@ export const fetchPageData = async () => {
 
 export const generateVendorId = async (activeParty, filteredCompanyName) => {
   if (!activeParty) return "VN-000";
-  const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
-  const comp = filteredCompanyName || (activeParty.includes("::") ? activeParty.split("::")[1].trim() : null);
+  const parsed = parsePartyAndCompany(activeParty);
+  const cleanParty = parsed.party;
+  const comp = filteredCompanyName || parsed.company || null;
 
   let query = supabase
     .from('purchase_vendors')
@@ -413,8 +434,9 @@ export const insertPurchaseOrder = async (poData) => {
 
 export const getOrCreateVendorPortalLink = async (activeParty, filteredCompanyName, baseUrl) => {
   if (!activeParty) return "";
-  const cleanParty = activeParty.includes("::") ? activeParty.split("::")[0].trim() : activeParty.trim();
-  const comp = filteredCompanyName || (activeParty.includes("::") ? activeParty.split("::")[1].trim() : null);
+  const parsed = parsePartyAndCompany(activeParty);
+  const cleanParty = parsed.party;
+  const comp = filteredCompanyName || parsed.company || null;
 
   let query = supabase
     .from("purchase_vendors")
@@ -521,8 +543,9 @@ export const holdIndentItems = async (ids) => {
 export const resolveSubIncrementIndentId = async (currentUniqueIndentId, partyName, companyScope = null) => {
   if (!currentUniqueIndentId) return currentUniqueIndentId;
 
-  const cleanParty = partyName?.includes("::") ? partyName.split("::")[0].trim().toLowerCase() : (partyName || "").trim().toLowerCase();
-  const cleanFilteredComp = (companyScope || (partyName?.includes("::") ? partyName.split("::")[1] : "") || "").trim().toLowerCase();
+  const parsedParty = parsePartyAndCompany(partyName);
+  const cleanParty = parsedParty.party.toLowerCase();
+  const cleanFilteredComp = (companyScope || parsedParty.company || "").trim().toLowerCase();
 
   let { data: existingPos, error: poErr } = await supabase
     .from("purchase_purchase_orders")
@@ -568,16 +591,15 @@ export const resolveSubIncrementIndentId = async (currentUniqueIndentId, partyNa
       const poIndentMain = (po.indent_id || "").split("::")[0].trim().toLowerCase();
       if (poIndentMain !== candidateIndentMain.toLowerCase()) return false;
 
-      const poVendor = po.vendor_name?.includes("::")
-        ? po.vendor_name.split("::")[0].trim().toLowerCase()
-        : (po.vendor_name || "").trim().toLowerCase();
+      const parsedPoVendor = parsePartyAndCompany(po.vendor_name);
+      const poVendor = parsedPoVendor.party.toLowerCase();
 
       if (poVendor !== cleanParty) return false;
 
       const poFilteredComp = (
         po.company_scope ||
         po.filtered_company_name ||
-        (po.vendor_name?.includes("::") ? po.vendor_name.split("::")[1] : "") ||
+        parsedPoVendor.company ||
         ""
       ).trim().toLowerCase();
 
@@ -654,7 +676,7 @@ export const holdItemsToHoldTable = async ({
     return {
       hold_batch_id: holdBatchId,
       hold_type: holdType,
-      party_key: partyKey || (companyScope ? `${partyName}::${companyScope}` : partyName),
+      party_key: partyKey || (companyScope ? `${partyName} (${companyScope})` : partyName),
       party_name: partyName || item.partyName || item.party_name || "Unspecified Vendor",
       company_scope: companyScope || item.company_scope || item.filtered_company_name || null,
       filtered_company_name: companyScope || item.company_scope || item.filtered_company_name || null,
@@ -768,20 +790,39 @@ export const fetchHeldFromHoldTable = async (assignedShops = [], isShopAdmin = t
 
   const batchMap = {};
   rawHoldRows.forEach(row => {
-    const bId = row.hold_batch_id || `batch-${row.party_key || row.party_name}`;
+    const cleanVendor = (row.party_name || "Unspecified Vendor").trim();
+    const cleanScope = (row.company_scope || row.filtered_company_name || "").trim();
+    const cleanShop = (row.shop_name || "").trim();
+    // Group PO key based on vendor + company scope + shop
+    const bId = cleanScope 
+      ? `${cleanVendor} (${cleanScope})::${cleanShop}`.toLowerCase()
+      : `${cleanVendor}::${cleanShop}`.toLowerCase();
+
     if (!batchMap[bId]) {
       batchMap[bId] = {
         batchId: bId,
+        groupKey: bId,
+        holdBatchIds: [],
+        itemIds: [],
         type: row.hold_type || "complete_po",
-        partyKey: row.party_key || (row.company_scope ? `${row.party_name}::${row.company_scope}` : row.party_name),
-        partyName: row.party_name,
-        companyScope: row.company_scope || row.filtered_company_name || null,
-        companyName: row.company_name || null,
-        shopName: row.shop_name,
+        partyKey: cleanScope ? `${cleanVendor} (${cleanScope})` : cleanVendor,
+        partyName: cleanVendor,
+        companyScope: cleanScope || null,
+        filteredCompanyName: cleanScope || null,
+        companyName: cleanScope || null,
+        shopName: cleanShop || row.shop_name,
         heldAt: row.held_at ? new Date(row.held_at).toLocaleString() : new Date().toLocaleString(),
         heldByEmpCode: row.held_by_emp_code,
         items: []
       };
+    }
+
+    if (row.hold_batch_id && !batchMap[bId].holdBatchIds.includes(row.hold_batch_id)) {
+      batchMap[bId].holdBatchIds.push(row.hold_batch_id);
+    }
+    batchMap[bId].itemIds.push(row.id);
+    if (row.hold_type === "complete_po") {
+      batchMap[bId].type = "complete_po";
     }
 
     batchMap[bId].items.push({
@@ -832,13 +873,16 @@ export const fetchHeldFromHoldTable = async (assignedShops = [], isShopAdmin = t
 export const restoreHeldFromHoldTable = async ({
   batchId = null,
   holdItemId = null,
+  itemIds = null,
   empCode = null
 }) => {
   let query = supabase.from("purchase_hold").select("*");
   if (holdItemId) {
     query = query.eq("id", holdItemId);
+  } else if (itemIds && Array.isArray(itemIds) && itemIds.length > 0) {
+    query = query.in("id", itemIds);
   } else if (batchId) {
-    query = query.eq("hold_batch_id", batchId);
+    query = query.or(`hold_batch_id.eq."${batchId}",id.eq."${batchId}"`);
   } else {
     return null;
   }
@@ -892,6 +936,7 @@ export const restoreHeldFromHoldTable = async ({
   }));
 
   // Delete any existing rows with matching id to prevent duplicates
+  const chunkSize = 50;
   const existingIdsToDelete = approvedPayload.map((p) => p.id).filter(Boolean);
   if (existingIdsToDelete.length > 0) {
     for (let i = 0; i < existingIdsToDelete.length; i += chunkSize) {
@@ -995,12 +1040,14 @@ export const restoreHeldFromHoldTable = async ({
 /**
  * Permanently delete held batch or single item from purchase_hold and mark in dashboard.
  */
-export const deleteHeldFromHoldTable = async (batchId, holdItemId = null) => {
+export const deleteHeldFromHoldTable = async (batchId, holdItemId = null, itemIds = null) => {
   let query = supabase.from("purchase_hold").select("*");
   if (holdItemId) {
     query = query.eq("id", holdItemId);
+  } else if (itemIds && Array.isArray(itemIds) && itemIds.length > 0) {
+    query = query.in("id", itemIds);
   } else if (batchId) {
-    query = query.eq("hold_batch_id", batchId);
+    query = query.or(`hold_batch_id.eq."${batchId}",id.eq."${batchId}"`);
   } else {
     return;
   }

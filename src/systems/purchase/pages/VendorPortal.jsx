@@ -443,7 +443,7 @@ const VendorPortal = () => {
           const safeParty = targetParty.replace(/"/g, '""');
           const safeComp = targetCompany.replace(/"/g, '""');
           poQuery = poQuery.or(
-            `and(vendor_name.eq."${safeParty}",company_scope.eq."${safeComp}"),and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty}::${safeComp}"`
+            `and(vendor_name.eq."${safeParty}",company_scope.eq."${safeComp}"),and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty} (${safeComp})",vendor_name.eq."${safeParty}::${safeComp}"`
           );
         } else {
           const safeParty = targetParty.replace(/"/g, '""');
@@ -465,7 +465,7 @@ const VendorPortal = () => {
             const safeParty = targetParty.replace(/"/g, '""');
             const safeComp = targetCompany.replace(/"/g, '""');
             fallbackQuery = fallbackQuery.or(
-              `and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty}::${safeComp}"`
+              `and(vendor_name.eq."${safeParty}",filtered_company_name.eq."${safeComp}"),vendor_name.eq."${safeParty} (${safeComp})",vendor_name.eq."${safeParty}::${safeComp}"`
             );
           } else {
             const safeParty = targetParty.replace(/"/g, '""');
@@ -477,7 +477,7 @@ const VendorPortal = () => {
           const fbRes = await fallbackQuery;
           if (fbRes.error) {
             console.warn("Legacy column query warning, using relaxed fallback:", fbRes.error.message);
-            const cleanPartyPart = targetParty.includes("::") ? targetParty.split("::")[0].trim() : targetParty;
+            const cleanPartyPart = targetParty.includes("(") ? targetParty.split("(")[0].trim() : (targetParty.includes("::") ? targetParty.split("::")[0].trim() : targetParty);
             const fallbackRes = await supabase
               .from("purchase_purchase_orders")
               .select("*")

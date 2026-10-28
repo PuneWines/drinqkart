@@ -65,21 +65,12 @@ import { useRealtimeSync } from "../hooks/useRealtimeSync";
 import { dashboardSyncService } from "../services/dashboardSyncService";
 
 // Utilities
-import { transformActivePartyItems, roundPoBox } from "../utils/poTransformer";
+import {
+  transformActivePartyItems,
+  roundPoBox,
+  parsePartyAndCompany,
+} from "../utils/poTransformer";
 import { today } from "../utils/poHelpers";
-
-const parsePartyAndCompany = (str) => {
-  if (!str || typeof str !== "string") return { party: "", company: "" };
-  if (str.includes("::")) {
-    const parts = str.split("::");
-    return { party: (parts[0] || "").trim(), company: (parts[1] || "").trim() };
-  }
-  const match = str.match(/^(.*?)\s*\((.*?)\)$/);
-  if (match) {
-    return { party: (match[1] || "").trim(), company: (match[2] || "").trim() };
-  }
-  return { party: str.trim(), company: "" };
-};
 
 const PurchaseOrder = () => {
   const { companies, companySettings, fetchCompanySettings } =
@@ -291,18 +282,15 @@ const PurchaseOrder = () => {
         const hasPo = existingPos.some((po) => {
           if (po.indent_id !== item.unique_indent_id) return false;
 
-          const poVendor = po.vendor_name?.includes("::")
-            ? po.vendor_name.split("::")[0].trim().toLowerCase()
-            : (po.vendor_name || "").trim().toLowerCase();
+          const parsedPoVendor = parsePartyAndCompany(po.vendor_name);
+          const poVendor = parsedPoVendor.party.toLowerCase();
 
           if (poVendor !== itemParty) return false;
 
           const poFilteredComp = (
             po.company_scope ||
             po.filtered_company_name ||
-            (po.vendor_name?.includes("::")
-              ? po.vendor_name.split("::")[1]
-              : "") ||
+            parsedPoVendor.company ||
             ""
           )
             .trim()
@@ -430,18 +418,19 @@ const PurchaseOrder = () => {
 
   const dbParties = useMemo(() => {
     if (poMode === "manual") {
-      return vendorsList.map((v) => ({
-        key: v.company_name
-          ? `${v.party_name}::${v.company_name}`
-          : v.party_name,
-        partyName: v.party_name,
-        companyName: v.company_name || "",
-        companyScope: v.company_name || null,
-        filteredCompanyName: v.company_name || null,
-        label: v.company_name
+      return vendorsList.map((v) => {
+        const label = v.company_name
           ? `${v.party_name} (${v.company_name})`
-          : v.party_name,
-      }));
+          : v.party_name;
+        return {
+          key: label,
+          partyName: v.party_name,
+          companyName: v.company_name || "",
+          companyScope: v.company_name || null,
+          filteredCompanyName: v.company_name || null,
+          label,
+        };
+      });
     }
 
     // Group approved items by party_name and company_scope combination
@@ -453,20 +442,14 @@ const PurchaseOrder = () => {
         item.filtered_company_name ||
         ""
       ).trim();
-      if (party.includes("::")) {
-        const parts = party.split("::");
-        party = parts[0].trim();
-        if (!scope) scope = parts[1].trim();
-      } else {
-        const pMatch = party.match(/^(.*?)\s*\((.*?)\)$/);
-        if (pMatch) {
-          party = pMatch[1].trim();
-          if (!scope) scope = pMatch[2].trim();
-        }
+      const parsedParty = parsePartyAndCompany(party);
+      if (parsedParty.company) {
+        party = parsedParty.party;
+        if (!scope) scope = parsedParty.company;
       }
       if (!party) return;
       const origComp = (item.company_name || "").trim();
-      const key = scope ? `${party}::${scope}` : party;
+      const key = scope ? `${party} (${scope})` : party;
       if (!partyCompanyMap.has(key)) {
         partyCompanyMap.set(key, {
           key,
@@ -771,6 +754,7 @@ const PurchaseOrder = () => {
     try {
       const res = await restoreHeldFromHoldTable({
         batchId,
+        itemIds: targetBatch.itemIds || targetBatch.items?.map((i) => i.id),
         empCode,
       });
 
@@ -825,15 +809,20 @@ const PurchaseOrder = () => {
 
   // Delete held batch from purchase_hold
   const handleDeleteHeldBatch = async (batchId) => {
+    const targetBatch = heldPOs.find((b) => b.batchId === batchId);
     if (
       !window.confirm(
-        "Are you sure you want to delete this held item/PO batch?",
+        `Are you sure you want to delete this held PO for "${targetBatch?.partyName || "this vendor"}"?`,
       )
     )
       return;
 
     try {
-      await deleteHeldFromHoldTable(batchId);
+      await deleteHeldFromHoldTable(
+        batchId,
+        null,
+        targetBatch?.itemIds || targetBatch?.items?.map((i) => i.id),
+      );
       addToast("Held item/PO deleted.", "info");
       await loadPageData(false);
     } catch (err) {
@@ -957,22 +946,14 @@ const PurchaseOrder = () => {
         ""
       ).trim();
       if (!targetParty && vendorOption.key) {
-        if (vendorOption.key.includes("::")) {
-          const parts = vendorOption.key.split("::");
-          targetParty = parts[0].trim();
-          targetCompany = parts[1].trim();
-        } else {
-          targetParty = vendorOption.key.trim();
-        }
+        const parsedKey = parsePartyAndCompany(vendorOption.key);
+        targetParty = parsedKey.party;
+        if (!targetCompany && parsedKey.company) targetCompany = parsedKey.company;
       }
     } else if (typeof vendorOption === "string") {
-      if (vendorOption.includes("::")) {
-        const parts = vendorOption.split("::");
-        targetParty = parts[0].trim();
-        targetCompany = parts[1].trim();
-      } else {
-        targetParty = vendorOption.trim();
-      }
+      const parsed = parsePartyAndCompany(vendorOption);
+      targetParty = parsed.party;
+      if (!targetCompany && parsed.company) targetCompany = parsed.company;
     }
 
     if (targetParty.includes("(") && targetParty.endsWith(")")) {
@@ -1186,22 +1167,12 @@ const PurchaseOrder = () => {
   const activeVendorInfo = useMemo(() => {
     if (!activeParty)
       return { vendorName: "", companyScope: null, filteredCompany: null };
-    if (activeParty.includes("::")) {
-      const parts = activeParty.split("::");
-      const scope = parts[1]?.trim() || null;
+    const { party, company } = parsePartyAndCompany(activeParty);
+    if (company) {
       return {
-        vendorName: parts[0].trim(),
-        companyScope: scope,
-        filteredCompany: scope,
-      };
-    }
-    const match = activeParty.match(/^(.*?)\s*\((.*?)\)$/);
-    if (match) {
-      const scope = match[2].trim() || null;
-      return {
-        vendorName: match[1].trim(),
-        companyScope: scope,
-        filteredCompany: scope,
+        vendorName: party,
+        companyScope: company,
+        filteredCompany: company,
       };
     }
     const found = (dbParties || []).find((p) =>
@@ -1220,7 +1191,7 @@ const PurchaseOrder = () => {
       };
     }
     return {
-      vendorName: activeParty.trim(),
+      vendorName: party || activeParty.trim(),
       companyScope: null,
       filteredCompany: null,
     };
@@ -1683,9 +1654,8 @@ const PurchaseOrder = () => {
       // --- Generate / Fetch Unique Vendor ID ---
       const rawParty =
         activeVendorInfo.vendorName ||
-        (activeParty.includes("::")
-          ? activeParty.split("::")[0].trim()
-          : activeParty.trim());
+        parsePartyAndCompany(activeParty).party ||
+        activeParty.trim();
       const currentVendorId = await generateVendorId(rawParty, targetScope);
 
       // --- Insert Database Record ---
@@ -1772,9 +1742,8 @@ const PurchaseOrder = () => {
 
       const rawPartyName =
         activeVendorInfo.vendorName ||
-        (activeParty.includes("::")
-          ? activeParty.split("::")[0].trim()
-          : activeParty.trim());
+        parsePartyAndCompany(activeParty).party ||
+        activeParty.trim();
       const currentFilteredComp = targetScope;
       const currentOrigCompany =
         itemsForActiveParty[0]?.company_name || activeCompany?.name || null;
@@ -2335,7 +2304,7 @@ const PurchaseOrder = () => {
                   Held Purchase Orders & Items
                 </h2>
                 <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">
-                  {filteredHeldPOs.length} Batches
+                  {filteredHeldPOs.length} {filteredHeldPOs.length === 1 ? "Held PO" : "Held POs"}
                 </span>
               </div>
               <p className="text-xs text-slate-500">
@@ -2360,7 +2329,7 @@ const PurchaseOrder = () => {
               </div>
             ) : (
               filteredHeldPOs.map((batch) => {
-                const scope = batch.companyScope || batch.companyName;
+                const scope = batch.companyScope || batch.filteredCompanyName;
                 return (
                   <div
                     key={batch.batchId}
@@ -2372,7 +2341,7 @@ const PurchaseOrder = () => {
                         <span className="px-2.5 py-1 bg-amber-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-md shadow-xs">
                           {batch.type === "complete_po"
                             ? "Complete PO Hold"
-                            : "Item Hold"}
+                            : `${batch.items.length} ${batch.items.length === 1 ? "Item" : "Items"} on Hold`}
                         </span>
 
                         <div className="flex items-center gap-1.5 ml-1">

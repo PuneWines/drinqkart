@@ -22,6 +22,7 @@ import {
   Search,
 } from "lucide-react";
 import "../styles/Pages.css";
+import { parsePartyAndCompany } from "../utils/poTransformer";
 
 import Toast, { useToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
@@ -1280,7 +1281,7 @@ const Indent = () => {
       const vendorName = itemData.party_name;
 
       if (uniqueIndentId && vendorName) {
-        const cleanVendorName = vendorName.split("::")[0].trim();
+        const cleanVendorName = parsePartyAndCompany(vendorName).party || vendorName.trim();
         const { data: poData, error: poError } = await supabase
           .from("purchase_purchase_orders")
           .select("*")

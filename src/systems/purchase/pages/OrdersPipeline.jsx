@@ -4,6 +4,7 @@ import { fetchPipelineOrders, fetchPipelineStats } from "../services/ordersPipel
 import useShopStore from "../store/useShopStore";
 import useCompanyStore from "../store/useCompanyStore";
 import { isTransporterSkippedForOrder } from "../utils/poHelpers";
+import { parsePartyAndCompany } from "../utils/poTransformer";
 import Toast, { useToast } from "../components/Toast";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 import {
@@ -421,19 +422,14 @@ const OrdersPipeline = () => {
     if (scope && scope.trim()) {
       return scope.trim();
     }
-    if (po.vendor_name && po.vendor_name.includes("::")) {
-      const parts = po.vendor_name.split("::");
-      return parts[1]?.trim() || "";
-    }
-    return "";
+    const parsed = parsePartyAndCompany(po.vendor_name);
+    return parsed.company || "";
   };
 
   const getCleanVendorName = (po) => {
     if (!po || !po.vendor_name) return "—";
-    if (po.vendor_name.includes("::")) {
-      return po.vendor_name.split("::")[0].trim();
-    }
-    return po.vendor_name.trim();
+    const parsed = parsePartyAndCompany(po.vendor_name);
+    return parsed.party || po.vendor_name.trim();
   };
 
   // 2. Resolve Stakeholder Status details
