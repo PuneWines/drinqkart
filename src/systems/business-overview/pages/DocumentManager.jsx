@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission, ViewOnlyBanner } from '../../../utils/permissionUtils';
 import * as dbService from '../services/documentManagerDb';
+import { useChatStore } from '../../../store/useChatStore';
 import toast, { Toaster } from 'react-hot-toast';
 import {
   LayoutDashboard,
@@ -668,6 +669,19 @@ export default function DocumentManager() {
     } else {
       const cleanPhone = recipient.replace(/\D/g, '');
       const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+
+      // 1. Dispatch via automated WhatsApp gateway (Maytapi & chat history)
+      try {
+        await useChatStore.getState().sendSystemWhatsAppMessage({
+          phone: formattedPhone,
+          text: fullText,
+          contactName: docs[0]?.person_name || 'Document Recipient'
+        });
+      } catch (err) {
+        console.warn('[WhatsApp] Automated dispatch note:', err);
+      }
+
+      // 2. Open WhatsApp Web / App directly so user has immediate confirmation & send
       const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(fullText)}`;
       window.open(waUrl, '_blank', 'noopener');
     }
@@ -725,15 +739,13 @@ export default function DocumentManager() {
                 Cloud Database Connected
               </span>
             ) : (
-              <button
-                type="button"
-                onClick={() => setIsSqlModalOpen(true)}
-                className="bg-amber-50 text-amber-800 hover:bg-amber-100 font-medium text-xs px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1 cursor-pointer transition"
-                title="Click to view database SQL setup instructions"
+              <span
+                className="bg-slate-100 text-slate-600 font-medium text-xs px-2.5 py-0.5 rounded-full border border-slate-200 flex items-center gap-1"
+                title="Local / Offline Storage Mode active"
               >
-                <Database size={12} />
-                Local Storage Mode · View Supabase Schema
-              </button>
+                <Clock size={12} />
+                Local Storage Mode
+              </span>
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1">
