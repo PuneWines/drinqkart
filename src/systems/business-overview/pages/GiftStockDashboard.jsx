@@ -660,7 +660,9 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
           esc(itemName(r.itemId, r.itemName)) +
           '</td><td class="r num q-in">+' +
           num(r.qty) +
-          '</td><td class="act"><button class="btn sm ghost danger write" data-act="del-in" data-id="' +
+          '</td><td class="act"><button class="btn sm ghost write" data-act="edit-in" data-id="' +
+          esc(r.id) +
+          '">Edit</button><button class="btn sm ghost danger write" data-act="del-in" data-id="' +
           esc(r.id) +
           '">Delete</button></td></tr>';
       });
@@ -717,7 +719,9 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
           esc(r.contact) +
           '</td><td>' +
           proofHtml +
-          '</td><td class="act"><button class="btn sm ghost danger write" data-act="del-out" data-id="' +
+          '</td><td class="act"><button class="btn sm ghost write" data-act="edit-out" data-id="' +
+          esc(r.id) +
+          '">Edit</button><button class="btn sm ghost danger write" data-act="del-out" data-id="' +
           esc(r.id) +
           '">Delete</button></td></tr>';
       });
@@ -1228,12 +1232,18 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
             '">' +
             f.options
               .map(function (o) {
-                return '<option value="' + esc(o) + '"' + (o === f.value ? ' selected' : '') + '>' + esc(o) + '</option>';
+                const val = typeof o === 'object' && o !== null ? o.value : o;
+                const lbl = typeof o === 'object' && o !== null ? o.label : o;
+                return '<option value="' + esc(val) + '"' + (String(val) === String(f.value) ? ' selected' : '') + '>' + esc(lbl) + '</option>';
               })
               .join('') +
             '</select>';
         } else if (f.type === 'static') {
           h += '<input id="mf-' + f.id + '" value="' + esc(f.value) + '" disabled>';
+        } else if (f.type === 'date') {
+          h += '<input id="mf-' + f.id + '" type="date" value="' + esc(f.value || '') + '"' + (f.required === false ? '' : ' required') + '>';
+        } else if (f.type === 'number') {
+          h += '<input id="mf-' + f.id + '" type="number" min="' + (f.min != null ? f.min : '1') + '" value="' + esc(f.value != null ? f.value : '') + '"' + (f.required === false ? '' : ' required') + '>';
         } else {
           h +=
             '<input id="mf-' +
@@ -1242,7 +1252,8 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
             esc(f.value || '') +
             '"' +
             (f.list ? ' list="ml-' + f.id + '"' : '') +
-            ' required>' +
+            (f.required === false ? '' : ' required') +
+            '>' +
             (f.list
               ? '<datalist id="ml-' +
                 f.id +
@@ -1326,6 +1337,109 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
           if (dup) return 'This item already exists for ' + v.store + '.';
           const id = editing ? item.id : 'i_' + uid();
           save(store.put('items', id, { name: v.name, store: v.store, ts: editing ? item.ts || Date.now() : Date.now() }), editing ? 'Item updated' : 'Item created');
+        }
+      });
+    }
+
+    function openStockInModal(entry) {
+      if (!entry) return;
+      const allItemOptions = S.items.map(function (it) {
+        return { value: it.id, label: it.name + (it.store !== ALL ? ' (' + it.store + ')' : '') };
+      });
+      if (entry.itemId && !allItemOptions.some(function (o) { return o.value === entry.itemId; })) {
+        allItemOptions.unshift({ value: entry.itemId, label: itemName(entry.itemId, entry.itemName) });
+      }
+
+      openModal({
+        title: 'Edit stock in entry',
+        submit: 'Save changes',
+        fields: [
+          { id: 'date', label: 'Date', type: 'date', value: entry.date },
+          { id: 'store', label: 'Store', type: 'select', options: STORES, value: entry.store },
+          { id: 'trader', label: 'Trader name', type: 'select', options: traders(), value: entry.trader },
+          { id: 'company', label: 'Company name', type: 'text', value: entry.company || '', required: false },
+          { id: 'itemId', label: 'Item name', type: 'select', options: allItemOptions, value: entry.itemId },
+          { id: 'qty', label: 'Quantity', type: 'number', min: '1', value: entry.qty }
+        ],
+        onSubmit: function (v) {
+          const q = Number(v.qty);
+          if (!Number.isInteger(q) || q < 1) return 'Qty must be a whole number, 1 or more.';
+          if (!v.date) return 'Enter a date.';
+          if (!v.store) return 'Choose a store.';
+          if (!v.trader) return 'Choose a trader.';
+          if (!v.itemId) return 'Choose an item.';
+          const it = itemMap()[v.itemId] || { id: v.itemId, name: entry.itemName };
+
+          const updated = {
+            ...entry,
+            date: v.date,
+            store: v.store,
+            trader: v.trader,
+            company: v.company || '',
+            itemId: it.id,
+            itemName: it.name,
+            qty: q,
+            ts: entry.ts || Date.now()
+          };
+
+          save(store.put('ins', entry.id, updated), 'Stock in updated');
+        }
+      });
+    }
+
+    function openStockOutModal(entry) {
+      if (!entry) return;
+      const allItemOptions = S.items.map(function (it) {
+        return { value: it.id, label: it.name + (it.store !== ALL ? ' (' + it.store + ')' : '') };
+      });
+      if (entry.itemId && !allItemOptions.some(function (o) { return o.value === entry.itemId; })) {
+        allItemOptions.unshift({ value: entry.itemId, label: itemName(entry.itemId, entry.itemName) });
+      }
+
+      openModal({
+        title: 'Edit stock out entry',
+        submit: 'Save changes',
+        fields: [
+          { id: 'date', label: 'Date', type: 'date', value: entry.date },
+          { id: 'store', label: 'Store', type: 'select', options: STORES, value: entry.store },
+          { id: 'itemId', label: 'Item name', type: 'select', options: allItemOptions, value: entry.itemId },
+          { id: 'qty', label: 'Quantity', type: 'number', min: '1', value: entry.qty },
+          { id: 'customer', label: 'Customer name', type: 'text', value: entry.customer || '', required: false },
+          { id: 'contact', label: 'Contact number', type: 'text', value: entry.contact || '', required: false }
+        ],
+        onSubmit: function (v) {
+          const q = Number(v.qty);
+          if (!Number.isInteger(q) || q < 1) return 'Qty must be a whole number, 1 or more.';
+          if (!v.date) return 'Enter a date.';
+          if (!v.store) return 'Choose a store.';
+          if (!v.itemId) return 'Choose an item.';
+          const it = itemMap()[v.itemId] || { id: v.itemId, name: entry.itemName };
+
+          const sameStoreAndItem = v.store === entry.store && v.itemId === entry.itemId;
+          const currAvail = available(v.store, v.itemId) + (sameStoreAndItem ? entry.qty : 0);
+          if (q > currAvail) {
+            return 'Only ' + num(currAvail) + ' in stock at ' + v.store + '.';
+          }
+
+          const phone = (v.contact || '').trim();
+          if (phone && !/^[+]?[0-9 -]{10,15}$/.test(phone)) {
+            return 'Enter a valid contact number.';
+          }
+
+          const updated = {
+            ...entry,
+            date: v.date,
+            store: v.store,
+            itemId: it.id,
+            itemName: it.name,
+            qty: q,
+            customer: (v.customer || '').trim(),
+            contact: phone,
+            proofImage: entry.proofImage || null,
+            ts: entry.ts || Date.now()
+          };
+
+          save(store.put('outs', entry.id, updated), 'Stock out updated');
         }
       });
     }
@@ -1431,10 +1545,20 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
         armed(b, function () {
           save(store.del('ins', id), 'Entry deleted');
         });
+      } else if (act === 'edit-in') {
+        const entry = S.ins.filter(function (x) {
+          return x.id === id;
+        })[0];
+        if (entry) openStockInModal(entry);
       } else if (act === 'del-out') {
         armed(b, function () {
           save(store.del('outs', id), 'Entry deleted');
         });
+      } else if (act === 'edit-out') {
+        const entry = S.outs.filter(function (x) {
+          return x.id === id;
+        })[0];
+        if (entry) openStockOutModal(entry);
       } else if (act === 'edit-item') {
         const it = S.items.filter(function (x) {
           return x.id === id;

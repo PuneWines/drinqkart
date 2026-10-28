@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission, ViewOnlyBanner } from '../../../utils/permissionUtils';
 import * as dbService from '../services/documentManagerDb';
@@ -147,12 +148,64 @@ const makeBlankEntry = () => ({
 // ============================================================================
 // Main Document Manager Component
 // ============================================================================
-export default function DocumentManager() {
-  const { user } = useAuth();
-  const { canView, canModify } = getPagePermission(user, 'business-overview', 'Document Manager');
+export default function DocumentManager({ defaultTab = 'dashboard' }) {
+  const { tab: routeTab } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Active Tab state
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'documents' | 'add' | 'renewal' | 'shared' | 'masters'
+  const getNormalizedTab = useCallback((t) => {
+    if (!t) return defaultTab;
+    const l = t.toLowerCase();
+    if (l === 'dashboard') return 'dashboard';
+    if (l === 'all-documents' || l === 'documents' || l === 'all') return 'documents';
+    if (l === 'add-document' || l === 'add') return 'add';
+    if (l === 'renewal-tracker' || l === 'renewal') return 'renewal';
+    if (l === 'shared-history' || l === 'shared') return 'shared';
+    if (l === 'masters' || l === 'masters-setup') return 'masters';
+    return defaultTab;
+  }, [defaultTab]);
+
+  // Active Page state
+  const [activeTab, setActiveTab] = useState(() => getNormalizedTab(routeTab || defaultTab));
+
+  useEffect(() => {
+    const nextTab = getNormalizedTab(routeTab || defaultTab);
+    setActiveTab(nextTab);
+  }, [routeTab, defaultTab, location.pathname, getNormalizedTab]);
+
+  const { user } = useAuth();
+  const pageLabelMap = {
+    dashboard: 'Dashboard',
+    documents: 'All Documents',
+    add: 'Add Document',
+    renewal: 'Renewal Tracker',
+    shared: 'Shared History',
+    masters: 'Masters & Setup'
+  };
+  const currentPageLabel = pageLabelMap[activeTab] || 'Document Manager';
+  const pagePerm = getPagePermission(user, 'business-overview', currentPageLabel);
+  const generalPerm = getPagePermission(user, 'business-overview', 'Document Manager');
+  const canView = pagePerm.canView || generalPerm.canView;
+  const canModify = pagePerm.canModify || generalPerm.canModify;
+
+  const changePage = (newTab, options = {}) => {
+    const routeMap = {
+      dashboard: '/systems/business-overview/document-manager/dashboard',
+      documents: '/systems/business-overview/document-manager/all-documents',
+      add: '/systems/business-overview/document-manager/add-document',
+      renewal: '/systems/business-overview/document-manager/renewal-tracker',
+      shared: '/systems/business-overview/document-manager/shared-history',
+      masters: '/systems/business-overview/document-manager/masters'
+    };
+    if (options.filterRenewal !== undefined) {
+      setFilterRenewal(options.filterRenewal);
+    }
+    if (routeMap[newTab]) {
+      navigate(routeMap[newTab]);
+    } else {
+      setActiveTab(newTab);
+    }
+  };
 
   // Data States
   const [documents, setDocuments] = useState([]);
@@ -463,14 +516,14 @@ export default function DocumentManager() {
         removedFileIds: []
       }
     ]);
-    setActiveTab('add');
+    changePage('add');
   };
 
   const handleCancelForm = () => {
     setEditingDoc(null);
     setFormEntries([makeBlankEntry()]);
     setFormErrors({});
-    setActiveTab('documents');
+    changePage('documents');
   };
 
   const handleAddAnotherEntry = () => {
@@ -731,7 +784,7 @@ export default function DocumentManager() {
             </h1>
             <span className="bg-[#C9A84C]/15 text-[#8C6D23] font-semibold text-xs px-2.5 py-0.5 rounded-full border border-[#C9A84C]/30 flex items-center gap-1">
               <ShieldCheck size={13} />
-              Centralized Vault
+              {currentPageLabel}
             </span>
             {isCloudSync ? (
               <span className="bg-emerald-50 text-emerald-700 font-medium text-xs px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
@@ -766,17 +819,13 @@ export default function DocumentManager() {
             <span>Refresh</span>
           </button>
 
-
-
-
-
-          {canModify && (
+          {canModify && activeTab !== 'add' && (
             <button
               type="button"
               onClick={() => {
                 setEditingDoc(null);
                 setFormEntries([makeBlankEntry()]);
-                setActiveTab('add');
+                changePage('add');
               }}
               className="flex items-center gap-1.5 px-4 py-2 bg-[#C9A84C] hover:bg-[#b8953d] text-[#1c120c] text-xs font-bold rounded-lg shadow-xs transition cursor-pointer"
             >
@@ -784,105 +833,18 @@ export default function DocumentManager() {
               <span>Add Document</span>
             </button>
           )}
-        </div>
-      </div>
 
-      {/* 2. System Tab Navigation Bar */}
-      <div className="flex items-center gap-1 bg-white p-1.5 rounded-xl border border-slate-200/80 shadow-xs overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab('dashboard')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition shrink-0 cursor-pointer ${
-            activeTab === 'dashboard'
-              ? 'bg-[#2C1D11] text-[#C9A84C] font-bold shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <LayoutDashboard size={14} />
-          <span>Dashboard</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('documents')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition shrink-0 cursor-pointer ${
-            activeTab === 'documents'
-              ? 'bg-[#2C1D11] text-[#C9A84C] font-bold shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Files size={14} />
-          <span>All Documents</span>
-          <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-200">
-            {documents.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (!editingDoc) setFormEntries([makeBlankEntry()]);
-            setActiveTab('add');
-          }}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition shrink-0 cursor-pointer ${
-            activeTab === 'add'
-              ? 'bg-[#2C1D11] text-[#C9A84C] font-bold shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <FilePlus size={14} />
-          <span>{editingDoc ? 'Edit Document' : 'Add Document'}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setFilterRenewal('needs');
-            setActiveTab('renewal');
-          }}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition shrink-0 cursor-pointer ${
-            activeTab === 'renewal'
-              ? 'bg-[#2C1D11] text-[#C9A84C] font-bold shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <CalendarClock size={14} />
-          <span>Renewal Tracker</span>
-          {stats.overdueCount > 0 && (
-            <span className="bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-              {stats.overdueCount}
-            </span>
+          {activeTab === 'add' && (
+            <button
+              type="button"
+              onClick={() => changePage('documents')}
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition cursor-pointer"
+            >
+              <ChevronLeft size={15} />
+              <span>Back to Documents</span>
+            </button>
           )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('shared')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition shrink-0 cursor-pointer ${
-            activeTab === 'shared'
-              ? 'bg-[#2C1D11] text-[#C9A84C] font-bold shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Share2 size={14} />
-          <span>Shared History</span>
-          <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-200">
-            {shares.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('masters')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition shrink-0 cursor-pointer ${
-            activeTab === 'masters'
-              ? 'bg-[#2C1D11] text-[#C9A84C] font-bold shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Settings size={14} />
-          <span>Masters & Setup</span>
-        </button>
+        </div>
       </div>
 
       {/* 3. TAB CONTENT */}
@@ -896,8 +858,7 @@ export default function DocumentManager() {
             {/* 1. Total Documents */}
             <div
               onClick={() => {
-                setFilterRenewal('');
-                setActiveTab('documents');
+                changePage('documents', { filterRenewal: '' });
               }}
               className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs hover:border-[#C9A84C]/50 transition cursor-pointer flex items-center justify-between"
             >
@@ -916,8 +877,7 @@ export default function DocumentManager() {
             {/* 2. Recent Uploads */}
             <div
               onClick={() => {
-                setFilterRenewal('');
-                setActiveTab('documents');
+                changePage('documents', { filterRenewal: '' });
               }}
               className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs hover:border-[#C9A84C]/50 transition cursor-pointer flex items-center justify-between"
             >
@@ -935,7 +895,7 @@ export default function DocumentManager() {
 
             {/* 3. Shared Documents */}
             <div
-              onClick={() => setActiveTab('shared')}
+              onClick={() => changePage('shared')}
               className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs hover:border-[#C9A84C]/50 transition cursor-pointer flex items-center justify-between"
             >
               <div>
@@ -953,8 +913,7 @@ export default function DocumentManager() {
             {/* 4. Need Renewal */}
             <div
               onClick={() => {
-                setFilterRenewal('needs');
-                setActiveTab('renewal');
+                changePage('renewal', { filterRenewal: 'needs' });
               }}
               className="bg-white p-4 rounded-xl border border-rose-200/80 shadow-xs hover:border-rose-300 transition cursor-pointer flex items-center justify-between"
             >
@@ -985,8 +944,7 @@ export default function DocumentManager() {
               <button
                 type="button"
                 onClick={() => {
-                  setFilterRenewal('overdue');
-                  setActiveTab('renewal');
+                  changePage('renewal', { filterRenewal: 'overdue' });
                 }}
                 className="text-xs font-bold text-amber-800 hover:text-amber-950 underline flex items-center gap-1 cursor-pointer"
               >
@@ -1038,7 +996,7 @@ export default function DocumentManager() {
                 <span className="text-slate-500">Total Categories: {categories.length}</span>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('masters')}
+                  onClick={() => changePage('masters')}
                   className="text-[#8C6D23] font-semibold hover:underline flex items-center gap-1"
                 >
                   Manage Categories <ChevronRight size={13} />
@@ -1057,8 +1015,7 @@ export default function DocumentManager() {
                   <button
                     type="button"
                     onClick={() => {
-                      setFilterRenewal('needs');
-                      setActiveTab('renewal');
+                      changePage('renewal', { filterRenewal: 'needs' });
                     }}
                     className="text-xs text-[#8C6D23] font-semibold hover:underline"
                   >

@@ -189,7 +189,15 @@ const AVAILABLE_SYSTEMS = [
       },
       {
         title: "DOCUMENT MANAGER MODULE",
-        pages: ["Document Manager"],
+        pages: [
+          "Dashboard",
+          "All Documents",
+          "Add Document",
+          "Renewal Tracker",
+          "Shared History",
+          "Masters & Setup",
+          "Document Manager",
+        ],
       },
     ],
   },

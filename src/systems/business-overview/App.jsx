@@ -26,8 +26,14 @@ function BusinessOverviewApp({ onCollapseSidebar }) {
             <Route path="feedback/resolution" element={<ComplaintResolution />} />
             <Route path="trader-invoices" element={<TraderInvoices />} />
             <Route path="shop-visit" element={<ShopVisit />} />
-            <Route path="document-manager" element={<DocumentManager />} />
-            <Route path="document-manager/*" element={<DocumentManager />} />
+            <Route path="document-manager" element={<Navigate to="document-manager/dashboard" replace />} />
+            <Route path="document-manager/dashboard" element={<DocumentManager defaultTab="dashboard" />} />
+            <Route path="document-manager/all-documents" element={<DocumentManager defaultTab="documents" />} />
+            <Route path="document-manager/add-document" element={<DocumentManager defaultTab="add" />} />
+            <Route path="document-manager/renewal-tracker" element={<DocumentManager defaultTab="renewal" />} />
+            <Route path="document-manager/shared-history" element={<DocumentManager defaultTab="shared" />} />
+            <Route path="document-manager/masters" element={<DocumentManager defaultTab="masters" />} />
+            <Route path="document-manager/:tab" element={<DocumentManager />} />
             <Route path="sales-analytics" element={<Navigate to="/systems/sales-analytics" replace />} />
             <Route path="stock-report" element={<Navigate to="/systems/stock-report" replace />} />
             <Route path="stock-balance" element={<Navigate to="/systems/sales-analytics" replace />} />

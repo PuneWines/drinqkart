@@ -36,11 +36,15 @@ import {
   Gift,
   Boxes,
   PackagePlus,
-  PackageMinus
+  PackageMinus,
+  Files,
+  FolderKanban
 } from 'lucide-react';
 
 const getSubtabIcon = (label) => {
   const l = (label || '').toLowerCase();
+  if (l.includes('document manager')) return FolderKanban;
+  if (l.includes('all documents') || l === 'all documents' || l === 'documents') return Files;
   if (l.includes('gift')) return Gift;
   if (l.includes('stock in')) return PackagePlus;
   if (l.includes('stock out')) return PackageMinus;

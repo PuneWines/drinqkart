@@ -167,7 +167,18 @@ export const systems = [
           { label: 'Trader Master', to: '/systems/business-overview/gift-stock/trader-master' }
         ]
       },
-      { label: 'Document Manager', to: '/systems/business-overview/document-manager' }
+      {
+        label: 'Document Manager',
+        to: '/systems/business-overview/document-manager/dashboard',
+        children: [
+          { label: 'Dashboard', to: '/systems/business-overview/document-manager/dashboard' },
+          { label: 'All Documents', to: '/systems/business-overview/document-manager/all-documents' },
+          { label: 'Add Document', to: '/systems/business-overview/document-manager/add-document' },
+          { label: 'Renewal Tracker', to: '/systems/business-overview/document-manager/renewal-tracker' },
+          { label: 'Shared History', to: '/systems/business-overview/document-manager/shared-history' },
+          { label: 'Masters & Setup', to: '/systems/business-overview/document-manager/masters' }
+        ]
+      }
     ]
   },
   {
@@ -340,6 +351,9 @@ export const getVisibleSystems = (user) => {
         }
         if (sub.label === 'Document Manager') {
           labelsToCheck.push('Document Manager', 'Document manager', 'document-manager', 'document_manager', 'Business overview');
+        }
+        if (['Dashboard', 'All Documents', 'Add Document', 'Renewal Tracker', 'Shared History', 'Masters & Setup'].includes(sub.label)) {
+          labelsToCheck.push(sub.label, 'Document Manager', 'Document manager', 'document-manager', 'document_manager', 'Business overview');
         }
       }
       if (systemId === 'sale-analytics' || systemId === 'sale_analytics') {

@@ -20,6 +20,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Image as ImageIcon,
+  Edit2,
 } from "lucide-react";
 
 const cleanList = (arr) => {
@@ -417,7 +418,7 @@ function dealString(r) {
 }
 
 /* ================= CARD VIEW COMPONENT ================= */
-function Card({ r, pending, setPending, onDelete, onOpen }) {
+function Card({ r, pending, setPending, onDelete, onEdit, onOpen }) {
   const st = statusOf(r), life = lifeOf(r);
   const stype = r.schemeType || r.scheme_type;
   const fromD = r.fromDate || r.from_date;
@@ -506,7 +507,16 @@ function Card({ r, pending, setPending, onDelete, onOpen }) {
 
       <div className="flex justify-between items-center pt-2 mt-auto border-t border-slate-100 text-[11px] text-slate-400">
         <span>Logged {fmt(r.date)}</span>
-        <div>
+        <div className="flex items-center gap-2">
+          {onEdit && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer text-xs font-semibold"
+              onClick={() => onEdit(r)}
+            >
+              <Edit2 size={13} /> Edit
+            </button>
+          )}
           {pending === r.id ? (
             <span className="flex items-center gap-2">
               <button
@@ -540,7 +550,7 @@ function Card({ r, pending, setPending, onDelete, onOpen }) {
 }
 
 /* ================= TABLE ROW COMPONENT ================= */
-function TableRow({ r, pending, setPending, onDelete, onOpen }) {
+function TableRow({ r, pending, setPending, onDelete, onEdit, onOpen }) {
   const st = statusOf(r), bt = basisText(r);
   const stype = r.schemeType || r.scheme_type;
   const fromD = r.fromDate || r.from_date;
@@ -588,16 +598,28 @@ function TableRow({ r, pending, setPending, onDelete, onOpen }) {
         {(r.attachments || []).length > 0 && <AttachStrip atts={r.attachments} onOpen={onOpen} />}
       </td>
       <td className="px-3.5 py-3 text-right whitespace-nowrap">
-        {pending === r.id ? (
-          <span className="flex items-center gap-2 justify-end text-xs">
-            <button type="button" className="text-red-600 font-bold hover:underline" onClick={() => onDelete(r.id)}>Confirm</button>
-            <button type="button" className="text-slate-500 hover:underline" onClick={() => setPending(null)}>Cancel</button>
-          </span>
-        ) : (
-          <button type="button" className="text-slate-400 hover:text-red-600 p-1 rounded" onClick={() => setPending(r.id)}>
-            <Trash2 size={15} />
-          </button>
-        )}
+        <div className="flex items-center justify-end gap-1.5">
+          {onEdit && (
+            <button
+              type="button"
+              className="text-slate-400 hover:text-indigo-600 p-1 rounded transition-colors cursor-pointer"
+              title="Edit"
+              onClick={() => onEdit(r)}
+            >
+              <Edit2 size={15} />
+            </button>
+          )}
+          {pending === r.id ? (
+            <span className="flex items-center gap-2 justify-end text-xs">
+              <button type="button" className="text-red-600 font-bold hover:underline" onClick={() => onDelete(r.id)}>Confirm</button>
+              <button type="button" className="text-slate-500 hover:underline" onClick={() => setPending(null)}>Cancel</button>
+            </span>
+          ) : (
+            <button type="button" className="text-slate-400 hover:text-red-600 p-1 rounded cursor-pointer" title="Delete" onClick={() => setPending(r.id)}>
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -769,8 +791,29 @@ const emptyForm = () => ({
   selected: [],
 });
 
-function CreateModal({ stores, setStores, onClose, onSave, tradersList, companiesList, brandsList }) {
-  const [f, setF] = useState(emptyForm);
+function CreateModal({ initialData, stores, setStores, onClose, onSave, tradersList, companiesList, brandsList }) {
+  const [f, setF] = useState(() => {
+    if (!initialData) return emptyForm();
+    return {
+      trader: initialData.trader || "",
+      company: initialData.company || "",
+      brand: initialData.brand || "",
+      from: initialData.fromDate || initialData.from_date || todayISO(),
+      to: initialData.toDate || initialData.to_date || "",
+      type: initialData.schemeType || initialData.scheme_type || "",
+      basis: initialData.basis || "",
+      unit: initialData.amtUnit || initialData.amt_unit || "",
+      tunit: initialData.targetUnit || initialData.target_unit || "",
+      qty: initialData.qty != null ? String(initialData.qty) : "",
+      free: initialData.freeQty != null ? String(initialData.freeQty) : "",
+      amount: initialData.amount != null ? String(initialData.amount) : "",
+      target: initialData.targetQty != null ? String(initialData.targetQty) : "",
+      disc: initialData.discussion || "",
+      all: Boolean(initialData.allStores ?? initialData.all_stores),
+      selected: initialData.stores || [],
+    };
+  });
+  const [existingAtts, setExistingAtts] = useState(() => initialData?.attachments || []);
   const [pend, setPend] = useState([]);
   const [err, setErr] = useState(null);
   const [saving, setSaving] = useState("");
@@ -984,8 +1027,8 @@ function CreateModal({ stores, setStores, onClose, onSave, tradersList, companie
     }
 
     const rec = {
-      id: uid(),
-      date: todayISO(),
+      id: initialData?.id || uid(),
+      date: initialData?.date || todayISO(),
       trader: f.trader,
       company: f.company,
       brand: f.brand,
@@ -1002,8 +1045,8 @@ function CreateModal({ stores, setStores, onClose, onSave, tradersList, companie
       allStores: f.all,
       stores: f.all ? [] : stores.filter((s) => f.selected.includes(s)),
       discussion: f.disc.trim(),
-      attachments: atts,
-      createdAt: Date.now(),
+      attachments: [...existingAtts, ...atts],
+      createdAt: initialData?.createdAt || Date.now(),
     };
 
     onSave(rec);
@@ -1022,9 +1065,11 @@ function CreateModal({ stores, setStores, onClose, onSave, tradersList, companie
         {/* Modal Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">New scheme discussion</h2>
+            <h2 className="text-xl font-bold text-slate-900">
+              {initialData ? "Edit scheme discussion" : "New scheme discussion"}
+            </h2>
             <p className="text-xs font-mono text-slate-400 mt-0.5">
-              Today, {dayName(todayISO())} {fmt(todayISO())}
+              {initialData ? `Logged ${fmt(initialData.date || todayISO())}` : `Today, ${dayName(todayISO())} ${fmt(todayISO())}`}
             </p>
           </div>
           <button
@@ -1421,6 +1466,34 @@ function CreateModal({ stores, setStores, onClose, onSave, tradersList, companie
                 }}
               />
 
+              {/* Existing Attachments in Edit Mode */}
+              {existingAtts.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Attached Files:</span>
+                  <ul className="space-y-1.5">
+                    {existingAtts.map((att, idx) => (
+                      <li key={att.id || idx} className="flex items-center gap-2.5 p-2 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs">
+                        <FileText size={16} className="text-indigo-600 shrink-0" />
+                        <span className="flex-1 min-w-0 font-medium text-slate-800 truncate">{att.name || "Attachment"}</span>
+                        {att.url && (
+                          <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-semibold shrink-0">
+                            View
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setExistingAtts((prev) => prev.filter((_, j) => j !== idx))}
+                          className="text-slate-400 hover:text-red-600 font-bold p-1 cursor-pointer"
+                          title="Remove attached file"
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {pend.length > 0 && (
                 <ul className="space-y-2 pt-1">
                   {pend.map((p, i) => (
@@ -1472,7 +1545,7 @@ function CreateModal({ stores, setStores, onClose, onSave, tradersList, companie
               disabled={!!saving}
               className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer shadow-sm"
             >
-              {saving || "Save Discussion"}
+              {saving || (initialData ? "Save changes" : "Save Discussion")}
             </button>
           </div>
         </form>
@@ -1747,9 +1820,16 @@ export default function SchemeDiscussions() {
   };
 
   const saveRecord = async (rec) => {
-    setRecords((p) => [rec].concat(p));
+    const isEdit = records.some((x) => x.id === rec.id);
+    if (isEdit) {
+      setRecords((p) => p.map((x) => (x.id === rec.id ? rec : x)));
+      toast.success("Discussion updated");
+    } else {
+      setRecords((p) => [rec].concat(p));
+      toast.success("Discussion saved");
+    }
     setModal(false);
-    toast.success("Discussion saved");
+    setEditingRecord(null);
 
     try {
       const payload = {
@@ -1772,18 +1852,26 @@ export default function SchemeDiscussions() {
         stores: rec.stores || [],
         discussion: rec.discussion || "",
         attachments: rec.attachments || [],
-        created_at: new Date(rec.createdAt).toISOString(),
+        created_at: new Date(rec.createdAt || Date.now()).toISOString(),
       };
 
-      await supabase.from("scheme_discussions").insert([payload]);
-    } catch (e) {}
+      await supabase.from("scheme_discussions").upsert([payload], { onConflict: "id" });
+    } catch (e) {
+      console.error("Failed to upsert scheme discussion:", e);
+    }
   };
+
+  const [editingRecord, setEditingRecord] = useState(null);
 
   const t = todayISO();
   const rowProps = {
     pending,
     setPending,
     onDelete: removeRecord,
+    onEdit: (rec) => {
+      setEditingRecord(rec);
+      setModal(true);
+    },
     onOpen: (url, name) => setLb({ url, name }),
   };
 
@@ -1814,7 +1902,10 @@ export default function SchemeDiscussions() {
             </button>
             <button
               type="button"
-              onClick={() => setModal(true)}
+              onClick={() => {
+                setEditingRecord(null);
+                setModal(true);
+              }}
               className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm px-4 py-2 rounded-lg shadow-2xs transition-all cursor-pointer"
             >
               <Plus size={16} /> Create
@@ -2022,12 +2113,16 @@ export default function SchemeDiscussions() {
           </div>
         )}
 
-        {/* Create Discussion Modal */}
+        {/* Create / Edit Discussion Modal */}
         {modal && (
           <CreateModal
+            initialData={editingRecord}
             stores={stores}
             setStores={setStores}
-            onClose={() => setModal(false)}
+            onClose={() => {
+              setModal(false);
+              setEditingRecord(null);
+            }}
             onSave={saveRecord}
             tradersList={traders}
             companiesList={companies}

@@ -98,7 +98,47 @@ const AVAILABLE_SYSTEMS = [
   {
     id: "business-overview",
     name: "Business overview",
-    pages: ["Trader Invoices", "Shop Visit", "Customer Feedback", "Assigned Complaints", "Complaint Resolution", "All Tickets", "Follow-Up", "Completed", "Dashboard", "Stock In", "Stock Out", "Current Stock", "Item Master", "Trader Master", "Document Manager"],
+    sections: [
+      {
+        title: "BUSINESS OVERVIEW MODULES",
+        pages: ["Scheme Discussions", "Trader Invoices", "Shop Visit"],
+      },
+      {
+        title: "FEEDBACK MODULE",
+        pages: [
+          "Customer Feedback",
+          "Assigned Complaints",
+          "Complaint Resolution",
+        ],
+      },
+      {
+        title: "HELP CENTER MODULE",
+        pages: ["All Tickets", "Follow-Up", "Completed"],
+      },
+      {
+        title: "GIFT STOCK MODULE",
+        pages: [
+          "Dashboard",
+          "Stock In",
+          "Stock Out",
+          "Current Stock",
+          "Item Master",
+          "Trader Master",
+        ],
+      },
+      {
+        title: "DOCUMENT MANAGER MODULE",
+        pages: [
+          "Dashboard",
+          "All Documents",
+          "Add Document",
+          "Renewal Tracker",
+          "Shared History",
+          "Masters & Setup",
+          "Document Manager",
+        ],
+      },
+    ],
   },
   {
     id: "sale-analytics",
@@ -789,71 +829,82 @@ export default function MasterSetting() {
                       </div>
 
                       {/* One Row Per Page List */}
-                      <div className="space-y-2 pt-1">
-                        {sys.pages.map((pg) => {
-                          const currentLevel = getPageLevel(sys.id, pg);
-
-                          return (
-                            <div
-                              key={pg}
-                              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[#FAFAFA] border border-[#1A1A1A]/10 hover:border-[#C9A84C]/40 transition-colors"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] shrink-0" />
-                                <span className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
-                                  {pg}
+                      <div className="space-y-3 pt-1">
+                        {(sys.sections || [{ title: null, pages: sys.pages || [] }]).map((sec, secIdx) => (
+                          <div key={secIdx} className="space-y-2">
+                            {sec.title && (
+                              <div className="flex items-center gap-2 border-l-4 border-[#C9A84C] bg-[#C9A84C]/10 px-3 py-1.5 rounded-r-md mt-2">
+                                <span className="text-[11px] font-black text-[#1C120C] uppercase tracking-wider font-sans">
+                                  {sec.title}
                                 </span>
                               </div>
+                            )}
+                            {sec.pages.map((pg) => {
+                              const currentLevel = getPageLevel(sys.id, pg);
 
-                              <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/10 shadow-xs shrink-0">
-                                {/* None Button */}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPageLevel(sys.id, pg, "none")
-                                  }
-                                  className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all ${
-                                    currentLevel === "none"
-                                      ? "bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20"
-                                      : "text-[#1A1A1A]/50 hover:text-[#1A1A1A]"
-                                  }`}
+                              return (
+                                <div
+                                  key={pg}
+                                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[#FAFAFA] border border-[#1A1A1A]/10 hover:border-[#C9A84C]/40 transition-colors"
                                 >
-                                  None
-                                </button>
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] shrink-0" />
+                                    <span className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
+                                      {pg}
+                                    </span>
+                                  </div>
 
-                                {/* View Button */}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPageLevel(sys.id, pg, "view")
-                                  }
-                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
-                                    currentLevel === "view"
-                                      ? "bg-[#1A1A1A] text-white font-bold shadow-sm"
-                                      : "text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
-                                  }`}
-                                >
-                                  .view
-                                </button>
+                                  <div className="flex items-center gap-1 bg-white p-1 border border-[#1A1A1A]/10 shadow-xs shrink-0">
+                                    {/* None Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPageLevel(sys.id, pg, "none")
+                                      }
+                                      className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                        currentLevel === "none"
+                                          ? "bg-[#1A1A1A]/10 text-[#1A1A1A] font-bold border border-[#1A1A1A]/20"
+                                          : "text-[#1A1A1A]/50 hover:text-[#1A1A1A]"
+                                      }`}
+                                    >
+                                      None
+                                    </button>
 
-                                {/* Modify Button */}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPageLevel(sys.id, pg, "modify")
-                                  }
-                                  className={`px-3 py-1 text-[10px] font-mono font-bold transition-all ${
-                                    currentLevel === "modify"
-                                      ? "bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm"
-                                      : "text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
-                                  }`}
-                                >
-                                  .modify
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
+                                    {/* View Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPageLevel(sys.id, pg, "view")
+                                      }
+                                      className={`px-3 py-1 text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                                        currentLevel === "view"
+                                          ? "bg-[#1A1A1A] text-white font-bold shadow-sm"
+                                          : "text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
+                                      }`}
+                                    >
+                                      .view
+                                    </button>
+
+                                    {/* Modify Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPageLevel(sys.id, pg, "modify")
+                                      }
+                                      className={`px-3 py-1 text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                                        currentLevel === "modify"
+                                          ? "bg-[#C9A84C] text-[#1A1A1A] font-bold shadow-sm"
+                                          : "text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
+                                      }`}
+                                    >
+                                      .modify
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
