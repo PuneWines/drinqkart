@@ -12,6 +12,7 @@ import {
   Clock,
   Building2,
   Store,
+  CheckSquare,
 } from "lucide-react";
 import useCompanyStore from "../store/useCompanyStore";
 import useShopStore from "../store/useShopStore";
@@ -123,6 +124,8 @@ const PurchaseOrder = () => {
   // Held PO states: Standard PO held items persist in Supabase DB (cross-device), Manual PO held items use localStorage
   const [heldItemIds, setHeldItemIds] = useState(new Set());
   const [heldPOs, setHeldPOs] = useState([]);
+  // Selection state for held items: { [batchId]: Set<itemId> }
+  const [selectedHeldItems, setSelectedHeldItems] = useState({});
 
   // Clean legacy local storage keys on mount
   useEffect(() => {
@@ -724,6 +727,32 @@ const PurchaseOrder = () => {
     }
   };
 
+  // ── Held item selection helpers ──
+  const toggleHeldItem = (batchId, itemId) => {
+    setSelectedHeldItems((prev) => {
+      const batchSet = new Set(prev[batchId] || []);
+      if (batchSet.has(itemId)) batchSet.delete(itemId);
+      else batchSet.add(itemId);
+      return { ...prev, [batchId]: batchSet };
+    });
+  };
+
+  const toggleAllHeldItems = (batchId, allItemIds) => {
+    setSelectedHeldItems((prev) => {
+      const batchSet = prev[batchId] || new Set();
+      const allSelected = allItemIds.every((id) => batchSet.has(id));
+      return { ...prev, [batchId]: allSelected ? new Set() : new Set(allItemIds) };
+    });
+  };
+
+  const clearHeldSelection = (batchId) => {
+    setSelectedHeldItems((prev) => {
+      const next = { ...prev };
+      if (batchId) delete next[batchId]; else return {};
+      return next;
+    });
+  };
+
   // Restore held batch from dedicated purchase_hold table under a new unique Indent ID
   const handleRestoreHeldBatch = async (batchId) => {
     const targetBatch = heldPOs.find((b) => b.batchId === batchId);
@@ -757,11 +786,47 @@ const PurchaseOrder = () => {
           "success",
         );
       }
+      clearHeldSelection(batchId);
       setPoMode("standard");
       await loadPageData(false);
     } catch (err) {
       console.error("Error restoring held batch:", err);
       addToast("Failed to restore held batch: " + err.message, "error");
+    }
+  };
+
+  // Restore selected (checked) items from a batch
+  const handleRestoreSelectedItems = async (batchId) => {
+    const selected = selectedHeldItems[batchId];
+    if (!selected || selected.size === 0) {
+      addToast("No items selected to restore.", "info");
+      return;
+    }
+    const itemIds = Array.from(selected);
+    const empCode =
+      currentUser?.employee_id ||
+      currentUser?.emp_code ||
+      currentUser?.name ||
+      "User";
+
+    try {
+      const res = await restoreHeldFromHoldTable({ itemIds, empCode });
+      if (res && res.newUniqueIndentId) {
+        const displayId = (res.newUniqueIndentId || "").split("::")[0].trim();
+        addToast(
+          `Restored ${itemIds.length} selected item(s) under Indent "${displayId}".`,
+          "success",
+        );
+        if (res.partyKey) setActiveParty(res.partyKey);
+      } else {
+        addToast(`Restored ${itemIds.length} selected item(s) back to Purchase Order.`, "success");
+      }
+      clearHeldSelection(batchId);
+      setPoMode("standard");
+      await loadPageData(false);
+    } catch (err) {
+      console.error("Error restoring selected items:", err);
+      addToast("Failed to restore selected items: " + err.message, "error");
     }
   };
 
@@ -782,6 +847,7 @@ const PurchaseOrder = () => {
       if (res && res.partyKey) {
         setActiveParty(res.partyKey);
       }
+      clearHeldSelection(batchId);
       setPoMode("standard");
       addToast("Restored held item back to active Purchase Order.", "success");
       await loadPageData(false);
@@ -2310,6 +2376,12 @@ const PurchaseOrder = () => {
             ) : (
               filteredHeldPOs.map((batch) => {
                 const scope = batch.companyScope;
+                const allItemIds = batch.items.map((i) => i.id);
+                const batchSelection = selectedHeldItems[batch.batchId] || new Set();
+                const selectedCount = batchSelection.size;
+                const allSelected = allItemIds.length > 0 && allItemIds.every((id) => batchSelection.has(id));
+                const someSelected = selectedCount > 0 && !allSelected;
+
                 return (
                   <div
                     key={batch.batchId}
@@ -2357,6 +2429,16 @@ const PurchaseOrder = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {/* Restore Selected — only visible when ≥1 items checked */}
+                        {selectedCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreSelectedItems(batch.batchId)}
+                            className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white text-xs px-3.5 py-1.5 rounded-lg font-semibold shadow-xs transition-colors cursor-pointer"
+                          >
+                            <CheckSquare size={13} /> Restore Selected ({selectedCount})
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleRestoreHeldBatch(batch.batchId)}
@@ -2379,10 +2461,19 @@ const PurchaseOrder = () => {
                       <table className="w-full text-xs text-left text-slate-700 border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 uppercase text-[10px] font-semibold tracking-wider">
-                            <th className="py-2.5 px-4">Item Name</th>
-                            <th className="py-2.5 px-3 text-center">
-                              Company Scope
+                            <th className="py-2.5 pl-4 pr-2 w-8">
+                              {/* Select-all checkbox */}
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                                onChange={() => toggleAllHeldItems(batch.batchId, allItemIds)}
+                                className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                                title="Select / deselect all"
+                              />
                             </th>
+                            <th className="py-2.5 px-4">Item Name</th>
+                            <th className="py-2.5 px-3 text-center">Company Scope</th>
                             <th className="py-2.5 px-3 text-center">Shop</th>
                             <th className="py-2.5 px-3 text-right">PO Box</th>
                             <th className="py-2.5 px-3 text-right">PO Qty</th>
@@ -2392,11 +2483,25 @@ const PurchaseOrder = () => {
                         <tbody className="divide-y divide-slate-100">
                           {batch.items.map((item) => {
                             const itemScope = item.company_scope;
+                            const isChecked = batchSelection.has(item.id);
                             return (
                               <tr
                                 key={item.id}
-                                className="hover:bg-amber-50/30 transition-colors"
+                                onClick={() => toggleHeldItem(batch.batchId, item.id)}
+                                className={`transition-colors cursor-pointer ${
+                                  isChecked
+                                    ? "bg-green-50/60 hover:bg-green-50"
+                                    : "hover:bg-amber-50/30"
+                                }`}
                               >
+                                <td className="py-2.5 pl-4 pr-2" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleHeldItem(batch.batchId, item.id)}
+                                    className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                                  />
+                                </td>
                                 <td className="py-2.5 px-4 font-medium text-slate-900">
                                   {item.itemName}
                                   <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
@@ -2423,15 +2528,10 @@ const PurchaseOrder = () => {
                                 <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                                   {item.poQty ?? item.orderQty ?? 0}
                                 </td>
-                                <td className="py-2.5 px-4 text-center">
+                                <td className="py-2.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      handleRestoreHeldItem(
-                                        batch.batchId,
-                                        item.id,
-                                      )
-                                    }
+                                    onClick={() => handleRestoreHeldItem(batch.batchId, item.id)}
                                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/90 transition-colors cursor-pointer"
                                   >
                                     <RotateCcw size={11} /> Restore Item

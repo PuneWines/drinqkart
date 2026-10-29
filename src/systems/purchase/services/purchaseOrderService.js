@@ -982,8 +982,10 @@ export const restoreHeldFromHoldTable = async ({
       .in("item_name", itemNames)
       .is("po_id", null);
 
-    if (existingDash && existingDash.length > 0) {
-      const existingItemNames = existingDash.map(d => d.item_name);
+    const existingNamesSet = new Set((existingDash || []).map((d) => d.item_name));
+
+    if (existingNamesSet.size > 0) {
+      const existingItemNames = Array.from(existingNamesSet);
       await supabase
         .from("purchase_dashboard")
         .update({
@@ -997,9 +999,12 @@ export const restoreHeldFromHoldTable = async ({
         })
         .eq("indent_id", oldCleanId)
         .in("item_name", existingItemNames);
-    } else {
-      // If the old indent was deleted from purchase_dashboard, restore with full lifecycle
-      const dashPayload = rowsToRestore.map(row => ({
+    }
+
+    // Insert any items that did NOT exist in existingDash to guarantee shop_name resolution
+    const missingRows = rowsToRestore.filter((r) => !existingNamesSet.has(r.item_name));
+    if (missingRows.length > 0) {
+      const dashPayload = missingRows.map((row) => ({
         indent_id: newCleanId,
         shop_name: row.shop_name,
         party_name: row.party_name,
