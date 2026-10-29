@@ -9,7 +9,7 @@
 // ============================================================
 import { useState, useEffect } from "react";
 import Toast from "../components/Toast";
-import { FaTimes, FaUser, FaShoppingCart, FaTruck, FaPlus, FaTrash, FaEdit } from "react-icons/fa";
+import { FaTimes, FaUser, FaShoppingCart, FaTruck, FaPlus, FaTrash, FaEdit, FaCoins } from "react-icons/fa";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 
@@ -59,15 +59,19 @@ const EXPENSE_OPTIONS = [
 interface CashTallyProps {
   isOpen?: boolean;
   onClose?: () => void;
+  onSave?: (data: any) => void;
   counter?: string | number;
   initialData?: any;
+  embedded?: boolean;
 }
 
 export default function CashTally({
   isOpen = true,
   onClose = () => { },
+  onSave = () => { },
   counter = "COUNTER-1",
   initialData,
+  embedded = false,
 }: CashTallyProps) {
   // ── RBAC ─────────────────────────────────────────────────
   const { hasCounterAccess, hasShopAccess, isAdmin, user, getAllowedCounters } = useAuth();
@@ -154,6 +158,80 @@ export default function CashTally({
   const [employees, setEmployees] = useState<string[]>([]);
   const [fetchedShopNames, setFetchedShopNames] = useState<string[]>([]);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const resetForm = () => {
+    let loggedInName = "";
+    let loggedInShopName = "";
+    try {
+      const savedUserStr = localStorage.getItem('currentUser');
+      if (savedUserStr) {
+        const parsed = JSON.parse(savedUserStr);
+        loggedInName = parsed.user_name || "";
+        loggedInShopName = parsed.shop_name || parsed.shopName || parsed.shops || "";
+      }
+    } catch (e) { }
+    if (!loggedInName) {
+      loggedInName = user?.name || user?.username || "";
+    }
+    const defaultShop = fetchedShopNames.length === 1 ? fetchedShopNames[0] : (loggedInShopName || "");
+
+    setFormData({
+      date: new Date().toISOString().split("T")[0],
+      name: loggedInName,
+      shopName: defaultShop,
+      retailScanAmount: "",
+      retail500: "",
+      retail200: "",
+      retail100: "",
+      retail50: "",
+      retail20: "",
+      retail10: "",
+      retail1: "",
+      retailGpay: "",
+      retailCard: "",
+      retailPhonePe: "",
+      retailPaytm: "",
+      expense: "",
+      wsCashBillingAmount: "",
+      wsCreditBillingAmount: "",
+      wsCreditReceipt: "",
+      ws500: "",
+      ws200: "",
+      ws100: "",
+      ws50: "",
+      ws20: "",
+      ws10: "",
+      ws1: "",
+      wsGpayCard: "",
+      wsPhonePe: "",
+      wsPaytm: "",
+      wsCard: "",
+      homeDelivery: "",
+      hd500: "",
+      hd200: "",
+      hd100: "",
+      hd50: "",
+      hd20: "",
+      hd10: "",
+      hd1: "",
+      hdGpay: "",
+      hdCard: "",
+      hdPhonePe: "",
+      hdPaytm: "",
+      voidSale: "",
+      status: "pending",
+    });
+    setAddedTransactions([]);
+  };
+
+  const handleCancel = () => {
+    if (embedded) {
+      resetForm();
+      setToast({ message: "Form cleared", type: "success" });
+    } else {
+      onClose();
+    }
+  };
 
   const fetchEmployees = async () => {
     try {
@@ -744,9 +822,14 @@ export default function CashTally({
         );
       }
 
-      setToast({ message: "Data saved successfully!", type: "success" });
+      setToast({ message: `Data saved successfully!${generatedId ? ` (ID: ${generatedId})` : ""}`, type: "success" });
       setTimeout(() => {
-        onClose();
+        onSave(recordToSubmit);
+        if (embedded) {
+          resetForm();
+        } else {
+          onClose();
+        }
         setIsLoading(false);
       }, 1000);
     } catch (error: any) {
@@ -766,19 +849,29 @@ export default function CashTally({
 
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm">
-      <div className="bg-[#f5f7fa] rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+    <div className={embedded ? "w-full petty-cash-root font-sans" : "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm petty-cash-root font-sans"}>
+      <div className={`bg-[#f5f7fa] rounded-2xl ${embedded ? "border border-gray-200/90 shadow-sm" : "shadow-2xl max-h-[90vh] overflow-y-auto"} w-full max-w-6xl font-sans`}>
         {/* Header */}
-        <div className="sticky top-0 bg-[#f5f7fa] border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-          <h2 className="text-2xl font-bold text-gray-800">
-            Cash Tally - {activeCounter}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <FaTimes className="text-gray-600 text-xl" />
-          </button>
+        <div className={`bg-[#f5f7fa] border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl ${embedded ? "" : "sticky top-0 z-10"}`}>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 font-sans flex items-center gap-2">
+              <FaCoins className="text-[#2a5298] text-lg sm:text-xl" />
+              <span>Cash Tally - {activeCounter}</span>
+            </h2>
+            {embedded && (
+              <p className="text-xs text-gray-500 mt-0.5 font-medium font-sans">
+                Record daily cash tally, retail, wholesale, and delivery counts
+              </p>
+            )}
+          </div>
+          {!embedded && (
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+            >
+              <FaTimes className="text-gray-600 text-xl" />
+            </button>
+          )}
         </div>
 
         <form
@@ -1396,7 +1489,7 @@ export default function CashTally({
               )}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleCancel}
                 className="px-5 py-2 text-xs font-semibold text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all cursor-pointer"
               >
                 Cancel

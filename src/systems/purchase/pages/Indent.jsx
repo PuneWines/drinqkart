@@ -1,3 +1,4 @@
+import { shopMatches } from "../utils/poHelpers";
 import React, { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -471,7 +472,7 @@ const Indent = () => {
             return (
               row.shop_name &&
               currentAssigned.some(
-                (as) => as.toLowerCase() === row.shop_name.toLowerCase(),
+                (as) => shopMatches(as, row.shop_name),
               )
             );
           }

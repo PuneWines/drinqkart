@@ -3,7 +3,7 @@ import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { fetchPipelineOrders, fetchPipelineStats } from "../services/ordersPipelineService";
 import useShopStore from "../store/useShopStore";
 import useCompanyStore from "../store/useCompanyStore";
-import { isTransporterSkippedForOrder } from "../utils/poHelpers";
+import { isTransporterSkippedForOrder, shopMatches } from "../utils/poHelpers";
 import { parsePartyAndCompany } from "../utils/poTransformer";
 import Toast, { useToast } from "../components/Toast";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
@@ -156,7 +156,7 @@ const OrdersPipeline = () => {
         (po) =>
           po.shop_name &&
           assignedShops.some(
-            (as) => as.toLowerCase() === po.shop_name.toLowerCase(),
+            (as) => shopMatches(as, po.shop_name),
           ),
       );
     }

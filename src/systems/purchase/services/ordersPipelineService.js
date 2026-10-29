@@ -1,3 +1,4 @@
+import { shopMatches } from "../utils/poHelpers";
 import { supabase } from "../lib/supabase";
 
 /**
@@ -253,7 +254,7 @@ export const fetchPipelineOrders = async ({
     mapped = mapped.filter((po) =>
       po.shop_name &&
       assignedShops.some(
-        (as) => as.toLowerCase() === po.shop_name.toLowerCase(),
+        (as) => shopMatches(as, po.shop_name),
       ),
     );
   }
@@ -304,7 +305,7 @@ export const fetchPipelineStats = async ({
       (item) =>
         item.shop_name &&
         assignedShops.some(
-          (as) => as.toLowerCase() === item.shop_name.toLowerCase(),
+          (as) => shopMatches(as, item.shop_name),
         ),
     );
   }

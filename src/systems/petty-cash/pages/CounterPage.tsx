@@ -181,6 +181,13 @@ export default function CounterPage({ onClose }: CounterPageProps) {
 
   const isModifyAllowed = hasPageModifyAccess("Cash Tally Counter");
 
+  // Role check:
+  // For 'user', 'manager', and 'employee' roles:
+  // Do NOT fetch records from database, and do NOT show ledger table / KPI / filters.
+  // Directly render the Cash Tally Entry Desk form as default page.
+  const userRole = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isDirectEntryOnly = userRole === 'user' || userRole === 'manager' || userRole === 'employee';
+
   const resetFilters = () => {
     setSearch("");
     setFromDate("");
@@ -194,6 +201,11 @@ export default function CounterPage({ onClose }: CounterPageProps) {
   };
 
   const fetchRows = useCallback(async () => {
+    if (isDirectEntryOnly) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     if (allowedCounters.length === 0) return;
     setLoading(true);
     try {
@@ -227,6 +239,10 @@ export default function CounterPage({ onClose }: CounterPageProps) {
   }, [allowedCounters]);
 
   const fetchShops = useCallback(async () => {
+    if (isDirectEntryOnly) {
+      setShops([]);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from("shop")
@@ -250,9 +266,11 @@ export default function CounterPage({ onClose }: CounterPageProps) {
   }, []);
 
   useEffect(() => {
-    fetchRows();
-    fetchShops();
-  }, [fetchRows, fetchShops]);
+    if (!isDirectEntryOnly) {
+      fetchRows();
+      fetchShops();
+    }
+  }, [fetchRows, fetchShops, isDirectEntryOnly]);
 
   const handleOpenAddModal = (cVal: string) => {
     setActiveModalCounter(cVal);
@@ -512,8 +530,24 @@ export default function CounterPage({ onClose }: CounterPageProps) {
     };
   }, [filtered]);
 
+  // Direct Default Page for 'user', 'manager', and 'employee' roles:
+  // Render the Cash Tally Entry Form desk directly, without fetching or showing historical table data
+  if (isDirectEntryOnly) {
+    return (
+      <div className="w-full max-w-5xl mx-auto space-y-4 animate-fadeIn pb-12 petty-cash-root font-sans">
+        <CashTally
+          isOpen={true}
+          embedded={true}
+          counter={allowedCounters[0] || "COUNTER-1"}
+          onClose={() => {}}
+          onSave={() => {}}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 petty-cash-root font-sans">
       {/* ── Paytm-Style Mobile Form Action Card (< 768px) ── */}
       {isModifyAllowed && (
         <div className="md:hidden bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-2">

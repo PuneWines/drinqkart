@@ -20,7 +20,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAllPurchaseOrders } from "../services/poHistoryService";
 import useShopStore from "../store/useShopStore";
 import useCompanyStore from "../store/useCompanyStore";
-import { isTransporterSkippedForOrder } from "../utils/poHelpers";
+import { isTransporterSkippedForOrder, shopMatches } from "../utils/poHelpers";
 import "../styles/POHistory.css";
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 
@@ -137,18 +137,18 @@ const POHistory = () => {
     if (!isShopAdmin) {
       if (!assignedShops || assignedShops.length === 0) return [];
       if (selectedShop && selectedShop !== "All") {
-        return orders.filter((o) => (o.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+        return orders.filter((o) => shopMatches(o.shop_name, selectedShop));
       }
       return orders.filter(
         (o) =>
           o.shop_name &&
           assignedShops.some(
-            (s) => s.toLowerCase() === o.shop_name.toLowerCase(),
+            (s) => shopMatches(s, o.shop_name),
           ),
       );
     }
     if (!selectedShop || selectedShop === "All") return orders;
-    return orders.filter((o) => (o.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+    return orders.filter((o) => shopMatches(o.shop_name, selectedShop));
   }, [orders, selectedShop, isShopAdmin, assignedShops]);
 
   /* ── Unique vendor list for filter dropdown ───────────────── */

@@ -71,3 +71,11 @@ export const isTransporterSkippedForOrder = (order, companies = []) => {
   return false;
 };
 
+
+// Shop names are stored as short or full names across tables, so match loosely.
+export const shopMatches = (a, b) => {
+  const x = (a || "").trim().toLowerCase();
+  const y = (b || "").trim().toLowerCase();
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+};

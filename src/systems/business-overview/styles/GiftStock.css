@@ -20,8 +20,8 @@
   --crit: #DC2626;
   --crit-soft: #FEE2E2;
   --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 14px rgba(15, 23, 42, 0.04);
-  --f-display: 'Bricolage Grotesque', 'DM Sans', system-ui, sans-serif;
-  --f-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --f-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --f-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
   background: var(--bg);

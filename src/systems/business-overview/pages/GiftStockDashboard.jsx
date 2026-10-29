@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { parseMasterAccessList } from '../../../layout/systemsConfig';
+import { getUserAssignedShops, isUserSuperadmin } from '../../../utils/permissionUtils';
 import '../styles/GiftStock.css';
 
 const ALL = 'ALL STORES';
@@ -25,6 +26,13 @@ function getTabLevels(user) {
   const role = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
   if (role === 'superadmin' || role === 'masteradmin' || role === 'hod') {
     TABS.forEach((t) => (levels[t] = 'modify'));
+    return levels;
+  }
+  const isDirectEntry = role === 'user' || role === 'manager' || role === 'employee';
+  if (isDirectEntry) {
+    TABS.forEach((t) => {
+      levels[t] = (t === 'stock-in' || t === 'stock-out') ? 'modify' : 'none';
+    });
     return levels;
   }
   const keys = [
@@ -259,8 +267,13 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
   const tabLevelsRef = useRef(null);
   tabLevelsRef.current = getTabLevels(user);
 
+  const roleLower = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isDirectEntryOnly = roleLower === 'user' || roleLower === 'manager' || roleLower === 'employee';
+
   const showTabRef = useRef(null);
-  const activeTabParam = routeTab || defaultTab || 'dashboard';
+  const activeTabParam = isDirectEntryOnly
+    ? (routeTab === 'stock-out' ? 'stock-out' : 'stock-in')
+    : (routeTab || defaultTab || 'dashboard');
 
   useEffect(() => {
     const container = containerRef.current;
@@ -278,7 +291,7 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
     const loaded = { items: false, pairs: false, ins: false, outs: false };
     let currentTab = activeTabParam;
     // View-only when the user lacks .modify on the tab being shown
-    const isRo = () => tabLevelsRef.current[currentTab] !== 'modify';
+    const isRo = () => !isDirectEntryOnly && tabLevelsRef.current[currentTab] !== 'modify';
     let selTrader = null;
     let csView = 'detail';
 
@@ -290,10 +303,21 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
           .select('shop_name')
           .order('shop_name', { ascending: true });
         if (!error && Array.isArray(data)) {
-          STORES = data.map((s) => s.shop_name).filter(Boolean);
+          let shops = data.map((s) => s.shop_name).filter(Boolean);
+          if (isDirectEntryOnly) {
+            const assigned = getUserAssignedShops(user);
+            if (assigned && assigned.length > 0) {
+              const assignedLower = assigned.map((a) => a.toLowerCase().trim());
+              const filtered = shops.filter((s) => assignedLower.includes(s.toLowerCase().trim()));
+              shops = filtered.length > 0 ? filtered : assigned;
+            }
+          }
+          STORES = shops;
           refreshForms();
-          refreshCsFilters();
-          renderDash();
+          if (!isDirectEntryOnly) {
+            refreshCsFilters();
+            renderDash();
+          }
         }
       } catch (err) {
         console.warn('[GiftStock] Error fetching shops from Supabase:', err);
@@ -306,40 +330,59 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
       sub: function (c, cb) {
         const tbl = TABLE_MAP[c];
         
+        let initialQuery = supabase.from(tbl).select('*');
+        if (isDirectEntryOnly && (c === 'ins' || c === 'outs')) {
+          const assigned = getUserAssignedShops(user);
+          if (assigned && assigned.length > 0) {
+            initialQuery = initialQuery.in('store', assigned);
+          }
+        }
+
         // Initial fetch
-        supabase
-          .from(tbl)
-          .select('*')
-          .then(({ data, error }) => {
-            if (error) {
-              console.warn(`[GiftStock] Note on ${tbl}:`, error.message);
-              // Fallback to local storage if table is not yet created
-              let fallbackData = [];
-              try {
-                fallbackData = JSON.parse(localStorage.getItem('gsd:' + c) || '[]');
-              } catch (e) {}
-              cb(fallbackData);
-              return;
-            }
-            const mapped = (data || []).map((r) => fromDb(c, r));
+        initialQuery.then(({ data, error }) => {
+          if (error) {
+            console.warn(`[GiftStock] Note on ${tbl}:`, error.message);
+            // Fallback to local storage if table is not yet created
+            let fallbackData = [];
+            try {
+              fallbackData = JSON.parse(localStorage.getItem('gsd:' + c) || '[]');
+              if (isDirectEntryOnly && (c === 'ins' || c === 'outs')) {
+                const assigned = getUserAssignedShops(user);
+                if (assigned && assigned.length > 0) {
+                  fallbackData = fallbackData.filter((r) => assigned.includes(r.store));
+                }
+              }
+            } catch (e) {}
+            cb(fallbackData);
+            return;
+          }
+          const mapped = (data || []).map((r) => fromDb(c, r));
+          if (!isDirectEntryOnly) {
             lsSet('gsd:' + c, JSON.stringify(mapped));
-            cb(mapped);
-          });
+          }
+          cb(mapped);
+        });
 
         // Real-time subscription to postgres changes
         const channel = supabase
           .channel(`gift_stock_realtime_${c}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: tbl }, () => {
-            supabase
-              .from(tbl)
-              .select('*')
-              .then(({ data, error }) => {
-                if (!error && data) {
-                  const mapped = data.map((r) => fromDb(c, r));
+            let rtQuery = supabase.from(tbl).select('*');
+            if (isDirectEntryOnly && (c === 'ins' || c === 'outs')) {
+              const assigned = getUserAssignedShops(user);
+              if (assigned && assigned.length > 0) {
+                rtQuery = rtQuery.in('store', assigned);
+              }
+            }
+            rtQuery.then(({ data, error }) => {
+              if (!error && data) {
+                const mapped = data.map((r) => fromDb(c, r));
+                if (!isDirectEntryOnly) {
                   lsSet('gsd:' + c, JSON.stringify(mapped));
-                  cb(mapped);
                 }
-              });
+                cb(mapped);
+              }
+            });
           })
           .subscribe();
 
@@ -582,7 +625,18 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
       const outItem = $('#out-item');
       const inHint = $('#in-hint');
 
-      if (inStore) fill(inStore, storeOpts(), 'Choose store');
+      if (inStore) {
+        fill(inStore, storeOpts(), 'Choose store');
+        if (isDirectEntryOnly && STORES.length > 0) {
+          if (!inStore.value || !STORES.includes(inStore.value)) {
+            inStore.value = STORES[0];
+          }
+          if (STORES.length === 1) {
+            inStore.style.pointerEvents = 'none';
+            inStore.style.backgroundColor = '#f1f5f9';
+          }
+        }
+      }
       if (inTrader) fill(inTrader, traders(), traders().length ? 'Choose trader' : 'No traders yet');
       const tr = inTrader ? inTrader.value : '';
       const cos = tr ? companiesOf(tr) : [];
@@ -601,7 +655,18 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
         );
         inItem.disabled = !s1;
       }
-      if (outStore) fill(outStore, storeOpts(), 'Choose store');
+      if (outStore) {
+        fill(outStore, storeOpts(), 'Choose store');
+        if (isDirectEntryOnly && STORES.length > 0) {
+          if (!outStore.value || !STORES.includes(outStore.value)) {
+            outStore.value = STORES[0];
+          }
+          if (STORES.length === 1) {
+            outStore.style.pointerEvents = 'none';
+            outStore.style.backgroundColor = '#f1f5f9';
+          }
+        }
+      }
       const s2 = outStore ? outStore.value : '';
       if (outItem) {
         fill(
@@ -625,10 +690,15 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
     }
 
     function renderIn() {
-      const inSearch = $('#in-search');
-      const q = lc(inSearch ? inSearch.value : '');
       const box = $('#in-list');
       if (!box) return;
+      if (isDirectEntryOnly) {
+        const parentCard = box.closest('.card');
+        if (parentCard) parentCard.style.display = 'none';
+        return;
+      }
+      const inSearch = $('#in-search');
+      const q = lc(inSearch ? inSearch.value : '');
       if (!ready()) {
         box.innerHTML = loadingBox();
         return;
@@ -673,10 +743,15 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
     }
 
     function renderOut() {
-      const outSearch = $('#out-search');
-      const q = lc(outSearch ? outSearch.value : '');
       const box = $('#out-list');
       if (!box) return;
+      if (isDirectEntryOnly) {
+        const parentCard = box.closest('.card');
+        if (parentCard) parentCard.style.display = 'none';
+        return;
+      }
+      const outSearch = $('#out-search');
+      const q = lc(outSearch ? outSearch.value : '');
       if (!ready()) {
         box.innerHTML = loadingBox();
         return;
@@ -1462,7 +1537,13 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
     }
 
     function showTab(t, updateRoute = true) {
-      if (TABS.indexOf(t) < 0) t = 'dashboard';
+      if (isDirectEntryOnly) {
+        if (t !== 'stock-in' && t !== 'stock-out') {
+          t = 'stock-in';
+          updateRoute = true;
+        }
+      }
+      if (TABS.indexOf(t) < 0) t = isDirectEntryOnly ? 'stock-in' : 'dashboard';
       const levels = tabLevelsRef.current;
       if (levels[t] === 'none') {
         // Fall back to the first tab the user is allowed to open
@@ -1482,7 +1563,7 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
       });
       const banner = $('#ro-banner');
       if (banner) {
-        banner.hidden = !isRo();
+        banner.hidden = isDirectEntryOnly || !isRo();
         banner.textContent = noAccess
           ? 'You do not have access to Gift Stock. Ask the owner for access.'
           : 'You can view this page but not change stock. Ask the owner for edit access.';

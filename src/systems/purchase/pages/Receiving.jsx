@@ -1,3 +1,4 @@
+import { shopMatches } from "../utils/poHelpers";
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import {
@@ -74,7 +75,7 @@ const Receiving = () => {
             enrichedPoData = enrichedPoData.filter((po) =>
               po.shop_name &&
               assignedShops.some(
-                (s) => s.toLowerCase() === po.shop_name.toLowerCase(),
+                (s) => shopMatches(s, po.shop_name),
               ),
             );
           }
@@ -214,19 +215,19 @@ const Receiving = () => {
     if (!isShopAdmin) {
       if (!assignedShops || assignedShops.length === 0) return [];
       if (selectedShop && selectedShop !== "All") {
-        return data.filter((po) => (po.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+        return data.filter((po) => shopMatches(po.shop_name, selectedShop));
       }
       return data.filter(
         (po) =>
           po.shop_name &&
           assignedShops.some(
-            (s) => s.toLowerCase() === po.shop_name.toLowerCase(),
+            (s) => shopMatches(s, po.shop_name),
           ),
       );
     }
     return selectedShop === "All"
       ? data
-      : data.filter((po) => (po.shop_name || "").toLowerCase() === selectedShop.toLowerCase());
+      : data.filter((po) => shopMatches(po.shop_name, selectedShop));
   }, [data, selectedShop, isShopAdmin, assignedShops]);
 
   const poRecords = useMemo(() => {

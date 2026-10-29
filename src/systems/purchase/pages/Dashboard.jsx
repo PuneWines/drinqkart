@@ -1,3 +1,4 @@
+import { shopMatches } from "../utils/poHelpers";
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import useShopStore from "../store/useShopStore";
@@ -164,7 +165,7 @@ const Dashboard = () => {
       if (!isShopAdmin && assignedShops && assignedShops.length > 0) {
         const allowedShop =
           assignedShops.find(
-            (s) => s.toLowerCase() === globalShop.toLowerCase(),
+            (s) => shopMatches(s, globalShop),
           ) || assignedShops[0];
         if (allowedShop !== filterShop) {
           setFilterShop(allowedShop);
@@ -208,7 +209,7 @@ const Dashboard = () => {
           (row) =>
             row.shop_name &&
             assignedShops.some(
-              (s) => s.toLowerCase() === row.shop_name.toLowerCase(),
+              (s) => shopMatches(s, row.shop_name),
             ),
         );
       }
@@ -266,7 +267,7 @@ const Dashboard = () => {
     const set = new Set();
     dashboardLogs.forEach(row => {
       if (filterShop && filterShop !== "All") {
-        if ((row.shop_name || "").toLowerCase() !== filterShop.toLowerCase()) return;
+        if (!shopMatches(row.shop_name, filterShop)) return;
       }
       const p = (row.party_name || "").trim();
       if (p) set.add(p);
@@ -280,7 +281,7 @@ const Dashboard = () => {
     const set = new Set();
     dashboardLogs.forEach(row => {
       if (filterShop && filterShop !== "All") {
-        if ((row.shop_name || "").toLowerCase() !== filterShop.toLowerCase()) return;
+        if (!shopMatches(row.shop_name, filterShop)) return;
       }
       if (filterParty && filterParty !== "All") {
         if ((row.party_name || "").trim().toLowerCase() !== filterParty.trim().toLowerCase()) return;
@@ -294,7 +295,7 @@ const Dashboard = () => {
   const hasUnassignedCompanyInLogs = useMemo(() => {
     return dashboardLogs.some(row => {
       if (filterShop && filterShop !== "All") {
-        if ((row.shop_name || "").toLowerCase() !== filterShop.toLowerCase()) return false;
+        if (!shopMatches(row.shop_name, filterShop)) return false;
       }
       if (filterParty && filterParty !== "All") {
         if ((row.party_name || "").trim().toLowerCase() !== filterParty.trim().toLowerCase()) return false;
@@ -359,7 +360,7 @@ const Dashboard = () => {
         (row) =>
           row.shop_name &&
           assignedShops.some(
-            (s) => s.toLowerCase() === row.shop_name.toLowerCase(),
+            (s) => shopMatches(s, row.shop_name),
           ),
       );
     }
@@ -367,7 +368,7 @@ const Dashboard = () => {
     // 1. Shop Filter
     if (filterShop && filterShop !== "All") {
       result = result.filter(
-        row => (row.shop_name || "").toLowerCase() === filterShop.toLowerCase()
+        row => shopMatches(row.shop_name, filterShop)
       );
     }
 

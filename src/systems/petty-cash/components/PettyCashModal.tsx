@@ -301,10 +301,12 @@ export default function PettyCashModal({
       (emp) => (emp.status || 'active').trim().toLowerCase() === 'active'
     );
 
-    // 2. If no shop specified on voucher yet
     if (!targetShop) {
-      if (isAdmin) return activeStaff;
-      const userShops = (user?.shops || []).map((s: any) => String(s).trim().toLowerCase());
+      const isElevated = typeof isAdmin === 'function' ? isAdmin() : !!isAdmin;
+      if (isElevated) return activeStaff;
+      if (user?.shops === 'all') return activeStaff;
+      const rawShops = Array.isArray(user?.shops) ? user.shops : (user?.shops ? [user.shops] : []);
+      const userShops = rawShops.map((s: any) => String(s).trim().toLowerCase());
       if (userShops.length === 0 || userShops.includes('all')) return activeStaff;
       return activeStaff.filter(emp => {
         const empShop = (emp.joining_company_name || '').trim().toLowerCase();

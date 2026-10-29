@@ -1,3 +1,4 @@
+import { shopMatches } from "../utils/poHelpers";
 import React, { useState, useEffect, useMemo } from "react";
 import Table from "../components/Table";
 import { supabase } from "../lib/supabase";
@@ -153,7 +154,7 @@ const TraderVerification = () => {
             formatted = formatted.filter((item) =>
               item.shop_name &&
               assignedShops.some(
-                (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+                (s) => shopMatches(s, item.shop_name),
               ),
             );
           }
@@ -320,13 +321,13 @@ const TraderVerification = () => {
         (item) =>
           item.shop_name &&
           assignedShops.some(
-            (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+            (s) => shopMatches(s, item.shop_name),
           ),
       );
     }
     if (selectedShop && selectedShop !== "All") {
       result = result.filter(
-        (item) => (item.shop_name || "").toLowerCase() === selectedShop.toLowerCase(),
+        (item) => shopMatches(item.shop_name, selectedShop),
       );
     }
 

@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabase";
 import { FileText } from "lucide-react";
 import useShopStore from "../store/useShopStore";
 import useCompanyStore from "../store/useCompanyStore";
-import { isTransporterSkippedForOrder } from "../utils/poHelpers";
+import { isTransporterSkippedForOrder, shopMatches } from "../utils/poHelpers";
 import { parsePartyAndCompany } from "../utils/poTransformer";
 import "../styles/Pages.css";
 
@@ -114,7 +114,7 @@ const TransporterVerification = () => {
             formatted = formatted.filter((item) =>
               item.shop_name &&
               assignedShops.some(
-                (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+                (s) => shopMatches(s, item.shop_name),
               ),
             );
           }
@@ -257,13 +257,13 @@ const TransporterVerification = () => {
         (item) =>
           item.shop_name &&
           assignedShops.some(
-            (s) => s.toLowerCase() === item.shop_name.toLowerCase(),
+            (s) => shopMatches(s, item.shop_name),
           ),
       );
     }
     if (selectedShop !== "All") {
       result = result.filter(
-        (item) => (item.shop_name || "").toLowerCase() === selectedShop.toLowerCase(),
+        (item) => shopMatches(item.shop_name, selectedShop),
       );
     }
 

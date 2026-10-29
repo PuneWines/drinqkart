@@ -298,6 +298,15 @@ export const getVisibleSystems = (user) => {
       }
     }
 
+    if (systemId === 'business-overview') {
+      const isDirectEntryRole = userRole === 'user' || userRole === 'manager' || userRole === 'employee';
+      if (isDirectEntryRole && sub.to && sub.to.includes('/gift-stock/')) {
+        if (['Dashboard', 'Current Stock', 'Item Master', 'Trader Master'].includes(sub.label)) {
+          return false;
+        }
+      }
+    }
+
     if (masterAccessList.length > 0) {
       const labelsToCheck = [sub.label];
       if (sub.label === 'All Tasks') labelsToCheck.push('Task');
@@ -309,6 +318,11 @@ export const getVisibleSystems = (user) => {
       if (sub.label === 'Cash Tally Counter') labelsToCheck.push('Cash Tally Counter', 'Cash Tally', 'Counter', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3');
       if (sub.label === 'Financial Reports') labelsToCheck.push('Financial Reports', 'Reports', 'financialreports');
       // business-overview: Feedback, Help Center and Gift Stock pages are granted individually by their own label
+      if (systemId === 'business-overview') {
+        if (sub.to && sub.to.includes('/gift-stock/')) {
+          labelsToCheck.push('Gift Stock', 'gift-stock', 'gift_stock', 'Gift stock');
+        }
+      }
       if (systemId === 'checklist') {
         if (sub.label === 'Holiday List' || sub.label === 'Working Day Calendar') {
           labelsToCheck.push('Holiday');
@@ -428,6 +442,13 @@ export const getVisibleSystems = (user) => {
         if (sub.label === 'Users Management') {
           return legacyPageAccess.includes('users_management') || legacyPageAccess.includes('Users Management');
         }
+      }
+      if (systemId === 'business-overview' && sub.to && sub.to.includes('/gift-stock/')) {
+        return legacyPageAccess.some((p) => {
+          if (typeof p !== 'string') return false;
+          const pLower = p.toLowerCase().trim();
+          return pLower === 'gift stock' || pLower === 'gift-stock' || pLower === 'gift_stock' || pLower === sub.label.toLowerCase();
+        });
       }
       return legacyPageAccess.some((p) => {
         if (typeof p !== 'string') return false;
