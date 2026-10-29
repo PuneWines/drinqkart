@@ -863,6 +863,7 @@ const WorkTasksTab = ({
           const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
           const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
           const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
+          const ds = getWorkTaskDynamicStatus(t, currentTime);
           return ds !== "UPCOMING" && !isAssignedByMe;
         });
         setSelectedItems(new Set(submittableTasks.map((t) => t.id)));
@@ -1363,7 +1364,8 @@ const WorkTasksTab = ({
                                 const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
                                 const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
                                 const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
-                                return ds !== "UPCOMING" && !isAssignedByMe;
+                                const tDs = getWorkTaskDynamicStatus(t, currentTime);
+                                return tDs !== "UPCOMING" && !isAssignedByMe;
                               });
                               return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                             })()}
@@ -1624,7 +1626,8 @@ const WorkTasksTab = ({
                               const role = (userRole || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || "").toLowerCase().trim();
                               const isAdmin = role === "admin" || role === "superadmin" || role === "masteradmin" || role === "hod";
                               const isAssignedByMe = !isAdmin && role === "manager" && t.manager_name === username && t.name !== username;
-                              return ds !== "UPCOMING" && !isAssignedByMe;
+                              const tDs = getWorkTaskDynamicStatus(t, currentTime);
+                              return tDs !== "UPCOMING" && !isAssignedByMe;
                             });
                             return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                           })()}

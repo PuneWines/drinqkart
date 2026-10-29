@@ -339,8 +339,6 @@ export default function WorkDetails() {
     fetchUserAssignedShops();
   }, [username, role]);
 
-
-
   // Fetch all shop names directly from database
   useEffect(() => {
     const fetchAllShops = async () => {

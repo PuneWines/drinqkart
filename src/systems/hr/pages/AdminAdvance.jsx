@@ -276,7 +276,7 @@ const AdminAdvance = () => {
 
     const isFixed = ['fixed amount', 'fixed advance', 'fixed advanced', 'fix advance', 'medical amount', 'brackage'].includes(request.type?.toLowerCase());
     setApprovedMonthlyDeduction(isFixed ? (request.apprAmount || request.amount || '') : (request.apprMonthlyDeduction || request.monthlyDeduction || ''));
-    
+
     setReceiveAmount(request.remainingAmount !== undefined && request.remainingAmount !== null ? request.remainingAmount : (request.apprAmount || request.amount || 0));
 
     setRemarks(request.adminRemarks || '');
@@ -461,7 +461,7 @@ const AdminAdvance = () => {
           updateData.remaining_amount = Number(approvedAmount) || 0;
         }
       } else if (actionStatus === 'Received') {
-        const currentRemaining = selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null 
+        const currentRemaining = selectedRequest.remainingAmount !== undefined && selectedRequest.remainingAmount !== null
           ? parseNumber(selectedRequest.remainingAmount)
           : parseNumber(selectedRequest.apprAmount || selectedRequest.amount || 0);
 
@@ -611,18 +611,16 @@ const AdminAdvance = () => {
             setMainTab('monthly');
             setSubTab('approved');
           }}
-          className={`pb-3.5 px-6 text-sm font-bold flex items-center gap-2.5 border-b-2 transition-all cursor-pointer ${
-            mainTab === 'monthly'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
+          className={`pb-3.5 px-6 text-sm font-bold flex items-center gap-2.5 border-b-2 transition-all cursor-pointer ${mainTab === 'monthly'
+            ? 'border-indigo-600 text-indigo-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
         >
           <Banknote size={18} className={mainTab === 'monthly' ? 'text-indigo-600' : 'text-gray-400'} />
-          <span>1st Monthly Advance</span>
+          <span>Monthly Advance</span>
           <span
-            className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-              mainTab === 'monthly' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
-            }`}
+            className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${mainTab === 'monthly' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
+              }`}
           >
             {monthlyApproved.length + monthlyPending.length + monthlyHistory.length}
           </span>
@@ -634,18 +632,16 @@ const AdminAdvance = () => {
             setMainTab('fixed');
             setSubTab('approved');
           }}
-          className={`pb-3.5 px-6 text-sm font-bold flex items-center gap-2.5 border-b-2 transition-all cursor-pointer ${
-            mainTab === 'fixed'
-              ? 'border-teal-600 text-teal-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
+          className={`pb-3.5 px-6 text-sm font-bold flex items-center gap-2.5 border-b-2 transition-all cursor-pointer ${mainTab === 'fixed'
+            ? 'border-teal-600 text-teal-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
         >
           <Wallet size={18} className={mainTab === 'fixed' ? 'text-teal-600' : 'text-gray-400'} />
-          <span>2nd Fixed Advance</span>
+          <span>Fixed Advance</span>
           <span
-            className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-              mainTab === 'fixed' ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-600'
-            }`}
+            className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${mainTab === 'fixed' ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-600'
+              }`}
           >
             {fixedActive.length + fixedPending.length + fixedReceived.length}
           </span>
@@ -656,33 +652,30 @@ const AdminAdvance = () => {
       <div className="flex gap-2 border-b border-gray-200 mb-6">
         {mainTab === 'monthly' ? (
           <>
-            <button
+            {/* <button
               onClick={() => setSubTab('approved')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${
-                subTab === 'approved'
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'approved'
                   ? 'border-green-500 text-green-600 font-bold'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               Approved Monthly Advance ({monthlyApproved.length})
-            </button>
+            </button> */}
             <button
               onClick={() => setSubTab('pending')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${
-                subTab === 'pending'
-                  ? 'border-orange-500 text-orange-600 font-bold'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'pending'
+                ? 'border-orange-500 text-orange-600 font-bold'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Pending ({monthlyPending.length})
             </button>
             <button
               onClick={() => setSubTab('history')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${
-                subTab === 'history'
-                  ? 'border-slate-600 text-slate-800 font-bold'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'history'
+                ? 'border-slate-600 text-slate-800 font-bold'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               History ({monthlyHistory.length})
             </button>
@@ -691,31 +684,28 @@ const AdminAdvance = () => {
           <>
             <button
               onClick={() => setSubTab('approved')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${
-                subTab === 'approved'
-                  ? 'border-teal-500 text-teal-600 font-bold'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'approved'
+                ? 'border-teal-500 text-teal-600 font-bold'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
-              Fixed Advanced ({fixedActive.length})
+              {/* Fixed Advanced ({fixedActive.length})
             </button>
             <button
               onClick={() => setSubTab('pending')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${
-                subTab === 'pending'
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'pending'
                   ? 'border-orange-500 text-orange-600 font-bold'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
+                }`}
+            > */}
               Pending ({fixedPending.length})
             </button>
             <button
               onClick={() => setSubTab('history')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${
-                subTab === 'history'
-                  ? 'border-emerald-600 text-emerald-600 font-bold'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'history'
+                ? 'border-emerald-600 text-emerald-600 font-bold'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Fixed Advanced Received ({fixedReceived.length})
             </button>
@@ -826,13 +816,12 @@ const AdminAdvance = () => {
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => openReviewModal(record)}
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors rounded cursor-pointer ${
-                            subTab === 'pending'
-                              ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
-                              : (mainTab === 'fixed' && subTab === 'approved')
-                                ? 'bg-teal-50 text-teal-600 hover:bg-teal-100'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors rounded cursor-pointer ${subTab === 'pending'
+                            ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                            : (mainTab === 'fixed' && subTab === 'approved')
+                              ? 'bg-teal-50 text-teal-600 hover:bg-teal-100'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
                         >
                           {subTab === 'pending' ? 'Review' : (mainTab === 'fixed' && subTab === 'approved') ? 'Receive' : 'Details'}
                         </button>
