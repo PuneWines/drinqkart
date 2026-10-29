@@ -105,7 +105,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             name: userData.user_name || userData.username || userData.name || "User",
             role: userData.role || "user",
             pages: userData.page_access || (userData.master_user_system_page_access ? [] : ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports']),
-            shops: userData.shop_name || userData.user_access ? [userData.shop_name || userData.user_access] : 'all',
+            shops: ['superadmin', 'masteradmin'].includes((userData.role || '').toLowerCase().trim())
+              ? 'all'
+              : parseShops([userData.user_access, userData.shop_name, userData.shops].filter(Boolean)),
             initials: (userData.user_name || userData.username || "U").substring(0, 2).toUpperCase(),
             loginTime: new Date().toISOString()
           };
@@ -207,7 +209,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const name = data.user_name || data.name || data.username || "";
         const role = data.role || "User";
         const pages = parsePages(data.pages || data.master_user_system_page_access);
-        const shops = parseShops(data.shops || data.shop_name || data.user_access);
+        const isSuperadminUser = ['superadmin', 'masteradmin'].includes((role || '').toLowerCase().trim());
+        const shops = isSuperadminUser ? 'all' : parseShops([data.user_access, data.shop_name, data.shops].filter(Boolean));
         const counterAccess = parseCounterAccess(data.counter_access);
 
         const initials = name
@@ -457,7 +460,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const hasShopAccess = (shopName: string): boolean => {
     if (!user) return false;
-    if (isAdmin()) return true;
+    const roleLower = (user.role || '').toLowerCase().trim();
+    if (roleLower === 'superadmin' || roleLower === 'masteradmin') return true;
     if (!user.shops || user.shops === 'all') return true;
 
     const rawList = Array.isArray(user.shops) ? user.shops : [user.shops];

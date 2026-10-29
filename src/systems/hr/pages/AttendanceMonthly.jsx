@@ -34,6 +34,7 @@ const AttendanceMonthly = () => {
     const [error, setError] = useState(null);
     const [lastSynced, setLastSynced] = useState(null);
     const [employeesData, setEmployeesData] = useState([]);
+    const [masterUsers, setMasterUsers] = useState([]);
     const [matchFilter, setMatchFilter] = useState('ALL'); // 'ALL', 'MATCHED', 'UNMATCHED'
     const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'HAS_PRESENT', 'HAS_ABSENT', 'HAS_LATE', 'ALL_ABSENT'
     const [currentPage, setCurrentPage] = useState(1);
@@ -50,26 +51,86 @@ const AttendanceMonthly = () => {
         "July", "August", "September", "October", "November", "December"
     ];
 
-const resolveEmployeeProfile = (empOrCode, employeesData = []) => {
+const resolveEmployeeProfile = (empOrCode, employeesData = [], masterUsers = []) => {
     if (!empOrCode) return null;
     const targetId = String(typeof empOrCode === 'object' ? (empOrCode.employee_id || empOrCode.employeeCode || empOrCode.id || '') : empOrCode).trim().toLowerCase();
     const targetIdClean = targetId.replace(/^0+/, '');
     const targetName = String(typeof empOrCode === 'object' ? (empOrCode.name || empOrCode.employeeName || empOrCode.user_name || empOrCode.name_as_per_aadhar || '') : '').trim().toLowerCase();
 
-    return (employeesData || []).find(e => {
-        const eEmpId = String(e.employee_id || e.employee_code || e.code || '').trim().toLowerCase();
-        const eEmpIdClean = eEmpId.replace(/^0+/, '');
-        const eId = String(e.id || '').trim().toLowerCase();
-        const eName = String(e.name_as_per_aadhar || e.user_name || e.name || '').trim().toLowerCase();
+    // 1. If an employee ID exists, strictly match by employee ID.
+    // Never fall back to name matching if the ID is different.
+    if (targetId && targetIdClean) {
+        const hrMatch = (employeesData || []).find(e => {
+            const eEmpId = String(e.employee_id || e.employee_code || e.code || '').trim().toLowerCase();
+            const eEmpIdClean = eEmpId.replace(/^0+/, '');
+            const eId = String(e.id || '').trim().toLowerCase();
+            return (targetId === eEmpId || targetIdClean === eEmpIdClean || targetId === eId);
+        });
+        if (hrMatch) return hrMatch;
 
-        if (targetId && eEmpId && (targetId === eEmpId || targetIdClean === eEmpIdClean)) return true;
-        if (targetId && eId && targetId === eId) return true;
-        if (targetName && eName && (targetName === eName || targetName.includes(eName) || eName.includes(targetName))) return true;
-        return false;
-    }) || null;
+        const userMatch = (masterUsers || []).find(u => {
+            const uEmpId = String(u.employee_id || '').trim().toLowerCase();
+            const uEmpIdClean = uEmpId.replace(/^0+/, '');
+            const uId = String(u.id || '').trim().toLowerCase();
+            return (targetId === uEmpId || targetIdClean === uEmpIdClean || targetId === uId);
+        });
+        if (userMatch) {
+            return {
+                id: userMatch.employee_id || userMatch.id,
+                employee_id: userMatch.employee_id || userMatch.id,
+                name: userMatch.user_name,
+                user_name: userMatch.user_name,
+                name_as_per_aadhar: userMatch.user_name,
+                joining_place: userMatch.shop_name,
+                shop_name: userMatch.shop_name,
+                designation: userMatch.role || userMatch.Designation || 'User',
+                candidate_photo: userMatch.profile_image || userMatch.HR_SYSTEM_employee_details?.candidate_photo,
+                photo_url: userMatch.profile_image,
+                isFromMasterUsers: true
+            };
+        }
+        return null;
+    }
+
+    // 2. Only if NO employee ID is present, match by exact name or whole word tokens
+    if (targetName) {
+        const hrMatch = (employeesData || []).find(e => {
+            const eName = String(e.name_as_per_aadhar || e.user_name || e.name || '').trim().toLowerCase();
+            if (!eName) return false;
+            if (targetName === eName) return true;
+            const eTokens = eName.split(/\s+/);
+            const targetTokens = targetName.split(/\s+/);
+            if (targetTokens.length === 1 && eTokens.includes(targetTokens[0])) return true;
+            return false;
+        });
+        if (hrMatch) return hrMatch;
+
+        const userMatch = (masterUsers || []).find(u => {
+            const uName = String(u.user_name || '').trim().toLowerCase();
+            return uName === targetName;
+        });
+        if (userMatch) {
+            return {
+                id: userMatch.employee_id || userMatch.id,
+                employee_id: userMatch.employee_id || userMatch.id,
+                name: userMatch.user_name,
+                user_name: userMatch.user_name,
+                name_as_per_aadhar: userMatch.user_name,
+                joining_place: userMatch.shop_name,
+                shop_name: userMatch.shop_name,
+                designation: userMatch.role || userMatch.Designation || 'User',
+                candidate_photo: userMatch.profile_image || userMatch.HR_SYSTEM_employee_details?.candidate_photo,
+                photo_url: userMatch.profile_image,
+                isFromMasterUsers: true
+            };
+        }
+        return null;
+    }
+
+    return null;
 };
 
-const getEmployeePhoto = (empOrCode, employeesData = []) => {
+const getEmployeePhoto = (empOrCode, employeesData = [], masterUsers = []) => {
     if (!empOrCode) return null;
     if (typeof empOrCode === 'object') {
         const directPhoto = empOrCode.candidate_photo || empOrCode.candidatePhoto || empOrCode.photo_url || empOrCode.photo || empOrCode.avatar_url || empOrCode.avatar || empOrCode.profile_photo || empOrCode.image_url || empOrCode.image || empOrCode.HR_SYSTEM_employee_data?.candidate_photo || empOrCode.details?.candidate_photo;
@@ -78,7 +139,7 @@ const getEmployeePhoto = (empOrCode, employeesData = []) => {
         }
     }
 
-    const profile = resolveEmployeeProfile(empOrCode, employeesData);
+    const profile = resolveEmployeeProfile(empOrCode, employeesData, masterUsers);
     if (profile) {
         const details = profile.HR_SYSTEM_employee_data || profile.details || {};
         const p = profile.candidate_photo || profile.candidatePhoto || profile.photo_url || profile.photo || profile.avatar_url || profile.avatar || profile.profile_photo || profile.image_url || profile.image || details.candidate_photo || details.candidatePhoto || details.photo_url || details.photo;
@@ -472,8 +533,9 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
 
             setEmployeesData(allEmployeesData);
 
-            // Fetch users table to build inactive sets
+            // Fetch users table to build inactive sets and masterUsers
             const { data: usersData } = await supabase.from('users').select('*');
+            setMasterUsers(usersData || []);
             const inactIds = new Set();
             const inactNames = new Set();
             (usersData || []).forEach(u => {
@@ -521,10 +583,16 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
     const isEmployeeInTable = (employeeCode) => {
         if (!employeeCode) return false;
         const cleanId = employeeCode.toString().trim().toLowerCase();
-        return employeesData.some(emp => {
+        const inHr = employeesData.some(emp => {
             const empId = emp.id?.toString().trim().toLowerCase();
             const empEmployeeId = emp.employee_id?.toString().trim().toLowerCase();
             return empId === cleanId || empEmployeeId === cleanId;
+        });
+        if (inHr) return true;
+        return masterUsers.some(u => {
+            const uEmpId = u.employee_id?.toString().trim().toLowerCase();
+            const uId = u.id?.toString().trim().toLowerCase();
+            return (uEmpId && uEmpId === cleanId) || (uId && uId === cleanId);
         });
     };
 
@@ -910,8 +978,8 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                 paginatedData.map((item, index) => {
                                     const isInEmployeesTable = isEmployeeInTable(item.employeeCode);
                                     const actualIndex = (activePage - 1) * pageSize + index;
-                                    const employeeProfile = resolveEmployeeProfile(item, employeesData);
-                                    const candidatePhoto = getEmployeePhoto(item, employeesData);
+                                    const employeeProfile = resolveEmployeeProfile(item, employeesData, masterUsers);
+                                    const candidatePhoto = getEmployeePhoto(item, employeesData, masterUsers);
                                     const payableDays = (item.presentDays || 0) + ((item.halfDayDays || 0) * 0.5) + (item.unpunchedHolidayDays || 0) + (item.weeklyOffDays || 0) + (item.dayOffDays || 0);
                                     return (
                                         <tr

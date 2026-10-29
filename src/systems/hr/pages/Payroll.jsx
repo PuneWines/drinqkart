@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
 import {
-    Search, Users, Download, Eye, Calendar, DollarSign, ArrowUpRight, ChevronLeft, ChevronRight, Filter, Settings, FileSpreadsheet, Send, HelpCircle, UserX, Clock, Sliders, Play, CheckCircle2, RotateCcw, AlertTriangle, AlertCircle, FileText, Check, ChevronDown, RefreshCw, X, ShieldAlert, CheckCircle, Info, Lock, Columns, Bookmark, TrendingUp, Loader2, Pencil, Save, Edit, Printer
+    Search, Users, Download, Eye, Calendar, DollarSign, ArrowUpRight, ChevronLeft, ChevronRight, Filter, Settings, FileSpreadsheet, Send, HelpCircle, UserX, Clock, Sliders, Play, CheckCircle2, RotateCcw, AlertTriangle, AlertCircle, FileText, Check, ChevronDown, RefreshCw, X, ShieldAlert, CheckCircle, Info, Lock, Columns, Bookmark, TrendingUp, Loader2, Pencil, Save, Edit, Printer, Building2, Wallet, CreditCard, ArrowUpDown, SlidersHorizontal, Sparkles
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -898,9 +898,14 @@ const Payroll = () => {
                 const present = originalPresent + leaveDays;
 
                 const adv = advanceMap[matchedKey] || advanceMap[empIdLower] || advanceMap[empNameLower] || { advanceDeduction: 0, fixedAdvanceAmount: 0, fixedAdvanceDeduction: 0 };
-                const advDeduction = (savedPayroll && savedPayroll.advance_deduction !== null && savedPayroll.advance_deduction !== undefined)
-                    ? Number(savedPayroll.advance_deduction)
-                    : adv.advanceDeduction;
+                const isPaidRecord = savedPayroll?.status?.toString().toLowerCase().trim() === 'paid';
+                const advDeduction = isPaidRecord
+                    ? (Number(savedPayroll.advance_deduction) || 0)
+                    : (adv.advanceDeduction > 0
+                        ? adv.advanceDeduction
+                        : (savedPayroll && savedPayroll.advance_deduction !== null && savedPayroll.advance_deduction !== undefined
+                            ? Number(savedPayroll.advance_deduction)
+                            : 0));
 
                 const fixedAdvBalance = adv.fixedAdvanceAmount || (savedPayroll ? Number(savedPayroll.fixed_advance) || Number(savedPayroll.fixed_advance_amount) || 0 : 0);
 
@@ -965,9 +970,14 @@ const Payroll = () => {
                     : 0;
 
                 const adv = advanceMap[empIdLower] || { advanceDeduction: 0, fixedAdvanceAmount: 0, fixedAdvanceDeduction: 0 };
-                const advDeduction = (savedPayroll && savedPayroll.advance_deduction !== null && savedPayroll.advance_deduction !== undefined)
-                    ? Number(savedPayroll.advance_deduction)
-                    : adv.advanceDeduction;
+                const isPaidRecord = savedPayroll?.status?.toString().toLowerCase().trim() === 'paid';
+                const advDeduction = isPaidRecord
+                    ? (Number(savedPayroll.advance_deduction) || 0)
+                    : (adv.advanceDeduction > 0
+                        ? adv.advanceDeduction
+                        : (savedPayroll && savedPayroll.advance_deduction !== null && savedPayroll.advance_deduction !== undefined
+                            ? Number(savedPayroll.advance_deduction)
+                            : 0));
 
                 const fixedAdvBalance = adv.fixedAdvanceAmount || (savedPayroll ? Number(savedPayroll.fixed_advance) || Number(savedPayroll.fixed_advance_amount) || 0 : 0);
 
@@ -1679,6 +1689,8 @@ const Payroll = () => {
     const totalBaseSalarySum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(activeTab === 'history' ? row[4] : row[2]) || 0), 0);
     const totalNetPayableSum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(activeTab === 'history' ? row[17] : row[15]) || 0), 0);
     const totalDeductionsSum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(activeTab === 'history' ? row[8] : row[7]) || 0), 0);
+    const totalProratedSum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(activeTab === 'history' ? row[13] : row[6]) || 0), 0);
+    const totalFixedAdvSum = filteredRowsForSummary.reduce((sum, row) => sum + (Number(activeTab === 'history' ? row[9] : row[8]) || 0), 0);
 
     // Pagination variables
     const pageSize = 15;
@@ -1691,16 +1703,17 @@ const Payroll = () => {
     const renderPagination = () => {
         if (totalPages <= 1) return null;
         return (
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-100 text-xs">
-                <div className="text-gray-500">
-                    Showing <span className="font-semibold">{(activePage - 1) * pageSize + 1}</span> to <span className="font-semibold">{Math.min(activePage * pageSize, filteredRows.length)}</span> of <span className="font-semibold">{filteredRows.length}</span> records
+            <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-2.5 bg-slate-50/90 border-t border-slate-200/80 text-[11px] gap-2.5">
+                <div className="text-slate-500 font-medium text-[11px] whitespace-nowrap">
+                    Showing <span className="font-bold text-slate-800 font-mono">{(activePage - 1) * pageSize + 1}–{Math.min(activePage * pageSize, filteredRows.length)}</span> of <span className="font-bold text-slate-800 font-mono">{filteredRows.length}</span> records
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                     <button
                         disabled={activePage === 1}
                         onClick={() => setCurrentPage(activePage - 1)}
-                        className="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold rounded shadow-sm cursor-pointer"
+                        className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold rounded-lg shadow-2xs cursor-pointer flex items-center gap-1 text-[11px]"
                     >
+                        <ChevronLeft size={13} />
                         Previous
                     </button>
                     <div className="flex items-center gap-1">
@@ -1710,12 +1723,12 @@ const Payroll = () => {
                                 const showEllipsis = index > 0 && page - arr[index - 1] > 1;
                                 return (
                                     <React.Fragment key={page}>
-                                        {showEllipsis && <span className="text-gray-400 px-1">...</span>}
+                                        {showEllipsis && <span className="text-slate-400 px-0.5 font-mono text-[10px]">...</span>}
                                         <button
                                             onClick={() => setCurrentPage(page)}
-                                            className={`px-2.5 py-1.5 font-semibold rounded border transition-all cursor-pointer ${activePage === page
-                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            className={`min-w-[28px] h-7 px-1.5 font-mono text-[11px] font-bold rounded-md border transition-all cursor-pointer flex items-center justify-center ${activePage === page
+                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs'
+                                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                                                 }`}
                                         >
                                             {page}
@@ -1727,314 +1740,364 @@ const Payroll = () => {
                     <button
                         disabled={activePage === totalPages}
                         onClick={() => setCurrentPage(activePage + 1)}
-                        className="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold rounded shadow-sm cursor-pointer"
+                        className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold rounded-lg shadow-2xs cursor-pointer flex items-center gap-1 text-[11px]"
                     >
                         Next
+                        <ChevronRight size={13} />
                     </button>
                 </div>
             </div>
         );
     };
 
-
     return (
-        <div className="p-8 pt-4 w-full max-w-full overflow-x-hidden">
-            {/* Header Area */}
-            <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                        <DollarSign size={24} className="text-indigo-600" />
-                        Payroll Management
-                    </h1>
-                    <p className="text-gray-500 text-xs mt-0.5">
-                        Dynamic payroll generated directly from employees table and attendance monthly database logs
-                    </p>
+        <div className="p-3.5 sm:p-4 md:p-5 bg-slate-50/50 min-h-screen w-full max-w-full overflow-x-hidden text-slate-800 font-sans text-xs">
+            {/* 1. Executive Page Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 flex-shrink-0">
+                        <DollarSign size={18} className="stroke-[2.5]" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-bold text-slate-900 tracking-tight font-sans">
+                                Payroll Management
+                            </h1>
+                            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60 font-mono">
+                                <Calendar size={10} className="text-indigo-600" />
+                                {monthNames[selectedMonth - 1]} {selectedYear}
+                            </span>
+                        </div>
+                        <p className="text-slate-500 text-[11px] mt-0.5">
+                            Automated attendance sync, advance deductions, and disbursement management
+                        </p>
+                    </div>
+                </div>
+
+                {/* Primary Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                    {(activeTab === 'salary' || activeTab === 'hold') && (
+                        <button
+                            onClick={handleExportBankCSV}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-semibold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer"
+                            title="Export verified records into Bank NEFT/RTGS CSV format"
+                        >
+                            <CreditCard size={13} />
+                            Export Bank CSV
+                        </button>
+                    )}
+                    <button
+                        onClick={handleExportExcel}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-[11px] border border-slate-200/90 !rounded-lg shadow-2xs transition-all cursor-pointer"
+                        title="Download full payroll worksheet in Excel format"
+                    >
+                        <Download size={13} className="text-emerald-600" />
+                        Export Excel
+                    </button>
+                    {(activeTab === 'salary' || activeTab === 'hold') && (
+                        <button
+                            onClick={fetchPayrollData}
+                            disabled={loading}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                            title="Refresh latest attendance and advance updates"
+                        >
+                            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+                            {loading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Summary Stats Panels */}
+            {/* 2. Executive KPI Summary Cards */}
             {(activeTab === 'salary' || activeTab === 'hold') && !loading && currentDataSet.rows?.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-white border-b border-l border-gray-200 p-4 ">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
+                    {/* Card 1: Active Workforce */}
+                    <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs hover:shadow-xs transition-all">
                         <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Active Employees</p>
-                                <p className="text-xl font-bold text-slate-800 mt-1">{totalEmployeesCount}</p>
-                            </div>
-                            <div className="p-2 bg-indigo-50 rounded">
-                                <Users size={16} className="text-indigo-600" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Workforce</span>
+                            <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                <Users size={13} />
                             </div>
                         </div>
+                        <div className="mt-1.5 flex items-baseline gap-1">
+                            <span className="text-xl font-bold text-slate-900 font-mono tabular-nums">{totalEmployeesCount}</span>
+                            <span className="text-[10px] font-semibold text-slate-500">enrolled</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">For {monthNames[selectedMonth - 1]} {selectedYear}</p>
                     </div>
 
-                    <div className="bg-white border-b border-l border-gray-200 p-4 ">
+                    {/* Card 2: Base Contracted */}
+                    <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs hover:shadow-xs transition-all">
                         <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Total Base Salary</p>
-                                <p className="text-xl font-bold text-slate-800 mt-1">₹{totalBaseSalarySum.toLocaleString()}</p>
-                            </div>
-                            <div className="p-2 bg-blue-50 rounded">
-                                <DollarSign size={16} className="text-blue-600" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Base Contracted</span>
+                            <div className="w-6 h-6 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
+                                <DollarSign size={13} />
                             </div>
                         </div>
+                        <div className="mt-1.5">
+                            <span className="text-xl font-bold text-slate-900 font-mono tabular-nums">₹{totalBaseSalarySum.toLocaleString()}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Gross contracted base</p>
                     </div>
 
-                    <div className="bg-white border-b border-l border-gray-200 p-4 ">
+                    {/* Card 3: Deductions */}
+                    <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs hover:shadow-xs transition-all">
                         <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Advance Deductions</p>
-                                <p className="text-xl font-bold text-orange-600 mt-1">₹{totalDeductionsSum.toLocaleString()}</p>
-                            </div>
-                            <div className="p-2 bg-orange-50 rounded">
-                                <TrendingUp size={16} className="text-orange-600" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Advance Deductions</span>
+                            <div className="w-6 h-6 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                                <TrendingUp size={13} />
                             </div>
                         </div>
+                        <div className="mt-1.5">
+                            <span className="text-xl font-bold text-rose-600 font-mono tabular-nums">₹{totalDeductionsSum.toLocaleString()}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Petty cash & advance deductions</p>
                     </div>
 
-                    <div className="bg-white border-b border-l border-gray-200 p-4 ">
+                    {/* Card 4: Net Disbursement */}
+                    <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs hover:shadow-xs transition-all">
                         <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Total Net Payable</p>
-                                <p className="text-xl font-bold text-green-600 mt-1">₹{totalNetPayableSum.toLocaleString()}</p>
-                            </div>
-                            <div className="p-2 bg-green-50 rounded">
-                                <DollarSign size={16} className="text-green-600" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Disbursement</span>
+                            <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                <Wallet size={13} />
                             </div>
                         </div>
+                        <div className="mt-1.5">
+                            <span className="text-xl font-bold text-emerald-600 font-mono tabular-nums">₹{totalNetPayableSum.toLocaleString()}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Estimated take-home payout</p>
                     </div>
                 </div>
             )}
 
-            {/* Action Bar & Controls */}
-            <div className="flex flex-wrap items-center justify-end gap-3 mb-6">
-                <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Search records..."
-                        className="pl-9 pr-3 py-1.5 border border-gray-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 w-60 bg-white"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-
-                {/* Column Checklist Selector */}
-                <div className="relative">
-                    <button
-                        onClick={() => setShowColumnDropdown(prev => !prev)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-slate-700 font-semibold text-xs hover:bg-gray-50 transition-colors rounded shadow-xs cursor-pointer"
-                    >
-                        <Columns size={14} className="text-gray-500" />
-                        Select Columns
-                        <ChevronDown size={12} className="text-gray-400" />
-                    </button>
-                    {showColumnDropdown && (
-                        <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50 p-3 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-150">
-                            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Toggle Columns</span>
-                                <button
-                                    onClick={() => setHiddenColumns(new Set())}
-                                    className="text-[10px] text-indigo-600 font-bold hover:underline"
-                                >
-                                    Select All
-                                </button>
-                            </div>
-                            <div className="max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-1.5">
-                                {(activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers).map(col => {
-                                    const isHidden = hiddenColumns.has(col);
-                                    return (
-                                        <label key={col} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50 p-1 rounded">
-                                            <input
-                                                type="checkbox"
-                                                checked={!isHidden}
-                                                onChange={(e) => {
-                                                    const next = new Set(hiddenColumns);
-                                                    if (e.target.checked) next.delete(col);
-                                                    else next.add(col);
-                                                    setHiddenColumns(next);
-                                                }}
-                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                            />
-                                            <span>{col}</span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {(activeTab === 'salary' || activeTab === 'hold') && (
-                    <div className="relative">
-                        <select
-                            value={sortOrder}
-                            onChange={(e) => setSortOrder(e.target.value)}
-                            className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700 rounded cursor-pointer"
-                        >
-                            <option value="ASC">Sort: ID Ascending</option>
-                            <option value="DESC">Sort: ID Descending</option>
-                            <option value="DEFAULT">Sort: Default</option>
-                        </select>
-                        <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                    </div>
-                )}
-                <button
-                    onClick={handleExportExcel}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-medium text-xs transition-colors rounded shadow-sm cursor-pointer"
-                >
-                    <Download size={14} />
-                    Export Excel
-                </button>
-                {(activeTab === 'salary' || activeTab === 'hold') && (
-                    <button
-                        onClick={handleExportBankCSV}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs transition-colors rounded shadow-sm cursor-pointer"
-                    >
-                        <Download size={14} />
-                        Export Bank CSV
-                    </button>
-                )}
-                {(activeTab === 'salary' || activeTab === 'hold') && (
-                    <div className="flex items-center gap-2">
+            {/* 3. Navigation Tabs & Unified Filter Toolbar */}
+            <div className="bg-white rounded-xl border border-slate-200/80 p-3 mb-4 shadow-2xs flex flex-col gap-2.5">
+                {/* Top Row: Pill Tabs & Search Input */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
+                    {/* Segmented Pill Tabs */}
+                    <div className="inline-flex p-0.5 bg-slate-100/90 rounded-lg border border-slate-200/70 self-start">
                         <button
-                            onClick={fetchPayrollData}
-                            disabled={loading}
-                            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
+                            onClick={() => setActiveTab('salary')}
+                            className={`px-3 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'salary'
+                                ? 'bg-white text-indigo-700 shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                                }`}
                         >
-                            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-                            {loading ? 'Refreshing...' : 'Refresh'}
+                            Salary Sheet
+                            {salaryData.rows?.length > 0 && (
+                                <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold ${activeTab === 'salary' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-200 text-slate-600'}`}>
+                                    {salaryData.rows.length}
+                                </span>
+                            )}
                         </button>
-                        {activeTab === 'hold' && (
+                        <button
+                            onClick={() => setActiveTab('history')}
+                            className={`px-3 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'history'
+                                ? 'bg-white text-indigo-700 shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                        >
+                            Payment History
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('hold')}
+                            className={`px-3 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'hold'
+                                ? 'bg-amber-500 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                        >
+                            <Bookmark size={11} className={holdData.rows?.length > 0 ? (activeTab === 'hold' ? "fill-white" : "text-amber-500 fill-amber-500") : ""} />
+                            Hold Tab
+                            {holdData.rows?.length > 0 && (
+                                <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold ${activeTab === 'hold' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                                    {holdData.rows.length}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Search Input */}
+                    <div className="relative min-w-[240px]">
+                        <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Search employee, ID, shop..."
+                            className="w-full pl-8 pr-7 py-1.5 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        {searchTerm && (
                             <button
-                                onClick={() => handleUnhold()}
-                                disabled={isSavingToDB || !holdData?.rows?.length}
-                                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs transition-colors rounded disabled:opacity-50 shadow-sm cursor-pointer"
-                                title="Move held records back to active Salary Sheet"
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
                             >
-                                {isSavingToDB ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                                Unhold Selected
+                                <X size={11} />
                             </button>
                         )}
                     </div>
-                )}
-            </div>
-
-            {/* Navigation Tabs & Date Filters */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-gray-200 mb-5">
-                <div className="flex gap-4">
-                    <button
-                        className={`pb-2.5 px-1 text-xs font-semibold border-b-2 transition-all ${activeTab === 'salary'
-                            ? 'border-indigo-600 text-indigo-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700'
-                            }`}
-                        onClick={() => setActiveTab('salary')}
-                    >
-                        Salary Sheet
-                    </button>
-                    <button
-                        className={`pb-2.5 px-1 text-xs font-semibold border-b-2 transition-all ${activeTab === 'history'
-                            ? 'border-indigo-600 text-indigo-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700'
-                            }`}
-                        onClick={() => setActiveTab('history')}
-                    >
-                        Payment History
-                    </button>
-                    <button
-                        className={`pb-2.5 px-1 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${activeTab === 'hold'
-                            ? 'border-amber-500 text-amber-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700'
-                            }`}
-                        onClick={() => setActiveTab('hold')}
-                    >
-                        <Bookmark size={14} className={holdData.rows?.length > 0 ? "text-amber-500 fill-amber-500" : ""} />
-                        Hold Tab {holdData.rows?.length > 0 && `(${holdData.rows.length})`}
-                    </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 pb-2">
-                    <div className="flex items-center gap-1 bg-white border border-gray-200 px-2.5 py-1 rounded shadow-2xs">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase">Shop:</span>
-                        <select
-                            value={selectedShop}
-                            onChange={(e) => {
-                                setSelectedShop(e.target.value);
-                                setCurrentPage(1);
-                            }}
-                            className="text-xs bg-transparent focus:outline-none font-semibold text-slate-800 cursor-pointer max-w-[150px] truncate"
-                        >
-                            <option value="ALL">All Shops</option>
-                            {shopsList.map(s => (
-                                <option key={s} value={s}>{s}</option>
-                            ))}
-                        </select>
+                {/* Bottom Row: Shop Filter, Month/Year Filter, Columns, Sort */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Shop Selector */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                            <Building2 size={12} className="text-slate-400" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Shop</span>
+                            <select
+                                value={selectedShop}
+                                onChange={(e) => {
+                                    setSelectedShop(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                className="text-[11px] bg-transparent focus:outline-none font-bold text-slate-800 cursor-pointer max-w-[130px] truncate"
+                            >
+                                <option value="ALL">All Shops</option>
+                                {shopsList.map(s => (
+                                    <option key={s} value={s}>{shopFullNameMap[s] || s}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Month & Year Selectors */}
+                        {(activeTab === 'salary' || activeTab === 'hold') && (
+                            <>
+                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                                    <Calendar size={12} className="text-slate-400" />
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Month</span>
+                                    <select
+                                        value={selectedMonth}
+                                        onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                                        className="text-[11px] bg-transparent focus:outline-none font-bold text-slate-800 cursor-pointer"
+                                    >
+                                        {monthNames.map((m, idx) => (
+                                            <option key={m} value={idx + 1}>{m}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Year</span>
+                                    <select
+                                        value={selectedYear}
+                                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                                        className="text-[11px] bg-transparent focus:outline-none font-bold text-slate-800 cursor-pointer"
+                                    >
+                                        {[2024, 2025, 2026, 2027].map(y => (
+                                            <option key={y} value={y}>{y}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </>
+                        )}
                     </div>
 
-                    {(activeTab === 'salary' || activeTab === 'hold') && (
-                        <>
-                            <div className="flex items-center gap-1 bg-white border border-gray-200 px-2.5 py-1 rounded shadow-2xs">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase">Month:</span>
+                    {/* Right Controls: Column Selector & Sort */}
+                    <div className="flex items-center gap-2">
+                        {/* Column Checklist Selector */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowColumnDropdown(prev => !prev)}
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-[11px] border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                            >
+                                <Columns size={12} className="text-slate-500" />
+                                Customize Columns
+                                <ChevronDown size={11} className="text-slate-400" />
+                            </button>
+                            {showColumnDropdown && (
+                                <div className="absolute right-0 mt-1.5 w-60 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-150">
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                                        <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Display Columns</span>
+                                        <button
+                                            onClick={() => setHiddenColumns(new Set())}
+                                            className="text-[10px] text-indigo-600 font-bold hover:underline cursor-pointer"
+                                        >
+                                            Reset (Show All)
+                                        </button>
+                                    </div>
+                                    <div className="max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
+                                        {(activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers).map(col => {
+                                            const isHidden = hiddenColumns.has(col);
+                                            return (
+                                                <label key={col} className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer hover:bg-slate-50 px-1.5 py-1 rounded transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!isHidden}
+                                                        onChange={(e) => {
+                                                            const next = new Set(hiddenColumns);
+                                                            if (e.target.checked) next.delete(col);
+                                                            else next.add(col);
+                                                            setHiddenColumns(next);
+                                                        }}
+                                                        className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                                                    />
+                                                    <span className="truncate">{col}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Sort Order */}
+                        {(activeTab === 'salary' || activeTab === 'hold') && (
+                            <div className="relative">
                                 <select
-                                    value={selectedMonth}
-                                    onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                                    className="text-xs bg-transparent focus:outline-none font-semibold text-slate-800 cursor-pointer"
+                                    value={sortOrder}
+                                    onChange={(e) => setSortOrder(e.target.value)}
+                                    className="appearance-none pl-7 pr-6 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-semibold text-slate-700 rounded-lg cursor-pointer"
                                 >
-                                    {monthNames.map((m, idx) => (
-                                        <option key={m} value={idx + 1}>{m}</option>
-                                    ))}
+                                    <option value="ASC">Sort: ID (Asc)</option>
+                                    <option value="DESC">Sort: ID (Desc)</option>
+                                    <option value="DEFAULT">Sort: Default</option>
                                 </select>
+                                <ArrowUpDown size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                             </div>
-                            <div className="flex items-center gap-1 bg-white border border-gray-200 px-2.5 py-1 rounded shadow-2xs">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase">Year:</span>
-                                <select
-                                    value={selectedYear}
-                                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                                    className="text-xs bg-transparent focus:outline-none font-semibold text-slate-800 cursor-pointer"
-                                >
-                                    {[2024, 2025, 2026, 2027].map(y => (
-                                        <option key={y} value={y}>{y}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Dynamic Grid / Table */}
+            {/* 4. Main Data Table or Empty/Loading State */}
             {loading ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
+                <div className="bg-white rounded-xl border border-slate-200/80 p-12 flex flex-col items-center justify-center gap-2.5 shadow-2xs">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-                    <span className="text-xs">Loading payroll and attendance details...</span>
+                    <p className="font-semibold text-slate-700 text-xs">Loading payroll & attendance logs...</p>
+                    <p className="text-slate-400 text-[11px]">Synchronizing with employee master, attendance logs, and advance requests</p>
                 </div>
             ) : error ? (
-                <div className="bg-red-50 border border-red-200 p-6 text-center rounded">
-                    <p className="text-red-600 text-xs mb-3">{error}</p>
+                <div className="bg-red-50 border border-red-200 p-6 text-center rounded-xl shadow-2xs">
+                    <AlertTriangle className="w-7 h-7 text-red-600 mx-auto mb-1.5" />
+                    <p className="text-red-700 font-semibold text-xs mb-1">Failed to load payroll data</p>
+                    <p className="text-red-500 text-[11px] mb-3">{error}</p>
                     <button
                         onClick={() => activeTab === 'salary' ? fetchPayrollData() : fetchHistoryData()}
-                        className="px-4 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors font-medium"
+                        className="px-3.5 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition-colors font-bold shadow-2xs cursor-pointer"
                     >
-                        Retry
+                        Retry Query
                     </button>
                 </div>
             ) : (
-                <div className="bg-white border border-gray-200  overflow-hidden max-w-full">
+                <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden max-w-full">
+                    {/* Floating Batch Action Bar (Visible when rows are selected) */}
                     {(activeTab === 'salary' || activeTab === 'hold') && selectedEmpIds.size > 0 && (
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 transition-all animate-in fade-in slide-in-from-top-2 duration-200">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center">
-                                    <Pencil size={12} className="animate-pulse" />
-                                </div>
-                                <span className="text-xs font-semibold text-indigo-900">
-                                    {selectedEmpIds.size} row(s) selected
+                        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 text-white backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl border border-slate-700/60 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200 max-w-[95vw] overflow-x-auto">
+                            <div className="flex items-center gap-2 pr-3 border-r border-slate-700 text-[11px] font-semibold shrink-0">
+                                <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-[10px] border border-indigo-500/30">
+                                    {selectedEmpIds.size}
+                                </span>
+                                <span className="text-slate-200 whitespace-nowrap">
+                                    {selectedEmpIds.size === 1 ? '1 selected' : `${selectedEmpIds.size} selected`}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 shrink-0">
                                 {activeTab === 'salary' && (
                                     <button
                                         onClick={() => handleSavePayrollToDB()}
                                         disabled={isSavingToDB}
-                                        className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
+                                        className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                                        title="Save basic salary changes and update draft payroll"
                                     >
                                         {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                                         Update Record
@@ -2044,7 +2107,8 @@ const Payroll = () => {
                                     <button
                                         onClick={() => handleUnhold()}
                                         disabled={isSavingToDB}
-                                        className="flex items-center gap-1.5 px-3 py-1 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
+                                        className="flex items-center gap-1.5 px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                                        title="Move held records back to active Salary Sheet"
                                     >
                                         {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                                         Unhold
@@ -2054,7 +2118,8 @@ const Payroll = () => {
                                     <button
                                         onClick={() => handleMarkAsHold()}
                                         disabled={isSavingToDB}
-                                        className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
+                                        className="flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                                        title="Hold salary payout for selected employees"
                                     >
                                         {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <Bookmark size={12} />}
                                         Mark as Hold
@@ -2063,26 +2128,29 @@ const Payroll = () => {
                                 <button
                                     onClick={() => handleMarkAsPaid()}
                                     disabled={isSavingToDB}
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors rounded shadow-sm cursor-pointer disabled:opacity-50"
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                                    title="Mark selected records as Paid & generate payroll disbursement"
                                 >
                                     {isSavingToDB ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
                                     Mark as Paid
                                 </button>
                                 <button
                                     onClick={() => setSelectedEmpIds(new Set())}
-                                    className="text-xs font-semibold text-gray-600 hover:text-gray-800 transition-colors cursor-pointer ml-2"
+                                    className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white transition-colors cursor-pointer rounded hover:bg-slate-800 ml-1"
                                 >
                                     Cancel
                                 </button>
                             </div>
                         </div>
                     )}
-                    <div className="overflow-x-auto max-h-[61vh] scrollbar-thin max-w-full">
-                        <table className="w-full min-w-[1400px] text-xs text-left border-collapse">
-                            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+
+                    {/* Table View */}
+                    <div className="overflow-x-auto max-h-[66vh] scrollbar-thin max-w-full">
+                        <table className="w-full min-w-[1300px] text-xs text-left border-collapse">
+                            <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 text-[11px] shadow-2xs">
                                 <tr>
                                     {(activeTab === 'salary' || activeTab === 'hold') && (
-                                        <th className="px-4 py-2.5 font-semibold text-gray-600 w-10 text-center">
+                                        <th className="px-3 py-2.5 font-bold text-slate-600 w-10 text-center bg-slate-50">
                                             <input
                                                 type="checkbox"
                                                 checked={paginatedRows.filter(r => r[16] === true).length > 0 && paginatedRows.filter(r => r[16] === true).every(row => selectedEmpIds.has(row[0]?.toString()))}
@@ -2101,35 +2169,63 @@ const Payroll = () => {
                                                     });
                                                     setSelectedEmpIds(newSelected);
                                                 }}
-                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
                                                 title="Select all verified employees"
                                             />
                                         </th>
                                     )}
                                     {(activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers)
                                         .filter(header => !hiddenColumns.has(header))
-                                        .map((header, idx) => (
-                                            <th key={idx} className="px-4 py-2.5 font-semibold text-gray-600 whitespace-nowrap text-center">
-                                                {header}
-                                            </th>
-                                        ))}
+                                        .map((header, idx) => {
+                                            const hName = header?.toLowerCase() || '';
+                                            const isDeduction = hName.includes('advance') || hName.includes('brakeges') || hName.includes('breakage') || hName.includes('medical') || hName.includes('rto');
+                                            const isEarning = hName.includes('salary') || hName.includes('bonus') || hName.includes('way off');
+                                            const isAttendance = hName.includes('days') || hName.includes('attendance') || hName.includes('present');
+                                            const isFinal = hName.includes('final') || hName.includes('net');
+
+                                            let headerColor = "text-slate-600";
+                                            if (isFinal) headerColor = "text-emerald-800 bg-emerald-50/70 font-bold";
+                                            else if (isDeduction) headerColor = "text-rose-800 bg-rose-50/50";
+                                            else if (isEarning) headerColor = "text-emerald-800 bg-emerald-50/30";
+                                            else if (isAttendance) headerColor = "text-indigo-800 bg-indigo-50/30";
+
+                                            const isAlignRight = isDeduction || isEarning || isFinal;
+
+                                            return (
+                                                <th
+                                                    key={idx}
+                                                    className={`px-3 py-2.5 font-bold whitespace-nowrap text-[11px] uppercase tracking-wider ${headerColor} ${isAlignRight ? 'text-right' : hName === 'name' ? 'text-left' : 'text-center'}`}
+                                                >
+                                                    {header}
+                                                </th>
+                                            );
+                                        })}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100 font-medium">
+                            <tbody className="divide-y divide-slate-100 font-medium text-xs">
                                 {paginatedRows.map((row, idx) => {
                                     const headersList = activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers;
                                     const cleanRow = row.slice(0, headersList.length);
                                     const isVerified = (activeTab === 'salary' || activeTab === 'hold') ? (row[16] === true) : true;
                                     const isRowSelected = (activeTab === 'salary' || activeTab === 'hold') && isVerified && selectedEmpIds.has(row[0]?.toString());
                                     const isEditable = isRowSelected;
+                                    const shopVal = activeTab === 'history' ? (row[20] || '') : (row[24] || '');
                                     const cellsToRender = (activeTab === 'salary' || activeTab === 'hold')
                                         ? headersList.map((header, j) => ({ header, cell: row[j + 1] }))
                                         : cleanRow.map((cell, j) => ({ header: headersList[j], cell }));
 
                                     return (
-                                        <tr key={idx} className={`transition-colors ${isVerified ? 'hover:bg-gray-50' : 'bg-slate-50/60 hover:bg-slate-50 opacity-90'}`}>
+                                        <tr
+                                            key={idx}
+                                            className={`transition-colors ${isRowSelected
+                                                ? 'bg-indigo-50/40 border-l-4 border-l-indigo-600 hover:bg-indigo-50/60'
+                                                : isVerified
+                                                    ? 'hover:bg-slate-50/80 bg-white'
+                                                    : 'bg-slate-50/50 hover:bg-slate-100/60 opacity-85'
+                                                }`}
+                                        >
                                             {(activeTab === 'salary' || activeTab === 'hold') && (
-                                                <td className="px-4 py-2.5 text-center">
+                                                <td className="px-3 py-2 text-center">
                                                     <input
                                                         type="checkbox"
                                                         disabled={!isVerified}
@@ -2147,8 +2243,8 @@ const Payroll = () => {
                                                             }
                                                             setSelectedEmpIds(newSelected);
                                                         }}
-                                                        className={`rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 ${!isVerified ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-                                                        title={!isVerified ? "Unverified employee cannot be selected" : "Select employee"}
+                                                        className={`w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 accent-indigo-600 ${!isVerified ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+                                                        title={!isVerified ? "Unverified employee cannot be selected" : "Select employee row to edit numbers or run actions"}
                                                     />
                                                 </td>
                                             )}
@@ -2157,274 +2253,166 @@ const Payroll = () => {
                                                 .map(({ header, cell }, j) => {
                                                     const headerName = header?.toLowerCase() || '';
 
-                                                    // Highlight cells based on their data type
-                                                    let cellClass = "px-4 py-2.5 text-slate-700 font-sans text-center";
+                                                    let cellClass = "px-3 py-2 text-slate-700 text-center";
                                                     let content = cell;
 
-                                                    const isCurrency = headerName === 'salary' ||
-                                                        headerName === 'basic salary' ||
-                                                        headerName === 'basic salary (prorated)' ||
-                                                        headerName === 'advance' ||
-                                                        headerName === 'monthly advance' ||
-                                                        headerName === 'fixed advance' ||
-                                                        headerName === 'fix advance' ||
-                                                        headerName === 'brakeges' ||
-                                                        headerName === 'medical' ||
-                                                        headerName === 'rto' ||
-                                                        headerName === 'way off' ||
-                                                        headerName === 'seasonal bonus' ||
-                                                        headerName === 'refferal bonus';
-
-                                                    if (headerName === 'emp id' || headerName.includes('id')) {
-                                                        cellClass = "px-4 py-2.5 font-mono text-gray-500 font-medium text-center border-r border-gray-100";
-                                                    } else if (headerName === 'final salary') {
-                                                        cellClass = "px-4 py-2.5 text-green-600 font-bold font-mono text-right";
-                                                        content = `₹${Math.round(Number(cell) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-                                                    } else if (isCurrency) {
-                                                        cellClass = "px-4 py-2.5 font-mono text-slate-600 text-right";
-                                                        content = cell > 0 ? `₹${Number(cell).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}` : '-';
-                                                    } else if (headerName === 'attendance' || headerName === 'extra days' || headerName === 'extra 2 days') {
-                                                        cellClass = "px-4 py-2.5 text-indigo-600 font-bold text-center";
-                                                    } else if (headerName === 'total days') {
-                                                        cellClass = "px-4 py-2.5 text-center text-slate-500 font-mono";
-                                                    }
+                                                    // Column Index Mapping for handleManualInputChange:
+                                                    // 2: Salary, 5: Extra Days, 6: Prorated, 7: Monthly Adv, 9: Breakage, 10: Medical, 11: RTO, 12: Seasonal, 13: Referral, 14: Way Off
+                                                    const colIndexMap = {
+                                                        'salary': 2,
+                                                        'basic salary': 2,
+                                                        'extra days': 5,
+                                                        'extra 2 days': 5,
+                                                        'basic salary (prorated)': 6,
+                                                        'prorated salary': 6,
+                                                        'monthly advance': 7,
+                                                        'brakeges': 9,
+                                                        'breakage': 9,
+                                                        'medical': 10,
+                                                        'rto': 11,
+                                                        'seasonal bonus': 12,
+                                                        'refferal bonus': 13,
+                                                        'referral bonus': 13,
+                                                        'way off': 14
+                                                    };
 
                                                     if (headerName === 'name') {
-                                                        cellClass = "px-4 py-2 text-slate-700 font-sans text-left";
+                                                        cellClass = "px-3 py-1.5 text-slate-900 text-left";
                                                         const empIdKey = row[0]?.toString()?.trim()?.toLowerCase();
                                                         const empNameKey = String(cell)?.trim()?.toLowerCase();
                                                         const candidatePhoto = row[25] || (empIdKey && empPhotoMap[empIdKey]) || (empNameKey && empPhotoMap[empNameKey]) || null;
 
                                                         content = (
-                                                            <div className="flex items-center justify-between gap-3 group min-w-[200px]">
-                                                                <div className="flex items-center gap-2">
-                                                                    {/* Profile Overview Avatar */}
+                                                            <div className="flex items-center gap-2 min-w-[180px]">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openPreviewWindow(row, 'timecard')}
+                                                                    className="relative flex-shrink-0 cursor-pointer group"
+                                                                    title="Click to view employee profile & timecard"
+                                                                >
+                                                                    {candidatePhoto ? (
+                                                                        <img
+                                                                            src={candidatePhoto}
+                                                                            alt=""
+                                                                            className="w-6.5 h-6.5 rounded-full object-cover border border-slate-200 shadow-2xs group-hover:ring-1 group-hover:ring-indigo-500 transition-all flex-shrink-0"
+                                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-6.5 h-6.5 rounded-full flex items-center justify-center text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 group-hover:ring-1 group-hover:ring-indigo-500 transition-all shadow-2xs flex-shrink-0">
+                                                                            {cell ? String(cell).charAt(0).toUpperCase() : '?'}
+                                                                        </div>
+                                                                    )}
+                                                                </button>
+                                                                <div className="flex flex-col min-w-0">
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => openPreviewWindow(row, 'timecard')}
-                                                                        className="relative flex-shrink-0 cursor-pointer group"
-                                                                        title="Click to view employee profile overview"
+                                                                        className="font-bold text-slate-900 hover:text-indigo-600 text-left transition-colors cursor-pointer text-xs truncate leading-tight"
+                                                                        title="Click to view employee overview & timecard"
                                                                     >
-                                                                        {candidatePhoto ? (
-                                                                            <img
-                                                                                src={candidatePhoto}
-                                                                                alt={cell}
-                                                                                className="w-6 h-6 rounded-full object-cover border border-gray-200 flex-shrink-0 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-xs"
-                                                                            />
-                                                                        ) : (
-                                                                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-xs">
-                                                                                {cell ? String(cell).charAt(0).toUpperCase() : '?'}
-                                                                            </div>
-                                                                        )}
+                                                                        {cell}
                                                                     </button>
-                                                                    <div className="flex flex-col">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => openPreviewWindow(row, 'timecard')}
-                                                                            className="font-bold text-slate-900 hover:text-indigo-600 text-left transition-colors cursor-pointer text-xs"
-                                                                            title="Click to view employee overview & timecard"
-                                                                        >
-                                                                            {cell}
-                                                                        </button>
+                                                                    <div className="flex items-center gap-1 mt-0.5 leading-none">
+                                                                        <span className="font-mono text-[11px] text-slate-400 font-medium">
+                                                                            ID: {row[0]}
+                                                                        </span>
+                                                                        {shopVal && (
+                                                                            <span className="text-[11px] text-slate-400 font-medium truncate max-w-[80px]">
+                                                                                • {shopVal}
+                                                                            </span>
+                                                                        )}
                                                                         {!isVerified && (
-                                                                            <span className="text-[9px] text-amber-600 font-semibold block mt-0.5">⚠️ Unverified</span>
+                                                                            <span className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.2 rounded font-semibold border border-amber-200">
+                                                                                Unverified
+                                                                            </span>
+                                                                        )}
+                                                                        {isRowSelected && (
+                                                                            <span className="text-[10px] text-indigo-700 bg-indigo-50 px-1 py-0.2 rounded font-bold border border-indigo-200">
+                                                                                Editing
+                                                                            </span>
                                                                         )}
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         );
-                                                    } else if (headerName === 'salary' || headerName === 'basic salary') {
-                                                        cellClass = "px-4 py-2.5 text-center";
+                                                    } else if (headerName === 'emp id' || headerName.includes('id')) {
+                                                        cellClass = "px-3 py-2 font-mono text-slate-500 font-semibold text-center";
+                                                        content = cell || '-';
+                                                    } else if (headerName === 'total days') {
+                                                        cellClass = "px-3 py-2 text-center text-slate-500 font-mono";
+                                                        content = cell;
+                                                    } else if (headerName === 'attendance' || headerName === 'present') {
+                                                        cellClass = "px-3 py-2 text-center";
                                                         content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 2, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
+                                                            <span className="font-mono text-xs font-bold text-indigo-600 bg-indigo-50/70 px-1.5 py-0.2 rounded">
+                                                                {cell}
+                                                            </span>
                                                         );
                                                     } else if (headerName === 'extra days' || headerName === 'extra 2 days') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
+                                                        cellClass = "px-3 py-2 text-center";
+                                                        content = isEditable ? (
                                                             <input
                                                                 type="number"
-                                                                disabled={!isEditable}
                                                                 value={cell === 0 ? '0' : cell}
                                                                 placeholder="0"
                                                                 onChange={(e) => handleManualInputChange(row[0], 5, e.target.value)}
-                                                                className={`w-16 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-center font-bold text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-indigo-600'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
+                                                                className="w-12 px-1 py-0.5 border border-indigo-300 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-500/20 rounded text-center font-mono text-xs font-bold bg-white text-indigo-600 outline-none shadow-2xs transition-all"
                                                             />
-                                                        );
-                                                    } else if (headerName === 'basic salary (prorated)') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 6, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
-                                                        );
-                                                    } else if (headerName === 'monthly advance') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 7, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
+                                                        ) : (
+                                                            <span className={`font-mono text-xs font-semibold ${Number(cell) > 0 ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
+                                                                {Number(cell) > 0 ? `+${cell}` : '0'}
+                                                            </span>
                                                         );
                                                     } else if (headerName === 'fixed advance') {
-                                                        cellClass = "px-4 py-2.5 font-mono text-slate-600 text-right";
-                                                        content = cell > 0 ? `₹${Number(cell).toLocaleString()}` : '-';
-                                                    } else if (headerName === 'brakeges') {
-                                                        cellClass = "px-4 py-2.5 text-center";
+                                                        cellClass = "px-3 py-2 font-mono text-slate-600 text-right";
+                                                        content = Number(cell) > 0 ? `₹${Number(cell).toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>;
+                                                    } else if (headerName === 'final salary' || headerName === 'net salary') {
+                                                        cellClass = "px-3 py-2 text-right";
                                                         content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 9, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
+                                                            <span className="font-mono text-xs tabular-nums font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 inline-block shadow-2xs">
+                                                                ₹{Math.round(Number(cell) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                            </span>
                                                         );
-                                                    } else if (headerName === 'medical') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
+                                                    } else if (colIndexMap[headerName] !== undefined && (activeTab === 'salary' || activeTab === 'hold')) {
+                                                        const targetIndex = colIndexMap[headerName];
+                                                        cellClass = "px-3 py-2 text-right";
+                                                        content = isEditable ? (
                                                             <input
                                                                 type="number"
-                                                                disabled={!isEditable}
                                                                 value={cell === 0 ? '' : cell}
                                                                 placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 10, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
+                                                                onChange={(e) => handleManualInputChange(row[0], targetIndex, e.target.value)}
+                                                                className="w-20 px-1.5 py-0.5 border border-indigo-300 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-500/20 rounded text-right font-mono text-xs font-semibold bg-white text-slate-900 outline-none shadow-2xs transition-all"
                                                             />
-                                                        );
-                                                    } else if (headerName === 'rto') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 11, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
-                                                        );
-                                                    } else if (headerName === 'seasonal bonus') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 12, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
-                                                        );
-                                                    } else if (headerName === 'refferal bonus') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 13, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
-                                                        );
-                                                    } else if (headerName === 'way off') {
-                                                        cellClass = "px-4 py-2.5 text-center";
-                                                        content = (
-                                                            <input
-                                                                type="number"
-                                                                disabled={!isEditable}
-                                                                value={cell === 0 ? '' : cell}
-                                                                placeholder="0"
-                                                                onChange={(e) => handleManualInputChange(row[0], 14, e.target.value)}
-                                                                className={`w-24 px-2 py-1 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded text-right font-mono text-xs ${!isEditable ? 'bg-slate-100/80 text-slate-400 cursor-not-allowed border-dashed' : 'bg-white text-slate-700 font-semibold'}`}
-                                                                title={!isVerified ? "Cannot edit unverified employee" : !isRowSelected ? "Select employee checkbox to edit" : ""}
-                                                            />
+                                                        ) : (
+                                                            <span className="font-mono text-xs tabular-nums text-slate-700 font-medium">
+                                                                {Number(cell) > 0 ? `₹${Number(cell).toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+                                                            </span>
                                                         );
                                                     } else if (headerName === 'action') {
-                                                        cellClass = "px-4 py-2.5 text-center whitespace-nowrap";
+                                                        cellClass = "px-3 py-2 text-center whitespace-nowrap";
                                                         if (typeof cell === 'object' && cell !== null && cell.type === 'action') {
                                                             content = (
                                                                 <button
                                                                     onClick={() => setSelectedPayslip(cell)}
-                                                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded transition-colors flex items-center gap-1.5 mx-auto cursor-pointer shadow-2xs"
+                                                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] !rounded-md transition-all flex items-center gap-1 mx-auto cursor-pointer shadow-2xs"
                                                                 >
-                                                                    <FileText size={12} />
+                                                                    <FileText size={11} />
                                                                     View PDF
                                                                 </button>
                                                             );
                                                         } else {
-                                                            content = (
-                                                                <div className="flex items-center justify-center gap-1.5 hide">
-                                                                    {/* {activeTab === 'salary' && (
-                                                                    <button
-                                                                        onClick={() => handleSavePayrollToDB(row)}
-                                                                        disabled={isSavingToDB}
-                                                                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[11px] rounded border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                                                        title="Update basic salary & employee record"
-                                                                    >
-                                                                        <Save size={11} />
-                                                                        Save
-                                                                    </button>
-                                                                )} */}
-                                                                    {activeTab === 'hold' && (
-                                                                        <button
-                                                                            onClick={() => handleUnhold(row)}
-                                                                            disabled={isSavingToDB}
-                                                                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded border border-slate-300 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                                                            title="Move held record back to active Salary Sheet"
-                                                                        >
-                                                                            <RefreshCw size={11} />
-                                                                            Unhold
-                                                                        </button>
-                                                                    )}
-                                                                    {/* {activeTab !== 'hold' && (
-                                                                    <button
-                                                                        onClick={() => handleMarkAsHold(row)}
-                                                                        disabled={isSavingToDB}
-                                                                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-[11px] rounded border border-amber-200 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                                                        title="Send record to Hold Tab"
-                                                                    >
-                                                                        <Bookmark size={11} />
-                                                                        Hold
-                                                                    </button>
-                                                                )} */}
-                                                                    {/* <button
-                                                                    onClick={() => handleMarkAsPaid(row)}
-                                                                    disabled={isSavingToDB}
-                                                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded transition-colors flex items-center gap-1 cursor-pointer shadow-xs disabled:opacity-50"
-                                                                    title="Mark as Paid & Generate Payroll"
-                                                                >
-                                                                    <CheckCircle2 size={11} />
-                                                                    Mark as Paid
-                                                                </button> */}
-                                                                </div>
-                                                            );
+                                                            content = '-';
+                                                        }
+                                                    } else {
+                                                        // Generic fallback for history tab currency/number columns
+                                                        const isNum = !isNaN(Number(cell)) && cell !== '' && cell !== null;
+                                                        if (isNum && (headerName.includes('salary') || headerName.includes('advance') || headerName.includes('bonus') || headerName.includes('breakage') || headerName.includes('medical') || headerName.includes('rto') || headerName.includes('way off'))) {
+                                                            cellClass = "px-3 py-2 font-mono text-slate-600 text-right tabular-nums text-xs";
+                                                            content = Number(cell) > 0 ? `₹${Number(cell).toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>;
+                                                        } else {
+                                                            cellClass = "px-3 py-2 text-slate-700 text-center";
+                                                            content = cell ?? '-';
                                                         }
                                                     }
 
@@ -2440,16 +2428,86 @@ const Payroll = () => {
 
                                 {filteredRows.length === 0 && (
                                     <tr>
-                                        <td colSpan={20} className="text-center py-12 bg-gray-50/50">
-                                            <div className="flex flex-col items-center justify-center text-gray-400 gap-1.5">
-                                                <HelpCircle size={32} />
-                                                <p className="font-semibold text-gray-600 text-xs">No payroll records found</p>
-                                                <p className="text-[10px] text-gray-400">Try matching by name, id or checking your database tables</p>
+                                        <td colSpan={22} className="text-center py-12 bg-slate-50/30">
+                                            <div className="flex flex-col items-center justify-center text-slate-400 gap-1.5">
+                                                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                                                    <HelpCircle size={20} />
+                                                </div>
+                                                <p className="font-bold text-slate-700 text-xs">No payroll records found</p>
+                                                <p className="text-[11px] text-slate-400">Try modifying search filters, month selection or verify database records</p>
                                             </div>
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
+
+                            {/* Summary Totals Footer Row */}
+                            {filteredRows.length > 0 && (
+                                <tfoot className="bg-slate-100/95 border-t-2 border-slate-300 font-bold text-xs sticky bottom-0 z-10 backdrop-blur-sm">
+                                    <tr>
+                                        {(activeTab === 'salary' || activeTab === 'hold') && (
+                                            <td className="px-3 py-2 text-center text-slate-400 font-mono text-[11px]">
+                                                ∑
+                                            </td>
+                                        )}
+                                        {(activeTab === 'salary' ? salaryData.headers : activeTab === 'hold' ? holdData.headers : historyData.headers)
+                                            .filter(header => !hiddenColumns.has(header))
+                                            .map((header, idx) => {
+                                                const hName = header?.toLowerCase() || '';
+                                                if (hName === 'name') {
+                                                    return (
+                                                        <td key={idx} className="px-3 py-2 text-left text-slate-900 font-bold whitespace-nowrap text-xs">
+                                                            Total Summary ({filteredRowsForSummary.length} staff)
+                                                        </td>
+                                                    );
+                                                }
+                                                if (hName === 'emp id' || hName.includes('id')) {
+                                                    return <td key={idx} className="px-3 py-2 text-center text-slate-400 font-mono text-[11px]">—</td>;
+                                                }
+                                                if (hName === 'salary' || hName === 'basic salary') {
+                                                    return (
+                                                        <td key={idx} className="px-3 py-2 text-right font-mono tabular-nums text-slate-900 font-bold whitespace-nowrap text-xs">
+                                                            ₹{totalBaseSalarySum.toLocaleString()}
+                                                        </td>
+                                                    );
+                                                }
+                                                if (hName === 'basic salary (prorated)' || hName === 'prorated salary') {
+                                                    return (
+                                                        <td key={idx} className="px-3 py-2 text-right font-mono tabular-nums text-slate-900 font-bold whitespace-nowrap text-xs">
+                                                            ₹{totalProratedSum.toLocaleString()}
+                                                        </td>
+                                                    );
+                                                }
+                                                if (hName === 'monthly advance' || hName === 'advance') {
+                                                    return (
+                                                        <td key={idx} className="px-3 py-2 text-right font-mono tabular-nums text-rose-700 font-bold whitespace-nowrap text-xs">
+                                                            ₹{totalDeductionsSum.toLocaleString()}
+                                                        </td>
+                                                    );
+                                                }
+                                                if (hName === 'fixed advance') {
+                                                    return (
+                                                        <td key={idx} className="px-3 py-2 text-right font-mono tabular-nums text-slate-700 font-bold whitespace-nowrap text-xs">
+                                                            ₹{totalFixedAdvSum.toLocaleString()}
+                                                        </td>
+                                                    );
+                                                }
+                                                if (hName === 'final salary' || hName === 'net salary') {
+                                                    return (
+                                                        <td key={idx} className="px-3 py-2 text-right font-mono tabular-nums text-emerald-800 font-extrabold whitespace-nowrap text-xs">
+                                                            ₹{totalNetPayableSum.toLocaleString()}
+                                                        </td>
+                                                    );
+                                                }
+                                                return (
+                                                    <td key={idx} className="px-3 py-2 text-center text-slate-400 font-mono text-[11px]">
+                                                        —
+                                                    </td>
+                                                );
+                                            })}
+                                    </tr>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
                     {renderPagination()}

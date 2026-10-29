@@ -76,35 +76,95 @@ const parseDojToYYYYMMDD = (rawDoj) => {
 // IST Timezone offset (UTC+5:30)
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 
-// Robust helper to resolve matching employee profile from hr_management_employees cache
-const resolveEmployeeProfile = (emp, employeesData = []) => {
+// Robust helper to resolve matching employee profile from hr_management_employees cache, with fallback to master setting users account
+const resolveEmployeeProfile = (emp, employeesData = [], masterUsers = []) => {
   if (!emp) return null;
   const targetId = String(emp.employee_id || emp.id || emp.code || emp.employeeCode || '').trim().toLowerCase();
   const targetIdClean = targetId.replace(/^0+/, '');
   const targetName = String(emp.name || emp.user_name || emp.name_as_per_aadhar || emp.employeeName || '').trim().toLowerCase();
 
-  return (employeesData || []).find(e => {
-    const eEmpId = String(e.employee_id || e.employee_code || e.code || '').trim().toLowerCase();
-    const eEmpIdClean = eEmpId.replace(/^0+/, '');
-    const eId = String(e.id || '').trim().toLowerCase();
-    const eName = String(e.name_as_per_aadhar || e.user_name || e.name || '').trim().toLowerCase();
+  // 1. If an employee ID exists, strictly match by employee ID in hr_management_employees
+  if (targetId && targetIdClean) {
+    const hrMatch = (employeesData || []).find(e => {
+      const eEmpId = String(e.employee_id || e.employee_code || e.code || '').trim().toLowerCase();
+      const eEmpIdClean = eEmpId.replace(/^0+/, '');
+      const eId = String(e.id || '').trim().toLowerCase();
+      return (targetId === eEmpId || targetIdClean === eEmpIdClean || targetId === eId);
+    });
+    if (hrMatch) return hrMatch;
 
-    if (targetId && eEmpId && (targetId === eEmpId || targetIdClean === eEmpIdClean)) return true;
-    if (targetId && eId && targetId === eId) return true;
-    if (targetName && eName && (targetName === eName || targetName.includes(eName) || eName.includes(targetName))) return true;
-    return false;
-  }) || null;
+    // Fallback: check master setting users account (users table) by employee_id or id
+    const userMatch = (masterUsers || []).find(u => {
+      const uEmpId = String(u.employee_id || '').trim().toLowerCase();
+      const uEmpIdClean = uEmpId.replace(/^0+/, '');
+      const uId = String(u.id || '').trim().toLowerCase();
+      return (targetId === uEmpId || targetIdClean === uEmpIdClean || targetId === uId);
+    });
+    if (userMatch) {
+      return {
+        id: userMatch.employee_id || userMatch.id,
+        employee_id: userMatch.employee_id || userMatch.id,
+        name: userMatch.user_name,
+        user_name: userMatch.user_name,
+        name_as_per_aadhar: userMatch.user_name,
+        joining_place: userMatch.shop_name,
+        shop_name: userMatch.shop_name,
+        designation: userMatch.role || userMatch.Designation || 'User',
+        candidate_photo: userMatch.profile_image || userMatch.HR_SYSTEM_employee_details?.candidate_photo,
+        photo_url: userMatch.profile_image,
+        isFromMasterUsers: true
+      };
+    }
+    return null;
+  }
+
+  // 2. Only if NO employee ID is present, match by exact name or whole word tokens
+  if (targetName) {
+    const hrMatch = (employeesData || []).find(e => {
+      const eName = String(e.name_as_per_aadhar || e.user_name || e.name || '').trim().toLowerCase();
+      if (!eName) return false;
+      if (targetName === eName) return true;
+      const eTokens = eName.split(/\s+/);
+      const targetTokens = targetName.split(/\s+/);
+      if (targetTokens.length === 1 && eTokens.includes(targetTokens[0])) return true;
+      return false;
+    });
+    if (hrMatch) return hrMatch;
+
+    const userMatch = (masterUsers || []).find(u => {
+      const uName = String(u.user_name || '').trim().toLowerCase();
+      return uName === targetName;
+    });
+    if (userMatch) {
+      return {
+        id: userMatch.employee_id || userMatch.id,
+        employee_id: userMatch.employee_id || userMatch.id,
+        name: userMatch.user_name,
+        user_name: userMatch.user_name,
+        name_as_per_aadhar: userMatch.user_name,
+        joining_place: userMatch.shop_name,
+        shop_name: userMatch.shop_name,
+        designation: userMatch.role || userMatch.Designation || 'User',
+        candidate_photo: userMatch.profile_image || userMatch.HR_SYSTEM_employee_details?.candidate_photo,
+        photo_url: userMatch.profile_image,
+        isFromMasterUsers: true
+      };
+    }
+    return null;
+  }
+
+  return null;
 };
 
 // Robust helper to resolve employee photo / candidate_photo from all possible properties
-const getEmployeePhoto = (emp, employeesData = []) => {
+const getEmployeePhoto = (emp, employeesData = [], masterUsers = []) => {
   if (!emp) return null;
   const directPhoto = emp.candidate_photo || emp.candidatePhoto || emp.photo_url || emp.photo || emp.avatar_url || emp.avatar || emp.profile_photo || emp.image_url || emp.image || emp.HR_SYSTEM_employee_data?.candidate_photo || emp.HR_SYSTEM_employee_data?.candidatePhoto || emp.details?.candidate_photo || emp.details?.photo_url;
   if (directPhoto && typeof directPhoto === 'string' && directPhoto.trim().length > 0) {
     return directPhoto.trim();
   }
 
-  const profile = resolveEmployeeProfile(emp, employeesData);
+  const profile = resolveEmployeeProfile(emp, employeesData, masterUsers);
   if (profile) {
     const details = profile.HR_SYSTEM_employee_data || profile.details || {};
     const p = profile.candidate_photo || profile.candidatePhoto || profile.photo_url || profile.photo || profile.avatar_url || profile.avatar || profile.profile_photo || profile.image_url || profile.image || details.candidate_photo || details.candidatePhoto || details.photo_url || details.photo;
@@ -312,6 +372,7 @@ const AttendanceDaily = () => {
   const [viewMode, setViewMode] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(todayDate);
   const [employeesData, setEmployeesData] = useState([]); // Store employees table data
+  const [masterUsers, setMasterUsers] = useState([]); // Store master setting users account
   const [matchFilter, setMatchFilter] = useState('ALL'); // 'ALL', 'MATCHED', 'UNMATCHED'
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'Present', 'Late', 'Absent', 'Half Day'
   const [currentPage, setCurrentPage] = useState(1);
@@ -362,22 +423,22 @@ const AttendanceDaily = () => {
   });
 
   const openPreviewWindow = (employee) => {
-    const empProfile = resolveEmployeeProfile(employee, employeesData);
+    const empProfile = resolveEmployeeProfile(employee, employeesData, masterUsers);
     const details = empProfile?.HR_SYSTEM_employee_data || empProfile?.details || {};
-    const photo = getEmployeePhoto(employee, employeesData);
-    const resolvedEmpId = employee.employee_id || empProfile?.employee_id || employee.id || empProfile?.id;
+    const photo = getEmployeePhoto(employee, employeesData, masterUsers);
+    const resolvedEmpId = employee.employee_id || employee.id || empProfile?.employee_id || empProfile?.id;
     const resolvedName = employee.name || empProfile?.name_as_per_aadhar || empProfile?.user_name || empProfile?.name;
 
     const enrichedEmp = {
-      ...employee,
       ...(empProfile || {}),
       ...(details || {}),
+      ...employee,
       id: resolvedEmpId,
       employee_id: resolvedEmpId,
       name: resolvedName,
       candidate_photo: photo,
       photo_url: photo,
-      db_id: empProfile?.id || employee.id,
+      db_id: empProfile?.id || employee.db_id || employee.id,
       date_of_joining: empProfile?.date_of_joining || empProfile?.doj || employee?.date_of_joining || employee?.doj
     };
     setPreviewModal({
@@ -402,8 +463,8 @@ const AttendanceDaily = () => {
     if (!emp) return;
     setLearningLoading(true);
     try {
-      const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
-      const empNameStr = String(emp.name || '').trim().toLowerCase();
+      const empIdStr = String(emp.employee_id || emp.id || emp.code || '').trim().toLowerCase();
+      const empNameStr = String(emp.name || emp.user_name || '').trim().toLowerCase();
 
       const { data, error } = await supabase
         .from('hr_learning_submissions')
@@ -415,9 +476,10 @@ const AttendanceDaily = () => {
       const matched = (data || []).find(s => {
         const subEmpId = String(s.employee_id || '').trim().toLowerCase();
         const subEmpName = String(s.employee_name || '').trim().toLowerCase();
-        const matchId = empIdStr && subEmpId && (empIdStr === subEmpId || subEmpId.includes(empIdStr));
-        const matchName = empNameStr && subEmpName && (empNameStr === subEmpName || empNameStr.includes(subEmpName) || subEmpName.includes(empNameStr));
-        return matchId || matchName;
+        if (empIdStr) {
+          return subEmpId === empIdStr || subEmpId.replace(/^0+/, '') === empIdStr.replace(/^0+/, '');
+        }
+        return Boolean(empNameStr && subEmpName && empNameStr === subEmpName);
       });
 
       if (matched) {
@@ -443,7 +505,7 @@ const AttendanceDaily = () => {
     if (!emp) return;
     setPayrollLoading(true);
     try {
-      const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
+      const empIdStr = String(emp.employee_id || emp.id || emp.code || '').trim().toLowerCase();
       const { data, error } = await supabase
         .from('hr_management_payroll')
         .select('*');
@@ -452,7 +514,10 @@ const AttendanceDaily = () => {
 
       const filtered = (data || []).filter(r => {
         const idCol = String(r.employee_id || r.employee_code || '').trim().toLowerCase();
-        return idCol === empIdStr || (idCol && empIdStr && (idCol.includes(empIdStr) || empIdStr.includes(idCol)));
+        if (empIdStr) {
+          return idCol === empIdStr || idCol.replace(/^0+/, '') === empIdStr.replace(/^0+/, '');
+        }
+        return false;
       });
       setPayrollRecords(filtered);
     } catch (e) {
@@ -536,8 +601,9 @@ const AttendanceDaily = () => {
 
       setEmployeesData(allEmployeesData);
 
-      // Fetch users table to build inactive sets
+      // Fetch users table to build inactive sets and masterUsers
       const { data: usersData } = await supabase.from('users').select('*');
+      setMasterUsers(usersData || []);
       const inactIds = new Set();
       const inactNames = new Set();
       (usersData || []).forEach(u => {
@@ -564,14 +630,20 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Check if employee exists in employees table
+  // Check if employee exists in employees table or master users
   const isEmployeeInTable = (employeeId) => {
     if (!employeeId) return false;
     const cleanId = employeeId.toString().trim().toLowerCase();
-    return employeesData.some(emp => {
+    const inHr = employeesData.some(emp => {
       const empId = emp.id?.toString().trim().toLowerCase();
       const empEmployeeId = emp.employee_id?.toString().trim().toLowerCase();
       return empId === cleanId || empEmployeeId === cleanId;
+    });
+    if (inHr) return true;
+    return masterUsers.some(u => {
+      const uEmpId = u.employee_id?.toString().trim().toLowerCase();
+      const uId = u.id?.toString().trim().toLowerCase();
+      return (uEmpId && uEmpId === cleanId) || (uId && uId === cleanId);
     });
   };
 
@@ -2724,10 +2796,25 @@ const AttendanceDaily = () => {
     const baseList = employees
       .map(emp => {
         const cleanEmpId = String(emp.id || '').trim().toLowerCase();
-        const empProfile = employeesData.find(e =>
+        let empProfile = employeesData.find(e =>
           (e.employee_id && String(e.employee_id).trim().toLowerCase() === cleanEmpId) ||
           (e.id && String(e.id).trim().toLowerCase() === cleanEmpId)
         );
+        if (!empProfile) {
+          const userMatch = masterUsers.find(u =>
+            (u.employee_id && String(u.employee_id).trim().toLowerCase() === cleanEmpId) ||
+            (u.id && String(u.id).trim().toLowerCase() === cleanEmpId)
+          );
+          if (userMatch) {
+            empProfile = {
+              name_as_per_aadhar: userMatch.user_name,
+              user_name: userMatch.user_name,
+              shop_name: userMatch.shop_name,
+              joining_place: userMatch.shop_name,
+              designation: userMatch.role || userMatch.Designation || 'User'
+            };
+          }
+        }
         const resolvedName = empProfile ? (empProfile.name_as_per_aadhar || empProfile.user_name || empProfile.name || emp.name) : emp.name;
         return {
           ...emp,
@@ -3259,8 +3346,8 @@ const AttendanceDaily = () => {
                   paginatedEmployees.map((employee, empIdx) => {
                     let presentCount = 0, lateCount = 0, absentCount = 0, halfDayCount = 0;
                     const isInEmployeesTable = isEmployeeInTable(employee.id);
-                    const employeeProfile = resolveEmployeeProfile(employee, employeesData);
-                    const candidatePhoto = getEmployeePhoto(employee, employeesData);
+                    const employeeProfile = resolveEmployeeProfile(employee, employeesData, masterUsers);
+                    const candidatePhoto = getEmployeePhoto(employee, employeesData, masterUsers);
                     const employeeRoster = getEmployeeRoster(employee.id, selectedDate);
                     const empDojStr = parseDojToYYYYMMDD(employeeProfile?.date_of_joining || employeeProfile?.doj || employeeProfile?.joining_date || employee.date_of_joining || employee.doj);
 
@@ -3931,8 +4018,8 @@ const AttendanceDaily = () => {
                         );
                       };
 
-                      const employeeProfile = resolveEmployeeProfile(employee, employeesData);
-                      const candidatePhoto = getEmployeePhoto(employee, employeesData);
+                      const employeeProfile = resolveEmployeeProfile(employee, employeesData, masterUsers);
+                      const candidatePhoto = getEmployeePhoto(employee, employeesData, masterUsers);
                       const employeeRoster = getEmployeeRoster(employee.id, selectedDate);
 
                       // Calculate valid punch count (filtering out pre-9 AM punches)

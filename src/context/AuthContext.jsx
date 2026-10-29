@@ -292,9 +292,9 @@ const syncSubsystemSessions = (userObj) => {
               "Reports",
             ]),
       shops:
-        userObj.shop_name || userObj.user_access
-          ? [userObj.shop_name || userObj.user_access]
-          : "all",
+        isSuperadmin
+          ? "all"
+          : (assignedShops.length > 0 ? assignedShops : "all"),
       initials: (userObj.user_name || userObj.username || "U")
         .substring(0, 2)
         .toUpperCase(),

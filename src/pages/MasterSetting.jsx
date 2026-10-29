@@ -1416,7 +1416,12 @@ export default function MasterSetting() {
 
     setPasswordInput(user.password || "");
     setPrimaryShopInput(user.shop_name || "");
-    setShopNameInput(user.user_access || user.shop_name || "");
+    const isSuper = normalizedRole === "Superadmin";
+    if (isSuper && availableShops.length > 0) {
+      setShopNameInput(availableShops.join(", "));
+    } else {
+      setShopNameInput(user.user_access || user.shop_name || "");
+    }
     setCounterAccessInput(user.counter_access || []);
 
     // Parse master_user_system_page_access
@@ -1660,7 +1665,13 @@ export default function MasterSetting() {
 
     const finalAccess = Object.keys(accessPermissions);
     const primaryShopVal = primaryShopInput.trim() || null;
-    const shopAccessVal = shopNameInput.trim() || primaryShopVal || null;
+    let shopAccessList = shopNameInput
+      ? shopNameInput.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+    if (primaryShopVal && !shopAccessList.some((s) => s.toLowerCase() === primaryShopVal.toLowerCase())) {
+      shopAccessList.unshift(primaryShopVal);
+    }
+    const shopAccessVal = shopAccessList.length > 0 ? shopAccessList.join(", ") : primaryShopVal || null;
     const finalUserName =
       usernameInput.trim() || editingUser.user_name || editingUser.username;
     const finalMobile = mobileInput.trim() || null;
@@ -2774,7 +2785,14 @@ export default function MasterSetting() {
                       const newRole = e.target.value;
                       setRoleInput(newRole);
                       const rLower = newRole.toLowerCase().trim();
-                      if (rLower === "hod" || rLower === "superadmin") {
+                      if (rLower === "superadmin") {
+                        const allModify = getAllModifyPermissions();
+                        setAccessPermissions(allModify);
+                        setRawJsonText(JSON.stringify(Object.keys(allModify), null, 2));
+                        if (availableShops.length > 0) {
+                          setShopNameInput(availableShops.join(", "));
+                        }
+                      } else if (rLower === "hod") {
                         const allModify = getAllModifyPermissions();
                         setAccessPermissions(allModify);
                         setRawJsonText(JSON.stringify(Object.keys(allModify), null, 2));

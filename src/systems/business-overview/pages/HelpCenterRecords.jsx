@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
+import { getUserAssignedShops } from '../../../utils/permissionUtils';
 import HelpCenterModal from '../../../components/help-center/HelpCenterModal';
 import {
   HelpCircle,
@@ -27,6 +28,11 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
   const userObj = user || {};
 
   const activeTab = propActiveTab;
+
+  // Retrieve user's assigned shops (empty array if superadmin/all)
+  const userAssignedShops = useMemo(() => {
+    return getUserAssignedShops(userObj);
+  }, [userObj]);
 
   // Permission calculation
   const roleLower = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
@@ -85,7 +91,11 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
   // Dropdown options
   const [shops, setShops] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [usersList, setUsersList] = useState([]);
+  const [assignedUsers, setAssignedUsers] = useState([]);
+
+  // Shop-based employee state for follow-up assignment (on-demand to reduce server load)
+  const [shopEmployees, setShopEmployees] = useState([]);
+  const [loadingShopEmployees, setLoadingShopEmployees] = useState(false);
 
   // Toast / inline status update state
   const [toastMsg, setToastMsg] = useState(null);
@@ -95,17 +105,37 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  // Fetch unique shops, categories, and users for dropdowns
+  // Fetch unique shops, categories, and existing assignees for dropdowns
   const fetchFilterOptions = async () => {
     try {
+      // 1. Fetch shops and restrict strictly to user's assigned access if not superadmin
       const { data: shopData } = await supabase
         .from('shop')
         .select('shop_name')
         .order('shop_name', { ascending: true });
+
       if (shopData) {
-        setShops(shopData.map(s => s.shop_name).filter(Boolean));
+        const allShopNames = shopData.map(s => s.shop_name).filter(Boolean);
+        if (userAssignedShops && userAssignedShops.length > 0) {
+          const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const allowed = allShopNames.filter(s => {
+            const sClean = clean(s);
+            return userAssignedShops.some(as => {
+              const asClean = clean(as);
+              return sClean === asClean || sClean.includes(asClean) || asClean.includes(sClean);
+            });
+          });
+          const finalShops = allowed.length > 0 ? allowed : userAssignedShops;
+          setShops(finalShops);
+          if (finalShops.length === 1) {
+            setShopFilter(finalShops[0]);
+          }
+        } else {
+          setShops(allShopNames);
+        }
       }
 
+      // 2. Fetch categories
       const { data: catData } = await supabase
         .from('help_center_option_sources')
         .select('category')
@@ -114,18 +144,112 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
         setCategories(catData.map(c => c.category).filter(Boolean));
       }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('user_name, shop_name')
-        .not('user_name', 'is', null)
-        .order('user_name', { ascending: true });
-      if (userData) {
-        setUsersList(userData.filter(u => u.user_name && u.user_name.trim() !== ''));
+      // 3. Lightweight fetch: only load distinct assigned_to names already in help_center_records
+      const { data: assigneeData } = await supabase
+        .from('help_center_records')
+        .select('assigned_to')
+        .not('assigned_to', 'is', null);
+
+      if (assigneeData) {
+        const uniqueAssignees = Array.from(
+          new Set(assigneeData.map(a => a.assigned_to?.trim()).filter(Boolean))
+        ).sort((a, b) => a.localeCompare(b));
+        setAssignedUsers(uniqueAssignees);
       }
     } catch (err) {
       console.error('Error fetching filter options:', err);
     }
   };
+
+  // Fetch shop-specific employees on-demand when opening Follow-Up modal to eliminate heavy server load
+  const fetchShopEmployees = useCallback(async (ticketShop) => {
+    setLoadingShopEmployees(true);
+    try {
+      const cleanShop = (ticketShop || '').trim();
+      const nameSet = new Set();
+
+      if (!cleanShop || cleanShop.toUpperCase() === 'ALL') {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('user_name')
+          .not('user_name', 'is', null)
+          .order('user_name', { ascending: true })
+          .limit(80);
+
+        if (usersData) {
+          usersData.forEach(u => {
+            if (u.user_name?.trim()) nameSet.add(u.user_name.trim());
+          });
+        }
+      } else {
+        // 1. Fetch only users specifically mapped to this shop
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('user_name, shop_name')
+          .not('user_name', 'is', null)
+          .ilike('shop_name', `%${cleanShop}%`)
+          .order('user_name', { ascending: true });
+
+        if (usersData) {
+          usersData.forEach(u => {
+            if (u.user_name?.trim()) nameSet.add(u.user_name.trim());
+          });
+        }
+
+        // 2. Also fetch employees placed at this shop from hr_management_employees
+        const { data: hrData } = await supabase
+          .from('hr_management_employees')
+          .select('name_as_per_aadhar, joining_company_name')
+          .not('name_as_per_aadhar', 'is', null)
+          .ilike('joining_company_name', `%${cleanShop}%`)
+          .order('name_as_per_aadhar', { ascending: true });
+
+        if (hrData) {
+          hrData.forEach(e => {
+            if (e.name_as_per_aadhar?.trim()) nameSet.add(e.name_as_per_aadhar.trim());
+          });
+        }
+      }
+
+      // Always include the employee who raised this ticket and current assignee
+      if (followUpRecord?.employee?.trim()) {
+        nameSet.add(followUpRecord.employee.trim());
+      }
+      if (followUpRecord?.assigned_to?.trim()) {
+        nameSet.add(followUpRecord.assigned_to.trim());
+      }
+
+      // If no direct match found (e.g. slight shop spelling variation), fallback to top users
+      if (nameSet.size === 0) {
+        const { data: fallbackUsers } = await supabase
+          .from('users')
+          .select('user_name')
+          .not('user_name', 'is', null)
+          .order('user_name', { ascending: true })
+          .limit(40);
+        if (fallbackUsers) {
+          fallbackUsers.forEach(u => {
+            if (u.user_name?.trim()) nameSet.add(u.user_name.trim());
+          });
+        }
+      }
+
+      setShopEmployees(Array.from(nameSet).sort((a, b) => a.localeCompare(b)));
+    } catch (err) {
+      console.error('Error fetching shop employees for follow-up:', err);
+    } finally {
+      setLoadingShopEmployees(false);
+    }
+  }, [followUpRecord]);
+
+  // Fetch shop employees whenever a followUpRecord modal is opened
+  useEffect(() => {
+    if (followUpRecord) {
+      fetchShopEmployees(followUpRecord.shop);
+    } else {
+      setShopEmployees([]);
+    }
+  }, [followUpRecord, fetchShopEmployees]);
 
   // Fetch help_center_records with server-side filtering and pagination
   const fetchRecords = useCallback(async () => {
@@ -155,9 +279,12 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
         query = query.lte('date', toDate);
       }
 
-      // Apply server-side Shop filter
+      // Apply server-side Shop filter (enforcing user shop access)
       if (shopFilter) {
         query = query.eq('shop', shopFilter);
+      } else if (userAssignedShops && userAssignedShops.length > 0) {
+        const finalShops = shops.length > 0 ? shops : userAssignedShops;
+        query = query.in('shop', finalShops);
       }
 
       // Apply server-side Category filter
@@ -198,7 +325,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, shopFilter, categoryFilter, statusFilter, search, page, activeTab]);
+  }, [fromDate, toDate, shopFilter, userAssignedShops, shops, categoryFilter, statusFilter, assignedToFilter, search, page, activeTab]);
 
   useEffect(() => {
     fetchFilterOptions();
@@ -393,7 +520,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
               onChange={(e) => handleFilterChange(setShopFilter, e.target.value)}
               className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800"
             >
-              <option value="">All Shops</option>
+              <option value="">{userAssignedShops && userAssignedShops.length > 0 ? 'All Assigned Shops' : 'All Shops'}</option>
               {shops.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
@@ -422,7 +549,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
               className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 truncate font-medium"
             >
               <option value="">All Assignees</option>
-              {Array.from(new Set(usersList.map((u) => u.user_name).filter(Boolean))).map((uName) => (
+              {assignedUsers.map((uName) => (
                 <option key={uName} value={uName}>{uName}</option>
               ))}
             </select>
@@ -791,39 +918,34 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
 
               {/* Assign To User Dropdown */}
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Assign To User
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Assign To User
+                  </label>
+                  <span className="text-[11px] text-[#8C6D23] font-semibold">
+                    Shop: {followUpRecord.shop || 'ALL'}
+                  </span>
+                </div>
                 <select
                   value={followUpAssignedTo}
                   onChange={(e) => setFollowUpAssignedTo(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-[#C9A84C] focus:outline-none cursor-pointer"
+                  disabled={loadingShopEmployees}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-[#C9A84C] focus:outline-none cursor-pointer disabled:bg-slate-100 disabled:opacity-75"
                 >
-                  <option value="">Select User Assignee</option>
-                  {(() => {
-                    const cleanStr = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                    const ticketShopClean = cleanStr(followUpRecord.shop);
-
-                    const filtered = usersList.filter((u) => {
-                      if (!u.user_name || !u.user_name.trim()) return false;
-                      if (!followUpRecord.shop || followUpRecord.shop === 'ALL' || !ticketShopClean) return true;
-                      if (!u.shop_name) return false;
-                      const userShopClean = cleanStr(u.shop_name);
-                      return userShopClean.includes(ticketShopClean) || ticketShopClean.includes(userShopClean);
-                    });
-
-                    const displayList = filtered.length > 0 ? filtered : usersList;
-                    const uniqueUserNames = Array.from(
-                      new Set(displayList.map((u) => u.user_name).filter(Boolean))
-                    );
-
-                    return uniqueUserNames.map((uName) => (
-                      <option key={uName} value={uName}>
-                        {uName}
-                      </option>
-                    ));
-                  })()}
+                  <option value="">
+                    {loadingShopEmployees ? 'Loading shop employees...' : 'Select User Assignee'}
+                  </option>
+                  {shopEmployees.map((uName) => (
+                    <option key={uName} value={uName}>
+                      {uName}
+                    </option>
+                  ))}
                 </select>
+                {shopEmployees.length > 0 && !loadingShopEmployees && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Showing {shopEmployees.length} employee{shopEmployees.length > 1 ? 's' : ''} for {followUpRecord.shop || 'this shop'}.
+                  </p>
+                )}
               </div>
 
               {/* Status Update Dropdown */}
