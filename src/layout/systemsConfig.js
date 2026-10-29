@@ -232,7 +232,7 @@ export const getVisibleSystems = (user) => {
     if (rawUser) {
       currentUserStored = JSON.parse(rawUser);
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const mergedUser = {
     ...currentUserStored,

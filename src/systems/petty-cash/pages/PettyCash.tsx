@@ -119,6 +119,13 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   const { user, hasPageModifyAccess } = useAuth();
   const isModifyAllowed = hasPageModifyAccess("Petty Cash Form");
 
+  // Determine user role:
+  // For 'user', 'manager', and 'employee' roles:
+  // Do NOT fetch records from database, and do NOT show ledger table / KPI / filters.
+  // Directly render the Petty Cash Entry Desk form as default page.
+  const userRole = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isDirectEntryOnly = userRole === 'user' || userRole === 'manager' || userRole === 'employee';
+
   const resetFilters = () => {
     setSearch('');
     setFromDate('');
@@ -130,6 +137,11 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   // Expense — fetch / CRUD
   // ─────────────────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async () => {
+    if (isDirectEntryOnly) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let q = supabase
@@ -172,6 +184,11 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   }, []);
 
   const fetchShops = useCallback(async () => {
+    if (isDirectEntryOnly) {
+      setShops([]);
+      setShopsLoading(false);
+      return;
+    }
     setShopsLoading(true);
     try {
       let q = supabase
@@ -187,9 +204,11 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
   }, []);
 
   useEffect(() => {
-    fetchRows();
-    fetchShops();
-  }, [fetchRows, fetchShops]);
+    if (!isDirectEntryOnly) {
+      fetchRows();
+      fetchShops();
+    }
+  }, [fetchRows, fetchShops, isDirectEntryOnly]);
 
   const openAddModal = () => { setEditData(undefined); setIsModalOpen(true); };
   const openEditModal = (row: PettyCashRow) => { setEditData(mapToFormData(row.raw)); setIsModalOpen(true); };
@@ -286,8 +305,23 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     String(s.id).includes(shopSearch)
   );
 
+  // Direct Default Page for 'user' and 'manager' roles:
+  // Render the Petty Cash Entry Form desk directly, without fetching or showing historical table data
+  if (isDirectEntryOnly) {
+    return (
+      <div className="w-full max-w-5xl mx-auto space-y-4 animate-fadeIn pb-12 petty-cash-root font-sans">
+        <PettyCashModal
+          isOpen={true}
+          embedded={true}
+          onClose={() => {}}
+          onSave={() => {}}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 petty-cash-root font-sans">
       {!isModifyAllowed && (
         <ViewOnlyBanner
           pageTitle="Petty Cash Module"
@@ -482,11 +516,10 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
                   <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
                   <td className="px-4 py-3 text-emerald-700 font-semibold whitespace-nowrap">{fmt(row.closing)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${
-                      row.status === 'completed'
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${row.status === 'completed'
                         ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
                         : 'bg-amber-100 text-amber-700 border-amber-300'
-                    }`}>
+                      }`}>
                       {row.status || 'pending'}
                     </span>
                   </td>
@@ -515,7 +548,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0"><FaTrash className="text-red-500" /></div>
               <div>
-                <h3 className="font-bold text-gray-800">Delete Record</h3>
+                <h3 className="font-bold text-gray-800 font-sans">Delete Record</h3>
                 <p className="text-sm text-gray-500 mt-0.5">Delete <span className="font-mono font-semibold text-[#2a5298]">{deleteId}</span>? This cannot be undone.</p>
               </div>
             </div>
@@ -543,7 +576,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
 
             {/* Panel header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-[#2a5298]">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2 font-sans">
                 <FaStore /> Manage Shops
               </h2>
               <button onClick={() => setShopsPanelOpen(false)} className="p-2 rounded-lg hover:bg-white/20 transition-colors text-white">
@@ -617,7 +650,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2 font-sans">
                 <FaStore className="text-[#2a5298]" />
                 {shopEditTarget ? 'Edit Shop' : 'Add New Shop'}
               </h3>
@@ -672,7 +705,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0"><FaTrash className="text-red-500" /></div>
               <div>
-                <h3 className="font-bold text-gray-800">Delete Shop</h3>
+                <h3 className="font-bold text-gray-800 font-sans">Delete Shop</h3>
                 <p className="text-sm text-gray-500 mt-0.5">Delete <span className="font-semibold text-gray-800">"{shopDeleteTarget.name}"</span>? It will no longer appear in the entry form.</p>
               </div>
             </div>

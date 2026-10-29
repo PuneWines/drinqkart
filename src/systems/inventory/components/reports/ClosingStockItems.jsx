@@ -98,7 +98,7 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
         setItemsList(items);
         const visibleShops = (isScoped && assigned.length > 0)
           ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
-          : (shops || []);
+          : (isScoped ? [] : (shops || []));
         setShopsList(visibleShops);
         if (isScoped && visibleShops.length === 1) {
           setSelectedShopId(visibleShops[0].id.toString());

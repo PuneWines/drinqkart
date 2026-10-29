@@ -158,7 +158,7 @@ export default function FormEntry({ currentUser }) {
       const assigned = isScoped ? getUserAssignedShops(currentUser).map(s => s.toLowerCase()) : [];
       const visibleShops = (isScoped && assigned.length > 0)
         ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
-        : (shops || []);
+        : (isScoped ? [] : (shops || []));
       setShopsList(visibleShops);
 
       if (visibleShops && visibleShops.length > 0) {

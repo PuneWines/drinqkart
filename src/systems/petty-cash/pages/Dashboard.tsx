@@ -622,7 +622,7 @@ export default function Dashboard() {
         .last-col { border-right: 1px solid #e0e0e0 !important; }
         .last-row td { border-bottom: 1px solid #e0e0e0 !important; }
       </style>
-      <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #333; width: 100%; border: none;">
+      <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; width: 100%; border: none;">
         <table style="width: 100%; border-collapse: separate; border-spacing: 0; border: none;">
           <!-- Repeating Page Header -->
           <thead style="display: table-header-group;">

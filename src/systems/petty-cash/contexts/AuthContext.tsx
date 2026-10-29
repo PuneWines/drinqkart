@@ -60,9 +60,8 @@ export const parsePages = (raw: any): string[] => {
   return str.split(",").map((p: string) => p.trim()).filter((p: string) => p.length > 0);
 };
 
-/** Shops parser: handles arrays, Postgres braces {}, comma-separated strings, and 'all' */
 export const parseShops = (raw: any): string[] | 'all' => {
-  if (!raw) return 'all';
+  if (!raw) return [];
 
   let strArr: string[] = [];
   if (Array.isArray(raw)) {
@@ -71,14 +70,16 @@ export const parseShops = (raw: any): string[] | 'all' => {
     strArr = [String(raw)];
   }
 
+  const NON_SHOP_TOKENS = new Set([
+    'admin', 'superadmin', 'masteradmin', 'user', 'employee', 'manager',
+    'hod', 'operator', 'staff', 'all', 'n/a', 'no shop', 'none', 'null',
+    'undefined'
+  ]);
+
   const items = strArr
     .flatMap(item => item.replace(/[{}]/g, "").split(","))
     .map(s => s.trim())
-    .filter(Boolean);
-
-  if (items.length === 0 || items.some(i => i.toLowerCase() === 'all')) {
-    return 'all';
-  }
+    .filter(s => s && !NON_SHOP_TOKENS.has(s.toLowerCase()));
 
   return items;
 };
@@ -107,7 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             pages: userData.page_access || (userData.master_user_system_page_access ? [] : ['Dashboard', 'Petty Cash Form', 'Cash Tally - Counter 1', 'Cash Tally - Counter 2', 'Cash Tally - Counter 3', 'Reports']),
             shops: ['superadmin', 'masteradmin'].includes((userData.role || '').toLowerCase().trim())
               ? 'all'
-              : parseShops([userData.user_access, userData.shop_name, userData.shops].filter(Boolean)),
+              : (userData.shop_name ? [userData.shop_name] : parseShops(userData.shops || userData.assigned_shops || userData.user_access)),
             initials: (userData.user_name || userData.username || "U").substring(0, 2).toUpperCase(),
             loginTime: new Date().toISOString()
           };
@@ -210,7 +211,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const role = data.role || "User";
         const pages = parsePages(data.pages || data.master_user_system_page_access);
         const isSuperadminUser = ['superadmin', 'masteradmin'].includes((role || '').toLowerCase().trim());
-        const shops = isSuperadminUser ? 'all' : parseShops([data.user_access, data.shop_name, data.shops].filter(Boolean));
+        const shops = isSuperadminUser ? 'all' : (data.shop_name ? [data.shop_name] : parseShops(data.shops || data.assigned_shops || data.user_access));
         const counterAccess = parseCounterAccess(data.counter_access);
 
         const initials = name
@@ -455,14 +456,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Legacy fallback for systems where masterPermissions are not configured
     const roleLower = (user.role || '').toLowerCase().trim();
-    return roleLower === 'admin' || roleLower === 'manager' || roleLower === 'masteradmin' || roleLower === 'hod';
+    return roleLower === 'admin' || roleLower === 'manager' || roleLower === 'masteradmin' || roleLower === 'hod' || roleLower === 'user' || roleLower === 'employee';
   };
 
   const hasShopAccess = (shopName: string): boolean => {
     if (!user) return false;
     const roleLower = (user.role || '').toLowerCase().trim();
-    if (roleLower === 'superadmin' || roleLower === 'masteradmin') return true;
-    if (!user.shops || user.shops === 'all') return true;
+    if (roleLower === 'superadmin' || roleLower === 'masteradmin' || roleLower === 'hod') return true;
+    if (user.shops === 'all') return roleLower === 'superadmin' || roleLower === 'masteradmin' || roleLower === 'hod';
+    if (!user.shops) return false;
 
     const rawList = Array.isArray(user.shops) ? user.shops : [user.shops];
     const shopList = rawList
@@ -470,8 +472,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .map(s => s.trim())
       .filter(Boolean);
 
-    if (shopList.length === 0 || shopList.some(s => s.toLowerCase() === 'all')) {
-      return true;
+    if (shopList.length === 0) {
+      return false;
     }
 
     const normShop = shopName?.trim().toLowerCase();

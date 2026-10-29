@@ -17,6 +17,7 @@ import { useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { syncPettyCashAdvances } from "../services/pettyCashAdvanceBridge";
+import { getUserAssignedShops, isUserSuperadmin } from "../../../utils/permissionUtils";
 
 interface OtherExpenseEntry {
   expenseName: string;
@@ -68,6 +69,7 @@ interface PettyCashModalProps {
   onClose: () => void;
   onSave: (data: CategoryAmounts) => void;
   initialData?: CategoryAmounts;
+  embedded?: boolean;
 }
 
 export default function PettyCashModal({
@@ -75,6 +77,7 @@ export default function PettyCashModal({
   onClose,
   onSave,
   initialData,
+  embedded = false,
 }: PettyCashModalProps) {
   const [formData, setFormData] = useState<CategoryAmounts>({
     id: "",
@@ -191,7 +194,7 @@ export default function PettyCashModal({
           const parsed = JSON.parse(savedUserStr);
           loggedInName = parsed.user_name || "";
         }
-      } catch (e) {}
+      } catch (e) { }
       if (!loggedInName) {
         loggedInName = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
       }
@@ -350,45 +353,26 @@ export default function PettyCashModal({
         }
       }
 
-      // Restrict shop names based on the logged-in user's allowed shops, regardless of admin status.
-      // (Unless they are allowed "all" shops)
-      let rawShops: any = user?.shops;
-      if (!rawShops) {
-        try {
-          const savedUserStr = localStorage.getItem('currentUser');
-          if (savedUserStr) {
-            const parsed = JSON.parse(savedUserStr);
-            rawShops = parsed.shops;
-          }
-        } catch (e) {}
-      }
-
-      let userShops: string[] | 'all' = 'all';
-      if (rawShops) {
-        if (rawShops === 'all') {
-          userShops = 'all';
-        } else if (Array.isArray(rawShops)) {
-          const flattened: string[] = [];
-          rawShops.forEach((item: any) => {
-            if (item) {
-              item.toString().split(',').forEach((subItem: string) => {
-                const trimmed = subItem.trim();
-                if (trimmed) flattened.push(trimmed);
-              });
-            }
-          });
-          userShops = flattened;
-        } else {
-          userShops = rawShops.toString().split(',').map((s: string) => s.trim()).filter(Boolean);
+      // Restrict shop names based on the logged-in user's assigned shops
+      const isSuper = isUserSuperadmin(user);
+      if (!isSuper) {
+        let assignedList = getUserAssignedShops(user);
+        if (assignedList.length === 0 && user?.shops && user.shops !== 'all') {
+          const raw = Array.isArray(user.shops) ? user.shops : [user.shops];
+          assignedList = raw.flatMap((s: any) => String(s).split(',')).map((s: string) => s.trim()).filter(Boolean);
         }
-      }
+        if (assignedList.length === 0 && user?.shop_name) {
+          assignedList = [user.shop_name];
+        }
 
-      if (userShops && userShops !== 'all') {
-        const allowedShops = Array.isArray(userShops) ? userShops : [];
-        const filtered = uniqueShops.filter((shop) =>
-          allowedShops.some(allowed => allowed.trim().toLowerCase() === shop.trim().toLowerCase())
-        );
-        uniqueShops = filtered.length > 0 ? filtered : allowedShops;
+        if (assignedList.length > 0) {
+          const filtered = uniqueShops.filter((shop) =>
+            assignedList.some(allowed => allowed.trim().toLowerCase() === shop.trim().toLowerCase())
+          );
+          uniqueShops = filtered.length > 0 ? filtered : assignedList;
+        } else {
+          uniqueShops = [];
+        }
       }
 
       setFetchedShopNames(uniqueShops);
@@ -426,7 +410,7 @@ export default function PettyCashModal({
           const parsed = JSON.parse(savedUserStr);
           defaultUser = parsed.user_name || "";
         }
-      } catch (e) {}
+      } catch (e) { }
       if (!defaultUser) {
         defaultUser = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
       }
@@ -455,7 +439,7 @@ export default function PettyCashModal({
                     description: row.description || "",
                     amount: String(row.amount)
                   }));
-                
+
                 setFormData(prev => ({
                   ...prev,
                   otherExpenses: mappedExpenses
@@ -535,6 +519,65 @@ export default function PettyCashModal({
     const updated = [...formData.otherExpenses];
     updated[index] = { ...updated[index], [field]: value };
     setFormData({ ...formData, otherExpenses: updated });
+  };
+
+  const resetForm = () => {
+    let defaultUser = "";
+    try {
+      const savedUserStr = localStorage.getItem('currentUser');
+      if (savedUserStr) {
+        const parsed = JSON.parse(savedUserStr);
+        defaultUser = parsed.user_name || "";
+      }
+    } catch (e) { }
+    if (!defaultUser) {
+      defaultUser = user?.name || user?.username || localStorage.getItem('currentUserName') || "";
+    }
+
+    const defaultShop = fetchedShopNames.length === 1 ? fetchedShopNames[0] : "";
+
+    setFormData({
+      id: "",
+      username: defaultUser,
+      shopName: defaultShop,
+      openingQty: "",
+      teaNasta: "",
+      waterJar: "",
+      lightBill: "",
+      recharge: "",
+      postOffice: "",
+      customerDiscount: "",
+      repairMaintenance: "",
+      stationary: "",
+      excisePolice: "",
+      desiBhada: "",
+      otherPurchaseVoucherNo: "",
+      otherVendorPayment: "",
+      differenceAmount: "",
+      petrol: "",
+      patilPetrol: "",
+      roomExpense: "",
+      officeExpense: "",
+      personalExpense: "",
+      miscExpense: "",
+      closing: "",
+      creditCardCharges: "",
+      otherExpenses: [],
+      miscRemarks: "",
+      transactionStatus: "Pending",
+      status: "pending",
+      date: new Date().toISOString().split("T")[0],
+    });
+    setShowMiscRemarks(false);
+  };
+
+  const handleCancel = () => {
+    if (embedded) {
+      resetForm();
+      setToast({ message: "Form cleared", type: "success" });
+    } else {
+      onClose();
+    }
   };
 
   const removeOtherExpenseEntry = (index: number) => {
@@ -743,10 +786,14 @@ export default function PettyCashModal({
         initialData?.id
       );
 
-      setToast({ message: "Data saved successfully!", type: "success" });
+      setToast({ message: `Data saved successfully!${finalId ? ` (ID: ${finalId})` : ""}`, type: "success" });
       setTimeout(() => {
         onSave({ ...formData, id: finalId });
-        onClose();
+        if (embedded) {
+          resetForm();
+        } else {
+          onClose();
+        }
         setIsLoading(false);
       }, 1000);
     } catch (error: any) {
@@ -761,18 +808,28 @@ export default function PettyCashModal({
   if (!isOpen) return null;
 
   return (
-    <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 backdrop-blur-sm">
-      <div className="bg-[#f5f7fa] rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-[#f5f7fa] border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-          <h2 className="text-2xl font-bold text-gray-800">
-            Petty Cash Entry{initialData?.id ? ` - ID: ${initialData.id}` : ""}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg transition-colors hover:bg-gray-100"
-          >
-            <FaTimes className="text-xl text-gray-600" />
-          </button>
+    <div className={embedded ? "w-full petty-cash-root font-sans" : "flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 backdrop-blur-sm petty-cash-root font-sans"}>
+      <div className={`bg-[#f5f7fa] rounded-2xl ${embedded ? "border border-gray-200/90 shadow-sm" : "shadow-2xl max-h-[90vh] overflow-y-auto"} w-full max-w-6xl font-sans`}>
+        <div className={`bg-[#f5f7fa] border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl ${embedded ? "" : "sticky top-0 z-10"}`}>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2 font-sans">
+              <FaWallet className="text-[#2a5298] text-lg sm:text-xl" />
+              <span>Petty Cash Entry{initialData?.id ? ` - ID: ${initialData.id}` : ""}</span>
+            </h2>
+            {embedded && (
+              <p className="text-xs text-gray-500 mt-0.5 font-medium font-sans">
+                Record daily operational petty cash expenses directly to the ledger
+              </p>
+            )}
+          </div>
+          {!embedded && (
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg transition-colors hover:bg-gray-100 cursor-pointer"
+            >
+              <FaTimes className="text-xl text-gray-600" />
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -843,7 +900,7 @@ export default function PettyCashModal({
                       {fetchedShopNames.length > 0 ? (
                         fetchedShopNames.map((shop, index) => (
                           <li
-                             key={index}
+                            key={index}
                             onClick={() => {
                               setFormData({ ...formData, shopName: shop });
                               setIsShopDropdownOpen(false);
@@ -1013,7 +1070,7 @@ export default function PettyCashModal({
           {/* ── Dynamic Other Expenses ── */}
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-3">
             <div className="flex justify-between items-center">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider font-sans">
                 Additional Custom Expenses (Advance, Breakage, Medical, etc.)
               </h4>
             </div>
@@ -1177,7 +1234,7 @@ export default function PettyCashModal({
               )}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleCancel}
                 className="px-5 py-2 text-xs font-semibold text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all cursor-pointer"
               >
                 Cancel

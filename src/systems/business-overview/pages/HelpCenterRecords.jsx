@@ -28,7 +28,6 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
   const userObj = user || {};
 
   const activeTab = propActiveTab;
-
   
   // Retrieve user's assigned shops (empty array if superadmin/all)
   const userAssignedShops = useMemo(() => {

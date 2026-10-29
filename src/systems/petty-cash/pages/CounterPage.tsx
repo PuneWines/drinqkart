@@ -558,7 +558,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Retail Scan Amount</p>
-                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans">
                   {fmt(summaryStats.retailScan.total)}
                 </div>
                 <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
@@ -575,7 +575,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Wholesale Amount</p>
-                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                <div className="text-xl font-bold text-slate-800 mt-1 tracking-normal font-sans">
                   {fmt(summaryStats.wholesale.total)}
                 </div>
                 <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
@@ -592,7 +592,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Credit Receipt</p>
-                <div className="text-xl font-bold text-teal-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                <div className="text-xl font-bold text-teal-700 mt-1 tracking-normal font-sans">
                   {fmt(summaryStats.creditReceipt.total)}
                 </div>
                 <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
@@ -609,7 +609,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Home Delivery Amount</p>
-                <div className="text-xl font-bold text-amber-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                <div className="text-xl font-bold text-amber-700 mt-1 tracking-normal font-sans">
                   {fmt(summaryStats.homeDelivery.total)}
                 </div>
                 <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
@@ -626,7 +626,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-gray-500 font-sans">Net Total</p>
-                <div className="text-xl font-bold text-emerald-700 mt-1 tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+                <div className="text-xl font-bold text-emerald-700 mt-1 tracking-normal font-sans">
                   {fmt(summaryStats.net.total)}
                 </div>
                 <div className="text-[11px] font-medium text-gray-500 mt-1.5 flex items-center gap-1 font-sans">
@@ -645,7 +645,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 6. Total Expense */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Expense</span>
-              <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.expense.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
@@ -656,7 +656,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 7. Total GPay */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total GPay</span>
-              <div className="text-base font-bold text-blue-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-blue-700 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.gpay.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
@@ -667,7 +667,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 8. Total PhonePe */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total PhonePe</span>
-              <div className="text-base font-bold text-purple-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-purple-700 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.phonepe.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
@@ -678,7 +678,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 9. Total Paytm */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Paytm</span>
-              <div className="text-base font-bold text-cyan-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-cyan-700 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.paytm.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
@@ -689,7 +689,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 10. Total Card */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Card</span>
-              <div className="text-base font-bold text-indigo-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-indigo-700 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.card.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
@@ -700,7 +700,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 11. Total Cash */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Cash</span>
-              <div className="text-base font-bold text-emerald-700 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-emerald-700 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.cash.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
@@ -711,7 +711,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 12. Total void */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total void</span>
-              <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-rose-600 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.void.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">
@@ -722,7 +722,7 @@ export default function CounterPage({ onClose }: CounterPageProps) {
             {/* 13. Total Diff */}
             <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-xs flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-gray-500 truncate font-sans">Total Diff</span>
-              <div className="text-base font-bold text-slate-800 mt-1 truncate tracking-normal font-sans [font-family:-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+              <div className="text-base font-bold text-slate-800 mt-1 truncate tracking-normal font-sans">
                 {fmt(summaryStats.diff.total)}
               </div>
               <div className="text-[10px] font-medium text-gray-400 mt-1 truncate font-sans">

@@ -140,7 +140,7 @@ export default function StockLedger({ currentUser }) {
         const shops = await getShops();
         const visibleShops = (isScoped && assigned.length > 0)
           ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
-          : (shops || []);
+          : (isScoped ? [] : (shops || []));
         setShopsList(visibleShops);
         if (isScoped && visibleShops.length === 1) {
           setSelectedShopId(visibleShops[0].id.toString());

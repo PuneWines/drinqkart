@@ -860,9 +860,39 @@ export const restoreHeldFromHoldTable = async ({
     return null;
   }
 
-  const { data: rowsToRestore, error: fetchErr } = await query;
+  const { data: selectedRows, error: fetchErr } = await query;
   if (fetchErr) throw fetchErr;
-  if (!rowsToRestore || rowsToRestore.length === 0) return null;
+  if (!selectedRows || selectedRows.length === 0) return null;
+
+  // Pull in any duplicate hold rows pointing to the same original item, so they are cleared too
+  // (otherwise the leftover duplicate keeps the restored item hidden on the PO page)
+  let allHoldRows = [...selectedRows];
+  const selectedOriginalIds = [...new Set(selectedRows.map(r => r.original_item_id).filter(Boolean))];
+  if (selectedOriginalIds.length > 0) {
+    const { data: dupRows } = await supabase
+      .from("purchase_hold")
+      .select("*")
+      .in("original_item_id", selectedOriginalIds);
+    if (dupRows) {
+      const seenHoldIds = new Set(allHoldRows.map(r => r.id));
+      dupRows.forEach(r => {
+        if (!seenHoldIds.has(r.id)) allHoldRows.push(r);
+      });
+    }
+  }
+
+  // Restore each original item only once (latest hold wins)
+  const rowsToRestore = [];
+  const seenOriginalIds = new Set();
+  [...allHoldRows]
+    .sort((a, b) => new Date(b.held_at || 0) - new Date(a.held_at || 0))
+    .forEach(row => {
+      if (row.original_item_id) {
+        if (seenOriginalIds.has(row.original_item_id)) return;
+        seenOriginalIds.add(row.original_item_id);
+      }
+      rowsToRestore.push(row);
+    });
 
   const sampleRow = rowsToRestore[0];
   const partyName = sampleRow.party_name;
@@ -880,7 +910,7 @@ export const restoreHeldFromHoldTable = async ({
 
   // 2. Prepare payload for purchase_approved_indent_items
   const approvedPayload = rowsToRestore.map(row => ({
-    id: row.original_item_id || undefined,
+    ...(row.original_item_id ? { id: row.original_item_id } : {}),
     indent_id: null, // Detached so Indent page remains 100% unlocked for new submissions
     party_indent_id: row.party_indent_id,
     unique_indent_id: newUniqueIndentId,
@@ -920,19 +950,23 @@ export const restoreHeldFromHoldTable = async ({
     }
   }
 
-  // Insert into purchase_approved_indent_items
-  for (let i = 0; i < approvedPayload.length; i += chunkSize) {
-    const chunk = approvedPayload.slice(i, i + chunkSize);
+  // Insert into purchase_approved_indent_items.
+  // Rows with and without an id are sent separately so missing ids are not sent as NULL.
+  const payloadWithId = approvedPayload.filter(p => p.id != null);
+  const payloadWithoutId = approvedPayload.filter(p => p.id == null);
+  for (let i = 0; i < payloadWithId.length; i += chunkSize) {
+    const chunk = payloadWithId.slice(i, i + chunkSize);
+    const { error: upsertErr } = await supabase
+      .from("purchase_approved_indent_items")
+      .upsert(chunk, { onConflict: "id" });
+    if (upsertErr) throw upsertErr;
+  }
+  for (let i = 0; i < payloadWithoutId.length; i += chunkSize) {
+    const chunk = payloadWithoutId.slice(i, i + chunkSize);
     const { error: insErr } = await supabase
       .from("purchase_approved_indent_items")
       .insert(chunk);
-    if (insErr) {
-      console.warn("Direct insert failed on restore, retrying with upsert:", insErr.message);
-      const { error: upsertErr } = await supabase
-        .from("purchase_approved_indent_items")
-        .upsert(chunk, { onConflict: "id" });
-      if (upsertErr) throw upsertErr;
-    }
+    if (insErr) throw insErr;
   }
 
   // 3. Update or recreate dashboard record with new unique Indent ID and full preserved lifecycle
@@ -992,8 +1026,8 @@ export const restoreHeldFromHoldTable = async ({
     console.warn("Could not sync dashboard during unhold:", dashSyncErr);
   }
 
-  // 4. Delete the rows from purchase_hold
-  const holdIdsToDelete = rowsToRestore.map(r => r.id);
+  // 4. Delete the rows (including duplicates) from purchase_hold
+  const holdIdsToDelete = allHoldRows.map(r => r.id);
   for (let i = 0; i < holdIdsToDelete.length; i += chunkSize) {
     const chunk = holdIdsToDelete.slice(i, i + chunkSize);
     await supabase.from("purchase_hold").delete().in("id", chunk);

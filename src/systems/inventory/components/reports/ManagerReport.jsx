@@ -48,7 +48,7 @@ export default function ManagerReport({ currentUser }) {
         const shops = await getShops();
         const visibleShops = (isScoped && assigned.length > 0)
           ? (shops || []).filter(s => assigned.includes((s.shop_name || '').toLowerCase()))
-          : (shops || []);
+          : (isScoped ? [] : (shops || []));
         setShopsList(visibleShops);
         if (isScoped && visibleShops.length === 1) {
           setSelectedShopName(visibleShops[0].shop_name);

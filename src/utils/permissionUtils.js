@@ -76,8 +76,10 @@ export const isUserSuperadmin = (user = null) => {
   return (
     userRole === 'superadmin' ||
     userRole === 'masteradmin' ||
+    userRole === 'hod' ||
     storedRole === 'superadmin' ||
-    storedRole === 'masteradmin'
+    storedRole === 'masteradmin' ||
+    storedRole === 'hod'
   );
 };
 
@@ -94,66 +96,79 @@ export const getUserAssignedShops = (user) => {
     return [];
   }
 
-  const rawSources = [
-    userObj.user_access,
-    userObj.shop_name,
-    userObj.assigned_shops,
-    userObj.shops,
-    userObj.shop,
-    typeof localStorage !== 'undefined' ? localStorage.getItem('user_access') : null,
-    typeof localStorage !== 'undefined' ? localStorage.getItem('assigned_shops') : null,
-    typeof localStorage !== 'undefined' ? localStorage.getItem('shop_name') : null,
-    typeof localStorage !== 'undefined' ? localStorage.getItem('shop') : null,
-  ];
+  // Blacklist of role names, statuses, and generic non-shop tokens that must NEVER be treated as shop names
+  const NON_SHOP_TOKENS = new Set([
+    'admin', 'superadmin', 'masteradmin', 'user', 'employee', 'manager',
+    'hod', 'operator', 'staff', 'all', 'n/a', 'no shop', 'none', 'null',
+    'undefined', 'true', 'false', 'active', 'inactive'
+  ]);
 
   const shopsSet = new Set();
-  let hasAll = false;
 
-  const addShop = (val) => {
+  const addShopCandidate = (val) => {
     if (!val || typeof val !== 'string') return;
     const trimmed = val.trim();
-    if (!trimmed || trimmed.toLowerCase() === 'n/a' || trimmed.toLowerCase() === 'no shop') return;
-    if (trimmed.toLowerCase() === 'all' || trimmed.toLowerCase() === 'admin') {
-      hasAll = true;
-      return;
-    }
+    if (!trimmed) return;
+    if (NON_SHOP_TOKENS.has(trimmed.toLowerCase())) return;
     shopsSet.add(trimmed);
   };
 
-  rawSources.forEach((raw) => {
+  const processSource = (raw) => {
     if (!raw) return;
     if (Array.isArray(raw)) {
-      raw.forEach((item) => {
-        if (typeof item === 'string') {
-          if (item.includes(',')) {
-            item.split(',').forEach(addShop);
-          } else {
-            addShop(item);
-          }
-        }
-      });
-    } else if (typeof raw === 'string') {
+      raw.forEach(processSource);
+      return;
+    }
+    if (typeof raw === 'string') {
       const trimmed = raw.trim();
+      if (!trimmed) return;
       if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
         try {
           const parsed = JSON.parse(trimmed);
           if (Array.isArray(parsed)) {
-            parsed.forEach((p) => {
-              if (typeof p === 'string') {
-                if (p.includes(',')) p.split(',').forEach(addShop);
-                else addShop(p);
-              }
-            });
+            parsed.forEach(processSource);
             return;
           }
         } catch {}
       }
-      trimmed.split(',').forEach(addShop);
+      if (trimmed.includes(',')) {
+        trimmed.split(',').forEach(addShopCandidate);
+      } else {
+        addShopCandidate(trimmed);
+      }
     }
-  });
+  };
 
-  if (hasAll) {
-    return [];
+  // 1. Direct explicit shop properties on userObj in strict priority:
+  // a) assigned_shops (array or comma-separated string)
+  processSource(userObj.assigned_shops);
+
+  // b) shops (array or string, if not 'all')
+  if (userObj.shops && userObj.shops !== 'all') {
+    processSource(userObj.shops);
+  }
+
+  // c) shop_name (e.g. 'KUNAL KHARGHAR')
+  if (userObj.shop_name) {
+    processSource(userObj.shop_name);
+  }
+
+  // d) shop
+  if (userObj.shop) {
+    processSource(userObj.shop);
+  }
+
+  // 2. If no valid shop found yet, inspect user_access (only if it contains actual shop name, not role)
+  if (shopsSet.size === 0 && userObj.user_access) {
+    processSource(userObj.user_access);
+  }
+
+  // 3. Fallback to localStorage shop keys if still empty:
+  if (shopsSet.size === 0 && typeof localStorage !== 'undefined') {
+    processSource(localStorage.getItem('assigned_shops'));
+    if (shopsSet.size === 0) processSource(localStorage.getItem('shop_name'));
+    if (shopsSet.size === 0) processSource(localStorage.getItem('shop'));
+    if (shopsSet.size === 0) processSource(localStorage.getItem('user_access'));
   }
 
   return Array.from(shopsSet);

@@ -9,6 +9,7 @@ import BankAudit from "./pages/BankAudit";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Footer from "./components/Footer";
+import "./index.css";
 
 // Global navigation config for routing logic
 const ALL_NAV_ITEMS = [
@@ -52,7 +53,7 @@ function MainApp() {
     if (isAuthenticated && user) {
       const currentReqPage = PAGE_NAMES[activeTab];
       if (currentReqPage && !hasPageAccess(currentReqPage)) {
-        const firstAllowed = ALL_NAV_ITEMS.find(item => 
+        const firstAllowed = ALL_NAV_ITEMS.find(item =>
           hasPageAccess(item.pageName)
         );
         if (firstAllowed) {
@@ -66,7 +67,7 @@ function MainApp() {
   // ── Route Guard ──
   useEffect(() => {
     if (!isAuthenticated) return;
-    
+
     if (activeTab === "transaction-history") return;
 
     const requiredPage = PAGE_NAMES[activeTab];
@@ -119,7 +120,7 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f7fa]">
+    <div className="min-h-screen bg-[#f5f7fa] petty-cash-root font-sans antialiased text-slate-800">
       {toast && (
         <Toast
           message={toast.message}
@@ -130,7 +131,7 @@ function MainApp() {
       <div className="flex flex-col min-h-screen">
         <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
           <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-900">{getPageTitle()}</h1>
+            <h1 className="text-xl font-bold text-gray-900 font-sans tracking-tight">{getPageTitle()}</h1>
 
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex flex-col items-end">

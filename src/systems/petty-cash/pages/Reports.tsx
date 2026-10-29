@@ -1153,7 +1153,7 @@ export default function Reports() {
     plugins: {
       legend: {
         position: "bottom" as const,
-        labels: { padding: 20, font: { size: 12, family: "'Segoe UI', sans-serif" } },
+        labels: { padding: 20, font: { size: 12, family: "'Inter', sans-serif" } },
       },
       tooltip: {
         callbacks: {
