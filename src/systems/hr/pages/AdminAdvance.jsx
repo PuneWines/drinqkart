@@ -20,13 +20,11 @@ const formatStartingMonth = (monthStr) => {
 const AdminAdvance = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mainTab, setMainTab] = useState('monthly'); // 'monthly' | 'fixed'
-  const [subTab, setSubTab] = useState('approved');   // 'approved' | 'pending' | 'history'
+  const [subTab, setSubTab] = useState('pending');   // 'pending' | 'history'
 
-  const [monthlyApproved, setMonthlyApproved] = useState([]);
   const [monthlyPending, setMonthlyPending] = useState([]);
   const [monthlyHistory, setMonthlyHistory] = useState([]);
 
-  const [fixedActive, setFixedActive] = useState([]);
   const [fixedPending, setFixedPending] = useState([]);
   const [fixedReceived, setFixedReceived] = useState([]);
 
@@ -166,15 +164,17 @@ const AdminAdvance = () => {
       };
       const isMonthly = (type) => !isFixed(type);
 
-      // Monthly Advance
-      setMonthlyApproved(allRecords.filter(r => isMonthly(r.type) && r.status?.toLowerCase() === 'approved'));
-      setMonthlyPending(allRecords.filter(r => isMonthly(r.type) && r.status?.toLowerCase() === 'pending'));
-      setMonthlyHistory(allRecords.filter(r => isMonthly(r.type) && (r.status?.toLowerCase() === 'rejected' || r.status?.toLowerCase() === 'received')));
+      // Monthly Advance:
+      // Pending = all active monthly advances where remainingAmount > 0 and not rejected
+      setMonthlyPending(allRecords.filter(r => isMonthly(r.type) && r.status?.toLowerCase() !== 'rejected' && (r.remainingAmount === undefined || r.remainingAmount === null || r.remainingAmount > 0)));
+      // History = settled / fully deducted in payroll (remainingAmount <= 0) or rejected/received
+      setMonthlyHistory(allRecords.filter(r => isMonthly(r.type) && (r.status?.toLowerCase() === 'rejected' || r.status?.toLowerCase() === 'received' || (r.remainingAmount !== undefined && r.remainingAmount !== null && r.remainingAmount <= 0))));
 
-      // Fixed Advance
-      setFixedActive(allRecords.filter(r => isFixed(r.type) && r.status?.toLowerCase() === 'approved'));
-      setFixedPending(allRecords.filter(r => isFixed(r.type) && r.status?.toLowerCase() === 'pending'));
-      setFixedReceived(allRecords.filter(r => isFixed(r.type) && (r.status?.toLowerCase() === 'received' || r.remainingAmount < parseNumber(r.apprAmount || r.amount || 0) || r.status?.toLowerCase() === 'rejected')));
+      // Fixed Advance:
+      // Pending = active fixed advances awaiting collection/payment (remainingAmount > 0 and not rejected)
+      setFixedPending(allRecords.filter(r => isFixed(r.type) && r.status?.toLowerCase() !== 'rejected' && (r.remainingAmount === undefined || r.remainingAmount === null || r.remainingAmount > 0)));
+      // History = settled fixed advances (remainingAmount <= 0) or rejected/received
+      setFixedReceived(allRecords.filter(r => isFixed(r.type) && (r.status?.toLowerCase() === 'rejected' || r.status?.toLowerCase() === 'received' || (r.remainingAmount !== undefined && r.remainingAmount !== null && r.remainingAmount <= 0))));
 
     } catch (error) {
       console.error('Error fetching advance data:', error);
@@ -522,13 +522,11 @@ const AdminAdvance = () => {
   const getFilteredData = () => {
     let list = [];
     if (mainTab === 'monthly') {
-      if (subTab === 'pending') list = monthlyPending;
-      else if (subTab === 'history') list = monthlyHistory;
-      else list = monthlyApproved;
+      if (subTab === 'history') list = monthlyHistory;
+      else list = monthlyPending;
     } else {
-      if (subTab === 'pending') list = fixedPending;
-      else if (subTab === 'history') list = fixedReceived;
-      else list = fixedActive;
+      if (subTab === 'history') list = fixedReceived;
+      else list = fixedPending;
     }
 
     return list.filter(item =>
@@ -583,24 +581,21 @@ const AdminAdvance = () => {
             Review and manage employee advance requests
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              if (mainTab === 'monthly') {
-                setAddModalType('Approved');
-                setNewType('Monthly Advance');
-              } else {
+        {mainTab === 'fixed' && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
                 setAddModalType('Approved');
                 setNewType('Fixed Amount');
-              }
-              setShowAddModal(true);
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-colors shadow-sm active:scale-95 transition-all cursor-pointer rounded-md"
-          >
-            <Plus size={14} />
-            {mainTab === 'monthly' ? 'Add Monthly Advance' : 'Add Fixed Advance'}
-          </button>
-        </div>
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs transition-colors shadow-sm active:scale-95 transition-all cursor-pointer rounded-md"
+            >
+              <Plus size={14} />
+              Add Fixed Advance
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── 2 Main Tabs: 1st Monthly Advance, 2nd Fixed Advance ── */}
@@ -609,7 +604,7 @@ const AdminAdvance = () => {
           type="button"
           onClick={() => {
             setMainTab('monthly');
-            setSubTab('approved');
+            setSubTab('pending');
           }}
           className={`pb-3.5 px-6 text-sm font-bold flex items-center gap-2.5 border-b-2 transition-all cursor-pointer ${mainTab === 'monthly'
             ? 'border-indigo-600 text-indigo-600'
@@ -622,7 +617,7 @@ const AdminAdvance = () => {
             className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${mainTab === 'monthly' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
               }`}
           >
-            {monthlyApproved.length + monthlyPending.length + monthlyHistory.length}
+            {monthlyPending.length + monthlyHistory.length}
           </span>
         </button>
 
@@ -630,7 +625,7 @@ const AdminAdvance = () => {
           type="button"
           onClick={() => {
             setMainTab('fixed');
-            setSubTab('approved');
+            setSubTab('pending');
           }}
           className={`pb-3.5 px-6 text-sm font-bold flex items-center gap-2.5 border-b-2 transition-all cursor-pointer ${mainTab === 'fixed'
             ? 'border-teal-600 text-teal-600'
@@ -643,74 +638,31 @@ const AdminAdvance = () => {
             className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${mainTab === 'fixed' ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-600'
               }`}
           >
-            {fixedActive.length + fixedPending.length + fixedReceived.length}
+            {fixedPending.length + fixedReceived.length}
           </span>
         </button>
       </div>
 
-      {/* ── Sub-tab Navigation: Approved, Pending, History ── */}
+      {/* ── Sub-tab Navigation: Only Pending and History ── */}
       <div className="flex gap-2 border-b border-gray-200 mb-6">
-        {mainTab === 'monthly' ? (
-          <>
-            {/* <button
-              onClick={() => setSubTab('approved')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'approved'
-                  ? 'border-green-500 text-green-600 font-bold'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              Approved Monthly Advance ({monthlyApproved.length})
-            </button> */}
-            <button
-              onClick={() => setSubTab('pending')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'pending'
-                ? 'border-orange-500 text-orange-600 font-bold'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              Pending ({monthlyPending.length})
-            </button>
-            <button
-              onClick={() => setSubTab('history')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'history'
-                ? 'border-slate-600 text-slate-800 font-bold'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              History ({monthlyHistory.length})
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => setSubTab('approved')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'approved'
-                ? 'border-teal-500 text-teal-600 font-bold'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              {/* Fixed Advanced ({fixedActive.length})
-            </button>
-            <button
-              onClick={() => setSubTab('pending')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'pending'
-                  ? 'border-orange-500 text-orange-600 font-bold'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            > */}
-              Pending ({fixedPending.length})
-            </button>
-            <button
-              onClick={() => setSubTab('history')}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'history'
-                ? 'border-emerald-600 text-emerald-600 font-bold'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              Fixed Advanced Received ({fixedReceived.length})
-            </button>
-          </>
-        )}
+        <button
+          onClick={() => setSubTab('pending')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'pending'
+            ? 'border-orange-500 text-orange-600 font-bold'
+            : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+        >
+          Pending ({mainTab === 'monthly' ? monthlyPending.length : fixedPending.length})
+        </button>
+        <button
+          onClick={() => setSubTab('history')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 cursor-pointer ${subTab === 'history'
+            ? 'border-slate-600 text-slate-800 font-bold'
+            : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+        >
+          History ({mainTab === 'monthly' ? monthlyHistory.length : fixedReceived.length})
+        </button>
       </div>
 
       {/* Search Bar */}
@@ -816,14 +768,14 @@ const AdminAdvance = () => {
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => openReviewModal(record)}
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors rounded cursor-pointer ${subTab === 'pending'
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors rounded cursor-pointer ${record.status?.toLowerCase() === 'pending'
                             ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
-                            : (mainTab === 'fixed' && subTab === 'approved')
+                            : (mainTab === 'fixed' && subTab === 'pending')
                               ? 'bg-teal-50 text-teal-600 hover:bg-teal-100'
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                             }`}
                         >
-                          {subTab === 'pending' ? 'Review' : (mainTab === 'fixed' && subTab === 'approved') ? 'Receive' : 'Details'}
+                          {record.status?.toLowerCase() === 'pending' ? 'Review' : (mainTab === 'fixed' && subTab === 'pending') ? 'Receive' : 'Details'}
                         </button>
                         <button
                           onClick={() => handleDeleteRequest(record.id)}
@@ -849,7 +801,7 @@ const AdminAdvance = () => {
             <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Wallet size={20} className="text-indigo-600" />
-                {subTab === 'pending' ? 'Review Request' : (mainTab === 'fixed' && subTab === 'approved') ? 'Receive Request' : 'Request Details'}
+                {selectedRequest.status?.toLowerCase() === 'pending' ? 'Review Request' : (mainTab === 'fixed' && subTab === 'pending') ? 'Receive Request' : 'Request Details'}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X size={18} />
@@ -920,7 +872,7 @@ const AdminAdvance = () => {
                 </div>
               )}
 
-              {mainTab === 'fixed' && subTab === 'approved' && (
+              {mainTab === 'fixed' && subTab === 'pending' && selectedRequest.status?.toLowerCase() !== 'pending' && (
                 <div className="bg-teal-50/50 p-4 border border-teal-100 rounded-lg space-y-3">
                   <div>
                     <div className="flex justify-between items-center mb-1">
@@ -953,7 +905,7 @@ const AdminAdvance = () => {
                 </div>
               )}
 
-              {(subTab === 'pending' || (subTab !== 'pending' && !(mainTab === 'fixed' && subTab === 'approved') && (selectedRequest.status === 'Approved' || selectedRequest.status === 'Received'))) && (
+              {(selectedRequest.status?.toLowerCase() === 'pending' || (selectedRequest.status?.toLowerCase() !== 'pending' && !(mainTab === 'fixed' && subTab === 'pending') && (selectedRequest.status === 'Approved' || selectedRequest.status === 'Received'))) && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className={['fixed amount', 'fixed advance', 'fixed advanced', 'fix advance', 'medical amount', 'brackage'].includes(selectedRequest.type?.toLowerCase()) ? "col-span-2" : ""}>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Approved Amount</label>
@@ -967,7 +919,7 @@ const AdminAdvance = () => {
                           setApprovedMonthlyDeduction(e.target.value);
                         }
                       }}
-                      disabled={subTab !== 'pending' || submitting}
+                      disabled={selectedRequest.status?.toLowerCase() !== 'pending' || submitting}
                       placeholder="Enter amount"
                     />
                   </div>
@@ -982,7 +934,7 @@ const AdminAdvance = () => {
                           }`}
                         value={approvedMonthlyDeduction}
                         onChange={(e) => setApprovedMonthlyDeduction(e.target.value)}
-                        disabled={subTab !== 'pending' || submitting}
+                        disabled={selectedRequest.status?.toLowerCase() !== 'pending' || submitting}
                         placeholder="Enter deduction"
                       />
                       {approvedAmount && approvedMonthlyDeduction && Number(approvedMonthlyDeduction) > Number(approvedAmount) && (
@@ -1003,12 +955,12 @@ const AdminAdvance = () => {
                   className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm resize-none"
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  disabled={(subTab !== 'pending' && !(mainTab === 'fixed' && subTab === 'approved')) || submitting}
+                  disabled={(selectedRequest.status?.toLowerCase() !== 'pending' && !(mainTab === 'fixed' && subTab === 'pending')) || submitting}
                 />
               </div>
             </div>
 
-            {subTab === 'pending' && (
+            {selectedRequest.status?.toLowerCase() === 'pending' && (
               <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 sticky bottom-0">
                 <button
                   onClick={() => handleAction('Rejected')}
@@ -1044,7 +996,7 @@ const AdminAdvance = () => {
               </div>
             )}
 
-            {mainTab === 'fixed' && subTab === 'approved' && (
+            {mainTab === 'fixed' && subTab === 'pending' && selectedRequest.status?.toLowerCase() !== 'pending' && (
               <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 sticky bottom-0">
                 <button
                   onClick={() => handleAction('Received')}

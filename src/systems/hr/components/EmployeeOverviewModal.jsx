@@ -198,13 +198,18 @@ export default function EmployeeOverviewModal({
           }
           orConditions.push(`employee_id.eq.${rawDbId}`);
         }
-        if (empNameStr) {
-          orConditions.push(`name_as_per_aadhar.ilike.%${empNameStr}%`);
-          orConditions.push(`user_name.ilike.%${empNameStr}%`);
+        // ONLY if NO ID was provided at all, search by exact name.
+        // Never put name in the same OR with employee_id, as that hijacks unmatched employees.
+        if (orConditions.length === 0 && empNameStr) {
+          orConditions.push(`name_as_per_aadhar.eq.${empNameStr}`);
+          orConditions.push(`user_name.eq.${empNameStr}`);
         }
 
         if (orConditions.length > 0) {
           query = query.or(orConditions.join(','));
+        } else {
+          setEmployeeProfile(employee);
+          return;
         }
         const { data, error } = await query.limit(1);
         if (error) {
@@ -215,13 +220,52 @@ export default function EmployeeOverviewModal({
           const details = empRec.HR_SYSTEM_employee_data || empRec.details || {};
           const photo = empRec.candidate_photo || empRec.candidatePhoto || empRec.photo_url || empRec.photo || empRec.avatar_url || empRec.avatar || empRec.profile_photo || empRec.image_url || empRec.image || details.candidate_photo || details.candidatePhoto || details.photo_url || details.photo || employee.candidate_photo || employee.candidatePhoto || employee.photo_url;
           setEmployeeProfile({
+            ...(empRec || {}),
+            ...(details || {}),
             ...employee,
-            ...empRec,
-            ...details,
             candidate_photo: photo,
             photo_url: photo
           });
         } else {
+          // Fallback: check master setting users account ('users' table)
+          try {
+            let userQuery = supabase.from('users').select('*');
+            const userOr = [];
+            if (empIdStr) {
+              userOr.push(`employee_id.eq.${empIdStr}`);
+              const stripped = empIdStr.replace(/^0+/, '');
+              if (stripped && stripped !== empIdStr) userOr.push(`employee_id.eq.${stripped}`);
+            }
+            if (rawDbId) {
+              userOr.push(`employee_id.eq.${rawDbId}`);
+            }
+            if (userOr.length > 0) {
+              const { data: uData } = await userQuery.or(userOr.join(',')).limit(1);
+              if (uData && uData.length > 0) {
+                const u = uData[0];
+                const hrDetails = u.HR_SYSTEM_employee_details || {};
+                const photo = u.profile_image || hrDetails.candidate_photo || employee.candidate_photo;
+                setEmployeeProfile({
+                  ...employee,
+                  ...hrDetails,
+                  ...u,
+                  id: u.employee_id || u.id || employee.id,
+                  employee_id: u.employee_id || u.id || employee.employee_id,
+                  name: u.user_name || employee.name,
+                  user_name: u.user_name || employee.name,
+                  name_as_per_aadhar: u.user_name || employee.name,
+                  joining_place: u.shop_name || employee.store_name,
+                  shop_name: u.shop_name || employee.store_name,
+                  designation: u.role || u.Designation || 'User',
+                  candidate_photo: photo,
+                  photo_url: photo
+                });
+                return;
+              }
+            }
+          } catch (ue) {
+            console.warn('Error querying master setting users account:', ue);
+          }
           setEmployeeProfile(employee);
         }
       } catch (e) {
@@ -288,8 +332,11 @@ export default function EmployeeOverviewModal({
           orClauses.push(`employee_id.eq.${stripped}`);
         }
       });
-      if (empNameStr) {
-        orClauses.push(`employee_name.ilike.%${empNameStr}%`);
+      // CRITICAL: Only search by employee_name if uniqueIds is EMPTY!
+      // If employee has a specific ID (e.g. 112), querying by name with OR causes logs from other employees
+      // with the same name (e.g. Jitendra Yadav 3053 at Kunal Ulwe) to be fetched and shown under 112!
+      if (uniqueIds.length === 0 && empNameStr) {
+        orClauses.push(`employee_name.eq.${empNameStr}`);
       }
 
       if (orClauses.length > 0) {
@@ -309,23 +356,19 @@ export default function EmployeeOverviewModal({
 
       const filteredAtt = combinedLogs.filter(a => {
         const idCol = String(a.employee_id || a.emp_id || '').trim().toLowerCase();
+        const idColClean = idCol.replace(/^0+/, '');
         const nameCol = String(a.employee_name || a.name || a.emp_name || '').trim().toLowerCase();
         const eName = empNameStr.toLowerCase();
 
-        const idMatches = uniqueIds.some(candId => {
-          const cLower = candId.toLowerCase();
-          return idCol === cLower ||
-            idCol.replace(/^0+/, '') === cLower.replace(/^0+/, '') ||
-            parseInt(idCol, 10) === parseInt(cLower, 10);
-        });
+        if (uniqueIds.length > 0) {
+          return uniqueIds.some(candId => {
+            const cLower = candId.toLowerCase();
+            const cClean = cLower.replace(/^0+/, '');
+            return idCol === cLower || (idColClean && cClean && idColClean === cClean);
+          });
+        }
 
-        const nameMatches = Boolean(eName && nameCol) && (
-          nameCol === eName ||
-          nameCol.includes(eName) ||
-          eName.includes(nameCol)
-        );
-
-        return idMatches || nameMatches;
+        return Boolean(eName && nameCol && nameCol === eName);
       });
 
       setAttendanceLogs(filteredAtt);
@@ -341,23 +384,19 @@ export default function EmployeeOverviewModal({
       if (rosterData) {
         const filteredRoster = rosterData.filter(r => {
           const idCol = String(r.employee_id || r.emp_id || '').trim().toLowerCase();
+          const idColClean = idCol.replace(/^0+/, '');
           const nameCol = String(r.employee_name || r.name || '').trim().toLowerCase();
           const eName = empNameStr.toLowerCase();
 
-          const idMatches = uniqueIds.some(candId => {
-            const cLower = candId.toLowerCase();
-            return idCol === cLower ||
-              idCol.replace(/^0+/, '') === cLower.replace(/^0+/, '') ||
-              parseInt(idCol, 10) === parseInt(cLower, 10);
-          });
+          if (uniqueIds.length > 0) {
+            return uniqueIds.some(candId => {
+              const cLower = candId.toLowerCase();
+              const cClean = cLower.replace(/^0+/, '');
+              return idCol === cLower || (idColClean && cClean && idColClean === cClean);
+            });
+          }
 
-          const nameMatches = Boolean(eName && nameCol) && (
-            nameCol === eName ||
-            nameCol.includes(eName) ||
-            eName.includes(nameCol)
-          );
-
-          return idMatches || nameMatches;
+          return Boolean(eName && nameCol && nameCol === eName);
         });
         setRosterLogs(filteredRoster);
       } else {
@@ -422,24 +461,18 @@ export default function EmployeeOverviewModal({
 
       if (allSubmissions.length > 0) {
         const found = allSubmissions.find(s => {
-          const sId = String(s.employee_id || s.employee_code || '').trim();
+          const sId = String(s.employee_id || s.employee_code || '').trim().toLowerCase();
           const normSId = sId.replace(/^0+/, '');
           const sName = String(s.employee_name || s.employee || '').trim().toLowerCase();
 
-          const matchId = candidateIds.some(candId => {
-            const normCandId = candId.replace(/^0+/, '');
-            return candId === sId ||
-              (normCandId && normSId && normCandId === normSId) ||
-              parseInt(candId, 10) === parseInt(sId, 10);
-          });
+          if (candidateIds.length > 0) {
+            return candidateIds.some(candId => {
+              const normCandId = candId.replace(/^0+/, '');
+              return candId === sId || (normCandId && normSId && normCandId === normSId);
+            });
+          }
 
-          const matchName = Boolean(empNameStr && sName && (
-            empNameStr === sName ||
-            empNameStr.includes(sName) ||
-            sName.includes(empNameStr)
-          ));
-
-          return matchId || matchName;
+          return Boolean(empNameStr && sName && empNameStr === sName);
         });
 
         setLearningSubmission(found || null);
@@ -475,10 +508,17 @@ export default function EmployeeOverviewModal({
       if (data) {
         const filtered = data.filter(r => {
           const idCol = String(r.employee_id || r.employee_code || '').trim().toLowerCase();
+          const idColClean = idCol.replace(/^0+/, '');
           const nameCol = String(r.employee_name || r.name || '').trim().toLowerCase();
-          const idMatch = candidateIds.some(candId => idCol === candId || idCol.replace(/^0+/, '') === candId.replace(/^0+/, ''));
-          const nameMatch = empNameStr && nameCol.includes(empNameStr);
-          return idMatch || nameMatch;
+
+          if (candidateIds.length > 0) {
+            return candidateIds.some(candId => {
+              const cClean = candId.replace(/^0+/, '');
+              return idCol === candId || (idColClean && cClean && idColClean === cClean);
+            });
+          }
+
+          return Boolean(empNameStr && nameCol && nameCol === empNameStr);
         });
         setPayrollRecords(filtered);
       } else {

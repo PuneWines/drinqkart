@@ -21,6 +21,7 @@ import { syncPettyCashAdvances } from "../services/pettyCashAdvanceBridge";
 interface OtherExpenseEntry {
   expenseName: string;
   employeeName: string;
+  employeeCode?: string;
   fromShop: string;
   toShop: string;
   description: string;
@@ -112,8 +113,15 @@ export default function PettyCashModal({
   const [totalAmount, setTotalAmount] = useState(0);
   const [totalExpense, setTotalExpense] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
   const [fetchedUsers, setFetchedUsers] = useState<string[]>([]);
   const [fetchedUserDetails, setFetchedUserDetails] = useState<{ userName: string; shopName: any; userAccess: any }[]>([]);
+  const [hrEmployees, setHrEmployees] = useState<{
+    employee_id: string;
+    name_as_per_aadhar: string;
+    joining_company_name?: string;
+    status?: string;
+  }[]>([]);
   const [fetchedShopNames, setFetchedShopNames] = useState<string[]>([]);
   const [showMiscRemarks, setShowMiscRemarks] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -222,29 +230,99 @@ export default function PettyCashModal({
     }
   };
 
-  const getFilteredEmployees = () => {
-    const targetShop = formData.shopName;
-    if (!targetShop) return fetchedUserDetails;
+  const fetchHrEmployees = async () => {
+    try {
+      setIsLoadingStaff(true);
+      // 1. Fetch active employees from hr_management_employees
+      const { data: hrData, error: hrErr } = await supabase
+        .from('hr_management_employees')
+        .select('employee_id, name_as_per_aadhar, joining_company_name, status')
+        .ilike('status', 'active')
+        .order('name_as_per_aadhar', { ascending: true });
 
-    const userHasShopAccess = (userShopsRaw: any, target: string): boolean => {
-      if (!userShopsRaw) return false;
-      const targetLower = target.trim().toLowerCase();
-      
-      if (Array.isArray(userShopsRaw)) {
-        return userShopsRaw.some(s => {
-          const sLower = String(s).trim().toLowerCase();
-          return sLower === 'all' || sLower === targetLower || targetLower.includes(sLower) || sLower.includes(targetLower);
+      // 2. Fetch users to merge staff mapped directly in users table
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('user_name, employee_id, shop_name, status');
+
+      const staffMap = new Map<string, { employee_id: string; name_as_per_aadhar: string; joining_company_name?: string; status?: string }>();
+
+      if (!hrErr && hrData) {
+        hrData.forEach((emp: any) => {
+          if (emp.employee_id) {
+            staffMap.set(String(emp.employee_id).trim().toLowerCase(), {
+              employee_id: String(emp.employee_id).trim(),
+              name_as_per_aadhar: emp.name_as_per_aadhar || emp.employee_id,
+              joining_company_name: emp.joining_company_name || "",
+              status: emp.status || "active"
+            });
+          }
         });
       }
-      
-      const str = String(userShopsRaw).trim().toLowerCase();
-      if (str === 'all') return true;
-      
-      const shopItems = str.split(',').map(s => s.trim().toLowerCase());
-      return shopItems.some(s => s === targetLower || targetLower.includes(s) || s.includes(targetLower));
-    };
 
-    return fetchedUserDetails.filter(u => userHasShopAccess(u.shopName, targetShop));
+      if (usersData) {
+        usersData.forEach((u: any) => {
+          const uStatus = (u.status || 'active').trim().toLowerCase();
+          if (uStatus === 'active' && u.employee_id) {
+            const key = String(u.employee_id).trim().toLowerCase();
+            if (!staffMap.has(key)) {
+              staffMap.set(key, {
+                employee_id: String(u.employee_id).trim(),
+                name_as_per_aadhar: u.user_name || u.employee_id,
+                joining_company_name: u.shop_name || "",
+                status: "active"
+              });
+            } else {
+              const existing = staffMap.get(key)!;
+              if (!existing.joining_company_name && u.shop_name) {
+                existing.joining_company_name = u.shop_name;
+              }
+            }
+          }
+        });
+      }
+
+      setHrEmployees(Array.from(staffMap.values()));
+    } catch (error) {
+      console.error("Error fetching HR employees for petty cash:", error);
+    } finally {
+      setIsLoadingStaff(false);
+    }
+  };
+
+  const getFilteredEmployees = () => {
+    const targetShop = (formData.shopName || '').trim().toLowerCase();
+
+    // 1. Strictly active status
+    const activeStaff = hrEmployees.filter(
+      (emp) => (emp.status || 'active').trim().toLowerCase() === 'active'
+    );
+
+    // 2. If no shop specified on voucher yet
+    if (!targetShop) {
+      if (isAdmin) return activeStaff;
+      const userShops = (user?.shops || []).map((s: any) => String(s).trim().toLowerCase());
+      if (userShops.length === 0 || userShops.includes('all')) return activeStaff;
+      return activeStaff.filter(emp => {
+        const empShop = (emp.joining_company_name || '').trim().toLowerCase();
+        return userShops.some((s: string) => empShop.includes(s) || s.includes(empShop));
+      });
+    }
+
+    // 3. Match against employee's assigned primary shop (joining_company_name)
+    const matchedStaff = activeStaff.filter((emp) => {
+      const empShop = (emp.joining_company_name || '').trim().toLowerCase();
+      if (!empShop) return false;
+
+      return (
+        empShop === targetShop ||
+        empShop.includes(targetShop) ||
+        targetShop.includes(empShop)
+      );
+    });
+
+    // Fallback to activeStaff if the specific shop has 0 matches so dropdown isn't empty
+    return matchedStaff.length > 0 ? matchedStaff : activeStaff;
   };
 
   const fetchShopNames = async () => {
@@ -371,6 +449,7 @@ export default function PettyCashModal({
                   .map(row => ({
                     expenseName: row.expense_name,
                     employeeName: row.employee_name || "",
+                    employeeCode: row.employee_name || "",
                     fromShop: row.from_shop || "",
                     toShop: row.to_shop || "",
                     description: row.description || "",
@@ -422,6 +501,7 @@ export default function PettyCashModal({
       fetchUsernames();
       fetchShopNames();
       fetchExpenseOptions();
+      fetchHrEmployees();
     }
   }, [isOpen, initialData, user]);
 
@@ -442,6 +522,7 @@ export default function PettyCashModal({
       otherExpenses: [...formData.otherExpenses, {
         expenseName: "",
         employeeName: "",
+        employeeCode: "",
         fromShop: "",
         toShop: "",
         description: "",
@@ -542,7 +623,7 @@ export default function PettyCashModal({
             total_amount: totalAmount,
             status: formData.status || 'pending',
             expense_name: entry.expenseName || null,
-            employee_name: (entry.expenseName !== 'Shop Name' && entry.expenseName !== 'Custom Expense Name' && entry.expenseName !== 'Incentive') ? (entry.employeeName || null) : null,
+            employee_name: (entry.expenseName !== 'Shop Name' && entry.expenseName !== 'Custom Expense Name' && entry.expenseName !== 'Incentive') ? (entry.employeeCode || entry.employeeName || null) : null,
             from_shop: null,
             to_shop: entry.expenseName === 'Shop Name' ? (entry.toShop || null) : null,
             description: entry.description || null,
@@ -978,17 +1059,37 @@ export default function PettyCashModal({
                     ) : (
                       (entry.expenseName !== "Custom Expense Name" && entry.expenseName !== "Incentive") && (
                         <>
-                          {/* Employee Name */}
+                          {/* Employee Selection */}
                           <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Employee Name</label>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Employee (Code - Name) *</label>
                             <select
-                              value={entry.employeeName}
-                              onChange={(e) => updateOtherExpenseEntry(index, "employeeName", e.target.value)}
+                              value={entry.employeeCode || entry.employeeName}
+                              onChange={(e) => {
+                                const selectedVal = e.target.value;
+                                const matched = hrEmployees.find(emp => emp.employee_id === selectedVal);
+                                const empName = matched ? matched.name_as_per_aadhar : selectedVal;
+                                const updated = [...formData.otherExpenses];
+                                updated[index] = {
+                                  ...updated[index],
+                                  employeeCode: selectedVal,
+                                  employeeName: empName
+                                };
+                                setFormData({ ...formData, otherExpenses: updated });
+                              }}
                               className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                              required
                             >
-                              <option value="">Select Employee</option>
-                              {getFilteredEmployees().map(u => (
-                                <option key={u.userName} value={u.userName}>{u.userName}</option>
+                              <option value="">
+                                {isLoadingStaff
+                                  ? "Loading employees..."
+                                  : formData.shopName
+                                    ? `Select Employee (${formData.shopName})`
+                                    : "Select Employee"}
+                              </option>
+                              {getFilteredEmployees().map(emp => (
+                                <option key={emp.employee_id} value={emp.employee_id}>
+                                  [{emp.employee_id}] {emp.name_as_per_aadhar}
+                                </option>
                               ))}
                             </select>
                           </div>

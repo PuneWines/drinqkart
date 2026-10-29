@@ -3,6 +3,7 @@ import { supabase } from "../supabase";
 interface OtherExpense {
   expenseName: string;
   employeeName: string;
+  employeeCode?: string;
   fromShop?: string;
   toShop?: string;
   description?: string;
@@ -106,7 +107,8 @@ export async function syncPettyCashAdvances(
     // 4. Construct 'Monthly Advance' records with status: 'Approved'
     const recordsToInsert = advanceEntries.map(({ entry, idx }) => {
       const amt = parseFloat(String(entry.amount)) || 0;
-      const empId = resolveEmpId(entry.employeeName);
+      const rawCode = (entry.employeeCode || '').trim();
+      const empId = rawCode || resolveEmpId(entry.employeeName);
       const voucherRef = `${basePattyId}-${String(idx + 1).padStart(2, "0")}`;
 
       return {
@@ -118,7 +120,7 @@ export async function syncPettyCashAdvances(
         remaining_amount: amt,
         type: "Monthly Advance", // STRICTLY 'Monthly Advance'
         status: "Approved",      // DIRECTLY Approved
-        reason: `${entry.description ? entry.description + " - " : ""}Petty Cash Disbursed at ${shopName || "Shop"}`,
+        reason: entry.description || "",
         admin_remarks: `Petty Cash Voucher: ${voucherRef}`,
         starting_month: startingMonth,
       };

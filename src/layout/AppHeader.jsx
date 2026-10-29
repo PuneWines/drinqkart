@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { getVisibleSystems, getActiveSystem } from './systemsConfig';
 import { LogOut, HelpCircle, Menu, X, ChevronDown, Video, PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import HelpCenterModal from '../components/help-center/HelpCenterModal';
@@ -14,6 +15,7 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [isTutorialModalOpen, setIsTutorialModalOpen] = useState(false);
+  const [assignedCount, setAssignedCount] = useState(0);
 
   const tabsContainerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -72,6 +74,60 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
     role === 'superadmin' ||
     role === 'hod';
 
+  // Fetch count of pending/in-progress help tickets assigned to the logged in user
+  const fetchAssignedCount = useCallback(async () => {
+    if (!userObj) {
+      setAssignedCount(0);
+      return;
+    }
+    try {
+      const candidateNames = [
+        userObj.user_name,
+        userObj.username,
+        userObj.name,
+        typeof localStorage !== 'undefined' ? localStorage.getItem('user_name') : null,
+        typeof localStorage !== 'undefined' ? localStorage.getItem('username') : null,
+      ].filter(Boolean).map(n => String(n).trim().toLowerCase());
+
+      if (candidateNames.length === 0) {
+        setAssignedCount(0);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('help_center_records')
+        .select('ticket_id, assigned_to, status')
+        .not('assigned_to', 'is', null)
+        .in('status', ['In Progress', 'Hold', 'Open']);
+
+      if (!error && data) {
+        const myCount = data.filter(r => {
+          const assigned = String(r.assigned_to || '').trim().toLowerCase();
+          return candidateNames.includes(assigned);
+        }).length;
+        setAssignedCount(myCount);
+      }
+    } catch (err) {
+      console.error('Error fetching assigned help tickets count in AppHeader:', err);
+    }
+  }, [userObj]);
+
+  useEffect(() => {
+    fetchAssignedCount();
+
+    // Supabase Realtime channel for instant count updates when tickets are assigned or updated
+    const channel = supabase
+      .channel('app_header_help_center')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'help_center_records' }, () => {
+        fetchAssignedCount();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchAssignedCount]);
+
   return (
     <header className="w-full max-w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20 min-w-0 overflow-hidden">
       {/* Mobile Top Header (< 768px): Upper left hamburger button opens sidebar drawer */}
@@ -123,10 +179,15 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
 
           <button
             onClick={() => setIsHelpModalOpen(true)}
-            className="p-1.5 bg-rose-600 text-white rounded-full transition-transform active:scale-95 cursor-pointer"
-            title="Help Center"
+            className="relative p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full transition-transform active:scale-95 cursor-pointer"
+            title={assignedCount > 0 ? `Help Center (${assignedCount} task${assignedCount > 1 ? 's' : ''} assigned to you)` : "Help Center"}
           >
             <HelpCircle size={16} />
+            {assignedCount > 0 && (
+              <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-amber-400 text-slate-950 rounded-full text-[9px] font-black leading-none shadow-sm animate-pulse border border-white">
+                {assignedCount}
+              </span>
+            )}
           </button>
 
           <Link 
@@ -166,11 +227,16 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setIsHelpModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 rounded-full text-xs font-bold transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-            title="Open Help Center Support"
+            className="relative flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 rounded-full text-xs font-bold transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            title={assignedCount > 0 ? `Help Center (${assignedCount} task${assignedCount > 1 ? 's' : ''} assigned to you)` : "Open Help Center Support"}
           >
             <HelpCircle size={15} className="text-white" />
             <span>Help Center</span>
+            {assignedCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-amber-400 text-slate-950 rounded-full text-[10px] font-black leading-none shadow-sm animate-pulse">
+                {assignedCount}
+              </span>
+            )}
           </button>
 
           {/* Clickable Profile Avatar & User Welcome */}
@@ -202,7 +268,11 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
       {/* Help Center Interactive Support Modal */}
       <HelpCenterModal
         isOpen={isHelpModalOpen}
-        onClose={() => setIsHelpModalOpen(false)}
+        onClose={() => {
+          setIsHelpModalOpen(false);
+          fetchAssignedCount();
+        }}
+        onTasksUpdated={fetchAssignedCount}
       />
 
       {/* Add Tutorial Video Modal for Admins */}

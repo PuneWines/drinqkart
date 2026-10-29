@@ -76,10 +76,8 @@ export const isUserSuperadmin = (user = null) => {
   return (
     userRole === 'superadmin' ||
     userRole === 'masteradmin' ||
-    userRole === 'hod' ||
     storedRole === 'superadmin' ||
-    storedRole === 'masteradmin' ||
-    storedRole === 'hod'
+    storedRole === 'masteradmin'
   );
 };
 
@@ -96,41 +94,69 @@ export const getUserAssignedShops = (user) => {
     return [];
   }
 
-  const rawAssigned = 
-    userObj.assigned_shops ||
-    (userObj.shops && userObj.shops !== 'all' ? userObj.shops : null) ||
-    userObj.shop_name ||
-    userObj.user_access ||
-    userObj.shop ||
-    (typeof localStorage !== 'undefined' ? (
-      localStorage.getItem('assigned_shops') || 
-      localStorage.getItem('shop_name') || 
-      localStorage.getItem('user_access') ||
-      localStorage.getItem('shop')
-    ) : null) ||
-    [];
+  const rawSources = [
+    userObj.user_access,
+    userObj.shop_name,
+    userObj.assigned_shops,
+    userObj.shops,
+    userObj.shop,
+    typeof localStorage !== 'undefined' ? localStorage.getItem('user_access') : null,
+    typeof localStorage !== 'undefined' ? localStorage.getItem('assigned_shops') : null,
+    typeof localStorage !== 'undefined' ? localStorage.getItem('shop_name') : null,
+    typeof localStorage !== 'undefined' ? localStorage.getItem('shop') : null,
+  ];
 
-  if (Array.isArray(rawAssigned)) {
-    return rawAssigned.map(s => String(s).trim()).filter(Boolean);
+  const shopsSet = new Set();
+  let hasAll = false;
+
+  const addShop = (val) => {
+    if (!val || typeof val !== 'string') return;
+    const trimmed = val.trim();
+    if (!trimmed || trimmed.toLowerCase() === 'n/a' || trimmed.toLowerCase() === 'no shop') return;
+    if (trimmed.toLowerCase() === 'all' || trimmed.toLowerCase() === 'admin') {
+      hasAll = true;
+      return;
+    }
+    shopsSet.add(trimmed);
+  };
+
+  rawSources.forEach((raw) => {
+    if (!raw) return;
+    if (Array.isArray(raw)) {
+      raw.forEach((item) => {
+        if (typeof item === 'string') {
+          if (item.includes(',')) {
+            item.split(',').forEach(addShop);
+          } else {
+            addShop(item);
+          }
+        }
+      });
+    } else if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((p) => {
+              if (typeof p === 'string') {
+                if (p.includes(',')) p.split(',').forEach(addShop);
+                else addShop(p);
+              }
+            });
+            return;
+          }
+        } catch {}
+      }
+      trimmed.split(',').forEach(addShop);
+    }
+  });
+
+  if (hasAll) {
+    return [];
   }
 
-  if (typeof rawAssigned === 'string') {
-    const trimmed = rawAssigned.trim();
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed.map(s => String(s).trim()).filter(Boolean);
-      } catch {}
-    }
-    if (trimmed.includes(',')) {
-      return trimmed.split(',').map(s => s.trim()).filter(Boolean);
-    }
-    if (trimmed.length > 0 && trimmed.toLowerCase() !== 'all') {
-      return [trimmed];
-    }
-  }
-
-  return [];
+  return Array.from(shopsSet);
 };
 
 // Known alias mappings for pages across subsystems

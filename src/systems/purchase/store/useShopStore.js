@@ -29,13 +29,12 @@ export const getEffectiveUserShops = () => {
     .toLowerCase()
     .trim();
 
-  // Superadmin and HOD hold supreme global store authority across all shops.
-  const isGlobalSuperOrHod =
+  // Superadmin holds supreme global store authority across all shops.
+  const isGlobalSuperadmin =
     role === "superadmin" ||
-    role === "masteradmin" ||
-    role === "hod";
+    role === "masteradmin";
 
-  if (isGlobalSuperOrHod) {
+  if (isGlobalSuperadmin) {
     return { isAdmin: true, isGlobal: true, assignedShops: [] };
   }
 
