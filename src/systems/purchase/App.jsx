@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import useShopStore from './store/useShopStore';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Toast, { useToast } from './components/Toast';
 import Dashboard from './pages/Dashboard';
@@ -31,6 +33,13 @@ const queryClient = new QueryClient({
 // (not here) since they're accessed by external parties without logging in.
 function PurchaseApp() {
   const { toasts, removeToast } = useToast();
+
+  // The shop store is built at module load; re-derive role/shop scope for the
+  // currently logged-in user so non-superadmin filtering is never stale.
+  useEffect(() => {
+    useShopStore.getState().syncUserShops();
+    useShopStore.getState().fetchShops();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -1,80 +1,14 @@
 import { create } from "zustand";
 import { supabase } from "../../../lib/supabase";
+import { getUserAssignedShops, isUserSuperadmin } from "../../../utils/permissionUtils";
 
+// Uses the app-wide permission helpers so shop scoping matches the other systems
+// (handles JSON-array shop lists, role tokens like "admin" stored in user_access, HOD).
 export const getEffectiveUserShops = () => {
-  let user = null;
-  try {
-    const raw =
-      localStorage.getItem("drinqkart_user") ||
-      localStorage.getItem("currentUser") ||
-      localStorage.getItem("user");
-    if (raw) user = JSON.parse(raw);
-  } catch (e) {}
-
-  const role = (
-    user?.role ||
-    localStorage.getItem("role") ||
-    localStorage.getItem("currentUserRole") ||
-    ""
-  )
-    .toLowerCase()
-    .trim();
-  const userName = (
-    user?.user_name ||
-    user?.username ||
-    localStorage.getItem("user-name") ||
-    localStorage.getItem("currentUserName") ||
-    ""
-  )
-    .toLowerCase()
-    .trim();
-
-  // Superadmin holds supreme global store authority across all shops.
-  const isGlobalSuperadmin =
-    role === "superadmin" ||
-    role === "masteradmin";
-
-  if (isGlobalSuperadmin) {
+  if (isUserSuperadmin()) {
     return { isAdmin: true, isGlobal: true, assignedShops: [] };
   }
-
-  const rawSources = [
-    user?.shop_name,
-    user?.user_access,
-    user?.shops,
-    localStorage.getItem("shop_name"),
-    localStorage.getItem("user_access"),
-  ];
-
-  const assigned = [];
-  rawSources.forEach((raw) => {
-    if (!raw) return;
-    if (Array.isArray(raw)) {
-      raw.forEach((s) => {
-        if (
-          typeof s === "string" &&
-          s.trim() &&
-          s.trim().toLowerCase() !== "all" &&
-          s.trim().toLowerCase() !== "n/a"
-        ) {
-          assigned.push(s.trim());
-        }
-      });
-    } else if (typeof raw === "string") {
-      raw.split(",").forEach((s) => {
-        const trimmed = s.trim();
-        if (
-          trimmed &&
-          trimmed.toLowerCase() !== "all" &&
-          trimmed.toLowerCase() !== "n/a"
-        ) {
-          assigned.push(trimmed);
-        }
-      });
-    }
-  });
-
-  return { isAdmin: false, assignedShops: [...new Set(assigned)] };
+  return { isAdmin: false, assignedShops: getUserAssignedShops() };
 };
 
 const getSavedShop = () => {

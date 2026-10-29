@@ -72,6 +72,14 @@ import {
 } from "../utils/poTransformer";
 import { today } from "../utils/poHelpers";
 
+// Shop names are stored as short or full names across tables, so match loosely.
+const shopMatches = (a, b) => {
+  const x = (a || "").trim().toLowerCase();
+  const y = (b || "").trim().toLowerCase();
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+};
+
 const PurchaseOrder = () => {
   const { companies, companySettings, fetchCompanySettings } =
     useCompanyStore();
@@ -306,9 +314,7 @@ const PurchaseOrder = () => {
           filteredIndentData = [];
         } else {
           filteredIndentData = filteredIndentData.filter((i) =>
-            assignedShops.some(
-              (as) => as.toLowerCase() === (i.shop_name || "").toLowerCase(),
-            ),
+            assignedShops.some((as) => shopMatches(as, i.shop_name)),
           );
         }
       }
@@ -322,9 +328,7 @@ const PurchaseOrder = () => {
           batches = [];
         } else {
           batches = batches.filter((b) =>
-            assignedShops.some(
-              (as) => as.toLowerCase() === (b.shopName || "").toLowerCase(),
-            ),
+            assignedShops.some((as) => shopMatches(as, b.shopName)),
           );
         }
       }
@@ -369,15 +373,11 @@ const PurchaseOrder = () => {
     if (!isShopAdmin) {
       if (!assignedShops || assignedShops.length === 0) return [];
       items = items.filter((item) =>
-        assignedShops.some(
-          (as) => as.toLowerCase() === (item.shop_name || "").toLowerCase(),
-        ),
+        assignedShops.some((as) => shopMatches(as, item.shop_name)),
       );
     }
     if (selectedShop && selectedShop !== "All") {
-      return items.filter(
-        (item) => (item.shop_name || "").toLowerCase() === selectedShop.toLowerCase(),
-      );
+      return items.filter((item) => shopMatches(item.shop_name, selectedShop));
     }
     return items;
   }, [approvedItems, selectedShop, assignedShops, isShopAdmin]);
