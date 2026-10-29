@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fa';
 import PettyCashModal, { CategoryAmounts } from '../components/PettyCashModal';
 import { supabase } from '../supabase';
+import { deletePettyCashAdvances } from '../services/pettyCashAdvanceBridge';
 import { useAuth } from '../contexts/AuthContext';
 import { ViewOnlyBanner, scopeQueryToUserShops } from '../../../utils/permissionUtils';
 
@@ -200,6 +201,7 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     try {
       const { error } = await supabase.from('petty_cash_expense').delete().like('patty_id', `${deleteId}%`);
       if (error) throw error;
+      await deletePettyCashAdvances(deleteId);
       setRows(prev => prev.filter(r => r.id !== deleteId));
     } catch (err) { console.error('Error deleting:', err); }
     finally { setDeleting(false); setDeleteId(null); }

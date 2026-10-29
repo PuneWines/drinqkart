@@ -16,6 +16,7 @@ import {
 import { useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
+import { syncPettyCashAdvances } from "../services/pettyCashAdvanceBridge";
 
 interface OtherExpenseEntry {
   expenseName: string;
@@ -651,6 +652,15 @@ export default function PettyCashModal({
 
         if (insertError) throw insertError;
       }
+
+      // Sync any "Advance Amount" custom expenses directly to hr_management_advance_requests as Approved Monthly Advance
+      await syncPettyCashAdvances(
+        formData.otherExpenses,
+        finalId,
+        formData.shopName,
+        formData.date,
+        initialData?.id
+      );
 
       setToast({ message: "Data saved successfully!", type: "success" });
       setTimeout(() => {

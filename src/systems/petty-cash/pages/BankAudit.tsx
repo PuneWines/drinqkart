@@ -183,7 +183,7 @@ export default function BankAudit() {
           };
         });
       }
-
+      
       // 3. Group petty_cash_tallies by distinct tally_id string
       const tallyGroupsMap: Record<string, {
         date: string;
