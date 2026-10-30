@@ -1,14 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  FileSpreadsheet, RefreshCw, Search, Calendar, Store,
+  FileSpreadsheet, Download, RefreshCw, Search, Calendar, Store,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
-import { Toaster } from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import toast, { Toaster } from 'react-hot-toast';
 import useStockRange from '../stock/useStockRange';
 import { getDefaultDateRange, todayISO } from '../stock/stockData';
 
 const PAGE_SIZE = 100;
 const DEFAULT_MIN_DAYS_NOT_SOLD = 15;
+const DEFAULT_MAX_PERCENT = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
@@ -25,6 +27,7 @@ export default function NotSoldStock() {
   const [startDate, setStartDate] = useState(() => getDefaultDateRange().start);
   const [endDate, setEndDate] = useState(() => getDefaultDateRange().end);
   const [minDaysNotSold, setMinDaysNotSold] = useState(DEFAULT_MIN_DAYS_NOT_SOLD);
+  const [maxPercent, setMaxPercent] = useState(DEFAULT_MAX_PERCENT);
   const [shopFilter, setShopFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -107,6 +110,8 @@ export default function NotSoldStock() {
     return [...byItem.values()].map((it) => ({
       ...it,
       total: it.opening + it.purchase,
+      // sale qty / total stock * 100 (sell-through); no sale is 0%
+      percentage: it.opening + it.purchase > 0 ? (it.sale / (it.opening + it.purchase)) * 100 : 0,
       // no sale inside the range counts as the whole range
       daysNotSold: it.lastSale ? Math.max(0, daysBetween(it.lastSale, endDate)) : rangeDays
     }));
@@ -115,8 +120,9 @@ export default function NotSoldStock() {
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     const min = Number(minDaysNotSold) || 0;
+    const maxPct = maxPercent === '' ? Infinity : Number(maxPercent) || 0;
     return items
-      .filter((it) => it.current > 0 && it.daysNotSold >= min)
+      .filter((it) => it.current > 0 && it.daysNotSold >= min && it.percentage <= maxPct)
       .filter((it) => !term || `${it.name || ''} ${it.itemId || ''}`.toLowerCase().includes(term))
       .sort((a, b) => {
         const { key, dir } = sort;
@@ -124,10 +130,11 @@ export default function NotSoldStock() {
         let cmp;
         if (key === 'name') cmp = (a.name || '').localeCompare(b.name || '');
         else if (key === 'lastSale') cmp = (a.lastSale || '').localeCompare(b.lastSale || ''); // "No sale" (empty) sorts as oldest
+        else if (a[key] === b[key]) cmp = 0; // also keeps Infinity - Infinity from giving NaN
         else cmp = a[key] - b[key];
         return cmp * mul || b.daysNotSold - a.daysNotSold || b.current - a.current;
       });
-  }, [items, search, minDaysNotSold, sort]);
+  }, [items, search, minDaysNotSold, maxPercent, sort]);
 
   const totalCurrent = useMemo(() => visible.reduce((sum, it) => sum + it.current, 0), [visible]);
 
@@ -136,6 +143,31 @@ export default function NotSoldStock() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
   const pageItems = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const fmtPct = (n) => `${n.toLocaleString('en-IN', { maximumFractionDigits: 1 })}%`;
+
+  const handleExport = () => {
+    if (!visible.length) {
+      toast.error('Nothing to export');
+      return;
+    }
+    const data = visible.map((it, i) => ({
+      '#': i + 1,
+      'Item Description': it.name || it.itemId,
+      'Opening Qty': it.opening,
+      'Purchase Qty': it.purchase,
+      'Total Stock': it.total,
+      'Sale Qty': it.sale,
+      'Percentage (Sale Qty / Total Stock x 100)': Number(it.percentage.toFixed(1)),
+      'Current Stock': it.current,
+      'Last Sale Date': it.lastSale ? fmtDate(it.lastSale) : 'Never Sold',
+      'Days Not Sold': it.daysNotSold
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Not Sold Stock');
+    XLSX.writeFile(wb, `Not_Sold_Stock_${startDate}_to_${endDate}.xlsx`);
+  };
 
   const loadingLabel = progress.total
     ? `Loading stock data... ${progress.done}/${progress.total} days`
@@ -158,14 +190,24 @@ export default function NotSoldStock() {
             </p>
           </div>
         </div>
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-xl transition-all cursor-pointer self-start sm:self-auto"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin text-indigo-600' : ''} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleExport}
+            disabled={loading || !visible.length}
+            className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={14} />
+            <span>Export Excel</span>
+          </button>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-xl transition-all cursor-pointer"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin text-indigo-600' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -257,6 +299,18 @@ export default function NotSoldStock() {
             className="w-14 bg-transparent text-xs text-slate-700 outline-none font-medium"
           />
         </div>
+
+        <div className="flex items-center gap-1.5 h-9 bg-slate-50 border border-slate-200 px-2.5 rounded-xl">
+          <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">Threshold (%):</span>
+          <input
+            type="number"
+            min={0}
+            value={maxPercent}
+            onChange={(e) => { setMaxPercent(e.target.value); setPage(1); }}
+            title="Show items whose Percentage (Sale Qty / Total Stock x 100) is at most this value"
+            className="w-16 bg-transparent text-xs text-slate-700 outline-none font-medium"
+          />
+        </div>
         </div>
       </div>
 
@@ -279,6 +333,7 @@ export default function NotSoldStock() {
                   ['purchase', 'Purchase Qty', 'text-right'],
                   ['total', 'Total Stock', 'text-right'],
                   ['sale', 'Sale Qty', 'text-right'],
+                  ['percentage', 'Percentage', 'text-right'],
                   ['current', 'Current Stock', 'text-right'],
                   ['lastSale', 'Last Sale Date', ''],
                   ['daysNotSold', 'Days Not Sold', 'text-right']
@@ -298,7 +353,7 @@ export default function NotSoldStock() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-400">
+                  <td colSpan={10} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={20} className="animate-spin text-indigo-600" />
                       <span className="text-xs font-semibold text-slate-600">{loadingLabel}</span>
@@ -307,7 +362,7 @@ export default function NotSoldStock() {
                 </tr>
               ) : pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-14 text-slate-400">
+                  <td colSpan={10} className="text-center py-14 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
                       <span className="text-sm font-semibold text-slate-600">No items match</span>
@@ -326,6 +381,7 @@ export default function NotSoldStock() {
                     <td className="px-3 py-2.5 text-right font-mono text-emerald-600 font-semibold">{fmtQty(it.purchase)}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-slate-700">{fmtQty(it.total)}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-amber-600 font-semibold">{fmtQty(it.sale)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-slate-700">{fmtPct(it.percentage)}</td>
                     <td className="px-3 py-2.5 text-right font-mono font-bold text-indigo-700 bg-indigo-50/40">{fmtQty(it.current)}</td>
                     <td className="px-3 py-2.5 text-slate-600 font-mono text-[11px]">{it.lastSale ? fmtDate(it.lastSale) : <span className="inline-block text-[10px] font-bold uppercase tracking-wide text-red-700 bg-red-50 border border-red-200 rounded-full px-2.5 py-0.5">Never Sold</span>}</td>
                     <td className="px-3 py-2.5 text-right font-mono font-bold text-red-600">{it.daysNotSold}</td>
