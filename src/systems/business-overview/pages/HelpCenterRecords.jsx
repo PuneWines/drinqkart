@@ -20,7 +20,13 @@ import {
   Lock,
   Edit,
   Trash2,
-  X
+  X,
+  Layers,
+  Clock,
+  CheckCircle2,
+  TicketCheck,
+  SlidersHorizontal,
+  AlertCircle
 } from 'lucide-react';
 
 export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) {
@@ -343,13 +349,13 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
 
   // Open Edit Modal
   const handleOpenEdit = (r) => {
-    if (activeTab === 'completed') return;
+    if (!isModifyAllowed || activeTab === 'completed') return;
     setEditingRecord(r);
   };
 
   // Delete Record
   const handleDeleteRecord = async (ticketId) => {
-    if (activeTab === 'completed') return;
+    if (!isModifyAllowed || activeTab === 'completed') return;
     if (!window.confirm(`Are you sure you want to delete ticket ${ticketId}?`)) return;
 
     setDeletingId(ticketId);
@@ -405,111 +411,133 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
       {/* Toast Notification */}
       {toastMsg && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium text-xs transition-all ${toastMsg.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'
-            }`}
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-xl text-white font-semibold text-xs transition-all flex items-center gap-2 ${
+            toastMsg.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'
+          }`}
         >
+          {toastMsg.type === 'error' ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
           {toastMsg.msg}
         </div>
       )}
 
       {/* Page Header */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-[#C9A84C]/15 text-[#8C6D23]">
-              <HelpCircle size={22} />
+      <div className="rounded-2xl border border-[#C9A84C]/25 shadow-md overflow-hidden">
+        {/* Gradient Banner */}
+        <div className="bg-gradient-to-r from-[#1C120C] via-[#2C1D11] to-[#1C120C] px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#C9A84C]/20 border border-[#C9A84C]/40 text-[#C9A84C] flex items-center justify-center shadow-inner">
+              <TicketCheck size={22} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-slate-900 font-sans">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base font-bold text-white font-sans tracking-wide">
                   Help Center Support Records
                 </h1>
-                <span className="px-2.5 py-0.5 bg-[#C9A84C]/20 text-[#8C6D23] font-bold text-xs rounded-full border border-[#C9A84C]/40 capitalize">
-                  {activeTab === 'follow-up' ? 'Follow-Up Tickets' : activeTab === 'completed' ? 'Completed Tickets' : 'All Tickets'}
-                </span>
                 {!isModifyAllowed && (
-                  <span className="px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Lock size={12} className="text-amber-600" /> View Only Mode
+                  <span className="px-2 py-0.5 bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Lock size={10} /> View Only
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                View, track, and manage employee support tickets with database-level querying
+              <p className="text-[11px] text-[#C9A84C]/70 mt-0.5 font-mono">
+                Database-level querying · employee support ticketing system
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0">
-          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-            <Link
-              to="/systems/business-overview/help-center/all"
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'all'
-                  ? 'bg-[#2C1D11] text-[#C9A84C] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                }`}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleExportCSV}
+              className="px-3.5 py-2 text-xs font-semibold text-emerald-300 bg-emerald-900/40 hover:bg-emerald-800/60 rounded-lg border border-emerald-600/40 transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Export filtered records to CSV"
             >
-              All Tickets
-            </Link>
-            <Link
-              to="/systems/business-overview/help-center/follow-up"
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'follow-up'
-                  ? 'bg-[#2C1D11] text-[#C9A84C] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                }`}
+              <FileSpreadsheet size={14} />
+              <span>Export CSV</span>
+            </button>
+
+            <button
+              onClick={fetchRecords}
+              disabled={loading}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-300 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              Follow-Up
-            </Link>
-            <Link
-              to="/systems/business-overview/help-center/completed"
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'completed'
-                  ? 'bg-[#2C1D11] text-[#C9A84C] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                }`}
-            >
-              Completed
-            </Link>
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            onClick={handleExportCSV}
-            className="px-3.5 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            title="Export filtered records to CSV"
+        {/* Tab Navigation */}
+        <div className="bg-[#150E08] px-4 py-2 flex items-center gap-2 border-t border-[#C9A84C]/15">
+          <Link
+            to="/systems/business-overview/help-center/all"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'all'
+                ? 'bg-[#C9A84C] text-[#1C120C] shadow-md scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-white/10 border border-transparent'
+            }`}
           >
-            <FileSpreadsheet size={15} />
-            <span>Export CSV</span>
-          </button>
+            <Layers size={13} />
+            <span>All Tickets</span>
+            {totalCount > 0 && activeTab === 'all' && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-[#1C120C] text-[#C9A84C] leading-none">
+                {totalCount}
+              </span>
+            )}
+          </Link>
 
-          <button
-            onClick={fetchRecords}
-            disabled={loading}
-            className="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300 transition-all flex items-center gap-1.5 cursor-pointer"
+          <Link
+            to="/systems/business-overview/help-center/follow-up"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'follow-up'
+                ? 'bg-amber-500 text-white shadow-md scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-white/10 border border-transparent'
+            }`}
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            <span>Refresh</span>
-          </button>
+            <Clock size={13} />
+            <span>Follow-Up</span>
+            {activeTab === 'follow-up' && totalCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-900/60 text-amber-100 leading-none">
+                {totalCount}
+              </span>
+            )}
+          </Link>
+
+          <Link
+            to="/systems/business-overview/help-center/completed"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'completed'
+                ? 'bg-emerald-500 text-white shadow-md scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-white/10 border border-transparent'
+            }`}
+          >
+            <CheckCircle2 size={13} />
+            <span>Completed</span>
+            {activeTab === 'completed' && totalCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-900/60 text-emerald-100 leading-none">
+                {totalCount}
+              </span>
+            )}
+          </Link>
         </div>
       </div>
 
       {/* Database Query Filter Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-          <Filter size={14} className="text-[#C9A84C]" />
-          <span>Server Database Query Filters</span>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white">
+          <SlidersHorizontal size={14} className="text-[#C9A84C]" />
+          <span className="text-xs font-bold uppercase tracking-wider">Server Database Query Filters</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
           {/* Search */}
           <div className="relative col-span-1 sm:col-span-2">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={15} />
+            <Search className="absolute left-3 top-2.5 text-[#C9A84C]" size={14} />
             <input
               type="text"
               placeholder="Search Ticket ID, Employee, Assigned To, Subject, Shop..."
               value={search}
               onChange={(e) => handleFilterChange(setSearch, e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800"
+              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 placeholder-slate-400"
             />
           </div>
 
@@ -518,7 +546,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
             <select
               value={shopFilter}
               onChange={(e) => handleFilterChange(setShopFilter, e.target.value)}
-              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800"
+              className="w-full px-2.5 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 cursor-pointer"
             >
               <option value="">{userAssignedShops && userAssignedShops.length > 0 ? 'All Assigned Shops' : 'All Shops'}</option>
               {shops.map(s => (
@@ -532,7 +560,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
             <select
               value={categoryFilter}
               onChange={(e) => handleFilterChange(setCategoryFilter, e.target.value)}
-              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 truncate"
+              className="w-full px-2.5 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 truncate cursor-pointer"
             >
               <option value="">All Categories</option>
               {categories.map(c => (
@@ -546,7 +574,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
             <select
               value={assignedToFilter}
               onChange={(e) => handleFilterChange(setAssignedToFilter, e.target.value)}
-              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 truncate font-medium"
+              className="w-full px-2.5 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white text-slate-800 truncate font-medium cursor-pointer"
             >
               <option value="">All Assignees</option>
               {assignedUsers.map((uName) => (
@@ -561,8 +589,9 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
               value={activeTab === 'completed' ? 'Resolved' : activeTab === 'follow-up' ? statusFilter || '' : statusFilter}
               disabled={activeTab !== 'all'}
               onChange={(e) => handleFilterChange(setStatusFilter, e.target.value)}
-              className={`w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] font-medium ${activeTab !== 'all' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white text-slate-800'
-                }`}
+              className={`w-full px-2.5 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] font-medium ${
+                activeTab !== 'all' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white text-slate-800 cursor-pointer'
+              }`}
             >
               {activeTab === 'all' && <option value="">All Statuses</option>}
               {activeTab === 'follow-up' && <option value="">Hold & In Progress</option>}
@@ -579,15 +608,15 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
               type="date"
               value={fromDate}
               onChange={(e) => handleFilterChange(setFromDate, e.target.value)}
-              className="w-1/2 px-2 py-1.5 border border-slate-300 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white"
+              className="w-1/2 px-2 py-2 border border-slate-300 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white"
               title="From Date"
             />
-            <span className="text-slate-400 text-xs">-</span>
+            <span className="text-slate-400 text-xs font-bold">→</span>
             <input
               type="date"
               value={toDate}
               onChange={(e) => handleFilterChange(setToDate, e.target.value)}
-              className="w-1/2 px-2 py-1.5 border border-slate-300 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white"
+              className="w-1/2 px-2 py-2 border border-slate-300 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white"
               title="To Date"
             />
           </div>
@@ -595,33 +624,40 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
       </div>
 
       {/* Table Container */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Table Header Bar */}
-        <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
-          <div className="flex items-center gap-3">
-            <span className="font-semibold text-slate-800">
-              Total Tickets Found: <span className="text-[#8C6D23] font-bold">{totalCount}</span>
+        <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
+              activeTab === 'follow-up'
+                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                : activeTab === 'completed'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-[#C9A84C]/10 text-[#8C6D23] border-[#C9A84C]/30'
+            }`}>
+              <TicketCheck size={13} />
+              <span>{totalCount} Ticket{totalCount !== 1 ? 's' : ''} Found</span>
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span>
-              Page <strong className="text-slate-900">{page}</strong> of <strong className="text-slate-900">{totalPages}</strong>
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span className="hidden sm:block">
+              Page <strong className="text-slate-800">{page}</strong> of <strong className="text-slate-800">{totalPages}</strong>
             </span>
             <div className="flex items-center gap-1">
               <button
                 disabled={page <= 1 || loading}
                 onClick={() => setPage(p => Math.max(1, p - 1))}
-                className="p-1 rounded bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="p-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 hover:border-[#C9A84C] disabled:opacity-40 cursor-pointer transition-colors"
               >
-                <ChevronLeft size={16} />
+                <ChevronLeft size={14} />
               </button>
               <button
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage(p => p + 1)}
-                className="p-1 rounded bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="p-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 hover:border-[#C9A84C] disabled:opacity-40 cursor-pointer transition-colors"
               >
-                <ChevronRight size={16} />
+                <ChevronRight size={14} />
               </button>
             </div>
           </div>
@@ -630,24 +666,24 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
         {/* Table Body */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-full text-xs divide-y divide-slate-200 border-collapse">
-            <thead className="bg-[#1C120C] text-white font-sans text-left">
+            <thead className="text-left" style={{background: 'linear-gradient(135deg, #1C120C 0%, #2C1D11 100%)'}}>
               <tr>
                 {/* Actions Column (1st Column) - Allowed on 'all' and 'follow-up' tabs */}
                 {isModifyAllowed && (activeTab === 'all' || activeTab === 'follow-up') && (
-                  <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-center w-[85px]">Actions</th>
+                  <th className="px-3 py-3 font-bold uppercase tracking-widest text-center w-[85px] text-[#C9A84C] text-[10px]">Actions</th>
                 )}
 
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-center w-[95px]">Ticket ID</th>
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-center w-[95px]">Date</th>
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider w-[140px]">Employee Name</th>
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider w-[120px]">Shop Name</th>
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider w-[160px] whitespace-nowrap">Category</th>
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider w-[220px]">Subject & Details</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest text-center w-[95px] text-[#C9A84C] text-[10px]">Ticket ID</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest text-center w-[95px] text-slate-300 text-[10px]">Date</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest w-[140px] text-slate-300 text-[10px]">Employee</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest w-[120px] text-slate-300 text-[10px]">Shop</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest w-[160px] whitespace-nowrap text-slate-300 text-[10px]">Category</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest w-[220px] text-slate-300 text-[10px]">Subject & Details</th>
 
                 {/* Assigned To, Status and Remarks on All Tabs */}
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider w-[140px]">Assigned To</th>
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-center w-[110px]">Status</th>
-                <th className="px-3 py-2.5 font-bold uppercase tracking-wider min-w-[220px]">Remarks</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest w-[140px] text-slate-300 text-[10px]">Assigned To</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest text-center w-[110px] text-slate-300 text-[10px]">Status</th>
+                <th className="px-3 py-3 font-bold uppercase tracking-widest min-w-[220px] text-slate-300 text-[10px]">Remarks</th>
               </tr>
             </thead>
 
@@ -675,7 +711,7 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
                   return (
                     <tr
                       key={r.ticket_id}
-                      className="hover:bg-slate-50/80 transition-colors"
+                      className="hover:bg-amber-50/30 transition-colors border-l-2 border-l-transparent hover:border-l-[#C9A84C]"
                     >
                       {/* Actions Column (1st Column) */}
                       {isModifyAllowed && (activeTab === 'all' || activeTab === 'follow-up') && (
@@ -784,13 +820,15 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
                       {/* Status column */}
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <span
-                          className={`inline-block px-3 py-1 text-xs font-extrabold rounded-full border shadow-2xs ${r.status === 'Resolved'
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-extrabold rounded-full border shadow-sm uppercase tracking-wide ${
+                            r.status === 'Resolved'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-400'
                               : r.status === 'In Progress'
-                                ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                : 'bg-amber-50 text-amber-800 border-amber-300'
-                            }`}
+                                ? 'bg-blue-100 text-blue-800 border-blue-400'
+                                : 'bg-amber-100 text-amber-800 border-amber-400'
+                          }`}
                         >
+                          {r.status === 'Resolved' ? <CheckCircle2 size={10} /> : r.status === 'In Progress' ? <Clock size={10} /> : <AlertCircle size={10} />}
                           {r.status || 'Hold'}
                         </span>
                       </td>
@@ -814,25 +852,30 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
         </div>
 
         {/* Footer Pagination */}
-        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
-          <div>
-            Showing <strong className="text-slate-900">{records.length > 0 ? (page - 1) * pageSize + 1 : 0}</strong> to <strong className="text-slate-900">{Math.min(page * pageSize, totalCount)}</strong> of <strong className="text-slate-900">{totalCount}</strong> entries
+        <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+          <div className="text-slate-500">
+            Showing{' '}
+            <strong className="text-slate-800">{records.length > 0 ? (page - 1) * pageSize + 1 : 0}</strong>
+            {' '}to{' '}
+            <strong className="text-slate-800">{Math.min(page * pageSize, totalCount)}</strong>
+            {' '}of{' '}
+            <strong className="text-[#8C6D23]">{totalCount}</strong>{' '}entries
           </div>
 
           <div className="flex items-center gap-2">
             <button
               disabled={page <= 1 || loading}
               onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="px-3 py-1 rounded bg-white border border-slate-300 hover:bg-slate-100 text-xs font-semibold disabled:opacity-40 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 hover:border-[#C9A84C] text-xs font-semibold disabled:opacity-40 cursor-pointer transition-all"
             >
-              Previous
+              <ChevronLeft size={13} /> Previous
             </button>
             <button
               disabled={page >= totalPages || loading}
               onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1 rounded bg-white border border-slate-300 hover:bg-slate-100 text-xs font-semibold disabled:opacity-40 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 hover:border-[#C9A84C] text-xs font-semibold disabled:opacity-40 cursor-pointer transition-all"
             >
-              Next
+              Next <ChevronRight size={13} />
             </button>
           </div>
         </div>

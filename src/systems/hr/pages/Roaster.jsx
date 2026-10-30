@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../../../context/AuthContext';
+import { getPagePermission } from '../../../utils/permissionUtils';
 import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
 import { toast } from 'react-hot-toast';
 import {
@@ -116,6 +118,8 @@ const isSameDay = (date1, date2) => {
 };
 
 const Roster = () => {
+    const { user: authUser } = useAuth();
+    const canModify = getPagePermission(authUser, 'hr', 'Roster').canModify;
     const [viewMode, setViewMode] = useState('weekly'); // 'weekly' or 'range'
     const [employees, setEmployees] = useState([]);
     const [rosterData, setRosterData] = useState(new Map());
@@ -219,6 +223,7 @@ const Roster = () => {
 
     const handleSaveShift = async (e) => {
         e.preventDefault();
+        if (!canModify) return;
         try {
             const cleanName = (shiftForm.shift_name || '').trim();
             const cleanLabel = (shiftForm.label || '').trim().toUpperCase();
@@ -291,6 +296,7 @@ const Roster = () => {
     };
 
     const handleDeleteCustomShift = async (id, shiftName) => {
+        if (!canModify) return;
         if (!confirm(`Are you sure you want to delete the shift "${shiftName}"?`)) return;
 
         try {
@@ -336,6 +342,7 @@ const Roster = () => {
     };
 
     const handleEditClick = (shift) => {
+        if (!canModify) return;
         const preset = COLOR_PRESETS.find(p => p.color === shift.color) || COLOR_PRESETS[0];
         setEditingShiftId(shift.id);
         setShiftForm({
@@ -603,6 +610,7 @@ const Roster = () => {
     };
 
     const handleAssignShift = async () => {
+        if (!canModify) return;
         try {
             if (!assignForm.employee_id || !assignForm.date) {
                 toast.error('Please select employee and date');
@@ -651,6 +659,7 @@ const Roster = () => {
     };
 
     const handleBulkAssignShift = async () => {
+        if (!canModify) return;
         try {
             const empIds = bulkAssignForm.employee_ids || [];
             if (empIds.length === 0 || !bulkAssignForm.start_date || !bulkAssignForm.end_date) {
@@ -873,6 +882,7 @@ const Roster = () => {
     };
 
     const handleOpenAssignModal = (employeeId, date) => {
+        if (!canModify) return;
         const dateStr = formatDate(date, 'yyyy-MM-dd');
         const empDoj = getEmpDojStr(employeeId);
         if (empDoj && dateStr < empDoj) {
@@ -898,6 +908,7 @@ const Roster = () => {
     };
 
     const handleOpenSlidePanel = (employee, date) => {
+        if (!canModify) return;
         const dateStr = formatDate(date, 'yyyy-MM-dd');
         const rawDoj = employee?.date_of_joining || employee?.doj || employee?.joining_date;
         const empDoj = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : getEmpDojStr(employee.employee_id);
@@ -927,6 +938,7 @@ const Roster = () => {
     };
 
     const handleOpenEditSlidePanel = (employee) => {
+        if (!canModify) return;
         let viewStart, viewEnd;
         if (viewMode === 'weekly') {
             viewStart = currentWeekStart;
@@ -1004,6 +1016,7 @@ const Roster = () => {
 
     // Open custom delete modal to fetch and display ALL assigned shifts for an employee
     const handleOpenDeleteModal = async (employee) => {
+        if (!canModify) return;
         setDeleteEmployee(employee);
         setSelectedShiftIdsToDelete(new Set());
         setShowDeleteModal(true);
@@ -1029,6 +1042,7 @@ const Roster = () => {
 
     // Delete selected shift entries from modal
     const handleDeleteSelectedShifts = async () => {
+        if (!canModify) return;
         if (selectedShiftIdsToDelete.size === 0) {
             toast.error('Please select at least one shift to delete');
             return;
@@ -1061,6 +1075,7 @@ const Roster = () => {
     };
 
     const handleSaveEditSlideRoster = async () => {
+        if (!canModify) return;
         try {
             if (!editSlideForm.employee_id || !editSlideForm.start_date || !editSlideForm.end_date) {
                 toast.error('Please select start date, end date and shift type');
@@ -1135,6 +1150,7 @@ const Roster = () => {
     };
 
     const handleOpenBulkAssignModal = () => {
+        if (!canModify) return;
         let startDate, endDate;
         if (viewMode === 'weekly') {
             startDate = currentWeekStart;
@@ -1153,6 +1169,7 @@ const Roster = () => {
     };
 
     const handleDeleteRoster = async (employeeId, date) => {
+        if (!canModify) return;
         if (!confirm('Are you sure you want to delete this roster entry?')) return;
 
         try {
@@ -1342,6 +1359,7 @@ const Roster = () => {
                     </p>
                 </div>
                 <div className="flex gap-2">
+                    {canModify && (<>
                     <button
                         onClick={() => setShowManageShiftsModal(true)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-medium text-xs transition-colors"
@@ -1356,6 +1374,7 @@ const Roster = () => {
                         <Plus size={12} />
                         Bulk Assign
                     </button>
+                    </>)}
                     <button
                         onClick={fetchRosterData}
                         disabled={loading}
@@ -1725,14 +1744,14 @@ const Roster = () => {
                                                 </td>
                                                 <td className="px-3 py-2 text-center">
                                                     <div className="flex items-center justify-center gap-1.5">
-                                                        <button
+                                                        {canModify && (<button
                                                             onClick={() => handleOpenEditSlidePanel(employee)}
                                                             title="Edit shift assignment"
                                                             className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-50"
                                                         >
                                                             Edit
-                                                        </button>
-                                                        {hasShift && (
+                                                        </button>)}
+                                                        {canModify && hasShift && (
                                                             <button
                                                                 onClick={() => handleOpenDeleteModal(employee)}
                                                                 title="Delete assigned shifts"

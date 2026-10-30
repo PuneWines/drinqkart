@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../../../lib/supabase";
+import { useAuth } from "../../../context/AuthContext";
+import { getPagePermission } from "../../../utils/permissionUtils";
 import toast from "react-hot-toast";
 import {
   Search,
@@ -605,7 +607,7 @@ function Card({ r, pending, setPending, onDelete, onEdit, onOpen }) {
               <Edit2 size={13} /> Edit
             </button>
           )}
-          {pending === r.id ? (
+          {onDelete && (pending === r.id ? (
             <span className="flex items-center gap-2">
               <button
                 type="button"
@@ -630,7 +632,7 @@ function Card({ r, pending, setPending, onDelete, onEdit, onOpen }) {
             >
               <Trash2 size={13} /> Delete
             </button>
-          )}
+          ))}
         </div>
       </div>
     </article>
@@ -697,7 +699,7 @@ function TableRow({ r, pending, setPending, onDelete, onEdit, onOpen }) {
               <Edit2 size={15} />
             </button>
           )}
-          {pending === r.id ? (
+          {onDelete && (pending === r.id ? (
             <span className="flex items-center gap-2 justify-end text-xs">
               <button type="button" className="text-red-600 font-bold hover:underline" onClick={() => onDelete(r.id)}>Confirm</button>
               <button type="button" className="text-slate-500 hover:underline" onClick={() => setPending(null)}>Cancel</button>
@@ -706,7 +708,7 @@ function TableRow({ r, pending, setPending, onDelete, onEdit, onOpen }) {
             <button type="button" className="text-slate-400 hover:text-red-600 p-1 rounded cursor-pointer" title="Delete" onClick={() => setPending(r.id)}>
               <Trash2 size={15} />
             </button>
-          )}
+          ))}
         </div>
       </td>
     </tr>
@@ -1715,6 +1717,8 @@ function exportCSV(rows) {
 
 /* ================= MAIN SCHEME DISCUSSIONS PAGE ================= */
 export default function SchemeDiscussions() {
+  const { user } = useAuth();
+  const canModify = getPagePermission(user, 'business-overview', 'Scheme Discussions').canModify;
   const [records, setRecords] = useState(() => loadJSON("sd_records", []));
   const [stores, setStores] = useState(() => loadJSON("sd_stores", []));
   const [traders, setTraders] = useState(() => {
@@ -1917,6 +1921,7 @@ export default function SchemeDiscussions() {
   }, [records, q, activeType, activeStatus, sortBy]);
 
   const removeRecord = async (id) => {
+    if (!canModify) return;
     const r = records.find((x) => x.id === id);
     if (r) (r.attachments || []).forEach((a) => delFile(a.id));
 
@@ -1930,6 +1935,7 @@ export default function SchemeDiscussions() {
   };
 
   const saveRecord = async (rec) => {
+    if (!canModify) return;
     const isEdit = records.some((x) => x.id === rec.id);
     if (isEdit) {
       setRecords((p) => p.map((x) => (x.id === rec.id ? rec : x)));
@@ -1977,11 +1983,11 @@ export default function SchemeDiscussions() {
   const rowProps = {
     pending,
     setPending,
-    onDelete: removeRecord,
-    onEdit: (rec) => {
+    onDelete: canModify ? removeRecord : undefined,
+    onEdit: canModify ? (rec) => {
       setEditingRecord(rec);
       setModal(true);
-    },
+    } : undefined,
     onOpen: (url, name) => setLb({ url, name }),
   };
 
@@ -2010,7 +2016,7 @@ export default function SchemeDiscussions() {
             >
               <Download size={15} /> Export CSV
             </button>
-            <button
+            {canModify && <button
               type="button"
               onClick={() => {
                 setEditingRecord(null);
@@ -2019,7 +2025,7 @@ export default function SchemeDiscussions() {
               className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm px-4 py-2 rounded-lg shadow-2xs transition-all cursor-pointer"
             >
               <Plus size={16} /> Create
-            </button>
+            </button>}
           </div>
         </header>
 
@@ -2224,7 +2230,7 @@ export default function SchemeDiscussions() {
         )}
 
         {/* Create / Edit Discussion Modal */}
-        {modal && (
+        {canModify && modal && (
           <CreateModal
             initialData={editingRecord}
             stores={stores}

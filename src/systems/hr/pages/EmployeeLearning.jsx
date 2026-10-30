@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
-import { isUserShopScoped, getUserAssignedShops } from '../../../utils/permissionUtils';
+import { isUserShopScoped, getUserAssignedShops, getPagePermission } from '../../../utils/permissionUtils';
 import { Check, CheckCircle2, Clock, AlertCircle, RefreshCw, Search, Filter, X } from 'lucide-react';
 
 /* ---------------- Task Catalogue ---------------- */
@@ -104,49 +104,9 @@ export default function EmployeeLearning() {
   const userRole = (currentUserObj?.role || '').toLowerCase().trim();
   const userNameClean = (currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim();
 
-  // Explicit Admin / Master / MasterAdmin / HOD check
-  const isAdminUser = userRole === 'admin' || userRole === 'master' || userRole === 'hod' || userRole === 'superadmin' || userRole === 'masteradmin';
-  const isManagerUser = userRole === 'manager';
-
-  // Check if Manager has explicit modify permission for Employee Learning or HR system
-  const hasModifyPermission = React.useMemo(() => {
-    if (isAdminUser) return true;
-    if (!isManagerUser || !currentUserObj) return false;
-
-    // Check account status
-    if (currentUserObj.is_active === false || currentUserObj.status === 'inactive') return false;
-
-    // Parse master_user_system_page_access permission strings
-    const rawVal = currentUserObj.master_user_system_page_access || localStorage.getItem('master_user_system_page_access');
-    let pageAccessArr = [];
-    if (typeof rawVal === 'string') {
-      try { pageAccessArr = JSON.parse(rawVal); } catch (e) { pageAccessArr = []; }
-    } else if (Array.isArray(rawVal)) {
-      pageAccessArr = rawVal;
-    } else if (rawVal && typeof rawVal === 'object') {
-      pageAccessArr = Object.keys(rawVal);
-    }
-
-    // Require explicit .modify permission entry for Manager
-    if (Array.isArray(pageAccessArr) && pageAccessArr.length > 0) {
-      return pageAccessArr.some(item => {
-        if (typeof item !== 'string') return false;
-        const norm = item.toLowerCase().trim();
-        return (
-          norm === 'hr.employee learning.modify' ||
-          norm === 'hr.employee_learning.modify' ||
-          norm === 'hr.employees.modify' ||
-          norm === 'hr.dashboard.modify' ||
-          norm.endsWith('.modify')
-        );
-      });
-    }
-
-    // Default to false for manager if no explicit modify permission string exists
-    return false;
-  }, [currentUserObj, isAdminUser, isManagerUser]);
-
-  const canCreateChecklist = isAdminUser || (isManagerUser && hasModifyPermission);
+  // Creation is governed by the page's modify permission (superadmin/masteradmin/hod bypass inside getPagePermission);
+  // admin/manager roles with view-only access must not see create controls.
+  const canCreateChecklist = getPagePermission(currentUserObj, 'hr', 'Employee Learning').canModify;
 
   useEffect(() => {
     loadInitialData();

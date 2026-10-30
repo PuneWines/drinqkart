@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, X, Check, Clock, Wallet, Banknote, Stethoscope, Hammer, Loader2, Filter, Users, TrendingUp, Database, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../../../context/AuthContext';
+import { getPagePermission } from '../../../utils/permissionUtils';
 
 const formatStartingMonth = (monthStr) => {
   if (!monthStr) return '-';
@@ -18,6 +20,8 @@ const formatStartingMonth = (monthStr) => {
 };
 
 const AdminAdvance = () => {
+  const { user: authUser } = useAuth();
+  const canModify = getPagePermission(authUser, 'hr', 'Admin Advance').canModify;
   const [searchTerm, setSearchTerm] = useState('');
   const [mainTab, setMainTab] = useState('monthly'); // 'monthly' | 'fixed'
   const [subTab, setSubTab] = useState('pending');   // 'pending' | 'history'
@@ -191,6 +195,7 @@ const AdminAdvance = () => {
 
   const handleCreateRequest = async (e) => {
     e.preventDefault();
+    if (!canModify) return;
     if (!newEmpId) {
       toast.error("Please select an employee");
       return;
@@ -252,6 +257,7 @@ const AdminAdvance = () => {
   };
 
   const handleDeleteRequest = async (id) => {
+    if (!canModify) return;
     if (!window.confirm("Are you sure you want to delete this advance request?")) return;
 
     try {
@@ -284,7 +290,7 @@ const AdminAdvance = () => {
   };
 
   const handleAction = async (actionStatus) => {
-    if (!selectedRequest) return;
+    if (!canModify || !selectedRequest) return;
 
     /* Commented out the Google Sheets update code:
     const updates = [
@@ -581,7 +587,7 @@ const AdminAdvance = () => {
             Review and manage employee advance requests
           </p>
         </div>
-        {mainTab === 'fixed' && (
+        {canModify && mainTab === 'fixed' && (
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -777,6 +783,7 @@ const AdminAdvance = () => {
                         >
                           {record.status?.toLowerCase() === 'pending' ? 'Review' : (mainTab === 'fixed' && subTab === 'pending') ? 'Receive' : 'Details'}
                         </button>
+                        {canModify && (
                         <button
                           onClick={() => handleDeleteRequest(record.id)}
                           className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
@@ -784,6 +791,7 @@ const AdminAdvance = () => {
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -960,7 +968,7 @@ const AdminAdvance = () => {
               </div>
             </div>
 
-            {selectedRequest.status?.toLowerCase() === 'pending' && (
+            {canModify && selectedRequest.status?.toLowerCase() === 'pending' && (
               <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 sticky bottom-0">
                 <button
                   onClick={() => handleAction('Rejected')}
@@ -996,7 +1004,7 @@ const AdminAdvance = () => {
               </div>
             )}
 
-            {mainTab === 'fixed' && subTab === 'pending' && selectedRequest.status?.toLowerCase() !== 'pending' && (
+            {canModify && mainTab === 'fixed' && subTab === 'pending' && selectedRequest.status?.toLowerCase() !== 'pending' && (
               <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 sticky bottom-0">
                 <button
                   onClick={() => handleAction('Received')}

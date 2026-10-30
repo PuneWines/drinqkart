@@ -391,7 +391,7 @@ export default function HelpCenterModal({
 
           {/* Top Tab Switcher: "My Assigned Tasks" vs "Raise Support Ticket" (hidden in editMode) */}
           {!editMode && (
-            <div className="bg-[#140D08] px-4 py-2 flex items-center justify-between border-b border-[#C9A84C]/20 shrink-0">
+            <div className="bg-[#100A05] px-4 py-2.5 flex items-center justify-between border-b border-[#C9A84C]/25 shrink-0">
               <div className="flex items-center gap-2">
                 {/* Tab: Assigned Tasks */}
                 <button
@@ -400,10 +400,10 @@ export default function HelpCenterModal({
                     setSelectedTask(null);
                     setTaskActionError(null);
                   }}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeMainTab === 'tasks'
-                      ? 'bg-[#C9A84C] text-[#1C120C] shadow-sm'
-                      : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      ? 'bg-[#C9A84C] text-[#1C120C] shadow-lg ring-2 ring-[#C9A84C]/40'
+                      : 'text-slate-400 hover:text-white hover:bg-white/10 border border-white/10'
                   }`}
                 >
                   <ClipboardList size={14} />
@@ -413,7 +413,7 @@ export default function HelpCenterModal({
                       className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
                         activeMainTab === 'tasks'
                           ? 'bg-[#1C120C] text-[#C9A84C]'
-                          : 'bg-amber-400 text-slate-950 animate-pulse'
+                          : 'bg-amber-500 text-white animate-pulse shadow-sm'
                       }`}
                     >
                       {assignedTasks.length}
@@ -427,10 +427,10 @@ export default function HelpCenterModal({
                     setActiveMainTab('create');
                     setSelectedTask(null);
                   }}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeMainTab === 'create'
-                      ? 'bg-[#C9A84C] text-[#1C120C] shadow-sm'
-                      : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      ? 'bg-[#C9A84C] text-[#1C120C] shadow-lg ring-2 ring-[#C9A84C]/40'
+                      : 'text-slate-400 hover:text-white hover:bg-white/10 border border-white/10'
                   }`}
                 >
                   <PlusCircle size={14} />
@@ -439,7 +439,7 @@ export default function HelpCenterModal({
               </div>
 
               {activeMainTab === 'tasks' && assignedTasks.length > 0 && (
-                <span className="hidden sm:inline-block text-[11px] text-[#C9A84C] font-medium font-sans">
+                <span className="hidden sm:inline-block text-[11px] text-amber-400 font-semibold font-sans">
                   {assignedTasks.length} Pending Task{assignedTasks.length > 1 ? 's' : ''}
                 </span>
               )}

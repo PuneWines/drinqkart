@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles, Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText, ExternalLink, ChevronLeft, Printer, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { scopeQueryToUserShops } from '../../../utils/permissionUtils'
+import { scopeQueryToUserShops, getUserAssignedShops, isApexAdmin, getPagePermission } from '../../../utils/permissionUtils'
+import { useAuth } from '../../../context/AuthContext'
 
 // Storage bucket name
 const STORAGE_BUCKET = 'HR_System_employee_documents'
@@ -27,6 +28,8 @@ const resolveDeviceStore = (log) => {
 
 
 export default function EmployeeManagement() {
+  const { user: authUser } = useAuth()
+  const canModify = getPagePermission(authUser, 'hr', 'Employees').canModify
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -234,7 +237,7 @@ export default function EmployeeManagement() {
         company_name: d.shop_name,
         shop_name: d.shop_name,
         full_name: d.full_name || '',
-        location: d.location || d.address || d.shop_name || '',
+        location: (d.location || '').toString().trim(),
         address: d.address || ''
       }))
       setJoiningCompanies(formatted)
@@ -247,25 +250,27 @@ export default function EmployeeManagement() {
   const dynamicJoiningPlaces = useMemo(() => {
     const places = new Set();
     joiningCompanies.forEach(c => {
-      if (c.shop_name) places.add(c.shop_name.toUpperCase());
-      if (c.location && typeof c.location === 'string') {
-        const cleanLoc = c.location.trim().toUpperCase();
-        if (cleanLoc.length <= 30) places.add(cleanLoc);
-      }
+      // Only the explicit shop.location counts; shop names and free-text addresses are not places
+      if (c.location) places.add(c.location.toUpperCase());
     });
     // Add legacy location keys to ensure backward compatibility for historical records
     ['BAWDHAN', 'HINJEWADI', 'WAGHOLI', 'AKOLE', 'MUMBAI', 'KHARGHAR'].forEach(p => places.add(p));
     return Array.from(places).sort();
   }, [joiningCompanies]);
 
+  // Shop filter options: superadmin sees all; everyone else (incl. HOD) only assigned shops
+  const filterShopOptions = useMemo(() => {
+    if (isApexAdmin()) return joiningCompanies
+    const allowed = new Set(getUserAssignedShops(null, { strict: true }).map(s => s.trim().toLowerCase()))
+    return joiningCompanies.filter(c => allowed.has((c.company_name || '').trim().toLowerCase()))
+  }, [joiningCompanies])
+
   const resolveShopFromPlace = (placeName) => {
     if (!placeName) return '';
     const clean = placeName.trim().toUpperCase();
     const matched = joiningCompanies.find(c =>
       (c.shop_name && c.shop_name.toUpperCase() === clean) ||
-      (c.location && c.location.toUpperCase().includes(clean)) ||
-      (c.address && c.address.toUpperCase().includes(clean)) ||
-      (c.full_name && c.full_name.toUpperCase().includes(clean))
+      (c.location && c.location.toUpperCase() === clean)
     );
     if (matched && matched.shop_name) return matched.shop_name;
     const LEGACY_MAP = {
@@ -918,6 +923,7 @@ export default function EmployeeManagement() {
   }
 
   const openEditPanel = (employee) => {
+    if (!canModify) return
     setEditingEmployee(employee)
     const rawPlace = (employee.joining_place || '').toString().trim().toUpperCase();
     const matchedPlace = dynamicJoiningPlaces.find(p => p === rawPlace || p.replace(/[^A-Z0-9]/g, '') === rawPlace.replace(/[^A-Z0-9]/g, '') || (rawPlace === 'BAVDHAN' && p === 'BAWDHAN') || (rawPlace === 'WAGOLI' && p === 'WAGHOLI')) || rawPlace;
@@ -1012,6 +1018,7 @@ export default function EmployeeManagement() {
   }
 
   const handleDelete = async (employee) => {
+    if (!canModify) return
     if (!window.confirm(`Delete ${employee.name_as_per_aadhar}?`)) return
 
     try {
@@ -1287,7 +1294,7 @@ export default function EmployeeManagement() {
               </button>
             </div>
           ) : (
-            <label className="flex items-center gap-2 px-4 py-2 border-2 border-dashed rounded hover:border-indigo-500 cursor-pointer transition-colors w-full justify-center bg-gray-50/50">
+            <label className="flex items-center gap-2 px-4 py-2 border-2 border-dashed rounded-lg hover:border-indigo-500 hover:bg-indigo-50/40 cursor-pointer transition-colors w-full justify-center bg-gray-50/50">
               <input
                 type="file"
                 accept="image/*,.pdf"
@@ -1341,7 +1348,7 @@ export default function EmployeeManagement() {
               </button>
             </div>
           ) : (
-            <label className="flex items-center gap-1.5 px-3 py-1.5 border-2 border-dashed rounded hover:border-indigo-500 cursor-pointer transition-colors">
+            <label className="flex items-center gap-1.5 px-3 py-1.5 border-2 border-dashed rounded-lg hover:border-indigo-500 hover:bg-indigo-50/40 cursor-pointer transition-colors">
               <input
                 type="file"
                 accept="image/*,.pdf"
@@ -1358,27 +1365,29 @@ export default function EmployeeManagement() {
   }
 
   return (
-    <div className="p-10 pt-5 pb-0">
+    <div className="p-6 lg:p-8 pt-5 pb-0">
       {/* Header */}
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Users size={22} />
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-indigo-600 text-white shadow-sm"><Users size={18} /></span>
             Employees
           </h1>
+          <p className="text-xs text-slate-500 mt-1">Manage employee records, documents and banking details</p>
         </div>
         <div className="flex items-center gap-2">
+          {canModify && (<>
           <button
             onClick={() => {
               resetForm()
               setShowForm(true)
             }}
-            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors text-xs font-semibold rounded shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
           >
             <UserPlus size={14} />
             Add New Employee
           </button>
-          <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer text-xs font-semibold rounded shadow-sm">
+          <label className="flex items-center gap-2 px-3 py-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer text-xs font-semibold rounded-lg shadow-sm">
             <Upload size={14} />
             Import CSV
             <input
@@ -1388,9 +1397,10 @@ export default function EmployeeManagement() {
               className="hidden"
             />
           </label>
+          </>)}
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 px-3 py-2 border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors text-xs font-semibold rounded shadow-sm"
+            className="flex items-center gap-2 px-3 py-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors text-xs font-semibold rounded-lg shadow-sm"
           >
             <ExternalLink size={14} />
             Export CSV
@@ -1399,7 +1409,7 @@ export default function EmployeeManagement() {
       </div>
 
       {/* Filter and Search Section */}
-      <div className="flex gap-4 mb-4 items-center flex-wrap">
+      <div className="flex gap-3 mb-4 items-center flex-wrap bg-white border border-gray-200 rounded-xl shadow-sm p-3">
         <div className="relative flex-1 max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -1407,94 +1417,28 @@ export default function EmployeeManagement() {
             placeholder="Search by name, ID, designation, mobile or shop..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
           />
         </div>
 
-        <div className="relative w-56" ref={shopDropdownRef}>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="All Shops"
-              value={isShopDropdownOpen ? shopSearchInput : (shopFilter || '')}
-              onChange={(e) => {
-                setShopSearchInput(e.target.value)
-                setIsShopDropdownOpen(true)
-                if (!e.target.value) {
-                  setShopFilter('')
-                }
-              }}
-              onFocus={() => {
-                setShopSearchInput(shopFilter)
-                setIsShopDropdownOpen(true)
-              }}
-              className="w-full pl-3 pr-8 py-2 border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-gray-700"
-            />
-            {shopFilter ? (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShopFilter('')
-                  setShopSearchInput('')
-                  setIsShopDropdownOpen(false)
-                }}
-                className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X size={14} />
-              </button>
-            ) : null}
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-              ▼
-            </span>
-          </div>
-
-          {isShopDropdownOpen && (
-            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 shadow-lg max-h-60 overflow-y-auto rounded-md">
-              <div
-                onClick={() => {
-                  setShopFilter('')
-                  setShopSearchInput('')
-                  setIsShopDropdownOpen(false)
-                }}
-                className="px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 cursor-pointer font-medium border-b border-gray-100"
-              >
-                All Shops (Clear)
-              </div>
-              {joiningCompanies
-                .filter(company =>
-                  !shopSearchInput ||
-                  company.company_name?.toLowerCase().includes(shopSearchInput.toLowerCase())
-                )
-                .map((company) => (
-                  <div
-                    key={company.id}
-                    onClick={() => {
-                      setShopFilter(company.company_name)
-                      setShopSearchInput(company.company_name)
-                      setIsShopDropdownOpen(false)
-                    }}
-                    className={`px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 cursor-pointer ${shopFilter === company.company_name ? 'bg-indigo-50 font-medium text-indigo-600' : ''
-                      }`}
-                  >
-                    {company.company_name}
-                  </div>
-                ))}
-              {joiningCompanies.filter(company =>
-                !shopSearchInput ||
-                company.company_name?.toLowerCase().includes(shopSearchInput.toLowerCase())
-              ).length === 0 && (
-                  <div className="px-3 py-2 text-sm text-gray-400 italic">
-                    No shops found
-                  </div>
-                )}
-            </div>
-          )}
+        <div className="relative w-56">
+          <select
+            value={shopFilter}
+            onChange={(e) => setShopFilter(e.target.value)}
+            className="w-full appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+          >
+            <option value="">All Shops</option>
+            {filterShopOptions.map((company) => (
+              <option key={company.id} value={company.company_name}>{company.company_name}</option>
+            ))}
+          </select>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[10px]">▼</span>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 ">
-            <Users size={18} className="text-indigo-600" />
-            <span className="text-sm font-semibold text-gray-700">Total Employees:</span>
+        <div className="flex items-center gap-4 ml-auto">
+          <div className="flex items-center gap-2 px-3.5 py-2 bg-indigo-50 border border-indigo-100 rounded-lg">
+            <Users size={16} className="text-indigo-600" />
+            <span className="text-xs font-semibold text-gray-600">Total Employees:</span>
             <span className="text-sm font-bold text-indigo-600">{filteredEmployees.length}</span>
           </div>
         </div>
@@ -1502,112 +1446,80 @@ export default function EmployeeManagement() {
 
 
       {/* Table */}
-      <div className="bg-white rounded-md overflow-hidden border border-gray-200 shadow-sm">
-        <div className="overflow-x-auto overflow-y-scroll max-h-[73vh] scrollbar-thin">
-          <table className="w-full text-xs ">
-            <thead className="bg-gray-100 border-b border-gray-100 sticky top-0">
+      <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+        <div className="overflow-x-hidden overflow-y-auto max-h-[73vh] scrollbar-thin">
+          <table className="w-full table-fixed text-xs">
+            <thead className="bg-slate-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Employee ID</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Date Of Joining</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Mobile Number</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Father Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Work Location</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Designation</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Shop name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Transferred Shop</th>
-
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[22%]">Employee</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[9%]">Joined</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[10%]">Mobile</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[14%]">Father Name</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[10%]">Designation</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[15%]">Shop / Location</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[12%]">Transferred</th>
+                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[8%]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="11" className="text-center py-8 text-gray-500">Loading...</td>
+                  <td colSpan="8" className="text-center py-8 text-gray-500">Loading...</td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="text-center py-8 text-gray-500">No employees found</td>
+                  <td colSpan="8" className="text-center py-8 text-gray-500">No employees found</td>
                 </tr>
               ) : (
                 paginatedEmployees.map((emp) => (
-                  <tr
-                    key={emp.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-4 py-3 text-gray-900">
-                      {emp.employee_id}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                  <tr key={emp.id} className="hover:bg-indigo-50/40 transition-colors align-top">
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         {emp.candidate_photo ? (
-                          <img
-                            src={emp.candidate_photo}
-                            alt={emp.name_as_per_aadhar}
-                            className="w-7 h-7 rounded-full object-cover"
-                          />
+                          <img src={emp.candidate_photo} alt={emp.name_as_per_aadhar} className="w-8 h-8 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm" />
                         ) : (
-                          <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-medium">
+                          <div className="w-8 h-8 shrink-0 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-semibold">
                             {emp.name_as_per_aadhar?.charAt(0) || '?'}
                           </div>
                         )}
-                        {emp.name_as_per_aadhar}
+                        <div className="min-w-0">
+                          <div className="font-medium text-gray-900 break-words leading-tight">{emp.name_as_per_aadhar}</div>
+                          <div className="text-[11px] text-gray-500 mt-0.5">ID: {emp.employee_id}</div>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {emp.date_of_joining}
+                    <td className="px-3 py-3 text-gray-600">{emp.date_of_joining}</td>
+                    <td className="px-3 py-3 text-gray-600">{emp.mobile_no}</td>
+                    <td className="px-3 py-3 text-gray-600 break-words">{emp.father_name || '-'}</td>
+                    <td className="px-3 py-3 text-gray-600 break-words">{emp.designation}</td>
+                    <td className="px-3 py-3">
+                      <div className="text-gray-800 font-medium break-words leading-tight">{emp.joining_company_name || '-'}</div>
+                      {emp.joining_place && <div className="text-[11px] text-gray-500 mt-0.5 break-words">{emp.joining_place}</div>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {emp.mobile_no}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {emp.father_name || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {emp.joining_place}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {emp.designation}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {emp.joining_company_name}
-                    </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       {!emp.transferred_shop || emp.transferred_shop === 'Not Transferred' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
                           Not Transferred
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 shadow-sm" title={`Assigned: ${emp.joining_place || 'N/A'} | Punched at: ${emp.transferred_shop}`}>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 break-words" title={`Assigned: ${emp.joining_place || 'N/A'} | Punched at: ${emp.transferred_shop}`}>
                           ⚡ {emp.transferred_shop}
                         </span>
                       )}
                     </td>
-
-
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleViewDetails(emp)}
-                          className="p-1 text-slate-600 hover:text-slate-800 transition-colors"
-                          title="View Details"
-                        >
+                    <td className="px-3 py-3">
+                      <div className="flex gap-0.5">
+                        <button onClick={() => handleViewDetails(emp)} className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" title="View Details">
                           <Eye size={16} />
                         </button>
-                        <button
-                          onClick={() => openEditPanel(emp)}
-                          className="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-                          title="Edit"
-                        >
+                        {canModify && (<>
+                        <button onClick={() => openEditPanel(emp)} className="p-1.5 rounded-md text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors" title="Edit">
                           <Edit size={16} />
                         </button>
-                        <button
-                          onClick={() => handleDelete(emp)}
-                          className="p-1 text-red-600 hover:text-red-700 transition-colors"
-                          title="Delete"
-                        >
+                        <button onClick={() => handleDelete(emp)} className="p-1.5 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors" title="Delete">
                           <Trash2 size={16} />
                         </button>
+                        </>)}
                       </div>
                     </td>
                   </tr>
@@ -1621,8 +1533,8 @@ export default function EmployeeManagement() {
 
       {/* Modal Popup for Add Employee Form */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
-          <div className="bg-white max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
+          <div className="bg-white max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold">Add New Employee</h2>
               <div className="flex gap-2">
@@ -1787,18 +1699,18 @@ export default function EmployeeManagement() {
 
                   {/* Personal Information Section */}
                   <div className="lg:col-span-3 mt-2">
-                    <h3 className="text-md font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Personal Information</h3>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3 pb-2 border-b border-gray-200">Personal Information</h3>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Employee ID <span className="text-red-500">*</span>{" (as per biometric)"}</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Employee ID <span className="text-red-500">*</span>{" (as per biometric)"}</label>
                     <input
                       type="text"
                       name="employee_id"
                       value={formData.employee_id}
                       onChange={handleInputChange}
                       placeholder="e.g., 1001"
-                      className={`w-full px-3 py-2 border text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 ${addFormEmployeeIdExists ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50' : 'border-gray-300 bg-white'
+                      className={`w-full px-3 py-2 border text-sm focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 ${addFormEmployeeIdExists ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50' : 'border-gray-300 bg-white'
                         }`}
                       required
                     />
@@ -1808,23 +1720,23 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
-                    <input type="text" name="name_as_per_aadhar" value={formData.name_as_per_aadhar} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 uppercase" required />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Full Name <span className="text-red-500">*</span></label>
+                    <input type="text" name="name_as_per_aadhar" value={formData.name_as_per_aadhar} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 uppercase" required />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Father's Name <span className="text-red-500">*</span></label>
-                    <input type="text" name="father_name" value={formData.father_name} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 uppercase" required />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Father's Name <span className="text-red-500">*</span></label>
+                    <input type="text" name="father_name" value={formData.father_name} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 uppercase" required />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth <span className="text-red-500">*</span></label>
-                    <input type="date" name="dob" value={formData.dob} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date of Birth <span className="text-red-500">*</span></label>
+                    <input type="date" name="dob" value={formData.dob} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500" required />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Gender <span className="text-red-500">*</span></label>
-                    <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Gender <span className="text-red-500">*</span></label>
+                    <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500" required>
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -1833,7 +1745,7 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mobile No <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Mobile No <span className="text-red-500">*</span></label>
                     <input
                       type="tel"
                       name="mobile_no"
@@ -1843,18 +1755,18 @@ export default function EmployeeManagement() {
                       pattern="[0-9]{10}"
                       inputMode="numeric"
                       placeholder="Enter 10 digit mobile number"
-                      className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input type="email" name="candidate_email" value={formData.candidate_email} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Email</label>
+                    <input type="email" name="candidate_email" value={formData.candidate_email} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500" />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Family Mobile No</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Family Mobile No</label>
                     <input
                       type="tel"
                       name="family_mobile_no"
@@ -1864,27 +1776,27 @@ export default function EmployeeManagement() {
                       pattern="[0-9]{10}"
                       inputMode="numeric"
                       placeholder="Enter 10 digit mobile number"
-                      className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
                     />
                   </div>
 
                   {/* Employment Information Section */}
                   <div className="lg:col-span-3 mt-2">
-                    <h3 className="text-md font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Employment Information</h3>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3 pb-2 border-b border-gray-200">Employment Information</h3>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Joining <span className="text-red-500">*</span></label>
-                    <input type="date" name="date_of_joining" value={formData.date_of_joining} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date of Joining <span className="text-red-500">*</span></label>
+                    <input type="date" name="date_of_joining" value={formData.date_of_joining} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500" required />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Joining Place <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Joining Place <span className="text-red-500">*</span></label>
                     <select
                       name="joining_place"
                       value={formData.joining_place}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white"
                       required
                     >
                       <option value="">Select Joining Place</option>
@@ -1897,12 +1809,12 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Designation <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Designation <span className="text-red-500">*</span></label>
                     <select
                       name="designation"
                       value={formData.designation}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                      className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white"
                       required
                     >
                       <option value="">Select Designation</option>
@@ -1914,13 +1826,13 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Joining Shop Name</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Joining Shop Name</label>
                     <select
                       name="joining_company_name"
                       disabled
                       value={formData.joining_company_name}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
                     >
                       <option value="">Select Shop</option>
                       {joiningCompanies.map((company) => (
@@ -1932,23 +1844,23 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mode of Attendance</label>
-                    <select name="mode_of_attendance" value={formData.mode_of_attendance} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Mode of Attendance</label>
+                    <select name="mode_of_attendance" value={formData.mode_of_attendance} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500">
                       <option value="Biometric">Biometric</option>
                       <option value="Manual">Manual</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Employee Status <span className="text-red-500">*</span></label>
-                    <select name="status" value={formData.status} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Employee Status <span className="text-red-500">*</span></label>
+                    <select name="status" value={formData.status} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500">
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar No <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Aadhar No <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       name="aadhar_no"
@@ -1958,18 +1870,18 @@ export default function EmployeeManagement() {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       placeholder="Enter Aadhar Number"
-                      className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
                       required
                     />
                   </div>
 
                   {/* Banking Information Section */}
                   <div className="lg:col-span-3 mt-2">
-                    <h3 className="text-md font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200">Banking Information</h3>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3 pb-2 border-b border-gray-200">Banking Information</h3>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Account No <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Account No <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       name="current_account_no"
@@ -1978,24 +1890,24 @@ export default function EmployeeManagement() {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       placeholder="Enter Account Number"
-                      className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code <span className="text-red-500">*</span></label>
-                    <input type="text" name="ifsc_code" value={formData.ifsc_code} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 uppercase" required />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">IFSC Code <span className="text-red-500">*</span></label>
+                    <input type="text" name="ifsc_code" value={formData.ifsc_code} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 uppercase" required />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name <span className="text-red-500">*</span></label>
-                    <input type="text" name="branch_name" value={formData.branch_name} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 uppercase" required />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Branch Name <span className="text-red-500">*</span></label>
+                    <input type="text" name="branch_name" value={formData.branch_name} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 uppercase" required />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode <span className="text-red-500">*</span></label>
-                    <select name="payment_mode" value={formData.payment_mode} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Mode <span className="text-red-500">*</span></label>
+                    <select name="payment_mode" value={formData.payment_mode} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500" required>
                       <option value="Bank Transfer">Bank Transfer</option>
                       <option value="Cheque">Cheque</option>
                       <option value="Cash">Cash</option>
@@ -2003,13 +1915,13 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Beneficiary Name</label>
-                    <input type="text" name="beneficiary_name" value={formData.beneficiary_name} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300  focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 uppercase" />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Beneficiary Name</label>
+                    <input type="text" name="beneficiary_name" value={formData.beneficiary_name} onChange={handleInputChange} className="w-full px-3 py-2 text-sm border border-gray-300  rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 uppercase" />
                   </div>
 
                   {/* Documents Section */}
                   <div className="lg:col-span-3 mt-4">
-                    <h3 className="text-md font-medium text-gray-700 mb-3 pb-2 border-b border-gray-200 flex items-center gap-1.5">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3 pb-2 border-b border-gray-200 flex items-center gap-1.5">
                       <Upload size={16} className="text-indigo-600" />
                       Documents
                     </h3>
@@ -2027,10 +1939,10 @@ export default function EmployeeManagement() {
               </div>
 
               <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 sticky bottom-0">
-                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                   Cancel
                 </button>
-                <button type="submit" disabled={saving || uploading} className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                <button type="submit" disabled={saving || uploading} className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2">
                   {(saving || uploading) && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
                   {uploading ? 'Uploading...' : saving ? 'Saving...' : 'Save Employee'}
                 </button>
@@ -2104,8 +2016,8 @@ export default function EmployeeManagement() {
               <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6">
                 <div className="space-y-6">
                   {/* Documents Section */}
-                  <div className="bg-white border border-gray-200 shadow-sm p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-4 pb-3 border-b border-gray-100 flex items-center gap-2">
                       <Upload size={16} />
                       Documents
                     </h3>
@@ -2120,8 +2032,8 @@ export default function EmployeeManagement() {
                   </div>
 
                   {/* Personal Information Section */}
-                  <div className="bg-white border border-gray-200 shadow-sm p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-100">
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-4 pb-3 border-b border-gray-100">
                       Personal Information
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2133,7 +2045,7 @@ export default function EmployeeManagement() {
                           value={editFormData.employee_id || ''}
                           onChange={handleEditInputChange}
                           placeholder="Enter Employee ID"
-                          className={`w-full px-3 py-2 text-sm border focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 ${editFormEmployeeIdExists ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50 text-red-900' : 'border-gray-300 bg-white text-gray-800'
+                          className={`w-full px-3 py-2 text-sm border focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 ${editFormEmployeeIdExists ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50 text-red-900' : 'border-gray-300 bg-white text-gray-800'
                             }`}
                         />
                         {editFormEmployeeIdExists && (
@@ -2148,7 +2060,7 @@ export default function EmployeeManagement() {
                           name="name_as_per_aadhar"
                           value={editFormData.name_as_per_aadhar || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800 uppercase"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800 uppercase"
                           required
                         />
                       </div>
@@ -2160,7 +2072,7 @@ export default function EmployeeManagement() {
                           name="father_name"
                           value={editFormData.father_name || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800 uppercase"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800 uppercase"
                           required
                         />
                       </div>
@@ -2172,7 +2084,7 @@ export default function EmployeeManagement() {
                           name="dob"
                           value={editFormData.dob || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         />
                       </div>
@@ -2183,7 +2095,7 @@ export default function EmployeeManagement() {
                           name="gender"
                           value={editFormData.gender || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         >
                           <option value="">Select Gender</option>
@@ -2204,7 +2116,7 @@ export default function EmployeeManagement() {
                           pattern="[0-9]{10}"
                           inputMode="numeric"
                           placeholder="Enter 10 digit mobile number"
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         />
                       </div>
@@ -2216,7 +2128,7 @@ export default function EmployeeManagement() {
                           name="candidate_email"
                           value={editFormData.candidate_email || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                         />
                       </div>
 
@@ -2231,15 +2143,15 @@ export default function EmployeeManagement() {
                           pattern="[0-9]{10}"
                           inputMode="numeric"
                           placeholder="Enter 10 digit mobile number"
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                         />
                       </div>
                     </div>
                   </div>
 
                   {/* Employment Information Section */}
-                  <div className="bg-white border border-gray-200 shadow-sm p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-100">
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-4 pb-3 border-b border-gray-100">
                       Employment Information
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2250,7 +2162,7 @@ export default function EmployeeManagement() {
                           name="date_of_joining"
                           value={editFormData.date_of_joining || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         />
                       </div>
@@ -2261,7 +2173,7 @@ export default function EmployeeManagement() {
                           name="joining_place"
                           value={editFormData.joining_place || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         >
                           <option value="">Select Joining Place</option>
@@ -2284,7 +2196,7 @@ export default function EmployeeManagement() {
                           name="designation"
                           value={editFormData.designation || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         >
                           <option value="">Select Designation</option>
@@ -2302,7 +2214,7 @@ export default function EmployeeManagement() {
                           name="salary"
                           value={editFormData.salary || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                         />
                       </div>
 
@@ -2313,7 +2225,7 @@ export default function EmployeeManagement() {
                           disabled
                           value={editFormData.joining_company_name || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
                         >
                           <option value="">Select Shop</option>
                           {joiningCompanies.map((company) => (
@@ -2330,7 +2242,7 @@ export default function EmployeeManagement() {
                           name="mode_of_attendance"
                           value={editFormData.mode_of_attendance || 'Biometric'}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                         >
                           <option value="Biometric">Biometric</option>
                           <option value="Manual">Manual</option>
@@ -2343,7 +2255,7 @@ export default function EmployeeManagement() {
                           name="status"
                           value={editFormData.status || 'Active'}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         >
                           <option value="Active">Active</option>
@@ -2362,7 +2274,7 @@ export default function EmployeeManagement() {
                           inputMode="numeric"
                           pattern="[0-9]*"
                           placeholder="Enter Aadhar Number"
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         />
                       </div>
@@ -2370,8 +2282,8 @@ export default function EmployeeManagement() {
                   </div>
 
                   {/* Banking Information Section */}
-                  <div className="bg-white border border-gray-200 shadow-sm p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-100">
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-4 pb-3 border-b border-gray-100">
                       Banking Information
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2385,7 +2297,7 @@ export default function EmployeeManagement() {
                           inputMode="numeric"
                           pattern="[0-9]*"
                           placeholder="Enter Account Number"
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         />
                       </div>
@@ -2397,7 +2309,7 @@ export default function EmployeeManagement() {
                           name="ifsc_code"
                           value={editFormData.ifsc_code || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800 uppercase"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800 uppercase"
                           required
                         />
                       </div>
@@ -2409,7 +2321,7 @@ export default function EmployeeManagement() {
                           name="branch_name"
                           value={editFormData.branch_name || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800 uppercase"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800 uppercase"
                           required
                         />
                       </div>
@@ -2420,7 +2332,7 @@ export default function EmployeeManagement() {
                           name="payment_mode"
                           value={editFormData.payment_mode || 'Bank Transfer'}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         >
                           <option value="Bank Transfer">Bank Transfer</option>
@@ -2436,7 +2348,7 @@ export default function EmployeeManagement() {
                           name="beneficiary_name"
                           value={editFormData.beneficiary_name || ''}
                           onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-800 uppercase"
+                          className="w-full px-3 py-2 text-sm border border-gray-300  focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800 uppercase"
                         />
                       </div>
 

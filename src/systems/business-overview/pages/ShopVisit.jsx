@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { scopeQueryToUserShops } from '../../../utils/permissionUtils';
+import { scopeQueryToUserShops, getPagePermission } from '../../../utils/permissionUtils';
+import { useAuth } from '../../../context/AuthContext';
 import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, Pencil, X, Store, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2pdf from 'html2pdf.js';
@@ -849,7 +850,7 @@ function ChecklistModal({ shops, defaultShop = '', initialVisit = null, onClose,
   );
 }
 
-function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null }) {
+function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null, canModify = false }) {
   const currentChecklist = activeChecklist || getDynamicChecklistData();
   const scrollRef = useRef(null);
   const [filter, setFilter] = useState('all'); // 'all' | 'issues' | 'ok'
@@ -866,6 +867,7 @@ function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null }) 
   const manager2Sig = visit.manager2_signature || checks?.manager2_signature || '';
 
   const handleDelete = async () => {
+    if (!canModify) return;
     if (!window.confirm(`Are you sure you want to delete this inspection visit for ${shopName}?`)) return;
     try {
       const { error } = await supabase.from('shop_visit').delete().eq('id', visit.id);
@@ -1388,6 +1390,7 @@ function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null }) 
 
         {/* Modal Footer */}
         <div style={{ padding: '12px 22px', borderTop: '1.5px solid #e2e8f0', background: '#fff', display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+          {canModify ? (
           <button
             onClick={handleDelete}
             style={{
@@ -1407,7 +1410,9 @@ function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null }) 
           >
             <Trash2 size={14} /> Delete
           </button>
+          ) : <span />}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {canModify && (
             <button
               onClick={() => {
                 onClose();
@@ -1430,6 +1435,7 @@ function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null }) 
             >
               <Pencil size={14} /> Edit Visit
             </button>
+            )}
             <button
               onClick={downloadPDF}
               style={{
@@ -1474,6 +1480,8 @@ function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null }) 
 }
 
 export default function ShopVisit() {
+  const { user } = useAuth();
+  const canModify = getPagePermission(user, 'business-overview', 'Shop Visit').canModify;
   const [shops, setShops] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -1552,7 +1560,7 @@ export default function ShopVisit() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={fetch_} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, background: '#fff', color: '#475569', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}><RefreshCw size={14} /> Refresh</button>
-          <button onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 2px 12px rgba(15,76,129,0.3)' }}><Plus size={15} /> Create Checklist</button>
+          {canModify && <button onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg,#0f4c81,#1d7a9c)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 2px 12px rgba(15,76,129,0.3)' }}><Plus size={15} /> Create Checklist</button>}
         </div>
       </div>
 
@@ -1636,6 +1644,7 @@ export default function ShopVisit() {
                           >
                             <Eye size={12} /> View
                           </button>
+                          {canModify && (
                           <button
                             onClick={() => setEditRow(v)}
                             style={{
@@ -1656,6 +1665,7 @@ export default function ShopVisit() {
                           >
                             <Pencil size={12} /> Edit
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1666,7 +1676,7 @@ export default function ShopVisit() {
           </div>
         </div>
       )}
-      {(showModal || editRow) && (
+      {canModify && (showModal || editRow) && (
         <ChecklistModal
           shops={shops}
           defaultShop={shopFilt}
@@ -1683,6 +1693,7 @@ export default function ShopVisit() {
         <ViewModal
           visit={viewRow}
           activeChecklist={checklistConfig}
+          canModify={canModify}
           onClose={() => setViewRow(null)}
           onEdit={(v) => {
             setViewRow(null);

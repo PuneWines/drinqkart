@@ -6,6 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import { supabase } from "../../../lib/supabase";
+import { getDefaultDateRange as sharedDefaultDateRange } from "../stock/stockData";
 import DashboardFilterSidebar from "../components/DashboardFilterSidebar";
 import GroupWiseStoreWiseSale from "../components/GroupWiseStoreWiseSale";
 import BrandWiseSale from "../components/BrandWiseSale";
@@ -2036,24 +2037,10 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     return { currentMonthEndStr: endStr, thisMonthPrefix: prefix };
   }, []);
 
-  // Dynamic date range helper: last 4 months up to current month (e.g. Jul 1 to Oct 31)
-  const getDefaultDateRange = useCallback(() => {
-    const now = new Date();
-    const endYear = now.getFullYear();
-    const endMonth = now.getMonth(); // 0-based
-    const lastDay = new Date(endYear, endMonth + 1, 0).getDate();
-    const end = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  // Shared default: the last 30 days, ending today
+  const getDefaultDateRange = useCallback(() => sharedDefaultDateRange(), []);
 
-    // 4 months duration: current month and preceding 3 months
-    const startDateObj = new Date(endYear, endMonth - 3, 1);
-    const startYear = startDateObj.getFullYear();
-    const startMonth = startDateObj.getMonth() + 1;
-    const start = `${startYear}-${String(startMonth).padStart(2, "0")}-01`;
-
-    return { start, end };
-  }, []);
-
-  // Filter States — default to last 4 months to current month, strictly capped to 4 months max duration
+  // Filter States — default to the last 30 days, strictly capped to 4 months max duration
   const [selectedStore, setSelectedStore] = useState("All");
   const [selectedLiquorType, setSelectedLiquorType] = useState("All");
   const [selectedSubhead, setSelectedSubhead] = useState("All");

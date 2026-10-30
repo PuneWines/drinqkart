@@ -134,6 +134,9 @@ export default function PettyCashModal({
   const shopDropdownRef = useRef<HTMLDivElement>(null);
   // [RBAC] Access control helpers
   const { user, hasShopAccess, isAdmin } = useAuth();
+  // 'user', 'manager' and 'admin' roles can only record entries under their own name
+  const roleForUserLock = (user?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || '').toLowerCase().trim();
+  const isUserFieldLocked = ['user', 'manager', 'admin'].includes(roleForUserLock);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -862,10 +865,14 @@ export default function PettyCashModal({
                   name="username"
                   value={formData.username}
                   onChange={handleChange}
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
+                  disabled={isUserFieldLocked}
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   required
                 >
                   <option value="">Select User</option>
+                  {isUserFieldLocked && formData.username && !fetchedUsers.includes(formData.username) && (
+                    <option value={formData.username}>{formData.username}</option>
+                  )}
                   {fetchedUsers.map((user) => (
                     <option key={user} value={user}>
                       {user}

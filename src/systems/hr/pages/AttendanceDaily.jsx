@@ -4,6 +4,8 @@ import { Search, Download, Calendar, Loader2, CheckCircle, X, Clock, Pencil, Fil
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import useShopStore from '../../purchase/store/useShopStore';
+import { useAuth } from '../../../context/AuthContext';
+import { getPagePermission } from '../../../utils/permissionUtils';
 
 const DEVICES = [
   { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' },
@@ -356,6 +358,8 @@ const STATUS_CONFIG = {
 };
 
 const AttendanceDaily = () => {
+  const { user: authUser } = useAuth();
+  const canModify = getPagePermission(authUser, 'hr', 'Daily Attendance').canModify;
   const getLocalDateString = (date = new Date()) => {
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -2286,6 +2290,7 @@ const AttendanceDaily = () => {
 
   // Handle employee selection for slide panel
   const handleEmployeeSelect = (employee, date, status, inTime, outTime) => {
+    if (!canModify) return;
     const fullRecord = attendanceData.find(
       a => a.employee_id === employee.id && a.attendance_date === date
     );
@@ -3153,6 +3158,7 @@ const AttendanceDaily = () => {
             </button>
           </div>
 
+          {canModify && (
           <button
             onClick={() => setIsMarkModalOpen(true)}
             className="flex h-10 items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-colors shadow-sm"
@@ -3160,6 +3166,7 @@ const AttendanceDaily = () => {
             <Plus size={12} />
             Mark Attendance
           </button>
+          )}
 
           <div className="relative">
             <select
@@ -4189,12 +4196,14 @@ const AttendanceDaily = () => {
                             })()}
                           </td>
                           <td className="px-2 py-1.5 text-center">
+                            {canModify && (
                             <button
                               onClick={() => handleEmployeeSelect(employee, selectedDate, status, attendance.in_time, attendance.out_time)}
                               className="p-1 hover:bg-indigo-50 text-indigo-600 rounded transition-colors"
                             >
                               <Pencil size={10} />
                             </button>
+                            )}
                           </td>
                         </tr>
                       );

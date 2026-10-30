@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useShopStore from "../store/useShopStore";
 import useCompanyStore from "../store/useCompanyStore";
 import useAuthStore from "../store/useAuthStore";
+import { getPagePermission } from "../../../utils/permissionUtils";
 import "../styles/Pages.css";
 import { supabase } from "../lib/supabase";
 import {
@@ -33,6 +34,8 @@ const formatDateTime = (isoString) => {
 };
 
 const Approval = () => {
+  const { currentUser } = useAuthStore();
+  const isModifyAllowed = getPagePermission(currentUser, "purchase", "Approval").canModify;
   const [pendingGroupedApprovals, setPendingGroupedApprovals] = useState({});
   const [historyGroupedApprovals, setHistoryGroupedApprovals] = useState({});
   const [selectedIndentId, setSelectedIndentId] = useState(null);
@@ -208,6 +211,7 @@ const Approval = () => {
   }, [selectedIndentId]);
 
   const handleStatusChange = (itemId, status) => {
+    if (!isModifyAllowed) return;
     setIndentStatuses((prev) => ({
       ...prev,
       [itemId]: prev[itemId] === status ? null : status,
@@ -215,6 +219,7 @@ const Approval = () => {
   };
 
   const handleSelectAllFiltered = (status) => {
+    if (!isModifyAllowed) return;
     if (activeBatchItems.length === 0) return;
 
     // If all target items already have this status, toggle them off (null); otherwise set all to status
@@ -233,6 +238,7 @@ const Approval = () => {
   };
 
   const handleIncludeExcludedItem = (itemId) => {
+    if (!isModifyAllowed) return;
     setGroupedApprovals((prev) => {
       const updated = { ...prev };
       const currentItems = updated[selectedIndentId] || [];
@@ -252,6 +258,7 @@ const Approval = () => {
   };
 
   const handleDeleteBatch = async (groupKey, items) => {
+    if (!isModifyAllowed) return;
     const displayLabel = groupKey.includes("::")
       ? groupKey.split("::")[1]
       : groupKey;
@@ -325,6 +332,7 @@ const Approval = () => {
   };
 
   const handleDeleteItem = async (itemId, itemName, itemObj = null) => {
+    if (!isModifyAllowed) return;
     const confirmMsg = `Are you sure you want to permanently delete item "${itemName}"? This action cannot be undone.`;
     if (!window.confirm(confirmMsg)) return;
 
@@ -444,6 +452,7 @@ const Approval = () => {
   };
 
   const handleInlineChange = (itemId, field, value) => {
+    if (!isModifyAllowed) return;
     setGroupedApprovals((prev) => {
       const updated = { ...prev };
       const currentItems = updated[selectedIndentId] || [];
@@ -748,6 +757,7 @@ const Approval = () => {
   };
 
   const handleSubmitApprovals = async () => {
+    if (!isModifyAllowed) return;
     if (!selectedIndentId) return;
 
     try {
@@ -1583,7 +1593,7 @@ const Approval = () => {
                               </span>
                             )}
                           </button>
-                          <button
+                          {isModifyAllowed && (<button
                             onClick={() => handleDeleteBatch(groupKey, items)}
                             style={{
                               background: "#fee2e2", // Soft red background
@@ -1608,7 +1618,7 @@ const Approval = () => {
                             title="Delete entire batch"
                           >
                             <Trash2 size={16} />
-                          </button>
+                          </button>)}
                         </div>
                       </td>
                       <td
@@ -1974,7 +1984,7 @@ const Approval = () => {
               <div
                 style={{ display: "flex", alignItems: "center", gap: "12px" }}
               >
-                {activeTab !== "history" && (
+                {activeTab !== "history" && isModifyAllowed && (
                   <button
                     onClick={handleSubmitApprovals}
                     disabled={isLoading}
@@ -2286,7 +2296,7 @@ const Approval = () => {
                               fontSize: "11px",
                             }}
                           >
-                            <button
+                            {isModifyAllowed && (<button
                               type="button"
                               onClick={() =>
                                 handleSelectAllFiltered("approved")
@@ -2317,8 +2327,8 @@ const Approval = () => {
                               title="Approve all visible items in this filter"
                             >
                               ✓ All
-                            </button>
-                            <button
+                            </button>)}
+                            {isModifyAllowed && (<button
                               type="button"
                               onClick={() =>
                                 handleSelectAllFiltered("rejected")
@@ -2349,7 +2359,7 @@ const Approval = () => {
                               title="Reject all visible items in this filter"
                             >
                               ✗ All
-                            </button>
+                            </button>)}
                           </div>
                         )}
                       </th>
@@ -2767,7 +2777,7 @@ const Approval = () => {
                             {item.mls || "-"}
                           </td>
                           <td style={{ ...tdStyle, textAlign: "center" }}>
-                            <button
+                            {isModifyAllowed && (<button
                               onClick={() =>
                                 handleDeleteItem(item.id, item.item_name, item)
                               }
@@ -2794,7 +2804,7 @@ const Approval = () => {
                               title="Delete item"
                             >
                               <Trash2 size={16} />
-                            </button>
+                            </button>)}
                           </td>
                         </tr>
                       );
@@ -3280,7 +3290,7 @@ const Approval = () => {
                                         textAlign: "center",
                                       }}
                                     >
-                                      <button
+                                      {isModifyAllowed && (<button
                                         onClick={() =>
                                           handleIncludeExcludedItem(itemId)
                                         }
@@ -3307,7 +3317,7 @@ const Approval = () => {
                                         }
                                       >
                                         + Include
-                                      </button>
+                                      </button>)}
                                     </td>
                                     <td
                                       style={{ ...tdStyle, color: "#991b1b" }}
@@ -3854,7 +3864,7 @@ const Approval = () => {
                                       >
                                         Active in Lifecycle
                                       </span>
-                                      <button
+                                      {isModifyAllowed && (<button
                                         onClick={() =>
                                           handleDeleteItem(
                                             item.id,
@@ -3875,7 +3885,7 @@ const Approval = () => {
                                         title="Delete held item"
                                       >
                                         Delete
-                                      </button>
+                                      </button>)}
                                     </div>
                                   </td>
                                   <td

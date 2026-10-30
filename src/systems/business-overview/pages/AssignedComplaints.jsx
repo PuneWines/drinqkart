@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../../context/AuthContext';
+import { getPagePermission } from '../../../utils/permissionUtils';
 import { supabase } from '../../../lib/supabase';
 import {
   Search,
@@ -13,6 +14,7 @@ import toast from 'react-hot-toast';
 
 export default function AssignedComplaints() {
   const { user } = useAuth();
+  const canModify = getPagePermission(user, 'business-overview', 'Assigned Complaints').canModify;
 
   // Active Tab: 'pending' or 'history'
   const [activeTab, setActiveTab] = useState('pending');
@@ -151,6 +153,7 @@ export default function AssignedComplaints() {
 
   // Handlers
   const handleOpenComplete = (row) => {
+    if (!canModify) return;
     setSelectedComplaint(row);
     setFormValues({
       assigned_to: '',
@@ -170,6 +173,7 @@ export default function AssignedComplaints() {
 
   const handleSubmitComplete = async (e) => {
     e.preventDefault();
+    if (!canModify) return;
     if (!formValues.assigned_to) {
       toast.error('Please select an assignee.');
       return;
@@ -347,12 +351,14 @@ export default function AssignedComplaints() {
                       <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="py-3.5 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
                         <td className="py-3.5 px-3 text-center">
+                          {canModify ? (
                           <button
                             onClick={() => handleOpenComplete(row)}
                             className="px-2.5 py-1 bg-sky-500 hover:bg-sky-600 text-white font-bold text-[10px] uppercase rounded-md tracking-wider transition-colors shadow-xs cursor-pointer"
                           >
                             Complete
                           </button>
+                          ) : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="py-3.5 px-3 whitespace-nowrap">
                           {row.feedback_date ? new Date(row.feedback_date).toLocaleDateString('en-GB') : '—'}

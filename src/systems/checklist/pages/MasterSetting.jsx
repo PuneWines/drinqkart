@@ -148,7 +148,7 @@ const AVAILABLE_SYSTEMS = [
   {
     id: "stock-report",
     name: "Stock / Report",
-    pages: ["Stock Balance Sheet"],
+    pages: ["Stock Balance Sheet", "Valuation Report", "Current Stock", "Stock Report", "Not Sold Stock"],
   },
 ];
 

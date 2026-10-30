@@ -87,12 +87,21 @@ export const isUserShopScoped = (user = null) => {
   return !isUserSuperadmin(user);
 };
 
+// Apex authority: superadmin only (HOD / masteradmin are NOT included)
+export const isApexAdmin = (user = null) => {
+  const userObj = user || getUserFromStorage() || {};
+  const storedRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '' : '').toLowerCase().trim();
+  const userRole = (userObj.role || '').toLowerCase().trim();
+  return userRole === 'superadmin' || storedRole === 'superadmin';
+};
+
 // Retrieve assigned shops for a user
-export const getUserAssignedShops = (user) => {
+// strict: only superadmin bypasses (HOD/masteradmin are limited to their assigned shops)
+export const getUserAssignedShops = (user, { strict = false } = {}) => {
   const userObj = user || getUserFromStorage() || {};
 
   // Superadmin and HOD have global authority across all enterprise shops
-  if (isUserSuperadmin(userObj)) {
+  if (strict ? isApexAdmin(userObj) : isUserSuperadmin(userObj)) {
     return [];
   }
 
@@ -359,12 +368,14 @@ export const getPagePermission = (user, systemId, pageName) => {
   // If user has NO master_user_system_page_access list configured at all (legacy account)
   if (masterAccessList.length === 0) {
     // Legacy fallback based on role
+    // Admin/HOD with no configured access list may view, but never modify by default.
+    // (HOD/superadmin/masteradmin are already handled by the global authority check above.)
     if (userRole === 'hod' || userRole === 'admin') {
       return {
         canView: true,
-        canModify: true,
-        state: 'modify',
-        isRestricted: false,
+        canModify: false,
+        state: 'view',
+        isRestricted: true,
         assignedShops
       };
     }

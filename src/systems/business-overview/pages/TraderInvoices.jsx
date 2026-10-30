@@ -4,11 +4,15 @@ import {
   FileText, Plus, RefreshCw, Search, FileImage, ShieldAlert, CheckSquare, Calendar, Store, User, Edit, Trash2
 } from 'lucide-react';
 import TraderInvoiceFormModal from '../components/TraderInvoiceFormModal';
+import { useAuth } from '../../../context/AuthContext';
+import { getPagePermission } from '../../../utils/permissionUtils';
 
 const fmt = (n) =>
   `₹${(Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
 export default function TraderInvoices() {
+  const { user } = useAuth();
+  const canModify = getPagePermission(user, 'business-overview', 'Trader Invoices').canModify;
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,17 +59,19 @@ export default function TraderInvoices() {
   };
 
   const handleEditClick = (item) => {
+    if (!canModify) return;
     setEditData(item);
     setIsModalOpen(true);
   };
 
   const handleCreateClick = () => {
+    if (!canModify) return;
     setEditData(null);
     setIsModalOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteId || !canModify) return;
     setDeleting(true);
     try {
       const { error } = await supabase
@@ -135,6 +141,7 @@ export default function TraderInvoices() {
             <span>Refresh</span>
           </button>
           
+          {canModify && (
           <button
             onClick={handleCreateClick}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#2a5298] text-white rounded-lg text-xs font-bold hover:bg-[#1e3d70] transition-all shadow-xs cursor-pointer"
@@ -142,6 +149,7 @@ export default function TraderInvoices() {
             <Plus size={14} />
             <span>Fill Invoice Form</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -318,6 +326,7 @@ export default function TraderInvoices() {
                   </td>
                   <td className="px-2 py-2 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-1">
+                      {canModify && (<>
                       <button
                         onClick={() => handleEditClick(item)}
                         title="Edit Invoice"
@@ -332,6 +341,7 @@ export default function TraderInvoices() {
                       >
                         <Trash2 size={13} />
                       </button>
+                      </>)}
                     </div>
                   </td>
                 </tr>

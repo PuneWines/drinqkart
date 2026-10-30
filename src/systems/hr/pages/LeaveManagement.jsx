@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Calendar, Check, X, Search, Plus, User, FileText, ClipboardList, Info, AlertTriangle, Filter } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../../../context/AuthContext'
+import { getPagePermission } from '../../../utils/permissionUtils'
 
 export default function LeaveManagement() {
+  const { user: authUser } = useAuth()
+  const canModify = getPagePermission(authUser, 'hr', 'Leave Management').canModify
   const [leaves, setLeaves] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
@@ -121,6 +125,7 @@ export default function LeaveManagement() {
   }
 
   const handleStatusChange = async (leaveId, newStatus) => {
+    if (!canModify) return
     try {
       // Get the leave details first
       const leaveToUpdate = leaves.find(l => l.id === leaveId)
@@ -249,6 +254,7 @@ export default function LeaveManagement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!canModify) return
     if (!formData.employee_id || !formData.name || !formData.from_date || !formData.to_date || !formData.leave_type) {
       alert('Please fill out all required fields')
       return
@@ -347,6 +353,7 @@ export default function LeaveManagement() {
             Apply, track, and manage employee leave requests. Employee status auto-updates to Inactive on approved leave.
           </p>
         </div>
+        {canModify && (
         <button
           onClick={() => setShowForm(true)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white  hover:bg-indigo-700 transition-colors"
@@ -354,6 +361,7 @@ export default function LeaveManagement() {
           <Plus size={18} />
           New Leave Request
         </button>
+        )}
       </div>
 
       {/* Filter and Search Section */}
@@ -466,7 +474,7 @@ export default function LeaveManagement() {
                       >
                         <Info size={16} />
                       </button>
-                      {leave.status === 'Pending' && (
+                      {canModify && leave.status === 'Pending' && (
                         <>
                           <button
                             onClick={() => handleStatusChange(leave.id, 'Approved')}
@@ -484,7 +492,7 @@ export default function LeaveManagement() {
                           </button>
                         </>
                       )}
-                      {leave.status !== 'Pending' && (
+                      {canModify && leave.status !== 'Pending' && (
                         <button
                           onClick={() => handleStatusChange(leave.id, 'Pending')}
                           className="px-2 py-0.5 text-xs text-indigo-600 hover:bg-indigo-50  transition-colors border border-indigo-200"
@@ -761,7 +769,7 @@ export default function LeaveManagement() {
                     {detailsLeave.status}
                   </p>
                 </div>
-                {detailsLeave.status === 'Pending' && (
+                {canModify && detailsLeave.status === 'Pending' && (
                   <div className="flex gap-2">
                     <button
                       onClick={() => {

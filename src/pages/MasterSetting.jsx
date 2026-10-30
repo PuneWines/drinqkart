@@ -234,7 +234,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: "STOCK BALANCE MANAGEMENT",
-        pages: ["Stock Balance Sheet"],
+        pages: ["Stock Balance Sheet", "Valuation Report", "Current Stock", "Stock Report", "Not Sold Stock"],
       },
     ],
   },
@@ -3067,11 +3067,11 @@ export default function MasterSetting() {
                     return (
                       <div
                         key={sys.id}
-                        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:border-[#C9A84C]/50"
+                        className="bg-white rounded-xl border border-[#C9A84C]/30 shadow-sm overflow-hidden transition-all hover:border-[#C9A84C]/60"
                       >
                         {/* SYSTEM HEADER BAR - Interactive Header with Quick Actions */}
                         <div
-                          className="bg-[#1C120C] text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#C9A84C]/30 select-none"
+                          className="bg-[#FBF6E9] text-[#1C120C] px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#C9A84C]/30 select-none"
                         >
                           <div
                             onClick={() => toggleSystemExpand(sys.id)}
@@ -3079,10 +3079,10 @@ export default function MasterSetting() {
                           >
                             <span className="w-2.5 h-2.5 rounded-full bg-[#C9A84C] shrink-0" />
                             <div className="min-w-0">
-                              <h4 className="text-sm font-bold tracking-wide text-white uppercase font-serif truncate">
+                              <h4 className="text-sm font-bold tracking-wide text-[#1C120C] uppercase font-serif truncate">
                                 {sys.name}
                               </h4>
-                              <span className="text-[10px] font-mono text-[#C9A84C] font-semibold tracking-wider">
+                              <span className="text-[10px] font-mono text-[#8C6D23] font-semibold tracking-wider">
                                 System ID: {sys.id}
                               </span>
                             </div>
@@ -3090,11 +3090,11 @@ export default function MasterSetting() {
 
                           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
                             {/* System-level Quick Actions */}
-                            <div className="flex items-center gap-1 bg-white/10 p-0.5 rounded border border-white/15 mr-1">
+                            <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-[#C9A84C]/30 mr-1">
                               <button
                                 type="button"
                                 onClick={() => setSystemAllPagesLevel(sys.id, "modify")}
-                                className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-[#C9A84C] hover:bg-[#C9A84C]/20 rounded transition-colors cursor-pointer"
+                                className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-[#8C6D23] hover:bg-[#C9A84C]/15 rounded transition-colors cursor-pointer"
                                 title={`Set all pages in ${sys.name} to modify`}
                               >
                                 + All Modify
@@ -3102,7 +3102,7 @@ export default function MasterSetting() {
                               <button
                                 type="button"
                                 onClick={() => setSystemAllPagesLevel(sys.id, "view")}
-                                className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-slate-300 hover:bg-white/10 rounded transition-colors cursor-pointer"
+                                className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
                                 title={`Set all pages in ${sys.name} to view`}
                               >
                                 + All View
@@ -3110,7 +3110,7 @@ export default function MasterSetting() {
                               <button
                                 type="button"
                                 onClick={() => setSystemAllPagesLevel(sys.id, "none")}
-                                className="px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-rose-300 hover:bg-rose-900/30 rounded transition-colors cursor-pointer"
+                                className="px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
                                 title={`Clear all permissions for ${sys.name}`}
                               >
                                 Clear
@@ -3119,17 +3119,17 @@ export default function MasterSetting() {
 
                             {/* Summary Badges */}
                             {modifyCount > 0 && (
-                              <span className="px-2 py-0.5 bg-[#C9A84C]/25 text-[#C9A84C] border border-[#C9A84C]/50 text-[10px] font-bold uppercase tracking-wider rounded">
+                              <span className="px-2 py-0.5 bg-[#C9A84C]/20 text-[#8C6D23] border border-[#C9A84C]/50 text-[10px] font-bold uppercase tracking-wider rounded">
                                 {modifyCount} Modify
                               </span>
                             )}
                             {viewCount > 0 && (
-                              <span className="px-2 py-0.5 bg-slate-700 text-slate-200 border border-slate-600 text-[10px] font-semibold uppercase tracking-wider rounded">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-semibold uppercase tracking-wider rounded">
                                 {viewCount} View
                               </span>
                             )}
                             {modifyCount === 0 && viewCount === 0 && (
-                              <span className="px-2 py-0.5 bg-white/10 text-white/50 text-[10px] font-medium tracking-wider rounded">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-medium tracking-wider rounded">
                                 None
                               </span>
                             )}
@@ -3138,7 +3138,7 @@ export default function MasterSetting() {
                             <button
                               type="button"
                               onClick={() => toggleSystemExpand(sys.id)}
-                              className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer text-[#C9A84C]"
+                              className="p-1 hover:bg-[#C9A84C]/15 rounded transition-colors cursor-pointer text-[#8C6D23]"
                               title={isExpanded ? "Collapse section" : "Expand section"}
                             >
                               <ChevronDown

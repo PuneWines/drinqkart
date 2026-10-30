@@ -28,6 +28,10 @@ import PurchaseApp from './systems/purchase/App';
 import BusinessOverviewApp from './systems/business-overview/App';
 import StockBalanceDashboard from './systems/business-overview/pages/StockBalanceDashboard';
 import StockBalance from './systems/business-overview/pages/StockBalance';
+import ValuationReport from './systems/business-overview/pages/ValuationReport';
+import CurrentStock from './systems/business-overview/pages/CurrentStock';
+import NotSoldStock from './systems/business-overview/pages/NotSoldStock';
+import StockReport from './systems/business-overview/pages/StockReport';
 import PublicRegister from './systems/hr/pages/PublicRegister';
 import VendorConfirmation from './systems/purchase/pages/VendorConfirmation';
 import TransporterConfirmation from './systems/purchase/pages/TransporterConfirmation';
@@ -224,6 +228,38 @@ const AppLayout = () => {
             element={
               <ConsoleRoute systemId="sale-analytics">
                 <StockBalanceDashboard />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/stock-report/valuation"
+            element={
+              <ConsoleRoute systemId="stock-report">
+                <ValuationReport />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/stock-report/current"
+            element={
+              <ConsoleRoute systemId="stock-report">
+                <CurrentStock />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/stock-report/report"
+            element={
+              <ConsoleRoute systemId="stock-report">
+                <StockReport />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/stock-report/not-sold"
+            element={
+              <ConsoleRoute systemId="stock-report">
+                <NotSoldStock />
               </ConsoleRoute>
             }
           />

@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import useShopStore from '../../purchase/store/useShopStore';
 import toast, { Toaster } from 'react-hot-toast';
+import { useAuth } from '../../../context/AuthContext';
+import { getPagePermission } from '../../../utils/permissionUtils';
+import { getDefaultDateRange, todayISO, invalidateStockCache } from '../stock/stockData';
 
 const PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 400;
@@ -36,30 +39,17 @@ const parseRowKey = (key) => {
   return { store_name, snapshot_date, item_id };
 };
 
-// Default date range: last 6 months to current month (e.g. May 1 to Oct 31)
-export function getDefaultDateRange() {
-  const now = new Date();
-  const endYear = now.getFullYear();
-  const endMonth = now.getMonth();
-  const lastDay = new Date(endYear, endMonth + 1, 0).getDate();
-  const end = `${endYear}-${String(endMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-  // Last 4 months duration up to current month
-  const startDateObj = new Date(endYear, endMonth - 3, 1);
-  const startYear = startDateObj.getFullYear();
-  const startMonth = startDateObj.getMonth() + 1;
-  const start = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
-
-  return { start, end };
-}
-
 export default function StockBalance() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canModify =
+    getPagePermission(user, 'stock-report', 'Stock Balance Sheet').canModify ||
+    getPagePermission(user, 'stock-report', 'Stock Balance').canModify;
   const [stockRecords, setStockRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [shops, setShops] = useState([]);
   
-  // Search & Filter States (default to last 6 months to current month)
+  // Search & Filter States (date range defaults to the last 30 days)
   const [search, setSearch] = useState('');
   const [shopFilter, setShopFilter] = useState('');
   const [startDate, setStartDate] = useState(() => getDefaultDateRange().start);
@@ -116,14 +106,8 @@ export default function StockBalance() {
     return () => clearTimeout(t);
   }, [search, debouncedSearch]);
 
-  // Current month reference
-  const currentMonthEndStr = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const d = new Date(y, m + 1, 0).getDate();
-    return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  }, []);
+  // Latest selectable date (snapshots never exist in the future)
+  const currentMonthEndStr = useMemo(() => todayISO(), []);
 
   // Any filter change starts again from page 1
   const handleShopFilterChange = (value) => { setShopFilter(value); setPage(1); };
@@ -242,6 +226,7 @@ export default function StockBalance() {
 
   // Toggle Select Mode
   const toggleSelectMode = () => {
+    if (!canModify) return;
     if (isSelectMode) {
       setIsSelectMode(false);
       setSelectedIds(new Set());
@@ -252,7 +237,7 @@ export default function StockBalance() {
 
   // Single Record Delete
   const handleDelete = async (id) => {
-    if (!id) return;
+    if (!id || !canModify) return;
     if (!window.confirm('Are you sure you want to delete this stock record?')) return;
     
     const toastId = toast.loading('Deleting record...');
@@ -273,6 +258,7 @@ export default function StockBalance() {
         return next;
       });
       toast.success('Record deleted successfully', { id: toastId });
+      invalidateStockCache();
       fetchStockRecords();
     } catch (err) {
       console.error('Delete error:', err);
@@ -369,6 +355,7 @@ export default function StockBalance() {
       setSelectedIds(new Set());
 
       toast.success(`Successfully deleted ${deletedCount} records!`, { id: toastId });
+      invalidateStockCache();
       fetchStockRecords();
     } catch (err) {
       console.error('Error deleting records:', err);
@@ -523,9 +510,9 @@ export default function StockBalance() {
                     setPage(1);
                   }}
                   className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
-                  title="Reset to last 6 months to current month"
+                  title="Reset to the last 30 days"
                 >
-                  Reset (6M)
+                  Reset (30D)
                 </button>
                 <button
                   type="button"
@@ -539,6 +526,7 @@ export default function StockBalance() {
             )}
 
             {/* Select Button in Filter Toolbar */}
+            {canModify && (
             <button
               onClick={toggleSelectMode}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
@@ -551,6 +539,7 @@ export default function StockBalance() {
               <CheckSquare size={14} />
               <span>{isSelectMode ? 'Cancel Selection' : 'Select'}</span>
             </button>
+            )}
 
             {/* Delete button opens right beside Select button when Select is pressed */}
             {isSelectMode && (
@@ -677,6 +666,7 @@ export default function StockBalance() {
 
                       {/* Single Action: Delete */}
                       <td className="px-2 py-2.5 text-center">
+                        {canModify && (
                         <button
                           onClick={() => handleDelete(r.id)}
                           className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
@@ -684,6 +674,7 @@ export default function StockBalance() {
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
 
                       {/* Data Columns */}

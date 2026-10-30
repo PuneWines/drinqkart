@@ -6,8 +6,12 @@ import {
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../../../context/AuthContext';
+import { getPagePermission } from '../../../utils/permissionUtils';
 
 const Payroll = () => {
+    const { user: authUser } = useAuth();
+    const canModify = getPagePermission(authUser, 'hr', 'Payroll').canModify;
     const [activeTab, setActiveTab] = useState('salary');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -1055,6 +1059,7 @@ const Payroll = () => {
 
     // Handler for manual edits to inputs in salary or hold table
     const handleManualInputChange = (empId, colIndex, val) => {
+        if (!canModify) return;
         const numVal = val === '' ? '' : Math.max(0, Number(val) || 0);
         const updateRows = (prevRows) => {
             return prevRows.map(row => {
@@ -1250,6 +1255,7 @@ const Payroll = () => {
 
     // 1. Update Employee Records: Only updates values in hr_management_employees & draft payroll without sending to payment history or generating payroll
     const handleSavePayrollToDB = async (singleRow = null) => {
+        if (!canModify) return;
         const sourceData = activeTab === 'hold' ? holdData : salaryData;
         let rowsToProcess = [];
         if (singleRow) {
@@ -1343,6 +1349,7 @@ const Payroll = () => {
 
     // 2. Mark as Paid: Prompts for shop selection in a single modal, then generates payroll with chosen shop_name
     const handleMarkAsPaid = async (singleRow = null) => {
+        if (!canModify) return;
         const sourceData = activeTab === 'hold' ? holdData : salaryData;
         const rowsToProcess = singleRow
             ? [singleRow]
@@ -1460,6 +1467,7 @@ const Payroll = () => {
 
     // 3. Mark as Hold: Sends selected employee data row to Hold tab
     const handleMarkAsHold = async (singleRow = null) => {
+        if (!canModify) return;
         const sourceData = activeTab === 'hold' ? holdData : salaryData;
         const rowsToProcess = singleRow
             ? [singleRow]
@@ -1538,6 +1546,7 @@ const Payroll = () => {
 
     // 4. Unhold: Moves held records back to active Salary Sheet
     const handleUnhold = async (singleRow = null) => {
+        if (!canModify) return;
         const rowsToProcess = singleRow
             ? [singleRow]
             : (holdData.rows.filter(row => selectedEmpIds.has(row[0]?.toString())).length > 0
@@ -2081,7 +2090,7 @@ const Payroll = () => {
             ) : (
                 <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden max-w-full">
                     {/* Floating Batch Action Bar (Visible when rows are selected) */}
-                    {(activeTab === 'salary' || activeTab === 'hold') && selectedEmpIds.size > 0 && (
+                    {canModify && (activeTab === 'salary' || activeTab === 'hold') && selectedEmpIds.size > 0 && (
                         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 text-white backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl border border-slate-700/60 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200 max-w-[95vw] overflow-x-auto">
                             <div className="flex items-center gap-2 pr-3 border-r border-slate-700 text-[11px] font-semibold shrink-0">
                                 <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-[10px] border border-indigo-500/30">
@@ -2208,7 +2217,7 @@ const Payroll = () => {
                                     const cleanRow = row.slice(0, headersList.length);
                                     const isVerified = (activeTab === 'salary' || activeTab === 'hold') ? (row[16] === true) : true;
                                     const isRowSelected = (activeTab === 'salary' || activeTab === 'hold') && isVerified && selectedEmpIds.has(row[0]?.toString());
-                                    const isEditable = isRowSelected;
+                                    const isEditable = canModify && isRowSelected;
                                     const shopVal = activeTab === 'history' ? (row[20] || '') : (row[24] || '');
                                     const cellsToRender = (activeTab === 'salary' || activeTab === 'hold')
                                         ? headersList.map((header, j) => ({ header, cell: row[j + 1] }))

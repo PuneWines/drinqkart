@@ -19,8 +19,12 @@ import Toast, { useToast } from "../components/Toast";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
 import { dashboardSyncService } from "../services/dashboardSyncService";
 import useShopStore from "../store/useShopStore";
+import useAuthStore from "../store/useAuthStore";
+import { getPagePermission } from "../../../utils/permissionUtils";
 
 const Receiving = () => {
+  const { currentUser } = useAuthStore();
+  const isModifyAllowed = getPagePermission(currentUser, "purchase", "Receiving").canModify;
   const [data, setData] = useState([]);
   const [itemsData, setItemsData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -164,20 +168,23 @@ const Receiving = () => {
 
   const toggleExpand = (poId) => setExpandedPoIds(prev => ({ ...prev, [poId]: !prev[poId] }));
   const handleQtyChange = (poId, itemId, value) => {
+    if (!isModifyAllowed) return;
     setEditingQtys(prev => ({ ...prev, [poId]: { ...prev[poId], [itemId]: value === "" ? "" : Number(value) } }));
   };
   const handleDecrement = (poId, itemId, currentVal) => handleQtyChange(poId, itemId, Math.max(0, (currentVal === "" ? 0 : Number(currentVal)) - 1));
   const handleIncrement = (poId, itemId, currentVal) => handleQtyChange(poId, itemId, (currentVal === "" ? 0 : Number(currentVal)) + 1);
   const handleMatchProduct = (poId, itemId, orderQty) => handleQtyChange(poId, itemId, orderQty);
   const handleMatchAllForPo = (po, pendingProducts) => {
+    if (!isModifyAllowed) return;
     const poEdits = {};
     pendingProducts.forEach(p => { poEdits[p.id] = p.orderQty; });
     setEditingQtys(prev => ({ ...prev, [po.id]: { ...prev[po.id], ...poEdits } }));
     addToast(`Matched all pending items for PO ${po.po_number}.`, "info");
   };
-  const handleRemarksChange = (poId, value) => setEditingRemarks(prev => ({ ...prev, [poId]: value }));
+  const handleRemarksChange = (poId, value) => isModifyAllowed && setEditingRemarks(prev => ({ ...prev, [poId]: value }));
 
   const handleSavePo = async (po, poProducts) => {
+    if (!isModifyAllowed) return;
     setSavingPoId(po.id);
     try {
       const updatedMap = {};
@@ -475,7 +482,7 @@ const Receiving = () => {
                                   <td className="px-4 py-3.5 text-center text-slate-500 font-mono text-xs">{p.closingQty}</td>
                                   <td className="px-4 py-3.5 text-center font-semibold text-slate-700">{p.orderQty}</td>
                                   <td className="px-4 py-3.5 text-center">
-                                    {activeTab === "pending" ? (
+                                    {activeTab === "pending" && isModifyAllowed ? (
                                       <div className="inline-flex items-center gap-2">
                                         <div className="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden shadow-sm">
                                           <button
@@ -521,7 +528,7 @@ const Receiving = () => {
                       </div>
 
                       {/* Footer */}
-                      {activeTab === "pending" && (
+                      {activeTab === "pending" && isModifyAllowed && (
                         <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/60 space-y-3">
                           {/* Remarks */}
                           <div className="space-y-1.5">
