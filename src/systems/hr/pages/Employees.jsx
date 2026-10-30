@@ -3,17 +3,18 @@ import { Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles,
 import { supabase } from '../lib/supabase'
 import { scopeQueryToUserShops, getUserAssignedShops, isApexAdmin, getPagePermission } from '../../../utils/permissionUtils'
 import { useAuth } from '../../../context/AuthContext'
+import { LEGACY_PLACE_SHOP, resolvePlaceFromShop as resolvePlaceFromShopRows } from '../../../utils/shopLocation'
 
 // Storage bucket name
 const STORAGE_BUCKET = 'HR_System_employee_documents'
 
 const DEVICES = [
-    { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-    { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-    { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-    { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-    { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-    { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
+  { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
+  { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
+  { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
+  { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
+  { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
+  { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
 ];
 
 const resolveDeviceStore = (log) => {
@@ -246,17 +247,8 @@ export default function EmployeeManagement() {
     }
   }
 
-  // Derive dynamic joining places from database shop records
-  const dynamicJoiningPlaces = useMemo(() => {
-    const places = new Set();
-    joiningCompanies.forEach(c => {
-      // Only the explicit shop.location counts; shop names and free-text addresses are not places
-      if (c.location) places.add(c.location.toUpperCase());
-    });
-    // Add legacy location keys to ensure backward compatibility for historical records
-    ['BAWDHAN', 'HINJEWADI', 'WAGHOLI', 'AKOLE', 'MUMBAI', 'KHARGHAR'].forEach(p => places.add(p));
-    return Array.from(places).sort();
-  }, [joiningCompanies]);
+  // Joining place is derived from the selected shop (Master Setting shop table)
+  const resolvePlaceFromShop = (shopName) => resolvePlaceFromShopRows(shopName, joiningCompanies);
 
   // Shop filter options: superadmin sees all; everyone else (incl. HOD) only assigned shops
   const filterShopOptions = useMemo(() => {
@@ -273,16 +265,7 @@ export default function EmployeeManagement() {
       (c.location && c.location.toUpperCase() === clean)
     );
     if (matched && matched.shop_name) return matched.shop_name;
-    const LEGACY_MAP = {
-      'BAWDHAN': 'MADHURA',
-      'BAVDHAN': 'MADHURA',
-      'HINJEWADI': 'TLS',
-      'WAGHOLI': 'FRIENDS',
-      'AKOLE': 'BALAJI',
-      'MUMBAI': 'KUNAL ULWE',
-      'KHARGHAR': 'KUNAL KHARGHAR'
-    };
-    return LEGACY_MAP[clean] || clean;
+    return LEGACY_PLACE_SHOP[clean] || clean;
   };
 
   const fetchEmployees = async () => {
@@ -491,8 +474,8 @@ export default function EmployeeManagement() {
     }
     setFormData(prev => {
       const updated = { ...prev, [name]: value }
-      if (name === 'joining_place') {
-        updated.joining_company_name = resolveShopFromPlace(value)
+      if (name === 'joining_company_name') {
+        updated.joining_place = resolvePlaceFromShop(value)
       }
       return updated
     })
@@ -514,8 +497,8 @@ export default function EmployeeManagement() {
     }
     setEditFormData(prev => {
       const updated = { ...prev, [name]: value }
-      if (name === 'joining_place') {
-        updated.joining_company_name = resolveShopFromPlace(value)
+      if (name === 'joining_company_name') {
+        updated.joining_place = resolvePlaceFromShop(value)
       }
       return updated
     })
@@ -891,7 +874,7 @@ export default function EmployeeManagement() {
                   obj.mobile_no = newMobileStr;
                   localStorage.setItem(key, JSON.stringify(obj));
                 }
-              } catch (e) {}
+              } catch (e) { }
             }
           });
         }
@@ -926,8 +909,8 @@ export default function EmployeeManagement() {
     if (!canModify) return
     setEditingEmployee(employee)
     const rawPlace = (employee.joining_place || '').toString().trim().toUpperCase();
-    const matchedPlace = dynamicJoiningPlaces.find(p => p === rawPlace || p.replace(/[^A-Z0-9]/g, '') === rawPlace.replace(/[^A-Z0-9]/g, '') || (rawPlace === 'BAVDHAN' && p === 'BAWDHAN') || (rawPlace === 'WAGOLI' && p === 'WAGHOLI')) || rawPlace;
-    const matchedShop = employee.joining_company_name || resolveShopFromPlace(matchedPlace) || '';
+    const matchedShop = employee.joining_company_name || resolveShopFromPlace(rawPlace) || '';
+    const matchedPlace = matchedShop ? resolvePlaceFromShop(matchedShop) : rawPlace;
 
     setEditFormData({
       employee_id: employee.employee_id,  // <-- ADD THIS LINE
@@ -1377,26 +1360,26 @@ export default function EmployeeManagement() {
         </div>
         <div className="flex items-center gap-2">
           {canModify && (<>
-          <button
-            onClick={() => {
-              resetForm()
-              setShowForm(true)
-            }}
-            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
-          >
-            <UserPlus size={14} />
-            Add New Employee
-          </button>
-          <label className="flex items-center gap-2 px-3 py-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer text-xs font-semibold rounded-lg shadow-sm">
-            <Upload size={14} />
-            Import CSV
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleImportCSV}
-              className="hidden"
-            />
-          </label>
+            <button
+              onClick={() => {
+                resetForm()
+                setShowForm(true)
+              }}
+              className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
+            >
+              <UserPlus size={14} />
+              Add New Employee
+            </button>
+            <label className="flex items-center gap-2 px-3 py-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer text-xs font-semibold rounded-lg shadow-sm">
+              <Upload size={14} />
+              Import CSV
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleImportCSV}
+                className="hidden"
+              />
+            </label>
           </>)}
           <button
             onClick={handleExportCSV}
@@ -1447,8 +1430,8 @@ export default function EmployeeManagement() {
 
       {/* Table */}
       <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-        <div className="overflow-x-hidden overflow-y-auto max-h-[73vh] scrollbar-thin">
-          <table className="w-full table-fixed text-xs">
+        <div className="overflow-x-auto overflow-y-auto max-h-[73vh] scrollbar-thin">
+          <table className="w-full min-w-[1100px] table-fixed text-xs">
             <thead className="bg-slate-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
                 <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[22%]">Employee</th>
@@ -1458,7 +1441,7 @@ export default function EmployeeManagement() {
                 <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[10%]">Designation</th>
                 <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[15%]">Shop / Location</th>
                 <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[12%]">Transferred</th>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[8%]">Actions</th>
+                <th className="text-left px-3 pr-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[130px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -1508,17 +1491,17 @@ export default function EmployeeManagement() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex gap-0.5">
+                      <div className="flex flex-nowrap items-center gap-1.5 pr-2">
                         <button onClick={() => handleViewDetails(emp)} className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" title="View Details">
                           <Eye size={16} />
                         </button>
                         {canModify && (<>
-                        <button onClick={() => openEditPanel(emp)} className="p-1.5 rounded-md text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors" title="Edit">
-                          <Edit size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(emp)} className="p-1.5 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors" title="Delete">
-                          <Trash2 size={16} />
-                        </button>
+                          <button onClick={() => openEditPanel(emp)} className="p-1.5 rounded-md text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors" title="Edit">
+                            <Edit size={16} />
+                          </button>
+                          <button onClick={() => handleDelete(emp)} className="p-1.5 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors" title="Delete">
+                            <Trash2 size={16} />
+                          </button>
                         </>)}
                       </div>
                     </td>
@@ -1791,18 +1774,18 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Joining Place <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Joining Shop Name <span className="text-red-500">*</span></label>
                     <select
-                      name="joining_place"
-                      value={formData.joining_place}
+                      name="joining_company_name"
+                      value={formData.joining_company_name}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white"
                       required
                     >
-                      <option value="">Select Joining Place</option>
-                      {dynamicJoiningPlaces.map((place) => (
-                        <option key={place} value={place}>
-                          {place}
+                      <option value="">Select Shop</option>
+                      {joiningCompanies.map((company) => (
+                        <option key={company.id} value={company.company_name}>
+                          {company.company_name}
                         </option>
                       ))}
                     </select>
@@ -1826,21 +1809,15 @@ export default function EmployeeManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Joining Shop Name</label>
-                    <select
-                      name="joining_company_name"
-                      disabled
-                      value={formData.joining_company_name}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
-                    >
-                      <option value="">Select Shop</option>
-                      {joiningCompanies.map((company) => (
-                        <option key={company.id} value={company.company_name}>
-                          {company.company_name}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Joining Place</label>
+                    <input
+                      type="text"
+                      name="joining_place"
+                      readOnly
+                      value={formData.joining_place}
+                      placeholder="Auto-filled from shop"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed"
+                    />
                   </div>
 
                   <div>
@@ -2168,23 +2145,23 @@ export default function EmployeeManagement() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Place <span className="text-red-500">*</span></label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Shop Name <span className="text-red-500">*</span></label>
                         <select
-                          name="joining_place"
-                          value={editFormData.joining_place || ''}
+                          name="joining_company_name"
+                          value={editFormData.joining_company_name || ''}
                           onChange={handleEditInputChange}
                           className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-white text-gray-800"
                           required
                         >
-                          <option value="">Select Joining Place</option>
-                          {dynamicJoiningPlaces.map((place) => (
-                            <option key={place} value={place}>
-                              {place}
+                          <option value="">Select Shop</option>
+                          {joiningCompanies.map((company) => (
+                            <option key={company.id} value={company.company_name}>
+                              {company.company_name}
                             </option>
                           ))}
-                          {editFormData.joining_place && !dynamicJoiningPlaces.includes(editFormData.joining_place) && (
-                            <option value={editFormData.joining_place}>
-                              {editFormData.joining_place}
+                          {editFormData.joining_company_name && !joiningCompanies.some(c => c.company_name === editFormData.joining_company_name) && (
+                            <option value={editFormData.joining_company_name}>
+                              {editFormData.joining_company_name}
                             </option>
                           )}
                         </select>
@@ -2219,21 +2196,15 @@ export default function EmployeeManagement() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Shop Name</label>
-                        <select
-                          name="joining_company_name"
-                          disabled
-                          value={editFormData.joining_company_name || ''}
-                          onChange={handleEditInputChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none rounded-lg shadow-sm transition focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 bg-gray-50 text-gray-500 cursor-not-allowed"
-                        >
-                          <option value="">Select Shop</option>
-                          {joiningCompanies.map((company) => (
-                            <option key={company.id} value={company.company_name}>
-                              {company.company_name}
-                            </option>
-                          ))}
-                        </select>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Place</label>
+                        <input
+                          type="text"
+                          name="joining_place"
+                          readOnly
+                          value={editFormData.joining_place || ''}
+                          placeholder="Auto-filled from shop"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 focus:outline-none rounded-lg shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed"
+                        />
                       </div>
 
                       <div>

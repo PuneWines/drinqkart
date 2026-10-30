@@ -26,6 +26,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { fetchPlaceForShop } from "../utils/shopLocation";
 import { useAuth } from "../context/AuthContext";
 import JoiningCompany from "../systems/hr/pages/JoiningCompany";
 import CounterManagement from "./CounterManagement";
@@ -812,6 +813,7 @@ export default function MasterSetting() {
               .from("hr_management_employees")
               .update({
                 joining_company_name: shopVal,
+                joining_place: await fetchPlaceForShop(supabase, shopVal),
               })
               .eq("employee_id", targetEmpId);
           }
@@ -1776,6 +1778,12 @@ export default function MasterSetting() {
             joining_company_name: primaryShopVal,
             designation: roleInput,
           };
+          if (primaryShopVal) {
+            hrUpdatePayload.joining_place = await fetchPlaceForShop(
+              supabase,
+              primaryShopVal,
+            );
+          }
           if (finalMobile) {
             hrUpdatePayload.mobile_no = finalMobile;
           }
