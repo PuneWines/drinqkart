@@ -27,6 +27,7 @@ export default function CurrentStock() {
   const [loading, setLoading] = useState(false);
   const [shopFilter, setShopFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState({ key: 'label', dir: 'asc' });
   const [page, setPage] = useState(1);
@@ -75,6 +76,11 @@ export default function CurrentStock() {
 
   const shops = useMemo(() => [...new Set(rows.map((r) => r.store_name).filter(Boolean))].sort(), [rows]);
   const types = useMemo(() => [...new Set(rows.map((r) => r.liquor_type).filter(Boolean))].sort(), [rows]);
+  // Categories narrow to the chosen liquor type so the list only offers combinations that exist
+  const categories = useMemo(
+    () => [...new Set(rows.filter((r) => !typeFilter || r.liquor_type === typeFilter).map((r) => r.subhead).filter(Boolean))].sort(),
+    [rows, typeFilter]
+  );
 
   // One line per item, summed over the selected shop(s)
   const items = useMemo(() => {
@@ -83,6 +89,7 @@ export default function CurrentStock() {
     rows.forEach((r) => {
       if (shopFilter && r.store_name !== shopFilter) return;
       if (typeFilter && r.liquor_type !== typeFilter) return;
+      if (categoryFilter && r.subhead !== categoryFilter) return;
       if (term && !`${r.item_description || ''} ${r.item_id || ''} ${r.subhead || ''}`.toLowerCase().includes(term)) return;
 
       const closing = Number(r.closing_qty) || 0;
@@ -106,7 +113,7 @@ export default function CurrentStock() {
       it.mrpValue += closing * (Number(r.mrp_bottle_rate) || 0);
     });
     return [...map.values()].map((it) => ({ ...it, closingBox: toBox(it.closing, it.bottlesPerCase) }));
-  }, [rows, shopFilter, typeFilter, search]);
+  }, [rows, shopFilter, typeFilter, categoryFilter, search]);
 
   const tableRows = useMemo(() => {
     const mul = sort.dir === 'asc' ? 1 : -1;
@@ -254,12 +261,25 @@ export default function CurrentStock() {
         <div className="flex items-center gap-1.5 h-9 bg-slate-50 border border-slate-200 px-2.5 rounded-xl">
           <select
             value={typeFilter}
-            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+            onChange={(e) => { setTypeFilter(e.target.value); setCategoryFilter(''); setPage(1); }}
             className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
           >
             <option value="">All Liquor Types</option>
             {types.map((t) => (
               <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5 h-9 bg-slate-50 border border-slate-200 px-2.5 rounded-xl">
+          <select
+            value={categoryFilter}
+            onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+            className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer max-w-56"
+          >
+            <option value="">All Categories</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </div>

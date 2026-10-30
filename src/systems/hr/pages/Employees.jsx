@@ -18,6 +18,63 @@ const DEVICES = [
 ];
 
 const resolveDeviceStore = (log) => {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
   if (!log) return '';
   const serial = (log.serial_number || log.serialNo || '').toString().trim();
   if (serial && serial !== '-' && serial !== 'ALL') {

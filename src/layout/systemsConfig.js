@@ -92,6 +92,7 @@ export const systems = [
     subtabs: [
       { type: 'header', label: 'OVERVIEW' },
       { label: 'Dashboard', to: '/systems/purchase' },
+      { label: 'Purchase Report', to: '/systems/purchase/purchase-report' },
       { type: 'header', label: 'PROCUREMENT' },
       { label: 'Indent', to: '/systems/purchase/indent' },
       { label: 'Approval', to: '/systems/purchase/approval' },
@@ -200,7 +201,8 @@ export const systems = [
       { label: 'Valuation Report', to: '/systems/stock-report/valuation' },
       { label: 'Current Stock', to: '/systems/stock-report/current' },
       { label: 'Stock Report', to: '/systems/stock-report/report' },
-      { label: 'Not Sold Stock', to: '/systems/stock-report/not-sold' }
+      { label: 'Not Sold Stock', to: '/systems/stock-report/not-sold' },
+      { label: 'Req Stock Report', to: '/systems/stock-report/req-stock' }
     ]
   }
 ];
@@ -378,7 +380,7 @@ export const getVisibleSystems = (user) => {
         labelsToCheck.push('Sale Analytics', 'Dashboard', 'Stock Balance', 'Sales Analytics', 'Stock Balance Dashboard');
       }
       if (systemId === 'stock-report' || systemId === 'stock_report' || systemId === 'stock-balance') {
-        labelsToCheck.push('Stock / Report', 'Stock Balance Sheet', 'Stock Balance', 'Stock Report', 'Sheet', 'Not Sold Stock', 'Valuation Report', 'Current Stock');
+        labelsToCheck.push('Stock / Report', 'Stock Balance Sheet', 'Stock Balance', 'Stock Report', 'Sheet', 'Not Sold Stock', 'Req Stock Report', 'Valuation Report', 'Current Stock');
       }
 
       const hasMasterPerm = labelsToCheck.some((lbl) => {

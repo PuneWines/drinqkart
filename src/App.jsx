@@ -31,6 +31,7 @@ import StockBalance from './systems/business-overview/pages/StockBalance';
 import ValuationReport from './systems/business-overview/pages/ValuationReport';
 import CurrentStock from './systems/business-overview/pages/CurrentStock';
 import NotSoldStock from './systems/business-overview/pages/NotSoldStock';
+import ReqStockReport from './systems/business-overview/pages/ReqStockReport';
 import StockReport from './systems/business-overview/pages/StockReport';
 import PublicRegister from './systems/hr/pages/PublicRegister';
 import VendorConfirmation from './systems/purchase/pages/VendorConfirmation';
@@ -260,6 +261,14 @@ const AppLayout = () => {
             element={
               <ConsoleRoute systemId="stock-report">
                 <NotSoldStock />
+              </ConsoleRoute>
+            }
+          />
+          <Route
+            path="/systems/stock-report/req-stock"
+            element={
+              <ConsoleRoute systemId="stock-report">
+                <ReqStockReport />
               </ConsoleRoute>
             }
           />

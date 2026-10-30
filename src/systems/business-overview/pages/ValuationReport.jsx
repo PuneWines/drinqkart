@@ -254,9 +254,9 @@ export default function ValuationReport() {
             setEndDate(def.end);
           }}
           className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
-          title="Reset to the last 30 days"
+          title="Reset to the last 7 days"
         >
-          Reset (30D)
+          Reset (7D)
         </button>
 
         <div className="flex items-center gap-1.5">

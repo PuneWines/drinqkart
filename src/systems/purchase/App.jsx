@@ -4,6 +4,7 @@ import useShopStore from './store/useShopStore';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Toast, { useToast } from './components/Toast';
 import Dashboard from './pages/Dashboard';
+import PurchaseReport from './pages/PurchaseReport';
 import Indent from './pages/Indent';
 import Approval from './pages/Approval';
 import PurchaseOrder from './pages/PurchaseOrder';
@@ -47,6 +48,7 @@ function PurchaseApp() {
         <main>
           <Routes>
             <Route path="" element={<Dashboard />} />
+            <Route path="purchase-report" element={<PurchaseReport />} />
             <Route path="indent" element={<Indent />} />
             <Route path="approval" element={<Approval />} />
             <Route path="po" element={<PurchaseOrder />} />

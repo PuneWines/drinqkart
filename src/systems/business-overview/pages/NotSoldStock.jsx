@@ -283,9 +283,9 @@ export default function NotSoldStock() {
             setPage(1);
           }}
           className="h-9 text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-3 rounded-xl hover:bg-indigo-50 transition cursor-pointer"
-          title="Reset to the last 30 days"
+          title="Reset to the last 7 days"
         >
-          Reset (30D)
+          Reset (7D)
         </button>
 
         <div className="flex items-center gap-1.5 h-9 bg-slate-50 border border-slate-200 px-2.5 rounded-xl">

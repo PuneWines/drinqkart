@@ -49,7 +49,7 @@ export default function StockBalance() {
   const [loading, setLoading] = useState(false);
   const [shops, setShops] = useState([]);
   
-  // Search & Filter States (date range defaults to the last 30 days)
+  // Search & Filter States (date range defaults to the last 7 days)
   const [search, setSearch] = useState('');
   const [shopFilter, setShopFilter] = useState('');
   const [startDate, setStartDate] = useState(() => getDefaultDateRange().start);
@@ -510,9 +510,9 @@ export default function StockBalance() {
                     setPage(1);
                   }}
                   className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
-                  title="Reset to the last 30 days"
+                  title="Reset to the last 7 days"
                 >
-                  Reset (30D)
+                  Reset (7D)
                 </button>
                 <button
                   type="button"

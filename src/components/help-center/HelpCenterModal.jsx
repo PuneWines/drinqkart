@@ -469,7 +469,7 @@ export default function HelpCenterModal({
                         onClick={() => setSelectedTask(null)}
                         className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
                       >
-                        <ArrowLeft size={14} />
+                      <ArrowLeft size={14} />
                         <span>Back to Task List</span>
                       </button>
                       <span className="font-mono text-xs font-extrabold text-[#C9A84C] bg-[#1C120C] px-2.5 py-1 rounded-full">

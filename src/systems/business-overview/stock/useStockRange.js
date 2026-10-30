@@ -4,7 +4,8 @@ import { loadStockRange, invalidateStockCache } from './stockData';
 // Rows of stock_balance for [start, end], backed by the shared per-day cache
 export default function useStockRange(start, end) {
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // Start in the loading state when there is a range to load, so a page never flashes "no data" first
+  const [loading, setLoading] = useState(Boolean(start && end));
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const requestRef = useRef(0);

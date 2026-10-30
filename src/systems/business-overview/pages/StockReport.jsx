@@ -13,7 +13,33 @@ const EPS = 0.01;
 const VIEWS = [
   { id: 'item', label: 'Item-wise' },
   { id: 'shop', label: 'Shop-wise' },
-  { id: 'category', label: 'Category-wise' }
+  { id: 'category', label: 'Category-wise' },
+  { id: 'detail', label: 'Detail' }
+];
+
+// Detail view: one row per shop + date + item, with every stock balance column
+// key, header label, header align, cell render, cell class
+const fmtMoney0 = (n) => `₹${n}`;
+const DETAIL_COLUMNS = [
+  ['shop', 'Shop', '', (r) => r.shop || '—', 'font-bold text-indigo-900'],
+  ['date', 'Date', '', (r) => r.date || '—', 'text-slate-600 font-mono text-[11px]'],
+  ['itemId', 'Item ID', '', (r) => r.itemId || '—', 'text-slate-600 font-mono text-[11px]'],
+  ['label', 'Item Name', '', (r) => r.label, 'font-bold text-slate-900'],
+  ['opening', 'Opening Qty', 'text-right', (r) => r.opening, 'text-right font-mono text-slate-600'],
+  ['qtyIn', 'Qty In', 'text-right', (r) => `+${r.qtyIn}`, 'text-right font-mono text-emerald-600 font-semibold'],
+  ['qtyOut', 'Qty Out', 'text-right', (r) => `-${r.qtyOut}`, 'text-right font-mono text-amber-600 font-semibold'],
+  ['closing', 'Closing Qty', 'text-right', (r) => r.closing, 'text-right font-mono font-bold text-indigo-700 bg-indigo-50/40'],
+  ['purchaseRate', 'Purchase Rate', 'text-right', (r) => fmtMoney0(r.purchaseRate), 'text-right font-mono text-slate-700'],
+  ['mrpRate', 'MRP Rate', 'text-right', (r) => fmtMoney0(r.mrpRate), 'text-right font-mono text-slate-700 font-semibold'],
+  ['subhead', 'Subhead', '', (r) => r.subhead || '—', 'text-slate-600'],
+  ['brandId', 'Brand ID', '', (r) => (r.brandId === '' ? '—' : r.brandId), 'text-slate-600 font-mono text-[11px]'],
+  ['brandName', 'Brand Name', '', (r) => r.brandName || '—', 'text-slate-800 font-semibold'],
+  ['liquorType', 'Liquor Type', '', (r) => r.liquorType || '—', 'text-slate-600'],
+  ['bottlesPerCase', 'B/Cs', 'text-right', (r) => r.bottlesPerCase || '—', 'text-right text-slate-600'],
+  ['mls', 'Mls', 'text-right', (r) => (r.mls === '' ? '—' : r.mls), 'text-right text-slate-600'],
+  ['types', 'Type 1..6', '', (r) => r.types || '—', 'text-slate-600'],
+  ['company', 'Company Name', '', (r) => r.company || '—', 'text-slate-600'],
+  ['party', 'Party Name', '', (r) => r.party || '—', 'text-slate-600']
 ];
 
 const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
@@ -100,7 +126,9 @@ export default function StockReport() {
     setPage(1);
   };
   const handleSort = (key) => {
-    setSort((prev) => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'label' ? 'asc' : 'desc' }));
+    // text columns start ascending, number columns descending
+    const isText = ['label', 'shop', 'date', 'itemId', 'subhead', 'brandId', 'brandName', 'liquorType', 'types', 'company', 'party'].includes(key);
+    setSort((prev) => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: isText ? 'asc' : 'desc' }));
     setPage(1);
   };
   const changeView = (id) => {
@@ -119,7 +147,7 @@ export default function StockReport() {
     rows.forEach((r) => {
       if (shopFilter && r.store_name !== shopFilter) return;
       if (typeFilter && r.liquor_type !== typeFilter) return;
-      if (term && !`${r.item_description || ''} ${r.item_id || ''} ${r.subhead || ''}`.toLowerCase().includes(term)) return;
+      if (term && !`${r.item_description || ''} ${r.item_id || ''} ${r.subhead || ''} ${r.brand_name || ''} ${r.party_name || ''} ${r.company_name || ''}`.toLowerCase().includes(term)) return;
 
       const key = `${r.store_name}||${r.item_id}`;
       let l = byKey.get(key);
@@ -160,7 +188,56 @@ export default function StockReport() {
       .filter((l) => !hideIdle || l.qtyIn !== 0 || l.qtyOut !== 0);
   }, [rows, shopFilter, typeFilter, search, hideIdle]);
 
+  // Detail view rows: every snapshot row that passes the filters, not rolled up
+  const detailRows = useMemo(() => {
+    if (view !== 'detail') return [];
+    const term = search.trim().toLowerCase();
+    const out = [];
+    rows.forEach((r) => {
+      if (shopFilter && r.store_name !== shopFilter) return;
+      if (typeFilter && r.liquor_type !== typeFilter) return;
+      if (term && !`${r.item_description || ''} ${r.item_id || ''} ${r.subhead || ''} ${r.brand_name || ''} ${r.party_name || ''} ${r.company_name || ''}`.toLowerCase().includes(term)) return;
+      const qtyIn = Number(r.qty_in) || 0;
+      const qtyOut = Number(r.qty_out) || 0;
+      if (hideIdle && qtyIn === 0 && qtyOut === 0) return;
+      out.push({
+        key: `${r.store_name}||${r.snapshot_date}||${r.item_id}`,
+        shop: r.store_name || '',
+        date: r.snapshot_date || '',
+        itemId: r.item_id || '',
+        label: r.item_description || r.item_id || '',
+        opening: Number(r.opening_qty) || 0,
+        qtyIn,
+        qtyOut,
+        closing: Number(r.closing_qty) || 0,
+        purchaseRate: Number(r.purchase_bottle_rate) || 0,
+        mrpRate: Number(r.mrp_bottle_rate) || 0,
+        subhead: r.subhead || '',
+        brandId: r.brand_id ?? '',
+        brandName: r.brand_name || '',
+        liquorType: r.liquor_type || '',
+        bottlesPerCase: Number(r.bottles_per_case) || 0,
+        mls: r.mls ?? '',
+        types: [r.type1, r.type2, r.type3, r.type4, r.type5, r.type6].filter(Boolean).join(', '),
+        company: r.company_name || '',
+        party: r.party_name || ''
+      });
+    });
+    return out;
+  }, [rows, view, shopFilter, typeFilter, search, hideIdle]);
+
   const tableRows = useMemo(() => {
+    if (view === 'detail') {
+      const mul = sort.dir === 'asc' ? 1 : -1;
+      return [...detailRows].sort((a, b) => {
+        const av = a[sort.key];
+        const bv = b[sort.key];
+        const cmp = typeof av === 'string' || typeof bv === 'string'
+          ? String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true })
+          : av - bv;
+        return cmp * mul || a.label.localeCompare(b.label) || a.shop.localeCompare(b.shop);
+      });
+    }
     let list;
     if (view === 'shop') list = buildGroups(lines, (l) => l.shop, (l) => l.shop);
     else if (view === 'category') list = buildGroups(lines, (l) => `${l.liquorType}||${l.subhead}`, (l) => `${l.liquorType} / ${l.subhead}`);
@@ -171,7 +248,7 @@ export default function StockReport() {
       const cmp = sort.key === 'label' ? a.label.localeCompare(b.label) : a[sort.key] - b[sort.key];
       return cmp * mul || a.label.localeCompare(b.label);
     });
-  }, [lines, view, sort]);
+  }, [lines, view, sort, detailRows]);
 
   const grand = useMemo(() => {
     const t = emptyTotals();
@@ -194,6 +271,18 @@ export default function StockReport() {
     });
 
   const exportCsv = () => {
+    if (view === 'detail') {
+      const detailOut = [DETAIL_COLUMNS.map(([, label]) => label)];
+      tableRows.forEach((r) => detailOut.push(DETAIL_COLUMNS.map(([key]) => r[key])));
+      const blob = new Blob(['﻿' + detailOut.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stock-report_detail_${startDate}_to_${endDate}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
     const head = ['Group', 'Item', 'Opening Qty', 'Qty In', 'Qty Out', 'Closing Qty', 'Purchase Value', 'MRP Value'];
     const num = (r) => [r.opening, r.qtyIn, r.qtyOut, r.closing, r.purchaseValue.toFixed(2), r.mrpValue.toFixed(2)];
     const out = [head];
@@ -387,9 +476,9 @@ export default function StockReport() {
               setPage(1);
             }}
             className="h-9 text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-3 rounded-xl hover:bg-indigo-50 transition cursor-pointer"
-            title="Reset to the last 30 days"
+            title="Reset to the last 7 days"
           >
-            Reset (30D)
+            Reset (7D)
           </button>
 
           <label
@@ -436,25 +525,41 @@ export default function StockReport() {
           <table className="w-full text-left text-xs whitespace-nowrap border-collapse">
             <thead className="bg-slate-800 text-slate-200 uppercase font-bold text-[10px] tracking-wider select-none sticky top-0 z-20 shadow-xs">
               <tr>
-                {view !== 'item' && <th className="px-3 py-3 w-8" />}
-                {headers.map(([key, label, align]) => (
-                  <th
-                    key={key}
-                    onClick={() => handleSort(key)}
-                    className={`px-3 py-3 cursor-pointer hover:text-white ${align}`}
-                    title="Click to sort"
-                  >
-                    {label}
-                    <span className="ml-1 text-indigo-300">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
-                  </th>
-                ))}
-                <th className="px-3 py-3 text-center" title="Opening + In − Out vs Closing">Check</th>
+                {view === 'detail' ? (
+                  DETAIL_COLUMNS.map(([key, label, align]) => (
+                    <th
+                      key={key}
+                      onClick={() => handleSort(key)}
+                      className={`px-3 py-3 cursor-pointer hover:text-white ${align}`}
+                      title="Click to sort"
+                    >
+                      {label}
+                      <span className="ml-1 text-indigo-300">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+                    </th>
+                  ))
+                ) : (
+                  <>
+                    {view !== 'item' && <th className="px-3 py-3 w-8" />}
+                    {headers.map(([key, label, align]) => (
+                      <th
+                        key={key}
+                        onClick={() => handleSort(key)}
+                        className={`px-3 py-3 cursor-pointer hover:text-white ${align}`}
+                        title="Click to sort"
+                      >
+                        {label}
+                        <span className="ml-1 text-indigo-300">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+                      </th>
+                    ))}
+                    <th className="px-3 py-3 text-center" title="Opening + In − Out vs Closing">Check</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-400">
+                  <td colSpan={view === 'detail' ? DETAIL_COLUMNS.length : 9} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={20} className="animate-spin text-indigo-600" />
                       <span className="text-xs font-semibold text-slate-600">{loadingLabel}</span>
@@ -463,7 +568,7 @@ export default function StockReport() {
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-14 text-slate-400">
+                  <td colSpan={view === 'detail' ? DETAIL_COLUMNS.length : 9} className="text-center py-14 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
                       <span className="text-sm font-semibold text-slate-600">No stock data for these filters</span>
@@ -471,6 +576,14 @@ export default function StockReport() {
                     </div>
                   </td>
                 </tr>
+              ) : view === 'detail' ? (
+                pageRows.map((r) => (
+                  <tr key={r.key} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    {DETAIL_COLUMNS.map(([key, , , render, cls]) => (
+                      <td key={key} className={`px-3 py-2.5 ${cls}`}>{render(r)}</td>
+                    ))}
+                  </tr>
+                ))
               ) : (
                 <>
                   {pageRows.map((r) => {

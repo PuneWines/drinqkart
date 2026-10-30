@@ -6,7 +6,7 @@ import { supabase } from '../../../lib/supabase';
 // that no other page has already loaded.
 
 export const STOCK_TABLE = 'stock_balance';
-export const DEFAULT_RANGE_DAYS = 30;
+export const DEFAULT_RANGE_DAYS = 7;
 
 const FETCH_CHUNK = 1000;
 const DAY_CONCURRENCY = 4;
@@ -18,7 +18,7 @@ const GC_MS = 60 * 60 * 1000;
 export const STOCK_COLUMNS = [
   'store_name', 'snapshot_date', 'item_id', 'item_description', 'liquor_type', 'subhead', 'type5',
   'opening_qty', 'qty_in', 'qty_out', 'closing_qty', 'purchase_bottle_rate', 'mrp_bottle_rate',
-  'bottles_per_case'
+  'bottles_per_case', 'brand_id', 'brand_name', 'mls', 'type1', 'type2', 'type3', 'type4', 'type6', 'company_name', 'party_name'
 ].join(', ');
 
 // A client of its own: fetchQuery works without a provider, so no wiring in App.jsx is needed
@@ -31,7 +31,7 @@ export const toISODate = (d) =>
 
 export const todayISO = () => toISODate(new Date());
 
-// Default range for every stock page: the last 30 days, ending today
+// Default range for every stock page: the last 7 days, ending today
 export function getDefaultDateRange() {
   const end = new Date();
   const start = new Date(end);
@@ -52,6 +52,69 @@ export function eachDate(start, end) {
 }
 
 const dayKey = (date) => ['stock-day', date];
+
+// Past days are also kept in IndexedDB so a page refresh (or a new tab) does not refetch them.
+// Today's snapshot is never persisted - it can still change. A saved day is dropped when it is older
+// than PERSIST_TTL_MS, was saved with a different column list, or after invalidateStockCache().
+const IDB_NAME = 'drinqkart-stock-cache';
+const IDB_STORE = 'days';
+const PERSIST_TTL_MS = 12 * 60 * 60 * 1000;
+
+let idbPromise = null;
+const openIdb = () => {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  if (!idbPromise) {
+    idbPromise = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+        req.onblocked = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+  return idbPromise;
+};
+
+// Every helper swallows its errors: the persistent cache is an optimisation, never a requirement
+async function idbRun(mode, fn) {
+  const db = await openIdb();
+  if (!db) return undefined;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, mode);
+      const req = fn(tx.objectStore(IDB_STORE));
+      tx.oncomplete = () => resolve(req?.result);
+      tx.onerror = () => resolve(undefined);
+      tx.onabort = () => resolve(undefined);
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
+const readPersistedDay = async (date) => {
+  const hit = await idbRun('readonly', (s) => s.get(date));
+  if (!hit || hit.columns !== STOCK_COLUMNS || Date.now() - hit.savedAt > PERSIST_TTL_MS) return null;
+  return hit.rows;
+};
+const writePersistedDay = (date, rows) =>
+  idbRun('readwrite', (s) => s.put({ rows, columns: STOCK_COLUMNS, savedAt: Date.now() }, date));
+const clearPersistedDays = () => idbRun('readwrite', (s) => s.clear());
+
+async function fetchDayPersisted(date) {
+  const isPast = date < todayISO();
+  if (isPast) {
+    const saved = await readPersistedDay(date);
+    if (saved) return saved;
+  }
+  const rows = await fetchDay(date);
+  if (isPast) writePersistedDay(date, rows);
+  return rows;
+}
 
 async function fetchDay(date) {
   const all = [];
@@ -74,7 +137,7 @@ async function fetchDay(date) {
 export function loadStockDay(date) {
   return stockQueryClient.fetchQuery({
     queryKey: dayKey(date),
-    queryFn: () => fetchDay(date),
+    queryFn: () => fetchDayPersisted(date),
     staleTime: date >= todayISO() ? TODAY_STALE_MS : PAST_DAY_STALE_MS
   });
 }
@@ -136,6 +199,7 @@ export async function findLatestSnapshotDate(start, end) {
 }
 
 // Call after any insert / delete on stock_balance so other pages refetch
-export function invalidateStockCache() {
+export async function invalidateStockCache() {
+  await clearPersistedDays();
   return stockQueryClient.invalidateQueries({ queryKey: ['stock-day'] });
 }

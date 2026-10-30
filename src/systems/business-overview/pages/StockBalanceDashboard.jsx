@@ -7,11 +7,11 @@ import React, {
 } from "react";
 import { supabase } from "../../../lib/supabase";
 import { getDefaultDateRange as sharedDefaultDateRange } from "../stock/stockData";
+import useStockRange from "../stock/useStockRange";
 import DashboardFilterSidebar from "../components/DashboardFilterSidebar";
 import GroupWiseStoreWiseSale from "../components/GroupWiseStoreWiseSale";
 import BrandWiseSale from "../components/BrandWiseSale";
 import SaleExplorationTab from "../components/SaleExplorationTab";
-import useShopStore from "../../purchase/store/useShopStore";
 import {
   TrendingUp,
   Eraser,
@@ -2037,10 +2037,10 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     return { currentMonthEndStr: endStr, thisMonthPrefix: prefix };
   }, []);
 
-  // Shared default: the last 30 days, ending today
+  // Shared default: the last 7 days, ending today
   const getDefaultDateRange = useCallback(() => sharedDefaultDateRange(), []);
 
-  // Filter States — default to the last 30 days, strictly capped to 4 months max duration
+  // Filter States — default to the last 7 days, strictly capped to 4 months max duration
   const [selectedStore, setSelectedStore] = useState("All");
   const [selectedLiquorType, setSelectedLiquorType] = useState("All");
   const [selectedSubhead, setSelectedSubhead] = useState("All");
@@ -2134,48 +2134,30 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
   const [card3Metric, setCard3Metric] = useState("amount");
   const [card4Metric, setCard4Metric] = useState("amount");
 
-  // Dynamic filter options populated strictly from database
-  const [storeOptions, setStoreOptions] = useState(["All"]);
-  const [liquorTypeOptions, setLiquorTypeOptions] = useState([
-    "All",
-    "IMFL",
-    "BEER",
-    "MML",
-    "WINE",
-  ]);
-  const [subheadOptions, setSubheadOptions] = useState(["All"]);
-
   // Loading & Database state
-  const [loading, setLoading] = useState(true);
-  const [records, setRecords] = useState([]);
+  // Rows come from the shared per-day stock cache (the same one the stock report pages use), so a day that
+  // any page has already loaded is not fetched again. Shop / liquor type / subhead filters are applied here
+  // in the browser, so changing them no longer hits the database.
+  const defaultRange = useMemo(() => sharedDefaultDateRange(), []);
+  const {
+    rows: rangeRows,
+    loading,
+    error: rangeError,
+  } = useStockRange(startDate || defaultRange.start, endDate || defaultRange.end);
 
-  // 1. Initial metadata loader: Get registered shops from shop table & stock records
+  useEffect(() => {
+    if (rangeError) console.error("Error fetching real stock data:", rangeError);
+  }, [rangeError]);
+
+  // Registered shops from the shop table (shops that appear in the stock rows are merged in below)
+  const [registeredShops, setRegisteredShops] = useState([]);
   useEffect(() => {
     async function loadMetadata() {
       try {
-        const [shopsRes, distinctShopsRes] = await Promise.all([
-          supabase.from("shop").select("shop_name"),
-          supabase
-            .from("stock_balance")
-            .select("shop_id:store_name")
-            .limit(2000),
-        ]);
-
-        const names = new Set();
-        if (shopsRes.data) {
-          shopsRes.data.forEach((s) => {
-            if (s.shop_name) names.add(s.shop_name.trim());
-          });
-        }
-        if (distinctShopsRes.data) {
-          distinctShopsRes.data.forEach((s) => {
-            if (s.shop_id) names.add(s.shop_id.trim());
-          });
-        }
-
-        if (names.size > 0) {
-          setStoreOptions(["All", ...Array.from(names).sort()]);
-        }
+        const { data } = await supabase.from("shop").select("shop_name");
+        setRegisteredShops(
+          (data || []).map((s) => (s.shop_name || "").trim()).filter(Boolean),
+        );
       } catch (err) {
         console.warn("Metadata load notice:", err);
       }
@@ -2183,114 +2165,72 @@ export default function StockBalanceDashboard({ onCollapseSidebar }) {
     loadMetadata();
   }, []);
 
-  // 2. Fetch real data from stock_balance strictly based on filters
-  // Fetches ALL active records across stores in parallel without hitting PostgREST 1000 row limits or 57014 timeouts
-  const fetchRealStockData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const fields =
-        "date:snapshot_date, shop_id:store_name, liquor_type, subhead, item_name:item_description, quantity_out:qty_out, quantity_in:qty_in, closing_qty, mrp_rate:mrp_bottle_rate, purchase_rate:purchase_bottle_rate, b_cs:bottles_per_case, type1, type2, type5, brand_name, company_name, party_name";
+  // Only days with a purchase or a sale matter to the dashboard
+  const movementRows = useMemo(
+    () =>
+      rangeRows.filter(
+        (r) => (Number(r.qty_out) || 0) > 0 || (Number(r.qty_in) || 0) > 0,
+      ),
+    [rangeRows],
+  );
 
-      const batchSize = 1000;
-      const distinctStores = storeOptions.filter((s) => s !== "All");
-      const fallbackShops = useShopStore.getState().shops || [];
-      const storesToFetch =
-        selectedStore !== "All"
-          ? [selectedStore]
-          : distinctStores.length > 0
-            ? distinctStores
-            : fallbackShops;
-
-      const fetchStoreRows = async (store) => {
-        let storeRows = [];
-        let page = 0;
-        const maxPages = 50; // up to 50,000 rows per store
-
-        while (page < maxPages) {
-          let q = supabase
-            .from("stock_balance")
-            .select(fields)
-            .eq("store_name", store)
-            .or("qty_out.gt.0,qty_in.gt.0");
-
-          if (selectedLiquorType !== "All") {
-            q = q.ilike("liquor_type", `%${selectedLiquorType}%`);
-          }
-          if (selectedSubhead !== "All") {
-            q = q.ilike("subhead", `%${selectedSubhead}%`);
-          }
-          if (startDate) {
-            q = q.gte("snapshot_date", startDate);
-          }
-          if (endDate) {
-            q = q.lte("snapshot_date", endDate);
-          }
-
-          q = q
-            .order("snapshot_date", { ascending: true })
-            .order("item_id", { ascending: true })
-            .range(page * batchSize, (page + 1) * batchSize - 1);
-
-          const { data, error } = await q;
-          if (error) {
-            console.warn(
-              `Error fetching stock_balance for store ${store}:`,
-              error.message,
-            );
-            break;
-          }
-          if (!data || data.length === 0) break;
-          storeRows.push(...data);
-          if (data.length < batchSize) break;
-          page++;
-        }
-        return storeRows;
-      };
-
-      const results = await Promise.all(
-        storesToFetch.map((s) => fetchStoreRows(s)),
-      );
-      const rows = results.flat();
-
-      setRecords(rows);
-
-      // Extract dynamic subhead and liquor options from fetched real rows
-      const dynamicSubheads = new Set();
-      const dynamicLiquorTypes = new Set(["IMFL", "BEER", "MML", "WINE"]);
-      rows.forEach((r) => {
-        if (r.subhead) dynamicSubheads.add(r.subhead.trim().toUpperCase());
-        if (r.liquor_type) {
-          let lt = r.liquor_type.trim().toUpperCase();
-          if (lt.includes("BEER")) dynamicLiquorTypes.add("BEER");
-          else if (lt.includes("MML")) dynamicLiquorTypes.add("MML");
-          else if (lt.includes("WINE")) dynamicLiquorTypes.add("WINE");
-          else if (lt.includes("IMFL")) dynamicLiquorTypes.add("IMFL");
-          else dynamicLiquorTypes.add(lt);
-        }
-      });
-
-      if (dynamicSubheads.size > 0) {
-        setSubheadOptions(["All", ...Array.from(dynamicSubheads).sort()]);
+  // Dynamic filter options come from the loaded rows, before the liquor type / subhead filters narrow them
+  const { storeOptions, liquorTypeOptions, subheadOptions } = useMemo(() => {
+    const stores = new Set(registeredShops);
+    const dynamicSubheads = new Set();
+    const dynamicLiquorTypes = new Set(["IMFL", "BEER", "MML", "WINE"]);
+    movementRows.forEach((r) => {
+      if (r.store_name) stores.add(r.store_name.trim());
+      if (r.subhead) dynamicSubheads.add(r.subhead.trim().toUpperCase());
+      if (r.liquor_type) {
+        let lt = r.liquor_type.trim().toUpperCase();
+        if (lt.includes("BEER")) dynamicLiquorTypes.add("BEER");
+        else if (lt.includes("MML")) dynamicLiquorTypes.add("MML");
+        else if (lt.includes("WINE")) dynamicLiquorTypes.add("WINE");
+        else if (lt.includes("IMFL")) dynamicLiquorTypes.add("IMFL");
+        else dynamicLiquorTypes.add(lt);
       }
-      setLiquorTypeOptions(["All", ...Array.from(dynamicLiquorTypes).sort()]);
-    } catch (err) {
-      console.error("Error fetching real stock data:", err);
-      setRecords([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    selectedStore,
-    storeOptions,
-    selectedLiquorType,
-    selectedSubhead,
-    startDate,
-    endDate,
-  ]);
+    });
+    return {
+      storeOptions: ["All", ...Array.from(stores).sort()],
+      liquorTypeOptions: ["All", ...Array.from(dynamicLiquorTypes).sort()],
+      subheadOptions: ["All", ...Array.from(dynamicSubheads).sort()],
+    };
+  }, [registeredShops, movementRows]);
 
-  useEffect(() => {
-    fetchRealStockData();
-  }, [fetchRealStockData]);
+  // 3. Apply the filters and map to the shape the dashboard tabs expect
+  const records = useMemo(() => {
+    const lt = selectedLiquorType.toLowerCase();
+    const sh = selectedSubhead.toLowerCase();
+    return movementRows
+      .filter(
+        (r) =>
+          (selectedStore === "All" || r.store_name === selectedStore) &&
+          (selectedLiquorType === "All" ||
+            (r.liquor_type || "").toLowerCase().includes(lt)) &&
+          (selectedSubhead === "All" ||
+            (r.subhead || "").toLowerCase().includes(sh)),
+      )
+      .map((r) => ({
+        date: r.snapshot_date,
+        shop_id: r.store_name,
+        liquor_type: r.liquor_type,
+        subhead: r.subhead,
+        item_name: r.item_description,
+        quantity_out: r.qty_out,
+        quantity_in: r.qty_in,
+        closing_qty: r.closing_qty,
+        mrp_rate: r.mrp_bottle_rate,
+        purchase_rate: r.purchase_bottle_rate,
+        b_cs: r.bottles_per_case,
+        type1: r.type1,
+        type2: r.type2,
+        type5: r.type5,
+        brand_name: r.brand_name,
+        company_name: r.company_name,
+        party_name: r.party_name,
+      }));
+  }, [movementRows, selectedStore, selectedLiquorType, selectedSubhead]);
 
   // Reset filters (resets date filter strictly back to last 6 months to current month)
   const handleResetFilters = () => {
