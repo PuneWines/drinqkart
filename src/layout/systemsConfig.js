@@ -202,7 +202,8 @@ export const systems = [
       { label: 'Current Stock', to: '/systems/stock-report/current' },
       { label: 'Stock Report', to: '/systems/stock-report/report' },
       { label: 'Not Sold Stock', to: '/systems/stock-report/not-sold' },
-      { label: 'Req Stock Report', to: '/systems/stock-report/req-stock' }
+      { label: 'Req Stock Report', to: '/systems/stock-report/req-stock' },
+      { label: 'BIO order dashboard', to: '/systems/stock-report/bio-order' }
     ]
   }
 ];
@@ -380,7 +381,7 @@ export const getVisibleSystems = (user) => {
         labelsToCheck.push('Sale Analytics', 'Dashboard', 'Stock Balance', 'Sales Analytics', 'Stock Balance Dashboard');
       }
       if (systemId === 'stock-report' || systemId === 'stock_report' || systemId === 'stock-balance') {
-        labelsToCheck.push('Stock / Report', 'Stock Balance Sheet', 'Stock Balance', 'Stock Report', 'Sheet', 'Not Sold Stock', 'Req Stock Report', 'Valuation Report', 'Current Stock');
+        labelsToCheck.push('Stock / Report', 'Stock Balance Sheet', 'Stock Balance', 'Stock Report', 'Sheet', 'Not Sold Stock', 'Req Stock Report', 'Valuation Report', 'Current Stock', 'BIO order dashboard');
       }
 
       const hasMasterPerm = labelsToCheck.some((lbl) => {

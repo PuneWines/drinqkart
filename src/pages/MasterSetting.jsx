@@ -235,7 +235,7 @@ const AVAILABLE_SYSTEMS = [
     sections: [
       {
         title: "STOCK BALANCE MANAGEMENT",
-        pages: ["Stock Balance Sheet", "Valuation Report", "Current Stock", "Stock Report", "Not Sold Stock", "Req Stock Report"],
+        pages: ["Stock Balance Sheet", "Valuation Report", "Current Stock", "Stock Report", "Not Sold Stock", "Req Stock Report", "BIO order dashboard"],
       },
     ],
   },
