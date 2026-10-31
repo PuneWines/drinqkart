@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 *.env
 Sale Page NO 1.png
+k6_load_test.js

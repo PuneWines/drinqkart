@@ -1219,14 +1219,14 @@ export const getInLifecycleItemNames = async (shopName) => {
 
   try {
     // Step 1: Fetch pending items in purchase_indent_items for shopName
-    const { data: indentItems } = await supabase
+    const { data: indentItems, error: indentItemsError } = await supabase
       .from("purchase_indent_items")
       .select("item_name, purchase_indents!inner(shop_name)")
       .eq("purchase_indents.shop_name", shopName)
       .eq("is_excluded", false)
       .or("already_in_lifecycle.eq.false,already_in_lifecycle.is.null")
-      .or("approval_status.eq.pending,approval_status.is.null")
-      .is("po_id", null);
+      .or("approval_status.eq.pending,approval_status.is.null");
+    if (indentItemsError) console.error("getInLifecycleItemNames: indent items query failed", indentItemsError);
 
     (indentItems || []).forEach(item => {
       if (item.item_name) {

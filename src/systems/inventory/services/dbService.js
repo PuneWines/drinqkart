@@ -1606,30 +1606,8 @@ export const DEFAULT_ADMIN_ACCESS = [
 function getLocalUsers() {
   const usersJson = localStorage.getItem('vishal_snacks_users');
   if (!usersJson) {
-    const defaultUsers = [
-      {
-        id: 1,
-        username: 'admin',
-        password: 'admin123',
-        role: 'admin',
-        shop_id: null,
-        shop_name: 'Global / All Shops',
-        is_approved: true,
-        page_access: DEFAULT_ADMIN_ACCESS,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 2,
-        username: 'operator',
-        password: 'operator123',
-        role: 'operator',
-        shop_id: 1,
-        shop_name: 'Mock Shop A',
-        is_approved: true,
-        page_access: DEFAULT_OPERATOR_ACCESS,
-        created_at: new Date().toISOString()
-      }
-    ];
+    // No built-in accounts: offline mode has no default credentials.
+    const defaultUsers = [];
     localStorage.setItem('vishal_snacks_users', JSON.stringify(defaultUsers));
     return defaultUsers;
   }
