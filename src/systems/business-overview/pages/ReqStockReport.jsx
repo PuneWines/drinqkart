@@ -95,7 +95,8 @@ export default function ReqStockReport() {
     const term = search.trim().toLowerCase();
     const minSaleQty = Number(minSale) || 0;
     return items
-      .filter((it) => it.sale > 0 && it.sale >= minSaleQty)
+      // sold above the threshold and out of stock (closing 0 or negative; a "-" / blank closing already counts as 0)
+      .filter((it) => it.sale > minSaleQty && it.current <= 0)
       .filter((it) => !term || `${it.name || ''} ${it.itemId || ''}`.toLowerCase().includes(term))
       .sort((a, b) => {
         const { key, dir } = sort;
@@ -148,7 +149,7 @@ export default function ReqStockReport() {
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight truncate">Req Stock Report</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Sale, per day average and the quantity to order to cover the next {days} day{days === 1 ? '' : 's'}
+              Out-of-stock items (closing 0 or less) that sold above the threshold, with the quantity to order for the next {days} day{days === 1 ? '' : 's'}
             </p>
           </div>
         </div>
@@ -256,7 +257,7 @@ export default function ReqStockReport() {
               value={minSale}
               onChange={(e) => { setMinSale(e.target.value); setPage(1); }}
               placeholder="0"
-              title="Show items whose Sale is at least this value"
+              title="Show items whose Sale is greater than this value"
               className="w-16 bg-transparent text-xs text-slate-700 outline-none font-medium"
             />
           </div>
@@ -323,8 +324,8 @@ export default function ReqStockReport() {
                   <td colSpan={6} className="text-center py-14 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
-                      <span className="text-sm font-semibold text-slate-600">No items with sales found</span>
-                      <p className="text-xs text-slate-400">Try a different date range or shop.</p>
+                      <span className="text-sm font-semibold text-slate-600">No items to order</span>
+                      <p className="text-xs text-slate-400">Only items with sales above the threshold and closing qty of 0 or less are listed. Try a different date range or shop.</p>
                     </div>
                   </td>
                 </tr>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  FileSpreadsheet, RefreshCw, Search, Calendar, Store, ChevronRight, ChevronDown
+  FileSpreadsheet, RefreshCw, Search, Calendar, Store, ChevronRight, ChevronDown, BarChart3
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import {
   getDefaultDateRange, todayISO, findLatestSnapshotDate, loadStockDay, invalidateStockCache
 } from '../stock/stockData';
@@ -11,7 +12,9 @@ const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDi
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const groupKey = (r) => [r.liquor_type || '—', r.subhead || '—', r.type5 || '—'].join('||');
+const KPI_OPTIONS = ['Purchase Value', 'MRP Value'];
+
+const groupKey =(r) => [r.liquor_type || '—', r.subhead || '—', r.type5 || '—'].join('||');
 
 const emptyCell = () => ({ qty: 0, purchase: 0, mrp: 0 });
 const addTo = (cell, qty, purchase, mrp) => {
@@ -27,9 +30,10 @@ export default function ValuationReport() {
   const [endDate, setEndDate] = useState(() => getDefaultDateRange().end);
   const [snapshotDate, setSnapshotDate] = useState(''); // snapshot actually valued (latest one inside the range)
   const [shopFilter, setShopFilter] = useState('');
-  const [valueBasis, setValueBasis] = useState('both'); // 'both' | 'purchase' | 'mrp'
-  const showPurchase = valueBasis !== 'mrp';
-  const showMrp = valueBasis !== 'purchase';
+  // Value Type: tick Purchase Value, MRP Value or both; nothing ticked shows both
+  const [kpiSel, setKpiSel] = useState(() => new Set(KPI_OPTIONS));
+  const showPurchase = kpiSel.size === 0 || kpiSel.has('Purchase Value');
+  const showMrp = kpiSel.size === 0 || kpiSel.has('MRP Value');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(new Set());
   const latestRequestRef = useRef(0);
@@ -211,7 +215,7 @@ export default function ValuationReport() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center gap-2.5 min-w-0">
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-end gap-2.5 min-w-0">
         <div className="relative flex-1 sm:flex-none sm:w-64 min-w-50">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -223,7 +227,7 @@ export default function ValuationReport() {
           />
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
+        <div className="flex items-center gap-1.5 h-[34px] bg-slate-50 border border-slate-200 px-2.5 rounded-xl">
           <Calendar size={13} className="text-slate-400 shrink-0" />
           <span className="text-[11px] font-semibold text-slate-500">From:</span>
           <input
@@ -234,7 +238,7 @@ export default function ValuationReport() {
             className="bg-transparent text-xs text-slate-700 outline-none font-medium"
           />
         </div>
-        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
+        <div className="flex items-center gap-1.5 h-[34px] bg-slate-50 border border-slate-200 px-2.5 rounded-xl">
           <Calendar size={13} className="text-slate-400 shrink-0" />
           <span className="text-[11px] font-semibold text-slate-500">To:</span>
           <input
@@ -253,7 +257,7 @@ export default function ValuationReport() {
             setStartDate(def.start);
             setEndDate(def.end);
           }}
-          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
+          className="h-[34px] text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-3 rounded-xl hover:bg-indigo-50 transition cursor-pointer"
           title="Reset to the last 7 days"
         >
           Reset (7D)
@@ -273,17 +277,17 @@ export default function ValuationReport() {
           </select>
         </div>
 
-        <select
-          value={valueBasis}
-          onChange={(e) => setValueBasis(e.target.value)}
-          className="px-3 py-2 text-xs border border-slate-200 rounded-xl font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 outline-none transition cursor-pointer"
-        >
-          <option value="both">Purchase + MRP Value</option>
-          <option value="purchase">Purchase Value</option>
-          <option value="mrp">MRP Value</option>
-        </select>
+        <div className="w-44">
+          <MultiSelectDropdown
+            label="Value Type"
+            icon={BarChart3}
+            options={KPI_OPTIONS}
+            selected={kpiSel}
+            onChange={setKpiSel}
+          />
+        </div>
 
-        <span className="ml-auto text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/60 whitespace-nowrap">
+        <span className="ml-auto flex items-center h-[34px] text-xs font-semibold text-slate-500 bg-slate-50 px-3 rounded-xl border border-slate-200/60 whitespace-nowrap">
           Groups: <b className="text-indigo-900">{groups.length}</b>
         </span>
       </div>
