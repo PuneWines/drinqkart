@@ -359,6 +359,11 @@ export default function StockReport() {
       <td className={`px-3 py-2.5 text-right font-mono font-bold text-indigo-700 ${cls}`}>{fmtQty(r.closing)}</td>
       <td className={`px-3 py-2.5 text-right font-mono text-slate-700 ${cls}`}>{fmtMoney(r.purchaseValue)}</td>
       <td className={`px-3 py-2.5 text-right font-mono text-slate-700 ${cls}`}>{fmtMoney(r.mrpValue)}</td>
+      {EXTRA_COLUMNS.map(([key, , , render, colCls]) => (
+        <td key={key} className={`px-3 py-2.5 ${colCls.replace(/bg-\S+/g, '')} ${cls}`}>
+          {r[key] === undefined ? '—' : render(r)}
+        </td>
+      ))}
       <td className={`px-3 py-2.5 text-center ${cls}`}>
         {r.gaps > 0 && (
           <span
@@ -370,11 +375,6 @@ export default function StockReport() {
           </span>
         )}
       </td>
-      {EXTRA_COLUMNS.map(([key, , , render, colCls]) => (
-        <td key={key} className={`px-3 py-2.5 ${colCls.replace(/bg-\S+/g, '')} ${cls}`}>
-          {r[key] === undefined ? '—' : render(r)}
-        </td>
-      ))}
     </>
   );
 
@@ -590,7 +590,6 @@ export default function StockReport() {
                         <span className="ml-1 text-indigo-300">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
                       </th>
                     ))}
-                    <th className="px-3 py-3 text-center" title="Opening + In − Out vs Closing">Check</th>
                     {EXTRA_COLUMNS.map(([key, label, align]) => (
                       <th
                         key={key}
@@ -602,6 +601,7 @@ export default function StockReport() {
                         <span className="ml-1 text-indigo-300">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
                       </th>
                     ))}
+                    <th className="px-3 py-3 text-center" title="Opening + In − Out vs Closing">Check</th>
                   </>
                 )}
               </tr>
