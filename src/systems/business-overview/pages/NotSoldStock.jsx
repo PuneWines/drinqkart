@@ -9,7 +9,7 @@ import useStockRange from '../stock/useStockRange';
 import { getDefaultDateRange, todayISO } from '../stock/stockData';
 
 const PAGE_SIZE = 100;
-const DEFAULT_MIN_DAYS_NOT_SOLD = 15;
+const DEFAULT_MIN_DAYS_NOT_SOLD = 7;
 const DEFAULT_MAX_PERCENT = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -73,7 +73,8 @@ export default function NotSoldStock() {
           closing: Number(r.closing_qty) || 0,
           purchase: 0,
           sale: 0,
-          lastSale: null
+          lastSale: null,
+          bottlesPerCase: Number(r.bottles_per_case) || 0
         };
         perShopItem.set(key, s);
       }
@@ -96,7 +97,7 @@ export default function NotSoldStock() {
     perShopItem.forEach((s) => {
       let it = byItem.get(s.itemId);
       if (!it) {
-        it = { itemId: s.itemId, name: s.name, opening: 0, purchase: 0, sale: 0, current: 0, lastSale: null };
+        it = { itemId: s.itemId, name: s.name, opening: 0, purchase: 0, sale: 0, current: 0, lastSale: null, bottlesPerCase: s.bottlesPerCase };
         byItem.set(s.itemId, it);
       }
       it.opening += s.opening;
@@ -109,6 +110,8 @@ export default function NotSoldStock() {
     const rangeDays = Math.max(1, daysBetween(startDate, endDate) + 1);
     return [...byItem.values()].map((it) => ({
       ...it,
+      // quantities are bottles; boxes = bottles / bottles per case (null when case size unknown)
+      currentBox: it.bottlesPerCase > 0 ? it.current / it.bottlesPerCase : null,
       total: it.opening + it.purchase,
       // sale qty / total stock * 100 (sell-through); no sale is 0%
       percentage: it.opening + it.purchase > 0 ? (it.sale / (it.opening + it.purchase)) * 100 : 0,
@@ -131,7 +134,7 @@ export default function NotSoldStock() {
         if (key === 'name') cmp = (a.name || '').localeCompare(b.name || '');
         else if (key === 'lastSale') cmp = (a.lastSale || '').localeCompare(b.lastSale || ''); // "No sale" (empty) sorts as oldest
         else if (a[key] === b[key]) cmp = 0; // also keeps Infinity - Infinity from giving NaN
-        else cmp = a[key] - b[key];
+        else cmp = (a[key] ?? -1) - (b[key] ?? -1); // unknown box counts sort lowest
         return cmp * mul || b.daysNotSold - a.daysNotSold || b.current - a.current;
       });
   }, [items, search, minDaysNotSold, maxPercent, sort]);
@@ -159,7 +162,8 @@ export default function NotSoldStock() {
       'Total Stock': it.total,
       'Sale Qty': it.sale,
       'Percentage (Sale Qty / Total Stock x 100)': Number(it.percentage.toFixed(1)),
-      'Current Stock': it.current,
+      'Current Stock (Bottles)': it.current,
+      'Current Stock (Boxes)': it.currentBox == null ? '' : Number(it.currentBox.toFixed(1)),
       'Last Sale Date': it.lastSale ? fmtDate(it.lastSale) : 'Never Sold',
       'Days Not Sold': it.daysNotSold
     }));
@@ -334,7 +338,8 @@ export default function NotSoldStock() {
                   ['total', 'Total Stock', 'text-right'],
                   ['sale', 'Sale Qty', 'text-right'],
                   ['percentage', 'Percentage', 'text-right'],
-                  ['current', 'Current Stock', 'text-right'],
+                  ['current', 'Current Stock (Btl)', 'text-right'],
+                  ['currentBox', 'Current Stock (Box)', 'text-right'],
                   ['lastSale', 'Last Sale Date', ''],
                   ['daysNotSold', 'Days Not Sold', 'text-right']
                 ].map(([key, label, align]) => (
@@ -353,7 +358,7 @@ export default function NotSoldStock() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-slate-400">
+                  <td colSpan={11} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={20} className="animate-spin text-indigo-600" />
                       <span className="text-xs font-semibold text-slate-600">{loadingLabel}</span>
@@ -362,7 +367,7 @@ export default function NotSoldStock() {
                 </tr>
               ) : pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-14 text-slate-400">
+                  <td colSpan={11} className="text-center py-14 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
                       <span className="text-sm font-semibold text-slate-600">No items match</span>
@@ -383,6 +388,7 @@ export default function NotSoldStock() {
                     <td className="px-3 py-2.5 text-right font-mono text-amber-600 font-semibold">{fmtQty(it.sale)}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-slate-700">{fmtPct(it.percentage)}</td>
                     <td className="px-3 py-2.5 text-right font-mono font-bold text-indigo-700 bg-indigo-50/40">{fmtQty(it.current)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-indigo-700 bg-indigo-50/40">{it.currentBox == null ? '—' : fmtQty(it.currentBox)}</td>
                     <td className="px-3 py-2.5 text-slate-600 font-mono text-[11px]">{it.lastSale ? fmtDate(it.lastSale) : <span className="inline-block text-[10px] font-bold uppercase tracking-wide text-red-700 bg-red-50 border border-red-200 rounded-full px-2.5 py-0.5">Never Sold</span>}</td>
                     <td className="px-3 py-2.5 text-right font-mono font-bold text-red-600">{it.daysNotSold}</td>
                   </tr>

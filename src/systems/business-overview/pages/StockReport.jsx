@@ -42,6 +42,12 @@ const DETAIL_COLUMNS = [
   ['party', 'Party Name', '', (r) => r.party || '—', 'text-slate-600']
 ];
 
+// Item-level stock balance columns shown after the totals in the Item/Shop/Category views.
+// Group rows have none of these (undefined), so they render as a dash.
+const EXTRA_KEYS = ['shop', 'date', 'itemId', 'purchaseRate', 'mrpRate', 'subhead', 'brandId', 'brandName', 'liquorType', 'bottlesPerCase', 'mls', 'types', 'company', 'party'];
+const EXTRA_COLUMNS = DETAIL_COLUMNS.filter(([key]) => EXTRA_KEYS.includes(key));
+const GROUP_COLUMN_COUNT = 8 + EXTRA_COLUMNS.length; // expander + label + 6 totals + check + extras
+
 const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -64,13 +70,30 @@ function rollUpItems(lines) {
   lines.forEach((l) => {
     let it = map.get(l.itemId);
     if (!it) {
-      it = { key: l.itemId, label: l.name || l.itemId, sub: l.itemId, gaps: 0, ...emptyTotals() };
+      it = {
+        key: l.itemId, label: l.name || l.itemId, sub: l.itemId, gaps: 0, ...emptyTotals(),
+        itemId: l.itemId, shops: new Set(), firstDate: l.firstDate, lastDate: l.lastDate,
+        purchaseRate: l.purchaseRate, mrpRate: l.mrpRate, subhead: l.subhead, brandId: l.brandId,
+        brandName: l.brandName, liquorType: l.liquorType, bottlesPerCase: l.bottlesPerCase,
+        mls: l.mls, types: l.types, company: l.company, party: l.party
+      };
       map.set(l.itemId, it);
     }
     addTotals(it, l);
     if (hasGap(l)) it.gaps++;
+    it.shops.add(l.shop);
+    if (l.firstDate < it.firstDate) it.firstDate = l.firstDate;
+    if (l.lastDate >= it.lastDate) {
+      it.lastDate = l.lastDate;
+      it.purchaseRate = l.purchaseRate;
+      it.mrpRate = l.mrpRate;
+    }
   });
-  return [...map.values()];
+  return [...map.values()].map(({ shops, ...it }) => ({
+    ...it,
+    shop: shops.size === 1 ? [...shops][0] : `${shops.size} shops`,
+    date: it.firstDate === it.lastDate ? it.firstDate : `${it.firstDate} → ${it.lastDate}`
+  }));
 }
 
 function buildGroups(lines, keyFn, labelFn) {
@@ -165,7 +188,14 @@ export default function StockReport() {
           qtyOut: 0,
           closing: Number(r.closing_qty) || 0,
           purchaseRate: Number(r.purchase_bottle_rate) || 0,
-          mrpRate: Number(r.mrp_bottle_rate) || 0
+          mrpRate: Number(r.mrp_bottle_rate) || 0,
+          brandId: r.brand_id ?? '',
+          brandName: r.brand_name || '',
+          bottlesPerCase: Number(r.bottles_per_case) || 0,
+          mls: r.mls ?? '',
+          types: [r.type1, r.type2, r.type3, r.type4, r.type5, r.type6].filter(Boolean).join(', '),
+          company: r.company_name || '',
+          party: r.party_name || ''
         };
         byKey.set(key, l);
       }
@@ -245,7 +275,11 @@ export default function StockReport() {
 
     const mul = sort.dir === 'asc' ? 1 : -1;
     return list.sort((a, b) => {
-      const cmp = sort.key === 'label' ? a.label.localeCompare(b.label) : a[sort.key] - b[sort.key];
+      const av = a[sort.key];
+      const bv = b[sort.key];
+      const cmp = typeof av === 'string' || typeof bv === 'string'
+        ? String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true })
+        : (av ?? 0) - (bv ?? 0);
       return cmp * mul || a.label.localeCompare(b.label);
     });
   }, [lines, view, sort, detailRows]);
@@ -336,6 +370,11 @@ export default function StockReport() {
           </span>
         )}
       </td>
+      {EXTRA_COLUMNS.map(([key, , , render, colCls]) => (
+        <td key={key} className={`px-3 py-2.5 ${colCls.replace(/bg-\S+/g, '')} ${cls}`}>
+          {r[key] === undefined ? '—' : render(r)}
+        </td>
+      ))}
     </>
   );
 
@@ -552,6 +591,17 @@ export default function StockReport() {
                       </th>
                     ))}
                     <th className="px-3 py-3 text-center" title="Opening + In − Out vs Closing">Check</th>
+                    {EXTRA_COLUMNS.map(([key, label, align]) => (
+                      <th
+                        key={key}
+                        onClick={() => handleSort(key)}
+                        className={`px-3 py-3 cursor-pointer hover:text-white ${align}`}
+                        title="Click to sort"
+                      >
+                        {label}
+                        <span className="ml-1 text-indigo-300">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+                      </th>
+                    ))}
                   </>
                 )}
               </tr>
@@ -559,7 +609,7 @@ export default function StockReport() {
             <tbody className="font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={view === 'detail' ? DETAIL_COLUMNS.length : 9} className="text-center py-12 text-slate-400">
+                  <td colSpan={view === 'detail' ? DETAIL_COLUMNS.length : GROUP_COLUMN_COUNT} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={20} className="animate-spin text-indigo-600" />
                       <span className="text-xs font-semibold text-slate-600">{loadingLabel}</span>
@@ -568,7 +618,7 @@ export default function StockReport() {
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={view === 'detail' ? DETAIL_COLUMNS.length : 9} className="text-center py-14 text-slate-400">
+                  <td colSpan={view === 'detail' ? DETAIL_COLUMNS.length : GROUP_COLUMN_COUNT} className="text-center py-14 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
                       <span className="text-sm font-semibold text-slate-600">No stock data for these filters</span>
@@ -631,7 +681,7 @@ export default function StockReport() {
                     <td className="px-3 py-2.5 text-right font-mono">{fmtQty(grand.closing)}</td>
                     <td className="px-3 py-2.5 text-right font-mono">{fmtMoney(grand.purchaseValue)}</td>
                     <td className="px-3 py-2.5 text-right font-mono">{fmtMoney(grand.mrpValue)}</td>
-                    <td />
+                    <td colSpan={1 + EXTRA_COLUMNS.length} />
                   </tr>
                 </>
               )}
