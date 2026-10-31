@@ -791,9 +791,15 @@ const Approval = () => {
       );
 
       // Validate valid parent indent IDs to avoid foreign key constraints
-      const { data: validIndents } = await supabase
-        .from("purchase_indents")
-        .select("id");
+      const batchIndentIds = [
+        ...new Set(itemsToProcess.map((i) => i.indent_id).filter(Boolean)),
+      ];
+      const { data: validIndents } = batchIndentIds.length
+        ? await supabase
+            .from("purchase_indents")
+            .select("id")
+            .in("id", batchIndentIds)
+        : { data: [] };
       const validIndentIds = new Set((validIndents || []).map((i) => i.id));
 
       itemsToProcess.forEach((item) => {

@@ -16,8 +16,13 @@ export const dashboardSyncService = {
   async syncIndentCreated({ indentId, shopName, itemsPayload, empCode }) {
     if (!indentId || !itemsPayload || itemsPayload.length === 0) return;
 
+    // Auto-excluded items (low/negative order qty) never reach a PO and are hidden
+    // on the Dashboard, so they are not written to purchase_dashboard.
+    const activeItems = itemsPayload.filter((itm) => !itm.is_excluded);
+    if (activeItems.length === 0) return;
+
     const now = new Date().toISOString();
-    const dashboardRows = itemsPayload.map((itm) => ({
+    const dashboardRows = activeItems.map((itm) => ({
       indent_id: String(indentId),
       shop_name: shopName || itm.shop_name || "UNKNOWN",
       party_name: itm.party_name || "UNKNOWN",

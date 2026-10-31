@@ -1191,7 +1191,8 @@ const Indent = () => {
       const { error: delApprovedError } = await supabase
         .from("purchase_approved_indent_items")
         .delete()
-        .eq("indent_id", indentId)
+        .or(`indent_id.eq.${indentId},unique_indent_id.like.${indentId}::*`)
+        .is("po_id", null)
         .neq("po_status", "on_hold");
       if (delApprovedError) throw delApprovedError;
 
