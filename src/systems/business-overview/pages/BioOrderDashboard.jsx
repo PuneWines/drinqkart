@@ -1,6 +1,6 @@
 
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ClipboardList, Download, RefreshCw, Search, FileSpreadsheet,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCcw,
@@ -81,6 +81,21 @@ export default function BioOrderDashboard() {
   const [page, setPage] = useState(1);
   const [showShopsDropdown, setShowShopsDropdown] = useState(false);
   const [showColsDropdown, setShowColsDropdown] = useState(false);
+  const shopsDropdownRef = useRef(null);
+  const colsDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (shopsDropdownRef.current && !shopsDropdownRef.current.contains(e.target)) {
+        setShowShopsDropdown(false);
+      }
+      if (colsDropdownRef.current && !colsDropdownRef.current.contains(e.target)) {
+        setShowColsDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const { rows, loading, error, refresh } = useStockRange(startDate, endDate);
 
@@ -589,7 +604,7 @@ export default function BioOrderDashboard() {
             </label>
 
             {/* Shops Dropdown Selector with Color Indicators */}
-            <div className="relative">
+            <div className="relative" ref={shopsDropdownRef}>
               <button
                 onClick={() => setShowShopsDropdown((p) => !p)}
                 className="flex items-center gap-1.5 bg-white border border-[#badbf4] px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 shadow-2xs cursor-pointer hover:bg-slate-50"
@@ -633,7 +648,7 @@ export default function BioOrderDashboard() {
 
             {/* Column Visibility Selector (when Detailed View) */}
             {viewMode === 'full' && (
-              <div className="relative">
+              <div className="relative" ref={colsDropdownRef}>
                 <button
                   onClick={() => setShowColsDropdown((p) => !p)}
                   className="flex items-center gap-1.5 bg-white border border-[#badbf4] px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 shadow-2xs cursor-pointer hover:bg-slate-50"
