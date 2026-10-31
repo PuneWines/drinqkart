@@ -91,6 +91,7 @@ export default function ScheduledWorkTasks() {
   const isSuperAdmin = role === "superadmin" || role === "masteradmin";
   const isHOD = role === "hod";
   const isAdmin = isSuperAdmin || isHOD || role === "admin";
+  const isManager = role === "manager";
 
   const assignedShops = useMemo(() => {
     return getUserAssignedShops().map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -318,7 +319,7 @@ export default function ScheduledWorkTasks() {
       return;
     }
 
-    if (!(isAdmin || isHOD)) {
+    if (!(isAdmin || isHOD || isManager)) {
       showToast("Only admins and managers can bulk schedule tasks", "error");
       return;
     }
@@ -609,7 +610,7 @@ export default function ScheduledWorkTasks() {
             </div>
           </div>
 
-          {(isAdmin || isHOD) && isModifyAllowed && (
+          {(isAdmin || isHOD || isManager) && isModifyAllowed && (
             <>
               {/* Bulk Start Date */}
               <div className="space-y-1">
