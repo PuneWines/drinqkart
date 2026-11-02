@@ -3,21 +3,74 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ---------------------------------------------------------------------------
 // Constants & Endpoints
 // ---------------------------------------------------------------------------
-const BIOMETRIC_API_KEY = "211616032630"; // Company-wide master API key
+const BIOMETRIC_API_KEY = "211616032630"; // Company-wide enterprise master API key
 const DEVICE_LOG_API_BASE = "http://103.195.203.77:15167/api/v2/WebAPI/GetDeviceLogs";
 
-const JOINING_API_URL =
-  "https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch";
-const MASTER_MAP_URL =
-  "https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=MASTER&action=fetch";
-
 // ---------------------------------------------------------------------------
-// Dynamic Biometric Device Model from `shop` table
+// Data Models
 // ---------------------------------------------------------------------------
 interface BiometricDevice {
   name: string;
   serial: string;
   apiName: string;
+}
+
+interface DBEmployee {
+  id: string;
+  name: string;
+  designation: string;
+  store: string;
+  dbId?: string;
+}
+
+interface ShiftRosterEntry {
+  id: number;
+  employee_id: string;
+  date: string;
+  shift_type: string;
+  start_time: string | null;
+  end_time: string | null;
+  remark: string | null;
+}
+
+interface RawLog {
+  EmployeeCode: string;
+  LogDate: string;
+  SerialNumber: string;
+  _DeviceName: string;
+}
+
+interface DeviceFetchResult {
+  device: BiometricDevice;
+  logs: RawLog[];
+  error?: string;
+}
+
+interface AggregatedRecord {
+  EmployeeID: string;
+  EmployeeName: string;
+  Date: string;
+  Day: string;
+  IsWorkingDay: string;
+  InTime: string;
+  OutTime: string;
+  StandardLunch: string;
+  WasteTime: string;
+  PunchLog: string;
+  PunchLogStatus: string;
+  StoreName: string;
+  DeviceID: string;
+  Designation: string;
+  SerialNumber: string;
+  AssignedSerial: string;
+  Status: string;
+  WorkingHour: string;
+  Overtime: string;
+  LateMinute: number;
+  PunchMiss: string;
+  PunchMissMsg: string;
+  RawLogs: string[];
+  ShiftType: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,11 +146,8 @@ function convert12hTo24h(time12h: string): string {
     const minute = parseInt(timeParts[1], 10);
     const ampm = parts[1].toUpperCase();
 
-    if (ampm === "PM" && hour < 12) {
-      hour += 12;
-    } else if (ampm === "AM" && hour === 12) {
-      hour = 0;
-    }
+    if (ampm === "PM" && hour < 12) hour += 12;
+    else if (ampm === "AM" && hour === 12) hour = 0;
 
     const hh = hour.toString().padStart(2, "0");
     const mm = minute.toString().padStart(2, "0");
@@ -169,12 +219,12 @@ function calculateLateMinutes(inStr: string, shift?: ShiftRosterEntry | null): n
     const minute = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
     const totalMinutes = hour * 60 + minute;
 
-    let officialStart = 10 * 60;
-    let graceThreshold = 10 * 60 + 10;
+    let officialStart = 10 * 60; // default 10:00 AM
+    let graceThreshold = 10 * 60 + 10; // 10:10 AM
 
     if (shift?.start_time) {
       const [shiftH, shiftM] = shift.start_time.split(":").map(Number);
-      officialStart = shiftH * 60 + shiftM;
+      officialStart = shiftH * 60 + (shiftM || 0);
       graceThreshold = officialStart + 10;
     }
 
@@ -185,148 +235,180 @@ function calculateLateMinutes(inStr: string, shift?: ShiftRosterEntry | null): n
 }
 
 // ---------------------------------------------------------------------------
-// Roster & Sheet Interfaces
+// Single Punch Classification (Day shifts, Evening shifts, Overnight shifts)
 // ---------------------------------------------------------------------------
-interface ShiftRosterEntry {
-  id: number;
-  employee_id: string;
-  date: string;
-  shift_type: string;
-  start_time: string | null;
-  end_time: string | null;
-  remark: string | null;
-}
+function classifySinglePunch(
+  punchTime: string,
+  shift?: ShiftRosterEntry | null
+): { inTime: string; outTime: string; punchMissMsg: string } {
+  const timePart = punchTime.split(" ")[1] || "";
+  const hour = parseInt(timePart.split(":")[0], 10) || 0;
+  const minute = parseInt(timePart.split(":")[1], 10) || 0;
+  const punchMinutes = hour * 60 + minute;
 
-interface JoiningEntry {
-  id: string;
-  name: string;
-  designation: string;
-  store: string;
-}
+  if (shift?.start_time && shift?.end_time) {
+    const [startH, startM] = shift.start_time.split(":").map(Number);
+    let [endH, endM] = shift.end_time.split(":").map(Number);
 
-async function fetchJoiningData(): Promise<JoiningEntry[]> {
-  try {
-    const res = await fetch(JOINING_API_URL);
-    const result = await res.json();
-    if (!result.success) return [];
+    const isOvernight = endH <= startH;
+    if (isOvernight) {
+      endH += 24;
+    }
 
-    const rawRows: unknown[][] = result.data ?? result;
-    const headers: unknown[] = rawRows[5];
-    const dataRows: unknown[][] = rawRows.slice(6);
+    const startMinutes = startH * 60 + (startM || 0);
+    const endMinutes = endH * 60 + (endM || 0);
+    const midMinutes = Math.floor((startMinutes + endMinutes) / 2);
 
-    const getIdx = (name: string) =>
-      headers.findIndex((h) => h && h.toString().trim().toLowerCase() === name.toLowerCase());
+    let effectivePunchMinutes = punchMinutes;
+    if (isOvernight && punchMinutes < startMinutes - 180) {
+      // Punched early morning on next calendar day for overnight shift (e.g. 04:00 AM)
+      effectivePunchMinutes += 24 * 60;
+    }
 
-    const empIdIdx = getIdx("Employee ID");
-    const nameIdx = getIdx("Name As Per Aadhar");
-    const desIdx = getIdx("Designation");
-    const storeIdx = getIdx("Joining Place");
+    if (effectivePunchMinutes >= midMinutes) {
+      return {
+        inTime: "-",
+        outTime: punchTime,
+        punchMissMsg: "Morning Punch Miss",
+      };
+    } else {
+      return {
+        inTime: punchTime,
+        outTime: "-",
+        punchMissMsg: "Evening Punch Miss",
+      };
+    }
+  }
 
-    return dataRows
-      .map((r) => ({
-        id: r[empIdIdx]?.toString().trim() ?? "",
-        name: r[nameIdx]?.toString().trim() ?? "",
-        designation: r[desIdx]?.toString().trim() ?? "",
-        store: r[storeIdx]?.toString().trim() ?? "",
-      }))
-      .filter((h) => h.id);
-  } catch {
-    return [];
+  // Default day shift (10:00 AM - 08:00 PM, midpoint 15:00 = 3:00 PM)
+  if (hour >= 15) {
+    return {
+      inTime: "-",
+      outTime: punchTime,
+      punchMissMsg: "Morning Punch Miss",
+    };
+  } else {
+    return {
+      inTime: punchTime,
+      outTime: "-",
+      punchMissMsg: "Evening Punch Miss",
+    };
   }
 }
 
-interface DeviceMapEntry {
-  userId: string;
-  name: string;
-  deviceId: string;
-  serialNo: string;
-  storeName: string;
+// ---------------------------------------------------------------------------
+// Employee and Shift Lookups (Handles trim and leading zeros)
+// ---------------------------------------------------------------------------
+function findEmployee(employees: DBEmployee[], code: string): DBEmployee | undefined {
+  const cleanCode = (code || "").toString().trim().toLowerCase();
+  const numericCode = cleanCode.replace(/^0+/, "");
+
+  return employees.find((e) => {
+    const eId = (e.id || "").toString().trim().toLowerCase();
+    const eNumeric = eId.replace(/^0+/, "");
+    const eName = (e.name || "").toString().trim().toLowerCase();
+    const eDbId = (e.dbId || "").toString().trim().toLowerCase();
+
+    return (
+      eId === cleanCode ||
+      (numericCode && eNumeric === numericCode) ||
+      (eDbId && eDbId === cleanCode) ||
+      (eName && eName === cleanCode)
+    );
+  });
 }
 
-async function fetchDeviceMapping(): Promise<DeviceMapEntry[]> {
-  try {
-    const res = await fetch(MASTER_MAP_URL);
-    const result = await res.json();
-    if (!result.success) return [];
+function findShift(
+  rosterList: ShiftRosterEntry[],
+  employeeId: string,
+  displayCode: string,
+  date: string
+): ShiftRosterEntry | null {
+  const cleanId = (employeeId || "").toString().trim().toLowerCase();
+  const cleanDisplay = (displayCode || "").toString().trim().toLowerCase();
+  const numId = cleanId.replace(/^0+/, "");
+  const numDisplay = cleanDisplay.replace(/^0+/, "");
 
-    const rows: unknown[][] = result.data.slice(1);
-    return rows.map((r) => ({
-      userId: r[5]?.toString().trim() ?? "",
-      name: r[6]?.toString().trim() ?? "",
-      deviceId: r[7]?.toString().trim() ?? "",
-      serialNo: r[8]?.toString().trim() ?? "",
-      storeName: r[9]?.toString().trim() ?? "",
-    }));
-  } catch {
-    return [];
-  }
+  return (
+    rosterList.find((s) => {
+      if (s.date !== date) return false;
+      const sId = (s.employee_id || "").toString().trim().toLowerCase();
+      const sNum = sId.replace(/^0+/, "");
+      return (
+        sId === cleanId ||
+        sId === cleanDisplay ||
+        (numId && sNum === numId) ||
+        (numDisplay && sNum === numDisplay)
+      );
+    }) ?? null
+  );
 }
 
-interface RawLog {
-  EmployeeCode: string;
-  LogDate: string;
-  SerialNumber: string;
-  _DeviceName: string;
-}
-
+// ---------------------------------------------------------------------------
+// Raw device log fetching with robust error handling for invalid serial/key
+// ---------------------------------------------------------------------------
 async function fetchRawLogsForDevice(
   device: BiometricDevice,
   fromDate: string,
   toDate: string
-): Promise<RawLog[]> {
+): Promise<DeviceFetchResult> {
+  const devName = device.apiName || device.name;
   const url =
     `${DEVICE_LOG_API_BASE}` +
     `?APIKey=${BIOMETRIC_API_KEY}` +
     `&SerialNumber=${encodeURIComponent(device.serial)}` +
-    `&DeviceName=${encodeURIComponent(device.apiName)}` +
+    `&DeviceName=${encodeURIComponent(devName)}` +
     `&FromDate=${fromDate}` +
     `&ToDate=${toDate}`;
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error(`[sync-attendance] Device ${device.name} (${device.serial}) returned HTTP ${res.status}`);
-    return [];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const msg = `HTTP error ${res.status}`;
+      console.error(`[sync-attendance] Device ${device.name} (${device.serial}): ${msg}`);
+      return { device, logs: [], error: msg };
+    }
+
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+
+    // Handles error messages from server (e.g. { status: false, message: 'Serial Number does not exist.' })
+    if (!Array.isArray(data)) {
+      const errorMsg =
+        typeof data === "object" && data?.message
+          ? data.message
+          : typeof data === "string" && data.trim()
+          ? data.trim()
+          : "Invalid data format from biometric server";
+      console.warn(`[sync-attendance] ⚠️ Shop "${device.name}" (${device.serial}): ${errorMsg}`);
+      return { device, logs: [], error: errorMsg };
+    }
+
+    const logs: RawLog[] = data.map((l: any) => ({
+      EmployeeCode: (l.EmployeeCode || "").toString().trim(),
+      LogDate: (l.LogDate || "").toString().trim(),
+      SerialNumber: (l.SerialNumber || device.serial).toString().trim(),
+      _DeviceName: device.name,
+    }));
+
+    return { device, logs };
+  } catch (err: any) {
+    console.error(`[sync-attendance] Fetch exception for ${device.name}:`, err.message || err);
+    return { device, logs: [], error: err.message || "Network exception" };
   }
-  const logs = await res.json();
-  return Array.isArray(logs)
-    ? logs.map((l: RawLog) => ({ ...l, _DeviceName: device.name }))
-    : [];
 }
 
 // ---------------------------------------------------------------------------
-// Aggregation logic
+// Aggregation logic (matches Supabase employee records directly)
 // ---------------------------------------------------------------------------
-interface AggregatedRecord {
-  EmployeeID: string;
-  EmployeeName: string;
-  Date: string;
-  Day: string;
-  IsWorkingDay: string;
-  InTime: string;
-  OutTime: string;
-  StandardLunch: string;
-  WasteTime: string;
-  PunchLog: string;
-  PunchLogStatus: string;
-  StoreName: string;
-  DeviceID: string;
-  Designation: string;
-  SerialNumber: string;
-  AssignedSerial: string;
-  Status: string;
-  WorkingHour: string;
-  Overtime: string;
-  LateMinute: number;
-  PunchMiss: string;
-  PunchMissMsg: string;
-  RawLogs: string[];
-  ShiftType: string | null;
-}
-
 function aggregateLogs(
   filteredLogs: RawLog[],
-  joiningData: JoiningEntry[],
-  deviceMapping: DeviceMapEntry[],
+  employees: DBEmployee[],
   rosterList: ShiftRosterEntry[],
   fromDate: string,
   toDate: string,
@@ -356,6 +438,7 @@ function aggregateLogs(
     grouped[key].logs.push(log.LogDate);
   }
 
+  // Inject absent records for rostered employees who didn't punch
   const start = new Date(fromDate + "T00:00:00+05:30");
   const end = new Date(toDate + "T00:00:00+05:30");
   const datesInRange: string[] = [];
@@ -371,24 +454,15 @@ function aggregateLogs(
       const empId = shift.employee_id.toString().trim();
       const key = `${empId}_${dateStr}`;
       if (!grouped[key]) {
-        let dMap = deviceMapping.find(
-          (m) => m.userId && m.userId.toString().toLowerCase() === empId.toLowerCase()
+        const empMeta = findEmployee(employees, empId);
+        const homeDevice = configuredDevices.find(
+          (d) => d.name.toLowerCase() === (empMeta?.store || "").toLowerCase()
         );
-        if (!dMap) {
-          const empMeta = joiningData.find(
-            (e) => (e.id && e.id.toLowerCase() === empId.toLowerCase()) ||
-              (e.name && e.name.toLowerCase() === empId.toLowerCase())
-          );
-          if (empMeta) {
-            const entryName = empMeta.name.trim().toLowerCase();
-            dMap = deviceMapping.find((m) => m.name?.toLowerCase() === entryName);
-          }
-        }
         grouped[key] = {
           EmployeeCode: empId,
           Date: dateStr,
-          SerialNumber: dMap ? dMap.serialNo : "-",
-          SourceDeviceName: dMap ? dMap.storeName : "-",
+          SerialNumber: homeDevice ? homeDevice.serial : "-",
+          SourceDeviceName: homeDevice ? homeDevice.name : (empMeta?.store || "-"),
           logs: [],
         };
       }
@@ -401,24 +475,14 @@ function aggregateLogs(
     const serial = group.SerialNumber ? group.SerialNumber.toString().trim() : "";
     const isNumeric = !isNaN(Number(code)) && code !== "";
 
-    const empMeta = joiningData.find(
-      (e) =>
-        (e.id && e.id.toLowerCase() === code.toLowerCase()) ||
-        (e.name && e.name.toLowerCase() === code.toLowerCase())
-    );
+    // Match employee against Supabase hr_management_employees
+    const empMeta = findEmployee(employees, code);
 
-    let dMap = deviceMapping.find(
-      (m) => m.userId && m.userId.toString().toLowerCase() === code.toLowerCase()
-    );
-    if (!dMap) {
-      const entryName = (empMeta?.name ?? code).toString().trim().toLowerCase();
-      dMap = deviceMapping.find((m) => m.name && m.name.toString().toLowerCase() === entryName);
-    }
+    const displayName = empMeta ? empMeta.name : (isNumeric ? "Unknown" : code);
+    const displayCode = empMeta ? empMeta.id : code;
+    const designation = empMeta ? empMeta.designation : "-";
 
-    const displayName = dMap ? dMap.name : (empMeta ? empMeta.name : (isNumeric ? "Unknown" : code));
-    const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (isNumeric ? code : "Unknown"));
-
-    // Matches against dynamic shop devices
+    // Matches punch machine against dynamic shop devices
     const matchedPunchDevice = configuredDevices.find(
       (d) => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase()
     );
@@ -426,24 +490,12 @@ function aggregateLogs(
       ? matchedPunchDevice.name
       : (group.SourceDeviceName && group.SourceDeviceName !== "ALL DEVICES"
           ? group.SourceDeviceName
-          : (dMap ? dMap.storeName : (empMeta ? empMeta.store : "-")));
+          : (empMeta?.store || "-"));
 
-    const displayDeviceId = dMap ? dMap.deviceId : "-";
-    const displayAssignedSerial = serial || (dMap ? dMap.serialNo : "-");
+    const displayAssignedSerial = serial || "-";
 
-    const shift = rosterList.find(
-      (s) =>
-        (s.employee_id.toString().trim().toLowerCase() === code.toLowerCase() ||
-         s.employee_id.toString().trim().toLowerCase() === displayCode.toLowerCase()) &&
-        s.date === group.Date
-    ) ?? null;
-
-    let morningPunchThreshold = 15;
-    if (shift?.start_time && shift?.end_time) {
-      const startHour = parseInt(shift.start_time.split(":")[0], 10);
-      const endHour = parseInt(shift.end_time.split(":")[0], 10);
-      morningPunchThreshold = Math.floor((startHour + endHour) / 2);
-    }
+    // Find shift for this employee on this date
+    const shift = findShift(rosterList, code, displayCode, group.Date);
 
     let inTime = "-";
     let outTime = "-";
@@ -451,24 +503,19 @@ function aggregateLogs(
     let punchMissMsg = "";
 
     if (logs.length === 1) {
-      const punchTime = logs[0];
-      const timePart = punchTime.split(" ")[1] || "";
-      const hours = parseInt(timePart.split(":")[0]) || 0;
       punchMiss = "Yes";
-      if (hours >= morningPunchThreshold) {
-        outTime = punchTime;
-        punchMissMsg = "Morning Punch Miss";
-      } else {
-        inTime = punchTime;
-        punchMissMsg = "Evening Punch Miss";
-      }
+      const classified = classifySinglePunch(logs[0], shift);
+      inTime = classified.inTime;
+      outTime = classified.outTime;
+      punchMissMsg = classified.punchMissMsg;
     } else if (logs.length > 1) {
       inTime = logs[0];
       outTime = logs[logs.length - 1];
     }
 
     const lateMins = calculateLateMinutes(inTime, shift);
-    const workHrs = (punchMiss === "Yes" || logs.length === 0) ? "00:00:00" : calculateWorkHours(logs);
+    const workHrs =
+      punchMiss === "Yes" || logs.length === 0 ? "00:00:00" : calculateWorkHours(logs);
 
     let actualLunchMs = 0;
     if (logs.length > 2) {
@@ -498,13 +545,7 @@ function aggregateLogs(
     let punchLogStatus = "Bahar";
     if (logs.length > 0) {
       if (logs.length % 2 === 1) {
-        if (logs.length === 1) {
-          const timePart = logs[0].split(" ")[1] || "";
-          const hours = parseInt(timePart.split(":")[0]) || 0;
-          punchLogStatus = hours >= morningPunchThreshold ? "Bahar" : "Andar";
-        } else {
-          punchLogStatus = "Andar";
-        }
+        punchLogStatus = outTime !== "-" ? "Bahar" : "Andar";
       } else {
         punchLogStatus = "Bahar";
       }
@@ -523,8 +564,8 @@ function aggregateLogs(
       PunchLog: punchLogStr,
       PunchLogStatus: punchLogStatus,
       StoreName: displayStore,
-      DeviceID: displayDeviceId,
-      Designation: empMeta ? empMeta.designation : "-",
+      DeviceID: "-",
+      Designation: designation,
       SerialNumber: serial,
       AssignedSerial: displayAssignedSerial,
       Status: status,
@@ -540,7 +581,7 @@ function aggregateLogs(
 }
 
 // ---------------------------------------------------------------------------
-// Supabase upsert
+// Supabase upsert (preserves manual overrides)
 // ---------------------------------------------------------------------------
 async function saveAttendanceToDB(
   supabase: ReturnType<typeof createClient>,
@@ -569,7 +610,8 @@ async function saveAttendanceToDB(
       if (idx < 5) {
         try {
           const formatted = formatTimeIST(logStr);
-          apiPunches[(idx + 1).toString()] = formatted !== "-" ? formatted : logStr.split(" ")[1]?.substring(0, 5) ?? "";
+          apiPunches[(idx + 1).toString()] =
+            formatted !== "-" ? formatted : logStr.split(" ")[1]?.substring(0, 5) ?? "";
         } catch { /* ignore */ }
       }
     });
@@ -598,12 +640,12 @@ async function saveAttendanceToDB(
     const isManualOverride =
       manualSection.is_manual === true || manualSection.manual_override === true;
 
-    const apiTimes24 = item.RawLogs.map(logStr => logStr.split(" ")[1]?.substring(0, 5)).filter(Boolean);
+    const apiTimes24 = item.RawLogs.map((logStr) => logStr.split(" ")[1]?.substring(0, 5)).filter(Boolean);
 
     const manualTimes24: string[] = [];
-    ["1", "2", "3", "4", "5"].forEach(key => {
+    ["1", "2", "3", "4", "5"].forEach((key) => {
       const val = manualSection[key];
-      if (val && val !== '') {
+      if (val && val !== "") {
         const t24 = convert12hTo24h(val);
         if (t24) manualTimes24.push(t24);
       }
@@ -612,20 +654,9 @@ async function saveAttendanceToDB(
     const combinedTimes24 = [...new Set([...apiTimes24, ...manualTimes24])];
     combinedTimes24.sort();
 
-    const combinedLogDates = combinedTimes24.map(t => `${item.Date} ${t}:00`);
+    const combinedLogDates = combinedTimes24.map((t) => `${item.Date} ${t}:00`);
 
-    const shift = rosterList.find(
-      (s) =>
-        (s.employee_id.toString().trim().toLowerCase() === item.EmployeeID.toLowerCase()) &&
-        s.date === item.Date
-    ) ?? null;
-
-    let morningPunchThreshold = 15;
-    if (shift?.start_time && shift?.end_time) {
-      const startHour = parseInt(shift.start_time.split(":")[0], 10);
-      const endHour = parseInt(shift.end_time.split(":")[0], 10);
-      morningPunchThreshold = Math.floor((startHour + endHour) / 2);
-    }
+    const shift = findShift(rosterList, item.EmployeeID, item.EmployeeID, item.Date);
 
     let inTime = "-";
     let outTime = "-";
@@ -633,24 +664,21 @@ async function saveAttendanceToDB(
     let punchMissMsg = "";
 
     if (combinedLogDates.length === 1) {
-      const punchTime = combinedLogDates[0];
-      const timePart = punchTime.split(" ")[1] || "";
-      const hours = parseInt(timePart.split(":")[0]) || 0;
       punchMiss = "Yes";
-      if (hours >= morningPunchThreshold) {
-        outTime = punchTime;
-        punchMissMsg = "Morning Punch Miss";
-      } else {
-        inTime = punchTime;
-        punchMissMsg = "Evening Punch Miss";
-      }
+      const classified = classifySinglePunch(combinedLogDates[0], shift);
+      inTime = classified.inTime;
+      outTime = classified.outTime;
+      punchMissMsg = classified.punchMissMsg;
     } else if (combinedLogDates.length > 1) {
       inTime = combinedLogDates[0];
       outTime = combinedLogDates[combinedLogDates.length - 1];
     }
 
     const lateMins = calculateLateMinutes(inTime, shift);
-    const workHrs = (punchMiss === "Yes" || combinedLogDates.length === 0) ? "00:00:00" : calculateWorkHours(combinedLogDates);
+    const workHrs =
+      punchMiss === "Yes" || combinedLogDates.length === 0
+        ? "00:00:00"
+        : calculateWorkHours(combinedLogDates);
 
     let actualLunchMs = 0;
     if (combinedLogDates.length > 2) {
@@ -676,18 +704,12 @@ async function saveAttendanceToDB(
       status = "Half Day";
     }
 
-    const punchLogStr = combinedTimes24.map(t24 => convert24hTo12h(t24)).join(" | ");
+    const punchLogStr = combinedTimes24.map((t24) => convert24hTo12h(t24)).join(" | ");
 
     let punchLogStatus = "Bahar";
     if (combinedLogDates.length > 0) {
       if (combinedLogDates.length % 2 === 1) {
-        if (combinedLogDates.length === 1) {
-          const timePart = combinedLogDates[0].split(" ")[1] || "";
-          const hours = parseInt(timePart.split(":")[0]) || 0;
-          punchLogStatus = hours >= morningPunchThreshold ? "Bahar" : "Andar";
-        } else {
-          punchLogStatus = "Andar";
-        }
+        punchLogStatus = outTime !== "-" ? "Bahar" : "Andar";
       } else {
         punchLogStatus = "Bahar";
       }
@@ -778,10 +800,11 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch active shops with configured device_serial from `shop` table
-    const [joiningData, deviceMapping, rosterResult, shopDevicesResult] = await Promise.all([
-      fetchJoiningData(),
-      fetchDeviceMapping(),
+    // Fetch in parallel: Supabase employees, shift roster, and shops with biometric serials
+    const [employeesResult, rosterResult, shopDevicesResult] = await Promise.all([
+      supabaseClient
+        .from("hr_management_employees")
+        .select("id, employee_id, name_as_per_aadhar, designation, joining_company_name, joining_place, HR_SYSTEM_employee_data"),
       supabaseClient
         .from("hr_management_shift_roster")
         .select("*")
@@ -794,17 +817,31 @@ Deno.serve(async (req: Request) => {
         .neq("device_serial", ""),
     ]);
 
+    // Format Supabase employees (robust fallback for all employee schemas)
+    const employees: DBEmployee[] = (employeesResult.data || [])
+      .map((emp: any) => {
+        const meta = emp.HR_SYSTEM_employee_data || {};
+        const empCode = (emp.employee_id || meta.employee_id || emp.id || "").toString().trim();
+        const name = (emp.name_as_per_aadhar || meta.name || meta.employee_name || "").toString().trim();
+        const designation = (emp.designation || meta.designation || "-").toString().trim();
+        const store = (emp.joining_company_name || emp.joining_place || meta.joining_place || meta.store || "-").toString().trim();
+        return { id: empCode, name, designation, store, dbId: emp.id?.toString() };
+      })
+      .filter((e: DBEmployee) => e.id);
+
     const rosterList: ShiftRosterEntry[] = rosterResult.data || [];
 
-    // Map shop records to devices
-    const configuredDevices: BiometricDevice[] = (shopDevicesResult.data || []).map((s: any) => ({
-      name: s.shop_name,
-      serial: s.device_serial.toString().trim(),
-      apiName: s.api_name ? s.api_name.toString().trim() : s.shop_name,
-    }));
+    // Map shop records to biometric machines
+    const configuredDevices: BiometricDevice[] = (shopDevicesResult.data || [])
+      .map((s: any) => ({
+        name: (s.shop_name || "").toString().trim(),
+        serial: (s.device_serial || "").toString().trim(),
+        apiName: s.api_name ? s.api_name.toString().trim() : (s.shop_name || "").toString().trim(),
+      }))
+      .filter((d: BiometricDevice) => d.serial.length > 0);
 
     console.log(
-      `[sync-attendance] Joining: ${joiningData.length}, DeviceMap: ${deviceMapping.length}, Roster: ${rosterList.length}, Dynamic Devices: ${configuredDevices.length}`
+      `[sync-attendance] DB Employees: ${employees.length}, Roster: ${rosterList.length}, Dynamic Devices: ${configuredDevices.length}`
     );
 
     if (configuredDevices.length === 0) {
@@ -822,17 +859,16 @@ Deno.serve(async (req: Request) => {
           );
 
     // Fetch logs from biometric hardware
-    const rawLogResponses = await Promise.all(
-      devicesToQuery.map((device) =>
-        fetchRawLogsForDevice(device, fromDate!, toDate!).catch((e) => {
-          console.error(`[sync-attendance] Failed for ${device.name}:`, e);
-          return [] as RawLog[];
-        })
-      )
+    const rawResponses: DeviceFetchResult[] = await Promise.all(
+      devicesToQuery.map((device) => fetchRawLogsForDevice(device, fromDate!, toDate!))
     );
 
-    const rawLogsData: RawLog[] = rawLogResponses.flat();
-    console.log(`[sync-attendance] Raw logs fetched: ${rawLogsData.length}`);
+    const rawLogsData: RawLog[] = rawResponses.flatMap((r) => r.logs);
+    const deviceErrors = rawResponses
+      .filter((r) => r.error)
+      .map((r) => ({ shop: r.device.name, serial: r.device.serial, error: r.error }));
+
+    console.log(`[sync-attendance] Raw logs fetched: ${rawLogsData.length}, Errors: ${deviceErrors.length}`);
 
     const filteredLogs = rawLogsData.filter((log) => {
       if (!log.LogDate) return false;
@@ -840,11 +876,10 @@ Deno.serve(async (req: Request) => {
       return logDateStr >= fromDate! && logDateStr <= toDate!;
     });
 
-    // Aggregate with dynamic device store mapping
+    // Aggregate using native Supabase employee & shop data
     const aggregatedData = aggregateLogs(
       filteredLogs,
-      joiningData,
-      deviceMapping,
+      employees,
       rosterList,
       fromDate!,
       toDate!,
@@ -853,7 +888,12 @@ Deno.serve(async (req: Request) => {
 
     if (aggregatedData.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "No logs or roster assignments in range.", inserted: 0 }),
+        JSON.stringify({
+          success: true,
+          message: "No logs or roster assignments in range.",
+          inserted: 0,
+          deviceErrors: deviceErrors.length > 0 ? deviceErrors : undefined,
+        }),
         { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
       );
     }
@@ -865,11 +905,12 @@ Deno.serve(async (req: Request) => {
         success: true,
         fromDate,
         toDate,
-        devicesCount: devicesToQuery.length,
+        devicesQueried: devicesToQuery.length,
         rawLogs: rawLogsData.length,
         filteredLogs: filteredLogs.length,
         aggregated: aggregatedData.length,
         inserted: upsertedRows.length,
+        deviceErrors: deviceErrors.length > 0 ? deviceErrors : undefined,
       }),
       {
         status: 200,
