@@ -182,7 +182,7 @@ export default function ScheduledWorkTasks() {
         return false;
       }
 
-      const userShopsList = (u.shop_name || u.user_access || "")
+      const userShopsList = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "")
         .toLowerCase()
         .split(',')
         .map(s => s.trim())

@@ -427,7 +427,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
           .select("user_name, shop_name, user_access");
         if (dbUsers) {
           const allowedUsernames = dbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => targetShops.includes(s));
           }).map(u => u.user_name || "");
@@ -587,7 +587,7 @@ export const fetchStaffTasksDataApi = async (
           .select("user_name, shop_name, user_access");
         if (dbUsers) {
           const allowedUsernames = dbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => targetShops.includes(s));
           }).map(u => u.user_name || "");
@@ -913,7 +913,7 @@ export const getStaffTasksCountApi = async (
           .select("user_name, shop_name, user_access");
         if (dbUsers) {
           const allowedUsernames = dbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => targetShops.includes(s));
           }).map(u => u.user_name || "");
@@ -1146,7 +1146,7 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
       const userAccess = localStorage.getItem('user_access') || "";
       const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       staff = staff.filter(user => {
-        const userShop = (user.shop_name || user.user_access || "").toLowerCase();
+        const userShop = ([user.shop_name, user.user_access].filter(Boolean).join(",") || "").toLowerCase();
         const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
         return userShopsList.some(s => managerShops.includes(s));
       });
@@ -1698,7 +1698,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
           .select("user_name, shop_name, user_access");
         if (dbUsers) {
           const allowedUsernames = dbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => targetShops.includes(s));
           }).map(u => u.user_name || "");
@@ -1817,7 +1817,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
           .select("user_name, shop_name, user_access");
         if (dbUsers) {
           const allowedUsernames = dbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => targetShops.includes(s));
           }).map(u => u.user_name || "");
@@ -1935,7 +1935,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
           .select("user_name, shop_name, user_access");
         if (dbUsers) {
           const allowedUsernames = dbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => targetShops.includes(s));
           }).map(u => u.user_name || "");

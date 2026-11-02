@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Calendar, QrCode, Copy, Printer, Lock, Upload } from 'lucide-react'
+import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Calendar, QrCode, Copy, Printer, Lock, Upload, Cpu } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ViewOnlyBanner } from '../../../utils/permissionUtils'
 
@@ -17,6 +17,8 @@ export default function JoiningCompany({ readOnly = false }) {
     shop_name: '',
     full_name: '',
     location: '',
+    api_name: '',
+    device_serial: '',
     gstin: '',
     contact: '',
     email: '',
@@ -24,11 +26,14 @@ export default function JoiningCompany({ readOnly = false }) {
   })
   const [addQrFile, setAddQrFile] = useState(null)
   const [addQrPreview, setAddQrPreview] = useState(null)
+  
 
   const [editingCompany, setEditingCompany] = useState(null)
   const [editForm, setEditForm] = useState({
     full_name: '',
     location: '',
+    api_name: '',
+    device_serial: '',
     gstin: '',
     contact: '',
     email: '',
@@ -146,6 +151,8 @@ export default function JoiningCompany({ readOnly = false }) {
       shop_name: '',
       full_name: '',
       location: '',
+      api_name: '',
+      device_serial: '',
       gstin: '',
       contact: '',
       email: '',
@@ -183,6 +190,8 @@ export default function JoiningCompany({ readOnly = false }) {
       const payload = {
         shop_name: shopName,
         full_name: addForm.full_name.trim() || null,
+        api_name: addForm.api_name.trim() || null,
+        device_serial: addForm.device_serial.trim() || null,
         gstin: addForm.gstin.trim() || null,
         contact: addForm.contact.trim() || null,
         email: addForm.email.trim() || null,
@@ -199,8 +208,10 @@ export default function JoiningCompany({ readOnly = false }) {
         .insert([payload])
         .select()
 
-      if (error && error.message?.toLowerCase().includes('location')) {
-        delete payload.location
+      if (error && (error.message?.toLowerCase().includes('location') || error.message?.toLowerCase().includes('device_serial') || error.message?.toLowerCase().includes('api_name'))) {
+        if (error.message?.toLowerCase().includes('location')) delete payload.location
+        if (error.message?.toLowerCase().includes('device_serial')) delete payload.device_serial
+        if (error.message?.toLowerCase().includes('api_name')) delete payload.api_name
         const retry = await supabase
           .from('shop')
           .insert([payload])
@@ -225,6 +236,8 @@ export default function JoiningCompany({ readOnly = false }) {
     setEditForm({
       full_name: company.full_name || '',
       location: getShopLocation(company),
+      api_name: company.api_name || '',
+      device_serial: company.device_serial || '',
       gstin: company.gstin || '',
       contact: company.contact || '',
       email: company.email || '',
@@ -253,6 +266,8 @@ export default function JoiningCompany({ readOnly = false }) {
 
       const payload = {
         full_name: editForm.full_name.trim() || null,
+        api_name: editForm.api_name.trim() || null,
+        device_serial: editForm.device_serial.trim() || null,
         gstin: editForm.gstin.trim() || null,
         contact: editForm.contact.trim() || null,
         email: editForm.email.trim() || null,
@@ -269,8 +284,10 @@ export default function JoiningCompany({ readOnly = false }) {
         .update(payload)
         .eq('id', editingCompany.id)
 
-      if (error && error.message?.toLowerCase().includes('location')) {
-        delete payload.location
+      if (error && (error.message?.toLowerCase().includes('location') || error.message?.toLowerCase().includes('device_serial') || error.message?.toLowerCase().includes('api_name'))) {
+        if (error.message?.toLowerCase().includes('location')) delete payload.location
+        if (error.message?.toLowerCase().includes('device_serial')) delete payload.device_serial
+        if (error.message?.toLowerCase().includes('api_name')) delete payload.api_name
         const retry = await supabase
           .from('shop')
           .update(payload)
@@ -300,7 +317,9 @@ export default function JoiningCompany({ readOnly = false }) {
     const contactMatch = (c.contact || '').toLowerCase().includes(s)
     const emailMatch = (c.email || '').toLowerCase().includes(s)
     const addressMatch = (c.address || '').toLowerCase().includes(s)
-    return nameMatch || fullNameMatch || gstinMatch || contactMatch || emailMatch || addressMatch || LocationMatch
+    const serialMatch = (c.device_serial || '').toLowerCase().includes(s)
+    const apiNameMatch = (c.api_name || '').toLowerCase().includes(s)
+    return nameMatch || fullNameMatch || gstinMatch || contactMatch || emailMatch || addressMatch || LocationMatch || serialMatch || apiNameMatch
   })
 
   return (
@@ -308,8 +327,8 @@ export default function JoiningCompany({ readOnly = false }) {
       {/* Alert banner */}
       {alert && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 shadow-lg border text-xs font-bold uppercase tracking-wider animate-fade-in rounded-none ${alert.type === 'success'
-            ? 'bg-emerald-950 text-emerald-100 border-emerald-800'
-            : 'bg-rose-950 text-rose-100 border-rose-800'
+          ? 'bg-emerald-950 text-emerald-100 border-emerald-800'
+          : 'bg-rose-950 text-rose-100 border-rose-800'
           }`}>
           {alert.type === 'success' ? <CheckCircle size={16} /> : <ShieldAlert size={16} />}
           <span>{alert.message}</span>
@@ -390,6 +409,7 @@ export default function JoiningCompany({ readOnly = false }) {
                   <th className="py-3.5 px-4">Shop Name</th>
                   <th className="py-3.5 px-4">Full Name</th>
                   <th className="py-3.5 px-4">Location</th>
+                  <th className="py-3.5 px-4 min-w-[160px]">Biometric Device</th>
                   <th className="py-3.5 px-4 min-w-[170px]">GSTIN</th>
                   <th className="py-3.5 px-4">Contact</th>
                   <th className="py-3.5 px-4">Email</th>
@@ -404,10 +424,10 @@ export default function JoiningCompany({ readOnly = false }) {
                   const currentShopName = company.shop_name || company.company_name
                   const formattedDate = company.created_at
                     ? new Date(company.created_at).toLocaleDateString('en-GB', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                      })
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric'
+                    })
                     : '—'
 
                   return (
@@ -428,6 +448,22 @@ export default function JoiningCompany({ readOnly = false }) {
                       {/* Location */}
                       <td className="py-3 px-4 font-medium text-slate-800">
                         {getShopLocation(company) || <span className="text-slate-400 italic">—</span>}
+                      </td>
+
+                      {/* Biometric Device (Serial & API Name) */}
+                      <td className="py-3 px-4 font-mono text-slate-800 whitespace-nowrap min-w-[160px]">
+                        {company.device_serial ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-slate-900 bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.5 rounded text-[10.5px] w-fit font-mono tracking-wide">
+                              {company.device_serial}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-sans">
+                              API: <span className="font-semibold text-slate-700">{company.api_name || company.shop_name}</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic font-sans">—</span>
+                        )}
                       </td>
 
                       {/* GSTIN (Wider Column) */}
@@ -560,6 +596,49 @@ export default function JoiningCompany({ readOnly = false }) {
                   placeholder="e.g. Shree Balaji Traders Pvt Ltd"
                   className="w-full px-3 py-2 text-xs border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] text-slate-900 rounded"
                 />
+              </div>
+
+              {/* Biometric Machine Integration */}
+              <div className="bg-amber-50/50 p-3.5 border border-amber-200/80 rounded space-y-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Cpu size={14} className="text-[#d4b457]" />
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Biometric Machine Configuration
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Device Serial Number (SerialNumber)
+                    </label>
+                    <input
+                      type="text"
+                      value={addForm.device_serial}
+                      onChange={(e) => setAddForm({ ...addForm, device_serial: e.target.value.trim() })}
+                      placeholder="e.g. C26238441B1E342D"
+                      className="w-full px-3 py-2 text-xs font-mono font-bold uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Hardware machine serial code
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Device API Name (DeviceName)
+                    </label>
+                    <input
+                      type="text"
+                      value={addForm.api_name}
+                      onChange={(e) => setAddForm({ ...addForm, api_name: e.target.value.trim() })}
+                      placeholder="e.g. BAVDHAN"
+                      className="w-full px-3 py-2 text-xs uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Leave blank to default to Shop Name
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -744,6 +823,49 @@ export default function JoiningCompany({ readOnly = false }) {
                 />
               </div>
 
+              {/* Biometric Machine Integration */}
+              <div className="bg-amber-50/50 p-3.5 border border-amber-200/80 rounded space-y-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Cpu size={14} className="text-[#d4b457]" />
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Biometric Machine Configuration
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Device Serial Number (SerialNumber)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.device_serial}
+                      onChange={(e) => setEditForm({ ...editForm, device_serial: e.target.value.trim() })}
+                      placeholder="e.g. C26238441B1E342D"
+                      className="w-full px-3 py-2 text-xs font-mono font-bold uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Hardware machine serial code
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Device API Name (DeviceName)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.api_name}
+                      onChange={(e) => setEditForm({ ...editForm, api_name: e.target.value.trim() })}
+                      placeholder="e.g. BAVDHAN"
+                      className="w-full px-3 py-2 text-xs uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Leave blank to default to Shop Name
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -892,7 +1014,7 @@ export default function JoiningCompany({ readOnly = false }) {
               <h3 className="text-sm font-bold text-slate-950 uppercase tracking-wide">
                 {qrModalShop.shop_name || qrModalShop.company_name}
               </h3>
-              
+
               <div className="p-2 border border-slate-200 rounded-lg bg-white shadow-inner">
                 <img
                   src={

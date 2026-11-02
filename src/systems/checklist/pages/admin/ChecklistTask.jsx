@@ -107,7 +107,7 @@ function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispat
             if (isUserShopScoped()) {
                 const assignedShops = getUserAssignedShops().map(s => s.toLowerCase());
                 if (assignedShops.length > 0) {
-                    const uShop = (user.shop_name || user.user_access || "").toLowerCase();
+                    const uShop = ([user.shop_name, user.user_access].filter(Boolean).join(",") || "").toLowerCase();
                     const uShopsList = uShop.split(',').map(s => s.trim()).filter(Boolean);
                     if (!uShopsList.some(s => assignedShops.includes(s) || assignedShops.some(as => s.includes(as)))) {
                         return false;

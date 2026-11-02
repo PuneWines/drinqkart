@@ -94,7 +94,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const initializeUserShop = async () => {
       const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
-      let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+      let rawShopStr = ([localStorage.getItem("shop_name"), localStorage.getItem("user_access")].filter(Boolean).join(",") || "").trim();
 
       if (currentUsername) {
         try {
@@ -104,7 +104,7 @@ export default function AdminDashboard() {
             .eq("user_name", currentUsername)
             .maybeSingle();
           if (userDb) {
-            rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
+            rawShopStr = ([userDb.shop_name, userDb.user_access].filter(Boolean).join(",") || rawShopStr || "").trim();
           }
         } catch (e) {
           console.error("Error setting user shop filter:", e);
@@ -262,7 +262,7 @@ export default function AdminDashboard() {
         const userAccess = localStorage.getItem("user_access") || "";
         const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
         const matchedUsers = allDbUsers.filter(u => {
-          const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+          const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
           const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
           return userShopsList.some(s => managerShopsList.includes(s));
         }).map(u => (u.user_name || "").toLowerCase());
@@ -826,7 +826,7 @@ export default function AdminDashboard() {
           const userAccess = localStorage.getItem("user_access") || "";
           const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
           const matchedUsers = allDbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => managerShopsList.includes(s));
           }).map(u => (u.user_name || "").toLowerCase());
@@ -1126,7 +1126,7 @@ export default function AdminDashboard() {
           staleTime: 10 * 60 * 1000 // 10 minutes
         });
         const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
-        let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+        let rawShopStr = ([localStorage.getItem("shop_name"), localStorage.getItem("user_access")].filter(Boolean).join(",") || "").trim();
 
         if (currentUsername) {
           try {
@@ -1136,7 +1136,7 @@ export default function AdminDashboard() {
               .eq("user_name", currentUsername)
               .maybeSingle();
             if (userDb) {
-              rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
+              rawShopStr = ([userDb.shop_name, userDb.user_access].filter(Boolean).join(",") || rawShopStr || "").trim();
             }
           } catch (err) {
             console.error("Error fetching user shop access in Dashboard:", err);

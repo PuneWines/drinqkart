@@ -157,6 +157,8 @@ export default function CashTally({
   const [isLoading, setIsLoading] = useState(false);
   const [employees, setEmployees] = useState<string[]>([]);
   const [fetchedShopNames, setFetchedShopNames] = useState<string[]>([]);
+  const [isPrivileged, setIsPrivileged] = useState(false);
+  const [allEmployees, setAllEmployees] = useState<{ name: string; shops: string }[]>([]);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const resetForm = () => {
@@ -252,6 +254,19 @@ export default function CashTally({
         loggedInShopName = (user as any)?.shop_name || (user as any)?.shops || "";
       }
       setEmployees([loggedInName].filter(Boolean));
+
+      const roleStr = (user?.role || localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '').toLowerCase().trim();
+      const privileged = isAdmin() || ['admin', 'masteradmin', 'superadmin', 'hod'].includes(roleStr);
+      setIsPrivileged(privileged);
+      if (privileged) {
+        const { data: allUsers } = await supabase.from('users').select('*');
+        if (allUsers) {
+          const list = allUsers
+            .map((u: any) => ({ name: u.user_name || u.username || u.name, shops: String(u.shop_name || u.shops || '') }))
+            .filter((u: any) => u.name);
+          setAllEmployees(list);
+        }
+      }
 
       let foundShops: string[] = [];
       if (loggedInShopName) {
@@ -923,6 +938,26 @@ export default function CashTally({
 
                 <div>
                   <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                    Shop Name <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="shopName"
+                    value={formData.shopName}
+                    onChange={(e) => setFormData({ ...formData, shopName: e.target.value, ...(isPrivileged ? { name: "" } : {}) })}
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800 cursor-pointer"
+                    required
+                  >
+                    <option value="">Select shop</option>
+                    {(isPrivileged || userShops.length === 0 ? fetchedShopNames : userShops).map((s, index) => (
+                      <option key={index} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
                     Employee Name <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -931,33 +966,24 @@ export default function CashTally({
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-medium text-gray-800 disabled:bg-gray-100"
                     required
+                    disabled={isPrivileged && !formData.shopName}
                   >
-                    <option value="">Select employee</option>
-                    {employees.map((emp, index) => (
+                    <option value="">{isPrivileged && !formData.shopName ? "Select shop first" : "Select employee"}</option>
+                    {(isPrivileged
+                      ? Array.from(new Set(
+                          allEmployees
+                            .filter((e) =>
+                              e.shops.split(',').map((s) => s.trim().toLowerCase()).includes(formData.shopName.trim().toLowerCase()) ||
+                              e.shops.trim().toLowerCase() === 'all'
+                            )
+                            .map((e) => e.name)
+                        ))
+                      : employees
+                    ).map((emp, index) => (
                       <option key={index} value={emp}>
                         {emp}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
-                    Shop Name <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="shopName"
-                    value={formData.shopName}
-                    onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800 cursor-pointer"
-                    required
-                  >
-                    <option value="">Select shop</option>
-                    {(userShops.length > 0 ? userShops : fetchedShopNames).map((s, index) => (
-                      <option key={index} value={s}>
-                        {s}
                       </option>
                     ))}
                   </select>

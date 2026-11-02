@@ -38,7 +38,7 @@ export default function DashboardHeader({
     const isHOD = normalizedRole === "hod";
     const isAdmin = normalizedRole === "admin" || normalizedRole === "manager" || isHOD || isSuperAdmin;
 
-    const userAccessStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+    const userAccessStr = ([localStorage.getItem("shop_name"), localStorage.getItem("user_access")].filter(Boolean).join(",") || "").trim();
     const hasAllShopsAccess = userAccessStr.toLowerCase() === "all" || !userAccessStr;
 
     // Fetch total users count - UPDATED VERSION

@@ -232,7 +232,7 @@ export default function EmployeeLearning() {
         if (!isInactive) {
           const name = u.emp_name || u.user_name || u.username;
           const id = (u.employee_id || u.id || '').toString().trim();
-          const shop = u.shop_name || u.user_access || '';
+          const shop = [u.shop_name, u.user_access].filter(Boolean).join(",") || '';
           const normId = id.toLowerCase();
           const normName = (name || '').toLowerCase().trim();
           const dedupeKey = normId || normName;
@@ -1037,9 +1037,8 @@ export default function EmployeeLearning() {
                 <div className="flex items-center gap-2 text-slate-600 text-xs font-semibold">
                   <span>{isSubmissionLogOpen ? 'Hide' : 'Show'}</span>
                   <svg
-                    className={`w-4 h-4 transform transition-transform duration-200 text-[#d4b457] ${
-                      isSubmissionLogOpen ? 'rotate-180' : ''
-                    }`}
+                    className={`w-4 h-4 transform transition-transform duration-200 text-[#d4b457] ${isSubmissionLogOpen ? 'rotate-180' : ''
+                      }`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -1126,11 +1125,10 @@ export default function EmployeeLearning() {
                                   return (
                                     <span
                                       key={lvl}
-                                      className={`inline-block text-[10px] font-mono px-2 py-0.5 rounded border mr-1 ${
-                                        d === 0
+                                      className={`inline-block text-[10px] font-mono px-2 py-0.5 rounded border mr-1 ${d === 0
                                           ? 'border-slate-200 bg-slate-50 text-slate-400'
                                           : 'border-[#d4b457]/40 bg-[#1C120C] text-[#d4b457] font-bold'
-                                      }`}
+                                        }`}
                                     >
                                       L{lvl} {d}/{total}
                                     </span>
@@ -1292,7 +1290,7 @@ export default function EmployeeLearning() {
             {/* Modal Body */}
             <div className="p-5 max-h-[85vh] overflow-y-auto space-y-6 text-slate-800">
               {(() => {
-                const modalEmpObj = employees.find(e => 
+                const modalEmpObj = employees.find(e =>
                   (e.name_as_per_aadhar && e.name_as_per_aadhar === selectedModalEmp) ||
                   (e.name && e.name === selectedModalEmp) ||
                   (e.employee_name && e.employee_name === selectedModalEmp) ||
@@ -1360,11 +1358,10 @@ export default function EmployeeLearning() {
                                 ⚠️ {totalMissingCount} Missing
                               </span>
                             )}
-                            <span className={`text-xs font-extrabold px-3 py-1.5 rounded-lg border shadow-2xs ${
-                              totalIssuesCount === 0 
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                            <span className={`text-xs font-extrabold px-3 py-1.5 rounded-lg border shadow-2xs ${totalIssuesCount === 0
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                                 : 'bg-red-100 text-red-800 border-red-300'
-                            }`}>
+                              }`}>
                               {totalIssuesCount === 0 ? 'All Clear ✓' : `⚠️ ${totalIssuesCount} Issue(s)`}
                             </span>
                           </div>

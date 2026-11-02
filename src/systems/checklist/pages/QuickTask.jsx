@@ -337,7 +337,7 @@ export default function QuickTask() {
       const isManager = (u.role || "").toLowerCase() === "manager";
       if (!isManager) return false;
 
-      const userShopsList = (u.shop_name || u.user_access || "")
+      const userShopsList = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "")
         .toLowerCase()
         .split(',')
         .map(s => s.trim())

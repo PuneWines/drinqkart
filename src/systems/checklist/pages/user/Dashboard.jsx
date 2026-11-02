@@ -29,7 +29,7 @@ const UserDashboard = () => {
     setLoading(true)
     try {
       const role = (localStorage.getItem("role") || localStorage.getItem("currentUserRole") || "").toLowerCase().trim()
-      const userAccess = localStorage.getItem("shop_name") || localStorage.getItem("user_access") || ""
+      const userAccess = [localStorage.getItem("shop_name"), localStorage.getItem("user_access")].filter(Boolean).join(",") || ""
       const isMasterAdmin = role === "superadmin" || role === "masteradmin" || role === "admin" || role === "hod"
       const assignedShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
       

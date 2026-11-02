@@ -303,7 +303,7 @@ export default function WorkDetails() {
   useEffect(() => {
     const fetchUserAssignedShops = async () => {
       const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
-      let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+      let rawShopStr = ([localStorage.getItem("shop_name"), localStorage.getItem("user_access")].filter(Boolean).join(",") || "").trim();
 
       if (currentUsername) {
         try {
@@ -313,7 +313,7 @@ export default function WorkDetails() {
             .eq("user_name", currentUsername)
             .maybeSingle();
           if (userDb) {
-            rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
+            rawShopStr = ([userDb.shop_name, userDb.user_access].filter(Boolean).join(",") || rawShopStr || "").trim();
           }
         } catch (e) {
           console.error("Error fetching user shop access in WorkDetails:", e);

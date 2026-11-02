@@ -764,7 +764,7 @@ export const checkAndPromoteAssignmentsApi = async () => {
 
 const getUserAssignedShops = () => {
   const role = (localStorage.getItem('role') || localStorage.getItem('currentUserRole') || '').toLowerCase().trim();
-  const shopNameVal = (localStorage.getItem('shop_name') || localStorage.getItem('user_access') || '').trim();
+  const shopNameVal = ([localStorage.getItem("shop_name"), localStorage.getItem("user_access")].filter(Boolean).join(",") || '').trim();
 
   if (role === 'admin' || role === 'superadmin' || role === 'masteradmin' || role === 'hod' || shopNameVal.toLowerCase() === 'all' || !shopNameVal) {
     return null;

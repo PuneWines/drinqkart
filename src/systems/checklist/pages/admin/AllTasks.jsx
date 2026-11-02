@@ -178,7 +178,7 @@ const AllTasks = () => {
       if (allowedShops.length > 0) {
         const matched = allUsers.filter(u => {
           if (typeof u !== 'object') return false;
-          const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+          const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
           const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
           return userShopsList.some(s => allowedShops.includes(s));
         }).map(u => u.user_name);
@@ -541,7 +541,7 @@ const AllTasks = () => {
           .select("user_name, shop_name, user_access");
         if (allDbUsers) {
           const matchedUsers = allDbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return managerShops.includes("all") || managerShops.includes("admin") || userShopsList.some(s => managerShops.includes(s));
           }).map(u => u.user_name || "");

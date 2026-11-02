@@ -714,7 +714,7 @@ function StaffTasksPage() {
 
             if (isScoped && assignedShops.length > 0) {
                 const scopedUsers = (dbUsersData || []).filter(u => {
-                    const uShop = (u.shop_name || u.user_access || "").toLowerCase();
+                    const uShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
                     const uShopsList = uShop.split(',').map(s => s.trim()).filter(Boolean);
                     return uShopsList.some(s => assignedShops.includes(s) || assignedShops.some(as => s.includes(as)));
                 }).map(u => (u.user_name || "").toLowerCase());

@@ -89,7 +89,7 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
             if (isUserShopScoped()) {
                 const assignedShops = getUserAssignedShops().map(s => s.toLowerCase());
                 if (assignedShops.length > 0) {
-                    const uShop = (d.shop_name || d.user_access || "").toLowerCase();
+                    const uShop = ([d.shop_name, d.user_access].filter(Boolean).join(",") || "").toLowerCase();
                     const uShopsList = uShop.split(',').map(s => s.trim()).filter(Boolean);
                     if (!uShopsList.some(s => assignedShops.includes(s) || assignedShops.some(as => s.includes(as)))) {
                         return false;

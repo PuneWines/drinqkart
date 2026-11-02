@@ -308,11 +308,41 @@ export default function EmployeeManagement() {
   const resolvePlaceFromShop = (shopName) => resolvePlaceFromShopRows(shopName, joiningCompanies);
 
   // Shop filter options: superadmin sees all; everyone else (incl. HOD) only assigned shops
+  // Source of truth = users table (shop_name + user_access); localStorage cache can be stale/overwritten by other systems
+  const [dbAssignedShops, setDbAssignedShops] = useState(null)
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const cached = getUserAssignedShops(null, { strict: true })
+        const id = localStorage.getItem('user-id') || ''
+        const name = localStorage.getItem('user-name') || ''
+        let q = supabase.from('users').select('shop_name, user_access')
+        q = id ? q.eq('id', id) : q.eq('user_name', name)
+        const { data } = await q.maybeSingle()
+        if (!alive) return
+        if (data) {
+          const list = [data.shop_name, data.user_access]
+            .flatMap(v => String(v || '').split(','))
+            .map(s => s.trim()).filter(Boolean)
+          setDbAssignedShops([...new Set([...list, ...cached])])
+        } else {
+          setDbAssignedShops(cached)
+        }
+      } catch {
+        if (alive) setDbAssignedShops(getUserAssignedShops(null, { strict: true }))
+      }
+    })()
+    return () => { alive = false }
+  }, [])
+
   const filterShopOptions = useMemo(() => {
     if (isApexAdmin()) return joiningCompanies
-    const allowed = new Set(getUserAssignedShops(null, { strict: true }).map(s => s.trim().toLowerCase()))
+    const source = dbAssignedShops ?? getUserAssignedShops(null, { strict: true })
+    const allowed = new Set(source.map(s => s.trim().toLowerCase()))
+    if (allowed.has('all')) return joiningCompanies
     return joiningCompanies.filter(c => allowed.has((c.company_name || '').trim().toLowerCase()))
-  }, [joiningCompanies])
+  }, [joiningCompanies, dbAssignedShops])
 
   const resolveShopFromPlace = (placeName) => {
     if (!placeName) return '';

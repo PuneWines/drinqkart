@@ -167,9 +167,31 @@ export const getUserAssignedShops = (user, { strict = false } = {}) => {
     processSource(userObj.shop);
   }
 
-  // 2. If no valid shop found yet, inspect user_access (only if it contains actual shop name, not role)
-  if (shopsSet.size === 0 && userObj.user_access) {
+  // 2. user_access holds the full multi-shop assignment (Master Setting); always merge it
+  // (role/generic tokens are filtered out by NON_SHOP_TOKENS)
+  if (userObj.user_access) {
     processSource(userObj.user_access);
+  }
+
+  // 2b. Implicit current user only: different systems (HR, petty-cash, purchase, checklist) each
+  // overwrite their own cached user object with a different shape (often primary shop only).
+  // Merge all of them so the result doesn't depend on which write landed last.
+  if (!user && typeof localStorage !== 'undefined') {
+    const mergeFrom = (key) => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const o = JSON.parse(raw);
+        if (!o || typeof o !== 'object') return;
+        processSource(o.user_access);
+        processSource(o.shop_name);
+        processSource(o.assigned_shops);
+        if (o.shops && o.shops !== 'all') processSource(o.shops);
+      } catch {}
+    };
+    ['drinqkart_user', 'currentUser', 'hr_user', 'vishal_snacks_user'].forEach(mergeFrom);
+    processSource(localStorage.getItem('user_access'));
+    processSource(localStorage.getItem('shop_name'));
   }
 
   // 3. Fallback to localStorage shop keys if still empty:

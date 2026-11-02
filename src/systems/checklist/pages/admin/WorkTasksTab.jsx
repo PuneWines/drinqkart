@@ -317,7 +317,12 @@ const WorkTasksTab = ({
         if (shopsRes.data) {
           const allShops = shopsRes.data.map(s => s.shop_name).filter(Boolean);
           const currentUsername = (username || localStorage.getItem("user-name") || localStorage.getItem("username") || "").trim();
-          let rawShopStr = (localStorage.getItem("shop_name") || localStorage.getItem("user_access") || "").trim();
+          const joinShops = (...parts) => {
+            const list = parts.flatMap(p => String(p || "").split(',')).map(s => s.trim()).filter(Boolean);
+            if (list.some(s => s.toLowerCase() === "all")) return "all";
+            return [...new Set(list)].join(',');
+          };
+          let rawShopStr = joinShops(localStorage.getItem("shop_name"), localStorage.getItem("user_access"));
 
           if (currentUsername) {
             try {
@@ -327,7 +332,7 @@ const WorkTasksTab = ({
                 .eq("user_name", currentUsername)
                 .maybeSingle();
               if (userDb) {
-                rawShopStr = (userDb.shop_name || userDb.user_access || rawShopStr || "").trim();
+                rawShopStr = joinShops(userDb.shop_name, userDb.user_access) || rawShopStr;
               }
             } catch (e) {
               console.error("Error fetching user shop access in WorkTasksTab:", e);
@@ -352,7 +357,7 @@ const WorkTasksTab = ({
 
         const mgrs = managersRes.data || [];
         const admins = (officeAdminsRes.data || []).filter(u => {
-          const shops = (u.shop_name || u.user_access || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+          const shops = ([u.shop_name, u.user_access].filter(Boolean).join(",") || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
           return shops.includes('office');
         });
         setAllManagerUsers([...mgrs, ...admins]);
@@ -374,7 +379,7 @@ const WorkTasksTab = ({
     const matchedNames = allManagerUsers
       .filter(u => {
         if (!isShopSelected) return true;
-        const shops = (u.shop_name || u.user_access || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+        const shops = ([u.shop_name, u.user_access].filter(Boolean).join(",") || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
         return shops.includes(targetShopLower);
       })
       .map(u => u.user_name)
@@ -1024,7 +1029,7 @@ const WorkTasksTab = ({
           const userAccess = localStorage.getItem("user_access") || "";
           const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
           const matchedUsers = allDbUsers.filter(u => {
-            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShop = ([u.shop_name, u.user_access].filter(Boolean).join(",") || "").toLowerCase();
             const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
             return userShopsList.some(s => managerShops.includes(s));
           }).map(u => u.user_name || "");
