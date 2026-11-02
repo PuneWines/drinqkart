@@ -166,6 +166,7 @@ export default function WorkDetails() {
   const isSuperAdmin = role === "superadmin" || role === "masteradmin";
   const isHOD = role === "hod";
   const isAdmin = isSuperAdmin || isHOD || role === "admin";
+  const isManager = role === "manager";
 
   const userAccess = localStorage.getItem("user_access") || "";
   const managerShops = useMemo(() => {
@@ -607,7 +608,7 @@ export default function WorkDetails() {
       showToast("View-Only Mode: You have read-only access to Work Records. Updating assignments is restricted.", "error");
       return;
     }
-    if (!(isAdmin || isHOD)) {
+    if (!(isAdmin || isHOD || isManager)) {
       showToast("Only admins and managers can update task dates", "error");
       return;
     }
@@ -674,7 +675,7 @@ export default function WorkDetails() {
     }
 
     const pendingBulkUpdates = {};
-    if ((isAdmin || isHOD) && (bulkStartDate || bulkEndDate)) {
+    if ((isAdmin || isHOD || isManager) && (bulkStartDate || bulkEndDate)) {
       allIdsToProcess.forEach(id => {
         const task = mergedData.find(t => t.taskId === id);
         if (!task) return;
@@ -1068,7 +1069,7 @@ export default function WorkDetails() {
         </div>
 
         {/* ── Paytm-Style Mobile Form Action Card (< 768px) ── */}
-        {isAdmin && (
+        {(isAdmin || (isManager && isModifyAllowed)) && (
           <div className="md:hidden p-4 bg-white border-x border-b border-gray-100 space-y-2">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -1145,7 +1146,7 @@ export default function WorkDetails() {
               </div>
             </div>
 
-            {(isAdmin || isHOD) && (
+            {(isAdmin || isHOD || isManager) && (
               <>
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
@@ -1192,7 +1193,7 @@ export default function WorkDetails() {
               {saving ? "Saving..." : !isModifyAllowed ? "View Only" : "Save All"}
             </button>
 
-            {isAdmin && (
+            {(isAdmin || (isManager && isModifyAllowed)) && (
               <>
                 <button
                   onClick={handleBulkGenerate}
@@ -1211,7 +1212,7 @@ export default function WorkDetails() {
               </>
             )}
 
-            {isAdmin && (
+            {(isAdmin || (isManager && isModifyAllowed)) && (
               <button
                 onClick={() => navigate('/dashboard/work-records/bulk-import')}
                 className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-purple-200 active:scale-95"
