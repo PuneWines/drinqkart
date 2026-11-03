@@ -25,3 +25,4 @@ dist-ssr
 *.env
 Sale Page NO 1.png
 k6_load_test.js
+query_optimization_indexes.sql

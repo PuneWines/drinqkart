@@ -134,6 +134,7 @@ export const sanitizeAssignmentTime = (datetimeVal, defaultTimeStr) => {
 export const generateWorkTasksApi = async (assignments) => {
   try {
     // 0. Sanitize assignment start_datetime and end_datetime, updating task_assignments in DB if time was 00:00
+    const assignmentUpdates = [];
     for (const asgn of assignments) {
       const sanitizedStart = sanitizeAssignmentTime(asgn.start_datetime, '09:00:00');
       const sanitizedEnd = sanitizeAssignmentTime(asgn.end_datetime, '23:00:00');
@@ -143,16 +144,20 @@ export const generateWorkTasksApi = async (assignments) => {
 
       const asgnId = asgn.assignmentId || asgn.id;
       if (asgnId) {
-        await supabase
-          .from('task_assignments')
-          .update({
-            start_datetime: sanitizedStart,
-            end_datetime: sanitizedEnd,
-            status: 'GENERATED'
-          })
-          .eq('id', asgnId);
+        assignmentUpdates.push(
+          supabase
+            .from('task_assignments')
+            .update({
+              start_datetime: sanitizedStart,
+              end_datetime: sanitizedEnd,
+              status: 'GENERATED'
+            })
+            .eq('id', asgnId)
+        );
       }
     }
+    // Run all assignment updates concurrently instead of one-by-one
+    await Promise.all(assignmentUpdates);
 
     const tasksToInsert = [];
 

@@ -718,18 +718,20 @@ export const holdItemsToHoldTable = async ({
   if (itemNames.length > 0) {
     try {
       const uniqueIndentIds = [...new Set(items.map(i => (i.unique_indent_id || i.indent_id || "").split("::")[0].trim()).filter(Boolean))];
-      for (const indId of uniqueIndentIds) {
-        await supabase
-          .from("purchase_dashboard")
-          .update({
-            po_action: "On Hold",
-            po_emp_code: empCode,
-            updated_at: now
-          })
-          .eq("indent_id", indId)
-          .in("item_name", itemNames)
-          .is("po_id", null);
-      }
+      await Promise.all(
+        uniqueIndentIds.map((indId) =>
+          supabase
+            .from("purchase_dashboard")
+            .update({
+              po_action: "On Hold",
+              po_emp_code: empCode,
+              updated_at: now
+            })
+            .eq("indent_id", indId)
+            .in("item_name", itemNames)
+            .is("po_id", null)
+        )
+      );
     } catch (dashErr) {
       console.warn("Could not sync dashboard hold status:", dashErr);
     }
@@ -1070,19 +1072,22 @@ export const deleteHeldFromHoldTable = async (batchId, holdItemId = null, itemId
 
   // Mark in dashboard as deleted from hold
   try {
-    for (const indId of indentIds) {
-      await supabase
-        .from("purchase_dashboard")
-        .update({
-          is_deleted: true,
-          deletion_stage: "po",
-          deletion_reason: "Deleted from On Hold",
-          deleted_at: new Date().toISOString()
-        })
-        .eq("indent_id", indId)
-        .in("item_name", itemNames)
-        .is("po_id", null);
-    }
+    const deletedAt = new Date().toISOString();
+    await Promise.all(
+      indentIds.map((indId) =>
+        supabase
+          .from("purchase_dashboard")
+          .update({
+            is_deleted: true,
+            deletion_stage: "po",
+            deletion_reason: "Deleted from On Hold",
+            deleted_at: deletedAt
+          })
+          .eq("indent_id", indId)
+          .in("item_name", itemNames)
+          .is("po_id", null)
+      )
+    );
   } catch (e) {
     console.warn("Could not mark dashboard deleted from hold:", e);
   }

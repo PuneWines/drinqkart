@@ -1440,9 +1440,9 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout>
-      <div className="space-y-4">
+      <div className="space-y-4 font-sans text-sm text-slate-800">
         {/* Sticky Only Task Management Tabs */}
-        <div className="sticky top-0 z-30 py-2 border-b border-gray-100/50  transition-all duration-300">
+        <div className="sticky top-0 z-30 py-1.5 border-b border-slate-200/60 bg-white/60 backdrop-blur-md rounded-xl transition-all duration-300">
           <div className="max-w-7xl mx-auto">
             <TaskManagementTabs
               activeTab={mainTab === 'default' ? 'checklist' : mainTab}

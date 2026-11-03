@@ -1324,16 +1324,16 @@ const Payroll = () => {
             let updatedCount = 0;
             const monthStr = monthNames[selectedMonth - 1];
 
+            const salaryUpdates = [];
+            const draftRecords = [];
+
             for (const row of rowsToProcess) {
                 const empId = row[0]?.toString() || '';
                 const basicSalary = Number(row[2]) || 0;
                 if (!empId || empId === '-') continue;
 
-                // Update basic salary in hr_management_employees
-                await supabase
-                    .from('hr_management_employees')
-                    .update({ salary: basicSalary })
-                    .eq('employee_id', empId);
+                // Queued: update basic salary in hr_management_employees (run in parallel batches below)
+                salaryUpdates.push({ empId, basicSalary });
 
                 // Save draft parameters into hr_management_payroll without sending to payment history (is_verified: false)
                 const draftRecord = {
@@ -1358,29 +1358,48 @@ const Payroll = () => {
                     is_verified: false
                 };
 
+                draftRecords.push(draftRecord);
+            }
+
+            if (draftRecords.length > 0) {
+                // 1) Employee salary updates: each row has a different value, so run in parallel chunks
+                //    (instead of one awaited round-trip per employee).
+                const SALARY_CHUNK = 15;
+                for (let i = 0; i < salaryUpdates.length; i += SALARY_CHUNK) {
+                    await Promise.all(
+                        salaryUpdates.slice(i, i + SALARY_CHUNK).map(({ empId, basicSalary }) =>
+                            supabase
+                                .from('hr_management_employees')
+                                .update({ salary: basicSalary })
+                                .eq('employee_id', empId)
+                        )
+                    );
+                }
+
+                // 2) Payroll drafts: a single batched upsert instead of one upsert per employee.
                 let { error: draftErr } = await supabase
                     .from('hr_management_payroll')
-                    .upsert(draftRecord, { onConflict: 'employee_id,year,month' });
+                    .upsert(draftRecords, { onConflict: 'employee_id,year,month' });
 
                 if (draftErr && draftErr.message && draftErr.message.toLowerCase().includes('integer')) {
-                    const intSafeRecord = {
-                        ...draftRecord,
-                        total_month_days: Math.round(draftRecord.total_month_days),
-                        total_present: Math.round(draftRecord.total_present),
-                        extra_days: Math.round(draftRecord.extra_days)
-                    };
+                    const intSafeRecords = draftRecords.map(r => ({
+                        ...r,
+                        total_month_days: Math.round(r.total_month_days),
+                        total_present: Math.round(r.total_present),
+                        extra_days: Math.round(r.extra_days)
+                    }));
                     const retryRes = await supabase
                         .from('hr_management_payroll')
-                        .upsert(intSafeRecord, { onConflict: 'employee_id,year,month' });
+                        .upsert(intSafeRecords, { onConflict: 'employee_id,year,month' });
                     draftErr = retryRes.error;
                 }
 
                 if (draftErr) {
-                    console.error(`Failed to save draft for employee ${empId}:`, draftErr);
+                    console.error('Failed to save payroll drafts:', draftErr);
                     throw draftErr;
                 }
 
-                updatedCount++;
+                updatedCount = draftRecords.length;
             }
 
             toast.success(`Successfully saved employee record for ${updatedCount} employee(s)!`);
@@ -1609,16 +1628,19 @@ const Payroll = () => {
         try {
             const monthStr = monthNames[selectedMonth - 1];
 
-            for (const row of rowsToProcess) {
-                const empId = row[0]?.toString() || '';
-                if (!empId || empId === '-') continue;
+            // Same values for every row -> one UPDATE ... WHERE employee_id IN (...) instead of N round-trips
+            const unholdEmpIds = rowsToProcess
+                .map(row => row[0]?.toString() || '')
+                .filter(id => id && id !== '-');
 
-                await supabase
+            if (unholdEmpIds.length > 0) {
+                const { error: unholdErr } = await supabase
                     .from('hr_management_payroll')
                     .update({ is_hold: false, status: 'pending' })
-                    .eq('employee_id', empId)
+                    .in('employee_id', unholdEmpIds)
                     .eq('year', Number(selectedYear))
                     .eq('month', monthStr);
+                if (unholdErr) throw unholdErr;
             }
 
             toast.success(`Successfully un-held ${rowsToProcess.length} record(s) and restored to Salary Sheet!`);

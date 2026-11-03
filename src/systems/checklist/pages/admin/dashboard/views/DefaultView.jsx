@@ -26,7 +26,7 @@ export default function DefaultView({
     userRole,
 }) {
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 font-sans text-sm text-slate-800">
             <StatisticsCards
                 totalTask={displayStats.totalTasks}
                 completeTask={displayStats.completedTasks}
@@ -57,21 +57,25 @@ export default function DefaultView({
             />
 
             {activeTab === "overview" && (
-                <div className="space-y-4">
-                    <div className="rounded-lg bg-white overflow-hidden">
-                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-2">
-                            <h3 className="text-purple-700 font-medium">Staff Task Summary</h3>
-                            <p className="text-purple-600 text-sm">Overview of tasks assigned to each staff member</p>
+                <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+                    <div className="px-4 py-3 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-sans">
+                                Staff Task Summary
+                            </h3>
+                            <p className="text-xs text-slate-500 font-sans mt-0.5">
+                                Overview of tasks assigned to each staff member
+                            </p>
                         </div>
-                        <div className="p-4 overflow-auto custom-scrollbar">
-                            <StaffTasksTable
-                                dashboardType={dashboardType}
-                                dashboardStaffFilter={dashboardStaffFilter}
-                                shopFilter={shopFilter}
-                                parseTaskStartDate={parseTaskStartDate}
-                                dateRange={dateRange}
-                            />
-                        </div>
+                    </div>
+                    <div className="p-4 overflow-auto">
+                        <StaffTasksTable
+                            dashboardType={dashboardType}
+                            dashboardStaffFilter={dashboardStaffFilter}
+                            shopFilter={shopFilter}
+                            parseTaskStartDate={parseTaskStartDate}
+                            dateRange={dateRange}
+                        />
                     </div>
                 </div>
             )}

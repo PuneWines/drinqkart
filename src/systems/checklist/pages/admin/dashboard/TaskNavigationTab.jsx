@@ -1,8 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
-import { motion } from "framer-motion"
-import { Filter, ChevronDown, ChevronUp, Play, Pause, Edit, Save, X, Mic, Square, Trash2, Loader2 } from "lucide-react"
+import { Filter, ChevronDown, ChevronUp, Play, Pause, Edit, Save, X, Mic, Square, Trash2, Loader2, Search } from "lucide-react"
 import { ReactMediaRecorder } from "react-media-recorder"
 import AudioPlayer from "../../../components/AudioPlayer"
 import RenderDescription from "../../../components/RenderDescription"
@@ -42,7 +41,7 @@ export default function TaskNavigationTabs({
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMoreData, setHasMoreData] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false) // Add this state
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [editingTaskId, setEditingTaskId] = useState(null)
   const [editFormData, setEditFormData] = useState({})
@@ -68,7 +67,6 @@ export default function TaskNavigationTabs({
       task_start_date: task.originalTaskStartDate || '',
       frequency: task.frequency || '',
       originalAudioUrl: isAudioUrl(task.title) ? task.title : null,
-      // Add other relevant fields if needed
     });
   };
 
@@ -81,7 +79,6 @@ export default function TaskNavigationTabs({
   const handleInputChange = async (field, value) => {
     setEditFormData(prev => ({ ...prev, [field]: value }));
 
-    // If shop changes, refresh doers list
     if (field === 'shop') {
       const doers = await fetchUniqueDoerNameDataApi(value);
       setDoersList(doers);
@@ -114,7 +111,6 @@ export default function TaskNavigationTabs({
 
           finalEditData.task_description = publicUrlData.publicUrl;
 
-          // If we had an original audio, mark it for cleanup
           if (editFormData.originalAudioUrl) {
             audioToCleanup = editFormData.originalAudioUrl;
           }
@@ -127,7 +123,6 @@ export default function TaskNavigationTabs({
       } else if (editFormData.originalAudioUrl && isAudioUrl(editFormData.task_description)) {
         // No new recording, keeping old audio
       } else if (editFormData.originalAudioUrl && !isAudioUrl(editFormData.task_description)) {
-        // Audio removed, record it for cleanup
         audioToCleanup = editFormData.originalAudioUrl;
       }
 
@@ -150,7 +145,7 @@ export default function TaskNavigationTabs({
         await dispatch(updateMaintenanceTask({
           updatedTask,
           originalTask: {
-            machine_name: originalTask.machine_name || originalTask.title, // Handle potential mapping differences
+            machine_name: originalTask.machine_name || originalTask.title,
             part_name: originalTask.part_name || '',
             task_description: originalTask.title
           }
@@ -167,7 +162,6 @@ export default function TaskNavigationTabs({
         })).unwrap();
       }
 
-      // Cleanup audio after successful DB update
       if (audioToCleanup) {
         try {
           const path = audioToCleanup.split('audio-recordings/').pop().split('?')[0];
@@ -194,7 +188,7 @@ export default function TaskNavigationTabs({
     setDisplayedTasks([])
     setHasMoreData(true)
     setTotalCount(0)
-  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter, dateRange]) // Add shopFilter & dateRange
+  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter, dateRange])
 
   // Function to load tasks from server
   const loadTasksFromServer = useCallback(async (page = 1, append = false) => {
@@ -207,19 +201,17 @@ export default function TaskNavigationTabs({
       const startParam = useDateRange ? dateRange.startDate : null;
       const endParam = useDateRange ? dateRange.endDate : null;
 
-      // Use shopFilter for server call (only affects table data)
       const data = await fetchDashboardDataApi(
         dashboardType,
         dashboardStaffFilter,
         page,
         itemsPerPage,
         taskView,
-        shopFilter, // Pass shop filter to API
+        shopFilter,
         startParam,
         endParam
       )
 
-      // Get total count for this view (only on first load)
       if (page === 1) {
         const count = await getDashboardDataCount(
           dashboardType,
@@ -241,13 +233,8 @@ export default function TaskNavigationTabs({
         return
       }
 
-      // console.log('Raw data received:', data.length, 'records');
-
-      // Process the data similar to your existing logic
       const seen = new Set();
       const processedTasks = data.map((task) => {
-        // Use planned_date for checklist/delegation as the primary date for status/display
-        // Use task_start_date for others (maintenance, repair, etc.)
         const dateToUse = (dashboardType === 'checklist' || dashboardType === 'delegation')
           ? (task.planned_date || task.task_start_date)
           : (dashboardType === 'work' ? task.current_date : task.task_start_date);
@@ -296,11 +283,7 @@ export default function TaskNavigationTabs({
         }
       })
 
-      // console.log('Processed tasks:', processedTasks.length, 'records');
-
-      // Apply client-side search filter AND smart deduplication
       let filteredTasks = processedTasks.filter((task) => {
-        // Role-based client-side filtering for user role
         const userRoleLower = (localStorage.getItem("role") || "").toLowerCase();
         const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
         if (userRoleLower === "user" && currentUsername) {
@@ -308,11 +291,7 @@ export default function TaskNavigationTabs({
           if (assigned !== currentUsername) return false;
         }
 
-        // 0. Tab view strict filter (Prevents UTC offset task leakage across tabs)
-        // If the task view is 'recent', we only want TODAY'S tasks. If the local calculation 
-        // says it's "Upcoming", we hide it from this tab.
         if (taskView === 'recent') {
-          // Keep tasks categorized as Today or already Submitted
           if (task.timeStatus !== 'Today' && task.timeStatus !== 'Submitted') return false;
         } else if (taskView === 'upcoming') {
           if (task.timeStatus !== 'Upcoming') return false;
@@ -320,7 +299,6 @@ export default function TaskNavigationTabs({
           if (task.timeStatus !== (dashboardType === 'work' ? 'Not Done' : 'Overdue')) return false;
         }
 
-        // 1. Search filter
         if (searchQuery && searchQuery.trim() !== "") {
           const query = searchQuery.toLowerCase().trim()
           const matchesSearch = (
@@ -331,17 +309,14 @@ export default function TaskNavigationTabs({
           if (!matchesSearch) return false;
         }
 
-        // 2. Smart deduplication for checklist/delegation/maintenance
         if (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') {
           if (task.status === "upcoming") {
-            // UPCOMING: only show the NEXT (earliest) occurrence per task series
             const descKey = task.task_description || task.title || "";
             const nameKey = task.name || task.assignedTo || "";
             const key = `upcoming::${descKey}::${nameKey}`;
             if (seen.has(key)) return false;
             seen.add(key);
           } else {
-            // OVERDUE & TODAY: show each day individually
             const taskDate = task.plannedDate ? new Date(task.plannedDate).toDateString() :
               (task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toDateString() : "");
             const descKey = task.task_description || task.title || "";
@@ -355,15 +330,12 @@ export default function TaskNavigationTabs({
         return true
       })
 
-      // console.log('Final filtered tasks:', filteredTasks.length, 'records');
-
       if (append) {
         setDisplayedTasks(prev => [...prev, ...filteredTasks])
       } else {
         setDisplayedTasks(filteredTasks)
       }
 
-      // Check if we have more data
       setHasMoreData(data.length === itemsPerPage)
 
     } catch (error) {
@@ -373,7 +345,6 @@ export default function TaskNavigationTabs({
     }
   }, [dashboardType, dashboardStaffFilter, taskView, searchQuery, shopFilter, dateRange, isLoadingMore, itemsPerPage])
 
-  // Helper functions
   const parseTaskStartDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== "string") return null
 
@@ -415,20 +386,9 @@ export default function TaskNavigationTabs({
     return `${day}/${month}/${year}`
   }
 
-  const isDateInPast = (date) => {
-    if (!date || !(date instanceof Date)) return false
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const checkDate = new Date(date)
-    checkDate.setHours(0, 0, 0, 0)
-    return checkDate < today
-  }
-
-  // Initial load when component mounts or key dependencies change
   useEffect(() => {
     loadTasksFromServer(1, false)
 
-    // Fetch dropdown data
     const fetchDropdownData = async () => {
       const [shopData, givens, doers] = await Promise.all([
         fetchUniqueShopDataApi(),
@@ -442,21 +402,18 @@ export default function TaskNavigationTabs({
     fetchDropdownData();
   }, [taskView, dashboardType, dashboardStaffFilter, shopFilter, dateRange])
 
-  // Load more when search changes (client-side filter)
   useEffect(() => {
     if (currentPage === 1) {
       loadTasksFromServer(1, false)
     }
   }, [searchQuery])
 
-  // Reset local staff filter when dashboardStaffFilter changes
   useEffect(() => {
     if (dashboardStaffFilter !== "all") {
       setFilterStaff("all")
     }
   }, [dashboardStaffFilter])
 
-  // Function to load more data when scrolling
   const loadMoreData = () => {
     if (!isLoadingMore && hasMoreData) {
       const nextPage = currentPage + 1
@@ -465,7 +422,6 @@ export default function TaskNavigationTabs({
     }
   }
 
-  // Handle scroll event for infinite loading
   useEffect(() => {
     const handleScroll = () => {
       if (!hasMoreData || isLoadingMore) return
@@ -489,171 +445,117 @@ export default function TaskNavigationTabs({
   }, [hasMoreData, isLoadingMore, currentPage])
 
   return (
-    <div className="w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <div className="bg-white/50 p-4 border-b border-gray-100/80">
-        <div className="flex bg-gray-100/60 p-1 rounded-xl border border-gray-200/20 relative overflow-x-auto no-scrollbar max-w-max mx-auto md:mx-0">
-          {["recent", "upcoming", "overdue"].map((view) => (
+    <div className="w-full rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden font-sans">
+      {/* Top Bar: Tabs & Search */}
+      <div className="p-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60">
+        <div className="inline-flex p-1 bg-slate-100/90 rounded-lg border border-slate-200/70">
+          {["recent", "upcoming", "overdue"].map((view) => {
+            const isActive = taskView === view;
+            const label = view === "overdue" ? (dashboardType === "work" ? "Not Done" : "Overdue") :
+              (dashboardType === "delegation"
+                ? (view === "recent" ? "Today Task" : "Future Task")
+                : (view === "recent" ? "Recent" : "Upcoming")
+              );
+            return (
+              <button
+                key={view}
+                type="button"
+                onClick={() => setTaskView(view)}
+                className={`
+                  h-8.5 px-4 text-xs sm:text-[13px] font-bold !rounded-md font-sans transition-all cursor-pointer whitespace-nowrap
+                  ${isActive ? "bg-white text-indigo-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"}
+                `}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full sm:w-72">
+          <input
+            type="text"
+            placeholder="Search title, ID, staff..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 pr-8 text-xs sm:text-[13px] font-sans text-slate-700 placeholder-slate-400 shadow-2xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          {searchQuery ? (
             <button
-              key={view}
-              onClick={() => setTaskView(view)}
-              className={`
-                relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10
-                ${taskView === view ? "text-white" : "text-gray-500 hover:text-purple-600"}
-              `}
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
-              {taskView === view && (
-                <motion.div
-                  layoutId="dashboardInnerTabMinimal"
-                  className="absolute inset-0 bg-purple-600 rounded-lg shadow-md"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
-              )}
-              <span className="relative">
-                {view === "overdue" ? (dashboardType === "work" ? "Not Done" : "Overdue") :
-                  (dashboardType === "delegation"
-                    ? (view === "recent" ? "Today Task" : "Future Task")
-                    : (view === "recent" ? "Recent" : "Upcoming")
-                  )
-                }
-              </span>
+              <X size={13} />
             </button>
-          ))}
+          ) : (
+            <Search size={14} className="text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          )}
         </div>
       </div>
 
-      <div className="p-2">
-        {/* Accordion Filter Section */}
-        {dashboardType !== 'checklist' && dashboardType !== 'delegation' && (
-          <div className="mb-4 border border-gray-200 rounded-lg">
-            <button
-              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
-              className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors rounded-t-lg"
-            >
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-purple-600" />
-                <span className="font-medium text-purple-700">Filters</span>
-                {(searchQuery || dashboardStaffFilter !== "all" || shopFilter !== "all") && (
-                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                    Active
-                  </span>
-                )}
-              </div>
-              {isFilterExpanded ? (
-                <ChevronUp className="h-4 w-4 text-gray-600" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-gray-600" />
-              )}
-            </button>
-
-            {isFilterExpanded && (
-              <div className="p-4 border-t border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label htmlFor="search" className="block text-sm font-medium text-gray-700">
-                      Search Tasks
-                    </label>
-                    <input
-                      id="search"
-                      placeholder="Search by task title or ID"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full rounded-md border border-gray-300 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                    />
-                  </div>
-
-                  {/* Active Filters Display */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Active Filters
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {dashboardStaffFilter !== "all" && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                          Staff: {dashboardStaffFilter}
-                        </span>
-                      )}
-                      {shopFilter !== "all" && (
-                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                          Shop: {shopFilter}
-                        </span>
-                      )}
-                      {searchQuery && (
-                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                          Search: {searchQuery}
-                        </span>
-                      )}
-                      {!dashboardStaffFilter || dashboardStaffFilter === "all" &&
-                        !shopFilter || shopFilter === "all" &&
-                        !searchQuery && (
-                          <span className="text-xs text-gray-500">No active filters</span>
-                        )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-
+      <div className="p-3">
         {/* Task List / Table Rendering */}
         {displayedTasks.length === 0 && !isLoadingMore ? (
-          <div className="text-center p-12 bg-white rounded-xl border border-dashed border-gray-300">
-            <div className="flex justify-center mb-4">
-              <div className="p-3 bg-gray-50 rounded-full">
-                <Filter className="h-8 w-8 text-gray-300" />
+          <div className="text-center p-12 bg-white rounded-xl border border-dashed border-slate-200 m-2">
+            <div className="flex justify-center mb-3">
+              <div className="p-3 bg-slate-50 rounded-full text-slate-300">
+                <Filter size={26} />
               </div>
             </div>
-            <p className="text-gray-500 font-medium">No tasks found for {taskView} view.</p>
-            <p className="text-sm text-gray-400 mt-1">Try adjusting your filters or search query.</p>
+            <p className="text-slate-800 font-bold text-sm">No tasks found for {taskView} view.</p>
+            <p className="text-xs sm:text-[13px] text-slate-500 mt-1">Try adjusting your filters or search query.</p>
           </div>
         ) : (
           <div>
             {/* Desktop Table View */}
-            <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="hidden md:block bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
               <div
                 className="task-table-container overflow-x-auto"
                 style={{ maxHeight: "calc(100vh - 380px)", minHeight: "300px", overflowY: "auto" }}
               >
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-10 transition-all">
+                <table className="min-w-full divide-y divide-slate-100">
+                  <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
                     <tr>
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">ID</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">ID</th>
                       {dashboardType === "delegation" && (
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Time Status</th>
+                        <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Time Status</th>
                       )}
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Description</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Description</th>
                       {dashboardType === "work" && (
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Manager Name</th>
+                        <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Manager Name</th>
                       )}
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Staff</th>
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Shop</th>
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Department</th>
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Date</th>
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100 italic">Status</th>
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Freq</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Staff</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Shop</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Department</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Date</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Status</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider font-sans">Freq</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {displayedTasks.map((task, index) => (
+                  <tbody className="bg-white divide-y divide-slate-100 font-sans text-xs sm:text-[13px]">
+                    {displayedTasks.map((task) => (
                       <tr
                         key={`${task.id}-${task.taskStartDate}`}
-                        className="hover:bg-purple-50/30 transition-colors border-b last:border-0 cursor-pointer"
+                        className="hover:bg-slate-50/70 transition-colors border-b last:border-0 cursor-pointer"
                         onDoubleClick={() => handleEditClick(task)}
                       >
-                        <td className="px-3 py-2 whitespace-nowrap text-xs font-bold text-purple-700">{task.id}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-[13px] font-mono font-bold text-indigo-600">
+                          #{task.id}
+                        </td>
                         {dashboardType === "delegation" && (
-                          <td className="px-3 py-2 whitespace-nowrap text-[10px] font-bold">
-                            <span className={`px-2 py-0.5 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
-                              task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
-                                task.timeStatus === "Submitted" ? "bg-green-100 text-green-700" :
-                                  "bg-blue-100 text-blue-700"
+                          <td className="px-4 py-3 whitespace-nowrap text-xs font-bold">
+                            <span className={`px-2.5 py-0.5 rounded-md font-mono ${task.timeStatus === "Overdue" ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                              task.timeStatus === "Today" ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                task.timeStatus === "Submitted" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                  "bg-indigo-50 text-indigo-700 border border-indigo-200"
                               }`}>
                               {task.timeStatus}
                             </span>
                           </td>
                         )}
-                        <td className="px-3 py-2 text-xs text-gray-700 min-w-[300px] max-w-sm font-medium">
+                        <td className="px-4 py-3 text-xs sm:text-[13px] text-slate-800 min-w-[300px] max-w-sm font-medium">
                           {editingTaskId === task.id ? (
                             <ReactMediaRecorder
                               audio
@@ -665,13 +567,13 @@ export default function TaskNavigationTabs({
                                       {isAudioUrl(editFormData.task_description) ? (
                                         <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2 mb-2">
                                           <div className="flex items-center justify-between mb-2">
-                                            <span className="text-[10px] font-bold text-indigo-600 uppercase">Existing Audio</span>
+                                            <span className="text-xs font-bold text-indigo-600 uppercase">Existing Audio</span>
                                             <button
                                               type="button"
                                               onClick={() => handleInputChange('task_description', '')}
-                                              className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                              className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
                                             >
-                                              <Trash2 size={10} /> Remove & Edit Text
+                                              <Trash2 size={12} /> Remove & Edit Text
                                             </button>
                                           </div>
                                           <AudioPlayer url={editFormData.task_description} />
@@ -680,7 +582,7 @@ export default function TaskNavigationTabs({
                                             onClick={startRecording}
                                             className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all"
                                           >
-                                            <Mic size={12} /> Replace with New Recording
+                                            <Mic size={14} /> Replace with New Recording
                                           </button>
                                         </div>
                                       ) : (
@@ -688,14 +590,14 @@ export default function TaskNavigationTabs({
                                           <textarea
                                             value={editFormData.task_description}
                                             onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-8"
-                                            rows="3"
-                                            placeholder="Edit description or record voice..."
+                                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs sm:text-[13px] pr-8"
+                                            rows="2"
+                                            placeholder="Edit description..."
                                           />
                                           <button
                                             type="button"
                                             onClick={startRecording}
-                                            className="absolute bottom-1.5 right-1.5 p-1 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all shadow-sm"
+                                            className="absolute bottom-2 right-2 p-1.5 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-all shadow-2xs"
                                             title="Record Voice Note"
                                           >
                                             <Mic size={14} />
@@ -706,22 +608,22 @@ export default function TaskNavigationTabs({
                                   )}
 
                                   {status === 'recording' && (
-                                    <div className="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
+                                    <div className="flex flex-col items-center justify-center p-3.5 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
                                       <Mic size={20} className="text-red-600" />
                                       <button
                                         type="button"
                                         onClick={stopRecording}
-                                        className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold shadow-sm"
+                                        className="flex items-center gap-1.5 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold shadow-2xs"
                                       >
-                                        <Square size={10} /> Stop
+                                        <Square size={12} /> Stop
                                       </button>
                                     </div>
                                   )}
 
                                   {recordedAudio && status !== 'recording' && (
-                                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-[10px] font-bold text-purple-600 uppercase">Voice Note Attached</span>
+                                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5">
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-bold text-indigo-600 uppercase">Voice Note Attached</span>
                                         <div className="flex gap-2">
                                           <button
                                             type="button"
@@ -730,9 +632,9 @@ export default function TaskNavigationTabs({
                                               setRecordedAudio(null);
                                               startRecording();
                                             }}
-                                            className="text-[10px] text-purple-600 hover:text-purple-800 font-bold flex items-center gap-1"
+                                            className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
                                           >
-                                            <Mic size={10} /> Give Again
+                                            <Mic size={12} /> Give Again
                                           </button>
                                           <button
                                             type="button"
@@ -740,9 +642,9 @@ export default function TaskNavigationTabs({
                                               clearBlobUrl();
                                               setRecordedAudio(null);
                                             }}
-                                            className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                            className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
                                           >
-                                            <Trash2 size={10} /> Remove
+                                            <Trash2 size={12} /> Remove
                                           </button>
                                         </div>
                                       </div>
@@ -764,16 +666,16 @@ export default function TaskNavigationTabs({
                           )}
                         </td>
                         {dashboardType === "work" && (
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 font-medium">
+                          <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-[13px] text-slate-600 font-medium">
                             {task.managerName}
                           </td>
                         )}
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 font-medium">
+                        <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-[13px] text-slate-700 font-medium">
                           {editingTaskId === task.id ? (
                             <select
                               value={editFormData.name}
                               onChange={(e) => handleInputChange('name', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              className="w-full px-2.5 py-1.5 border border-slate-200 rounded-md text-xs sm:text-[13px]"
                             >
                               <option value="">Select Name</option>
                               {doersList.map(name => (
@@ -784,12 +686,12 @@ export default function TaskNavigationTabs({
                             task.assignedTo
                           )}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
+                        <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-[13px] text-slate-600">
                           {editingTaskId === task.id ? (
                             <select
                               value={editFormData.shop}
                               onChange={(e) => handleInputChange('shop', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              className="w-full px-2.5 py-1.5 border border-slate-200 rounded-md text-xs sm:text-[13px]"
                             >
                               <option value="">Select Shop</option>
                               {shops.map(shop => (
@@ -797,68 +699,47 @@ export default function TaskNavigationTabs({
                               ))}
                             </select>
                           ) : (
-                            (task.shop || task.shop_name || '-')
+                            <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-200">
+                              {task.shop || task.shop_name || '-'}
+                            </span>
                           )}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
+                        <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-[13px] text-slate-500">
                           {task.department || '-'}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
-                          {editingTaskId === task.id ? (
-                            <input
-                              type="datetime-local"
-                              value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
-                              onChange={(e) => handleInputChange('task_start_date', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
-                              disabled
-                            />
-                          ) : (
-                            task.taskStartDate
-                          )}
+                        <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-[13px] font-mono text-slate-600">
+                          {task.taskStartDate}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-[10px] font-bold">
-                          <span className={`px-2 py-0.5 rounded-full ${(task.status === "completed" || task.status === "done" || task.status === "yes")
-                            ? (task.admin_done ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")
-                            : (task.status === "overdue" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700")
-                            }`}>
+                        <td className="px-4 py-3 whitespace-nowrap text-xs font-bold">
+                          <span className={`px-2.5 py-0.5 rounded-md font-mono border ${
+                            (task.status === "completed" || task.status === "done" || task.status === "yes")
+                              ? (task.admin_done ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")
+                              : (task.status === "overdue" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-slate-100 text-slate-700 border-slate-200")
+                          }`}>
                             {(task.status === "completed" || task.status === "done" || task.status === "yes")
                               ? (task.admin_done ? "Approved" : "Pending Approval")
                               : (task.status === 'overdue' ? (dashboardType === 'work' ? 'Not Done' : 'Overdue') : 'Pending')}
                           </span>
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           {editingTaskId === task.id ? (
-                            <div className="flex flex-col gap-2">
-                              <select
-                                value={editFormData.frequency}
-                                onChange={(e) => handleInputChange('frequency', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
-                                disabled
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={handleSaveEdit}
+                                disabled={isSaving}
+                                className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold disabled:opacity-50 flex items-center gap-1"
                               >
-                                <option value="one-time">One-time</option>
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                                <option value="monthly">Monthly</option>
-                                <option value="yearly">Yearly</option>
-                              </select>
-                              <div className="flex gap-2 justify-center">
-                                <button
-                                  onClick={handleSaveEdit}
-                                  disabled={isSaving}
-                                  className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                                >
-                                  <Save size={12} />
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="flex items-center gap-1 px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
+                                <Save size={13} /> Save
+                              </button>
+                              <button
+                                onClick={handleCancelEdit}
+                                className="h-7 px-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs font-bold flex items-center gap-1"
+                              >
+                                <X size={13} />
+                              </button>
                             </div>
                           ) : (
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm ${getFrequencyColor(task.frequency)}`}>
+                            <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider border ${getFrequencyColor(task.frequency)}`}>
                               {task.frequency}
                             </span>
                           )}
@@ -871,12 +752,14 @@ export default function TaskNavigationTabs({
             </div>
 
             {/* Mobile Card View */}
-            <div className="md:hidden space-y-4">
+            <div className="md:hidden space-y-3.5">
               {displayedTasks.map((task) => (
-                <div key={`${task.id}-${task.taskStartDate}`} className="bg-white p-4 rounded-xl shadow-md border border-gray-100 relative overflow-hidden group active:scale-[0.98] transition-all">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded uppercase">#{task.id}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getFrequencyColor(task.frequency)}`}>
+                <div key={`${task.id}-${task.taskStartDate}`} className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs font-sans">
+                  <div className="flex justify-between items-start mb-2.5">
+                    <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded border border-indigo-200/60">
+                      #{task.id}
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider border ${getFrequencyColor(task.frequency)}`}>
                       {task.frequency}
                     </span>
                   </div>
@@ -884,52 +767,45 @@ export default function TaskNavigationTabs({
                     {isAudioUrl(task.title) ? (
                       <AudioPlayer url={task.title} />
                     ) : (
-                      <h3 className="text-sm font-bold text-gray-800 line-clamp-2 leading-relaxed">{task.title}</h3>
+                      <h3 className="text-[13px] sm:text-sm font-bold text-slate-900 leading-relaxed line-clamp-2">{task.title}</h3>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-y-2 border-t border-gray-50 pt-3">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Assigned To</span>
-                      <span className="text-xs font-semibold text-gray-700">{task.assignedTo}</span>
+                  <div className="grid grid-cols-2 gap-2.5 border-t border-slate-100 pt-3 text-xs sm:text-[13px]">
+                    <div>
+                      <span className="text-[11px] uppercase font-bold text-slate-400">Assigned To</span>
+                      <p className="font-semibold text-slate-800 mt-0.5">{task.assignedTo}</p>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Start Date</span>
-                      <span className="text-xs font-semibold text-gray-700">{task.taskStartDate}</span>
+                    <div>
+                      <span className="text-[11px] uppercase font-bold text-slate-400">Date</span>
+                      <p className="font-mono text-slate-700 mt-0.5">{task.taskStartDate}</p>
                     </div>
-                    {dashboardType === "delegation" && (
-                      <div className="flex flex-col">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Time Status</span>
-                        <span className={`text-[10px] font-bold w-fit px-2 py-0.5 rounded-full ${["Overdue", "Not Done"].includes(task.timeStatus) ? "bg-red-100 text-red-700" :
-                          task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
-                            task.timeStatus === "Submitted" ? "bg-green-100 text-green-700" :
-                              "bg-blue-100 text-blue-700"
-                          }`}>
-                          {task.timeStatus}
+                    <div>
+                      <span className="text-[11px] uppercase font-bold text-slate-400">Shop</span>
+                      <p className="text-slate-700 mt-0.5">{task.shop || task.shop_name || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase font-bold text-slate-400">Status</span>
+                      <p className="mt-0.5">
+                        <span className={`px-2.5 py-0.5 rounded-md text-xs font-mono font-bold border ${
+                          (task.status === "completed" || task.status === "done" || task.status === "yes")
+                            ? (task.admin_done ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")
+                            : (task.status === "overdue" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-slate-100 text-slate-700 border-slate-200")
+                        }`}>
+                          {task.status}
                         </span>
-                      </div>
-                    )}
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Shop</span>
-                      <span className="text-xs font-semibold text-gray-700">{task.shop || task.shop_name || '-'}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Department</span>
-                      <span className="text-xs font-semibold text-gray-700">{task.department || '-'}</span>
+                      </p>
                     </div>
                   </div>
-                  <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
               ))}
             </div>
 
             {isLoadingMore && (
-              <div className="flex flex-col items-center justify-center py-8">
-                <div className="h-8 w-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-                <p className="text-xs font-bold text-purple-600 mt-3 uppercase tracking-widest">Loading Tasks...</p>
+              <div className="flex flex-col items-center justify-center py-7">
+                <div className="h-7 w-7 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                <p className="text-xs font-bold text-indigo-600 mt-2.5 uppercase tracking-wider">Loading Tasks...</p>
               </div>
             )}
-
-           
           </div>
         )}
       </div>

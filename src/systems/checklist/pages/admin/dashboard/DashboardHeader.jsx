@@ -2,20 +2,21 @@
 
 import { useState, useEffect } from "react"
 import { getTotalUsersCountApi } from "../../../redux/api/dashboardApi"
+import { ClipboardCheck, Users, Calendar, ChevronDown, X } from "lucide-react"
 
 export default function DashboardHeader({
     dashboardType,
     setDashboardType,
     dashboardStaffFilter,
     setDashboardStaffFilter,
-    availableStaff,
+    availableStaff = [],
     userRole,
     username,
     shopFilter,
     setShopFilter,
-    availableShops,
+    availableShops = [],
     isLoadingMore,
-    onDateRangeChange, // Add this prop to handle date range selection
+    onDateRangeChange,
     mainTab,
     dateRange
 }) {
@@ -33,19 +34,16 @@ export default function DashboardHeader({
             setEndDate("");
         }
     }, [dateRange]);
+
     const normalizedRole = (userRole || "").toLowerCase();
-    const isSuperAdmin = normalizedRole === "superadmin" || normalizedRole === "super_admin";
+    const isSuperAdmin = normalizedRole === "superadmin" || normalizedRole === "super_admin" || normalizedRole === "masteradmin";
     const isHOD = normalizedRole === "hod";
     const isAdmin = normalizedRole === "admin" || normalizedRole === "manager" || isHOD || isSuperAdmin;
 
-    const userAccessStr = ([localStorage.getItem("shop_name"), localStorage.getItem("user_access")].filter(Boolean).join(",") || "").trim();
-    const hasAllShopsAccess = userAccessStr.toLowerCase() === "all" || !userAccessStr;
-
-    // Fetch total users count - UPDATED VERSION
+    // Fetch total users count
     useEffect(() => {
         const fetchTotalUsers = async () => {
             try {
-                // Pass shopFilter to the API
                 const count = await getTotalUsersCountApi(shopFilter)
                 setTotalUsersCount(count)
             } catch (error) {
@@ -54,7 +52,7 @@ export default function DashboardHeader({
         }
 
         fetchTotalUsers()
-    }, [shopFilter]) // Add shopFilter as dependency
+    }, [shopFilter])
 
     // Apply date range filter
     const applyDateRange = () => {
@@ -80,286 +78,193 @@ export default function DashboardHeader({
     }
 
     return (
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold tracking-tight text-purple-500">Dashboard</h1>
-                {isAdmin && (mainTab === "default" || mainTab === "work") && (
-                    <div className="flex items-center gap-2 ml-auto mr-5">
-                        <div className="text-sm text-gray-600">
-                            {shopFilter !== "all" ? `Users in ${shopFilter}` : "Total Users"}
-                        </div>
-                        <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
-                            <span className="text-white font-bold text-sm">
-                                {totalUsersCount}
-                            </span>
-                        </div>
+        <div className="flex flex-col gap-3.5 font-sans">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+                {/* Left: Title & Users Badge */}
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+                        <ClipboardCheck size={20} className="stroke-[2.5]" />
                     </div>
-                )}
-            </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-sans">
+                            Dashboard
+                        </h1>
+                        {isAdmin && (mainTab === "default" || mainTab === "work") && (
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-[13px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/60 font-sans shadow-2xs">
+                                <Users size={14} className="text-indigo-600" />
+                                <span className="text-slate-500">{shopFilter !== "all" ? `Users in ${shopFilter}:` : "Total Users:"}</span>
+                                <span className="font-mono font-bold text-indigo-700 text-sm">{totalUsersCount}</span>
+                            </span>
+                        )}
+                    </div>
+                </div>
 
-            {(mainTab === "default" || mainTab === "work") && (
-                <>
-                    {/* Mobile & Tablet View - Improved Filter Layout */}
-                    <div className="md:hidden w-full">
-                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 mt-4">
-                            {/* Date Range Filter */}
-                            {isAdmin && (
-                                <div className="relative">
-                                    <button
-                                        onClick={() => setShowDateRangePicker(!showDateRangePicker)}
-                                        className="w-full flex items-center justify-between rounded-lg border border-purple-200 p-3 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
-                                    >
-                                        <span>{startDate && endDate ? `${startDate.split('-').reverse().slice(0, 2).join('/')} to ${endDate.split('-').reverse().slice(0, 2).join('/')}` : "Date Range"}</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                    </button>
+                {/* Right: Filters Toolbar (Desktop) */}
+                {(mainTab === "default" || mainTab === "work") && (
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        {/* Date Range Picker */}
+                        {isAdmin && (
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDateRangePicker(!showDateRangePicker)}
+                                    className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-[13px] font-medium border border-slate-200 !rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-2 font-sans"
+                                >
+                                    <Calendar size={14} className="text-slate-400" />
+                                    <span>
+                                        {startDate && endDate ? `${startDate} to ${endDate}` : "Date Range"}
+                                    </span>
+                                    {startDate && endDate && (
+                                        <span
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                clearDateRange();
+                                            }}
+                                            className="hover:text-red-500 p-0.5 ml-0.5"
+                                            title="Clear date range"
+                                        >
+                                            <X size={13} />
+                                        </span>
+                                    )}
+                                    <ChevronDown size={14} className="text-slate-400 ml-0.5" />
+                                </button>
 
-                                    {showDateRangePicker && (
-                                        <div className="fixed inset-x-4 top-[20%] mt-1 bg-white border border-purple-200 rounded-xl shadow-2xl z-[100] p-5">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h3 className="font-bold text-gray-800">Select Date Range</h3>
-                                                <button onClick={() => setShowDateRangePicker(false)} className="text-gray-400 p-1">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                                    </svg>
+                                {showDateRangePicker && (
+                                    <>
+                                        <div
+                                            className="fixed inset-0 z-40"
+                                            onClick={() => setShowDateRangePicker(false)}
+                                        />
+                                        <div className="absolute top-full right-0 sm:left-0 sm:right-auto mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-4 w-76 sm:w-84 font-sans">
+                                            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                                                <h3 className="text-xs sm:text-[13px] font-bold text-slate-800 uppercase tracking-wider">
+                                                    Select Date Range
+                                                </h3>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowDateRangePicker(false)}
+                                                    className="text-slate-400 hover:text-slate-600 p-1"
+                                                >
+                                                    <X size={15} />
                                                 </button>
                                             </div>
-                                            <div className="space-y-4">
+
+                                            <div className="grid grid-cols-2 gap-3 my-3">
                                                 <div>
-                                                    <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">From Date</label>
+                                                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                                        From Date
+                                                    </label>
                                                     <input
                                                         type="date"
                                                         value={startDate}
                                                         onChange={(e) => setStartDate(e.target.value)}
                                                         max={endDate || getTodayDate()}
-                                                        className="w-full rounded-lg border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                                                        className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs sm:text-[13px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">To Date</label>
+                                                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                                        To Date
+                                                    </label>
                                                     <input
                                                         type="date"
                                                         value={endDate}
                                                         onChange={(e) => setEndDate(e.target.value)}
                                                         min={startDate}
                                                         max={getTodayDate()}
-                                                        className="w-full rounded-lg border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                                                        className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs sm:text-[13px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                                     />
                                                 </div>
-                                                <div className="flex gap-3 pt-2">
-                                                    <button
-                                                        onClick={clearDateRange}
-                                                        className="flex-1 py-3 px-4 rounded-lg text-sm font-bold text-gray-600 border border-gray-200 hover:bg-gray-50"
-                                                    >
-                                                        Clear
-                                                    </button>
-                                                    <button
-                                                        onClick={applyDateRange}
-                                                        disabled={!startDate || !endDate}
-                                                        className="flex-1 bg-purple-600 text-white py-3 px-4 rounded-lg text-sm font-bold shadow-md shadow-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Apply Filter
-                                                    </button>
-                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 pt-2.5 border-t border-slate-100">
+                                                <button
+                                                    type="button"
+                                                    onClick={clearDateRange}
+                                                    className="h-9 flex-1 py-1.5 px-3 !rounded-lg text-xs sm:text-[13px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+                                                >
+                                                    Clear
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={applyDateRange}
+                                                    disabled={!startDate || !endDate}
+                                                    className="h-9 flex-1 py-1.5 px-3 !rounded-lg text-xs sm:text-[13px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                    Apply Filter
+                                                </button>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            )}
+                                    </>
+                                )}
+                            </div>
+                        )}
 
-                            {mainTab === "default" && (
-                                <div className="relative">
-                                    <select
-                                        value={dashboardType}
-                                        onChange={(e) => setDashboardType(e.target.value)}
-                                        className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
-                                    >
-                                        <option value="checklist">Checklist View</option>
-                                        <option value="delegation">Delegation View</option>
-                                    </select>
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-purple-400">
-                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Shop Filter - Show for checklist and delegation */}
-                            {(dashboardType === "checklist" || dashboardType === "delegation" || dashboardType === "work") && isAdmin && (
-                                <div className="relative">
-                                    <select
-                                        value={shopFilter}
-                                        onChange={(e) => setShopFilter(e.target.value)}
-                                        className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
-                                    >
-                                        <option value="all">All Shops</option>
-                                        {availableShops.map((shop) => (
-                                            <option key={shop} value={shop}>
-                                                {shop}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-purple-400">
-                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                    </div>
-                                </div>
-                            )}
-
+                        {/* View Type Toggle (Checklist / Delegation) */}
+                        {mainTab === "default" && (
                             <div className="relative">
-                                {isAdmin || isHOD ? (
+                                <select
+                                    value={dashboardType}
+                                    onChange={(e) => setDashboardType(e.target.value)}
+                                    className="h-9 pl-3.5 pr-8 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-[13px] font-medium border border-slate-200 !rounded-lg shadow-2xs appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
+                                >
+                                    <option value="checklist">Checklist</option>
+                                    <option value="delegation">Delegation</option>
+                                </select>
+                                <ChevronDown size={14} className="text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* Shop Filter */}
+                        {(dashboardType === "checklist" || dashboardType === "delegation" || dashboardType === "work") && isAdmin && (
+                            <div className="relative">
+                                <select
+                                    value={shopFilter}
+                                    onChange={(e) => setShopFilter(e.target.value)}
+                                    className="h-9 pl-3.5 pr-8 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-[13px] font-medium border border-slate-200 !rounded-lg shadow-2xs appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans max-w-[180px]"
+                                >
+                                    <option value="all">All Shops</option>
+                                    {availableShops.map((shop) => (
+                                        <option key={shop} value={shop}>
+                                            {shop}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* Staff Filter */}
+                        <div className="relative">
+                            {isAdmin || isHOD ? (
+                                <>
                                     <select
                                         value={dashboardStaffFilter}
                                         onChange={(e) => setDashboardStaffFilter(e.target.value)}
-                                        className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
+                                        className="h-9 pl-3.5 pr-8 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-[13px] font-medium border border-slate-200 !rounded-lg shadow-2xs appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans max-w-[200px]"
                                     >
-                                        <option value="all">All Staff</option>
+                                        <option value="all">All Staff Members</option>
                                         {availableStaff.map((staffName) => (
                                             <option key={staffName} value={staffName}>
                                                 {staffName}
                                             </option>
                                         ))}
                                     </select>
-                                ) : (
-                                    <select
-                                        value={username || ""}
-                                        disabled={true}
-                                        className="w-full appearance-none rounded-lg border border-gray-200 p-3 pr-8 bg-gray-50 text-gray-500 cursor-not-allowed text-sm"
-                                    >
-                                        <option value={username || ""}>{username || "Current User"}</option>
-                                    </select>
-                                )}
-                                {isAdmin && (
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-purple-400">
-                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                    </div>
-                                )}
-                            </div>
+                                    <ChevronDown size={14} className="text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                </>
+                            ) : (
+                                <select
+                                    value={username || ""}
+                                    disabled={true}
+                                    className="h-9 pl-3.5 pr-7 bg-slate-50 text-slate-500 text-xs sm:text-[13px] font-medium border border-slate-200 !rounded-lg cursor-not-allowed appearance-none font-sans"
+                                >
+                                    <option value={username || ""}>{username || "Current User"}</option>
+                                </select>
+                            )}
                         </div>
                     </div>
-
-                    {/* Desktop View - Original layout */}
-                    <div className="hidden md:flex flex-wrap items-center gap-2">
-                        {/* Date Range Filter */}
-                        {isAdmin && (
-                            <div className="relative">
-                                <button
-                                    onClick={() => setShowDateRangePicker(!showDateRangePicker)}
-                                    className="w-[140px] sm:w-[180px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-left bg-white hover:bg-gray-50"
-                                >
-                                    {startDate && endDate ? `${startDate} to ${endDate}` : "Date Range"}
-                                </button>
-
-                                {showDateRangePicker && (
-                                    <div className="absolute top-full left-0 mt-1 bg-white border border-purple-200 rounded-md shadow-lg z-10 p-4 w-80">
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <h3 className="text-sm font-medium text-gray-700">Select Date Range</h3>
-                                                {startDate && endDate && (
-                                                    <button
-                                                        onClick={clearDateRange}
-                                                        className="text-xs text-red-500 hover:text-red-700"
-                                                    >
-                                                        Clear
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">From Date</label>
-                                                    <input
-                                                        type="date"
-                                                        value={startDate}
-                                                        onChange={(e) => setStartDate(e.target.value)}
-                                                        max={endDate || getTodayDate()}
-                                                        className="w-full rounded border border-gray-300 p-2 text-sm"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">To Date</label>
-                                                    <input
-                                                        type="date"
-                                                        value={endDate}
-                                                        onChange={(e) => setEndDate(e.target.value)}
-                                                        min={startDate}
-                                                        max={getTodayDate()}
-                                                        className="w-full rounded border border-gray-300 p-2 text-sm"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={applyDateRange}
-                                                disabled={!startDate || !endDate}
-                                                className="w-full bg-purple-500 text-white py-2 px-4 rounded text-sm hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                                            >
-                                                Apply Date Range
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {mainTab === "default" && (
-                            <select
-                                value={dashboardType}
-                                onChange={(e) => setDashboardType(e.target.value)}
-                                className="w-[110px] sm:w-[140px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            >
-                                <option value="checklist">Checklist</option>
-                                <option value="delegation">Delegation</option>
-                            </select>
-                        )}
-
-                        {/* Shop Filter - Show for checklist and delegation */}
-                        {(dashboardType === "checklist" || dashboardType === "delegation" || dashboardType === "work") && isAdmin && (
-                            <select
-                                value={shopFilter}
-                                onChange={(e) => setShopFilter(e.target.value)}
-                                className="w-[110px] sm:w-[160px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            >
-                                <option value="all">All Shops</option>
-                                {availableShops.map((shop) => (
-                                    <option key={shop} value={shop}>
-                                        {shop}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
-
-                        {/* Dashboard Staff Filter */}
-                        {isAdmin || isHOD ? (
-                            <select
-                                value={dashboardStaffFilter}
-                                onChange={(e) => setDashboardStaffFilter(e.target.value)}
-                                className="w-[140px] sm:w-[180px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            >
-                                <option value="all">All Staff Members</option>
-                                {availableStaff.map((staffName) => (
-                                    <option key={staffName} value={staffName}>
-                                        {staffName}
-                                    </option>
-                                ))}
-                            </select>
-                        ) : (
-                            <select
-                                value={username || ""}
-                                disabled={true}
-                                className="w-[180px] rounded-md border border-gray-300 p-2 bg-gray-100 text-gray-600 cursor-not-allowed"
-                            >
-                                <option value={username || ""}>{username || "Current User"}</option>
-                            </select>
-                        )}
-                    </div>
-
-                    {/* Close date picker when clicking outside */}
-                    {showDateRangePicker && (
-                        <div
-                            className="fixed inset-0 z-0"
-                            onClick={() => setShowDateRangePicker(false)}
-                        />
-                    )}
-                </>
-            )}
+                )}
+            </div>
         </div>
     )
 }

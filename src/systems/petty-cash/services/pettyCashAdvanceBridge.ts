@@ -35,12 +35,14 @@ export async function syncPettyCashAdvances(
   try {
     // 1. Remove any previous advance rows linked to this specific voucher ID (handles edits/updates)
     const idsToClean = Array.from(new Set([basePattyId, previousPattyId].filter(Boolean)));
-    for (const id of idsToClean) {
-      await supabase
-        .from("hr_management_advance_requests")
-        .delete()
-        .ilike("admin_remarks", `%${id}%`);
-    }
+    await Promise.all(
+      idsToClean.map((id) =>
+        supabase
+          .from("hr_management_advance_requests")
+          .delete()
+          .ilike("admin_remarks", `%${id}%`)
+      )
+    );
 
     if (!otherExpenses || otherExpenses.length === 0) return;
 
