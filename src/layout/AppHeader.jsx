@@ -74,26 +74,33 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
     role === 'superadmin' ||
     role === 'hod';
 
+  const lastFetchRef = useRef(0);
+
   // Fetch count of pending/in-progress help tickets assigned to the logged in user
-  const fetchAssignedCount = useCallback(async () => {
-    if (!userObj) {
+  // With strict 2-minute (120,000 ms) throttle across page navigations to protect Supabase
+  const fetchAssignedCount = useCallback(async (force = false) => {
+    const candidateNames = [
+      user?.user_name,
+      user?.username,
+      user?.name,
+      typeof localStorage !== 'undefined' ? localStorage.getItem('user_name') : null,
+      typeof localStorage !== 'undefined' ? localStorage.getItem('username') : null,
+    ].filter(Boolean).map(n => String(n).trim().toLowerCase());
+
+    if (candidateNames.length === 0) {
       setAssignedCount(0);
       return;
     }
+
+    // Strict 2-minute throttle: on page switches, only query if >= 2 mins have passed.
+    // On page refresh or when explicitly forced (e.g. ticket submission), lastFetchRef is 0 or force=true.
+    const now = Date.now();
+    if (!force && now - lastFetchRef.current < 120000) {
+      return;
+    }
+    lastFetchRef.current = now;
+
     try {
-      const candidateNames = [
-        userObj.user_name,
-        userObj.username,
-        userObj.name,
-        typeof localStorage !== 'undefined' ? localStorage.getItem('user_name') : null,
-        typeof localStorage !== 'undefined' ? localStorage.getItem('username') : null,
-      ].filter(Boolean).map(n => String(n).trim().toLowerCase());
-
-      if (candidateNames.length === 0) {
-        setAssignedCount(0);
-        return;
-      }
-
       const { data, error } = await supabase
         .from('help_center_records')
         .select('ticket_id, assigned_to, status')
@@ -110,18 +117,12 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
     } catch (err) {
       console.error('Error fetching assigned help tickets count in AppHeader:', err);
     }
-  }, [userObj]);
+  }, [user?.user_name, user?.username, user?.id]);
 
+  // Fetches on initial page load / refresh and on route change if >= 2 minutes have elapsed
   useEffect(() => {
     fetchAssignedCount();
-
-    // Poll instead of Realtime to avoid exhausting the Realtime DB pool
-    const intervalId = setInterval(() => {
-      if (!document.hidden) fetchAssignedCount();
-    }, 60000);
-
-    return () => clearInterval(intervalId);
-  }, [fetchAssignedCount]);
+  }, [location.pathname, fetchAssignedCount]);
 
   return (
     <header className="w-full max-w-full flex flex-col shrink-0 z-30 shadow-md border-b border-[#C9A84C]/20 min-w-0 overflow-hidden">
@@ -265,9 +266,9 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
         isOpen={isHelpModalOpen}
         onClose={() => {
           setIsHelpModalOpen(false);
-          fetchAssignedCount();
+          fetchAssignedCount(true);
         }}
-        onTasksUpdated={fetchAssignedCount}
+        onTasksUpdated={() => fetchAssignedCount(true)}
       />
 
       {/* Add Tutorial Video Modal for Admins */}

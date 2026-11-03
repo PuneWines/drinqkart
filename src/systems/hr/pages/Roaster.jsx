@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import useHrShopScope, { getEmployeeShop } from '../hooks/useHrShopScope';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
@@ -27,7 +28,9 @@ import {
     CalendarRange,
     Trash2,
     Check,
-    ChevronDown
+    ChevronDown,
+    Building2,
+    RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -121,7 +124,18 @@ const Roster = () => {
     const { user: authUser } = useAuth();
     const canModify = getPagePermission(authUser, 'hr', 'Roster').canModify;
     const [viewMode, setViewMode] = useState('weekly'); // 'weekly' or 'range'
-    const [employees, setEmployees] = useState([]);
+    const [allEmployees, setEmployees] = useState([]);
+    const { allowedSet, isShopAllowed, resolveShopName, shopNames, isScoped } = useHrShopScope();
+    const [selectedShop, setSelectedShop] = useState('ALL');
+    // Access control: scoped users only ever see employees of their assigned shops
+    const employees = useMemo(
+        () => allEmployees.filter(emp => isShopAllowed(getEmployeeShop(emp))),
+        [allEmployees, allowedSet]
+    );
+    const shopOptions = useMemo(
+        () => shopNames.filter(isShopAllowed),
+        [shopNames, isShopAllowed]
+    );
     const [rosterData, setRosterData] = useState(new Map());
     const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date()));
     const [dateRange, setDateRange] = useState({
@@ -456,7 +470,7 @@ const Roster = () => {
     // Reset to page 1 whenever search / department filter / view changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedDepartment, viewMode]);
+    }, [searchTerm, selectedDepartment, selectedShop, viewMode]);
 
     const fetchEmployees = async () => {
         try {
@@ -1202,6 +1216,7 @@ const Roster = () => {
                     'Employee ID': employee.employee_id,
                     'Employee Name': employee.name_as_per_aadhar,
                     'Designation': employee.designation,
+                    'Shop': resolveShopName(getEmployeeShop(employee)) || '-',
                     'Department': employee.joining_place || '-',
                     'Date': formatDate(day, 'yyyy-MM-dd'),
                     'Day': formatDate(day, 'EEE'),
@@ -1259,7 +1274,8 @@ const Roster = () => {
         const matchesSearch = emp.name_as_per_aadhar?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             emp.employee_id?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesDept = selectedDepartment === 'ALL' || emp.designation === selectedDepartment;
-        return matchesSearch && matchesDept;
+        const matchesShop = selectedShop === 'ALL' || resolveShopName(getEmployeeShop(emp)).toLowerCase() === selectedShop.toLowerCase();
+        return matchesSearch && matchesDept && matchesShop;
     });
 
     // Reset to page 1 when filters or view changes
@@ -1276,46 +1292,53 @@ const Roster = () => {
     // Pagination controls component (rendered below each table)
     const PaginationBar = () => (
         filteredEmployees.length > ROWS_PER_PAGE ? (
-            <div className="flex items-center justify-between px-3 py-2 border-t border-gray-200 bg-gray-50 text-[10px] text-gray-500">
-                <span>{filteredEmployees.length} employees &bull; Page {safeCurrentPage} of {totalPages}</span>
+            <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-2.5 bg-slate-50/90 border-t border-slate-200/80 text-[11px] gap-2.5 font-sans">
+                <div className="text-slate-500 font-medium text-[11px] whitespace-nowrap">
+                    Showing <span className="font-bold text-slate-800 font-mono">{(safeCurrentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(safeCurrentPage * ROWS_PER_PAGE, filteredEmployees.length)}</span> of <span className="font-bold text-slate-800 font-mono">{filteredEmployees.length}</span> employees &bull; Page <span className="font-bold text-slate-800 font-mono">{safeCurrentPage}</span> of <span className="font-bold text-slate-800 font-mono">{totalPages}</span>
+                </div>
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => handlePageChange(safeCurrentPage - 1)}
                         disabled={safeCurrentPage === 1}
-                        className="px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                        className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold !rounded-lg shadow-2xs cursor-pointer flex items-center gap-1 text-[11px] font-sans"
                     >
-                        &#8249; Prev
+                        <ChevronLeft size={13} />
+                        Prev
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1)
-                        .filter(p => p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 1)
-                        .reduce((acc, p, idx, arr) => {
-                            if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
-                            acc.push(p);
-                            return acc;
-                        }, [])
-                        .map((p, idx) =>
-                            p === '...' ? (
-                                <span key={`ellipsis-${idx}`} className="px-1">…</span>
-                            ) : (
-                                <button
-                                    key={p}
-                                    onClick={() => handlePageChange(p)}
-                                    className={`px-2 py-0.5 rounded border font-semibold transition-colors ${p === safeCurrentPage
-                                        ? 'bg-indigo-600 text-white border-indigo-600'
-                                        : 'border-gray-200 hover:bg-gray-100'
+                    <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 1)
+                            .reduce((acc, p, idx, arr) => {
+                                if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                                acc.push(p);
+                                return acc;
+                            }, [])
+                            .map((p, idx) =>
+                                p === '...' ? (
+                                    <span key={`ellipsis-${idx}`} className="text-slate-400 px-0.5 font-mono text-[10px]">...</span>
+                                ) : (
+                                    <button
+                                        key={p}
+                                        onClick={() => handlePageChange(p)}
+                                        className={`min-w-[28px] h-7 px-1.5 font-mono text-[11px] font-bold !rounded-md border transition-all cursor-pointer flex items-center justify-center ${
+                                            p === safeCurrentPage
+                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs'
+                                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                                         }`}
-                                >
-                                    {p}
-                                </button>
+                                    >
+                                        {p}
+                                    </button>
+                                )
                             )
-                        )
-                    }
+                        }
+                    </div>
                     <button
                         onClick={() => handlePageChange(safeCurrentPage + 1)}
                         disabled={safeCurrentPage === totalPages}
-                        className="px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                        className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold !rounded-lg shadow-2xs cursor-pointer flex items-center gap-1 text-[11px] font-sans"
                     >
-                        Next &#8250;
+                        Next
+                        <ChevronRight size={13} />
                     </button>
                 </div>
             </div>
@@ -1346,79 +1369,85 @@ const Roster = () => {
     };
 
     return (
-        <div className="p-3 pl-7 pr-5 pb-8 h-full overflow-y-auto scrollbar-thin">
+        <div className="p-3.5 sm:p-4 md:p-5 bg-slate-50/50 min-h-screen w-full max-w-full overflow-x-hidden text-slate-800 font-sans text-xs">
             {/* Header */}
-            <div className="flex justify-between items-center mb-3">
-                <div>
-                    <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-                        <Calendar size={18} />
-                        Shift Roster
-                    </h1>
-                    <p className="text-gray-500 text-[11px] mt-0.5">
-                        Manage employee shifts and schedules
-                    </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 font-sans">
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+                        <Calendar size={18} className="stroke-[2.5]" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-bold text-slate-900 tracking-tight font-sans">
+                                Shift Roster
+                            </h1>
+                            <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60 font-mono">
+                                Live Sync
+                            </span>
+                        </div>
+                        <p className="text-slate-500 text-[11px] mt-0.5 font-sans">
+                            Manage employee shifts, weekly schedules, and bulk assignments
+                        </p>
+                    </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {canModify && (<>
                     <button
                         onClick={() => setShowManageShiftsModal(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-medium text-xs transition-colors"
+                        className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-200 !rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 font-sans"
+                        title="Manage shift types and timings"
                     >
-                        <Database size={12} />
+                        <Database size={13} className="text-indigo-600" />
                         Manage Shifts
                     </button>
                     <button
                         onClick={handleOpenBulkAssignModal}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium text-xs transition-colors"
+                        className="h-8 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs !rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 font-sans"
+                        title="Bulk assign shifts to multiple employees"
                     >
-                        <Plus size={12} />
+                        <Plus size={14} />
                         Bulk Assign
                     </button>
                     </>)}
                     <button
                         onClick={fetchRosterData}
                         disabled={loading}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-xs transition-colors disabled:opacity-50"
+                        className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-200 !rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 font-sans"
+                        title="Refresh roster data"
                     >
-                        <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                        <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
                         Refresh
                     </button>
                     <button
                         onClick={downloadExcel}
                         disabled={filteredEmployees.length === 0}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-medium text-xs transition-colors ${filteredEmployees.length === 0
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-green-600 hover:bg-green-700 text-white'
-                            }`}
+                        className={`h-8 px-3 font-semibold text-xs !rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 font-sans ${
+                            filteredEmployees.length === 0
+                                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-50'
+                                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                        }`}
+                        title="Download roster worksheet in Excel format"
                     >
-                        <Download size={12} />
+                        <Download size={13} className={filteredEmployees.length > 0 ? "text-emerald-600" : ""} />
                         Export
                     </button>
                 </div>
             </div>
 
             {/* View Mode Tabs */}
-            <div className="flex items-center gap-2 mb-3">
+            <div className="inline-flex p-0.5 bg-slate-100/90 rounded-lg border border-slate-200/70 mb-3 font-sans">
                 <button
+                    type="button"
                     onClick={() => setViewMode('weekly')}
-                    className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 ${viewMode === 'weekly'
-                        ? 'border-indigo-600 text-indigo-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                        }`}
+                    className={`h-7 px-3 text-[11px] font-bold !rounded-md transition-all cursor-pointer flex items-center gap-1.5 font-sans ${
+                        viewMode === 'weekly'
+                            ? 'bg-white text-indigo-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
-                    <LayoutGrid size={14} />
-                    Roster View
+                    <LayoutGrid size={12} className={viewMode === 'weekly' ? 'text-indigo-600' : 'text-slate-400'} />
+                    <span>Roster View</span>
                 </button>
-                {/* <button
-                    onClick={() => setViewMode('range')}
-                    className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 ${viewMode === 'range'
-                        ? 'border-indigo-600 text-indigo-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                        }`}
-                >
-                    <CalendarRange size={14} />
-                    Date Range View
-                </button> */}
             </div>
 
             {/* Status Legend */}
@@ -1443,70 +1472,117 @@ const Roster = () => {
                 </div>
             </div> */}
 
-            {/* Filters */}
-            <div className="bg-white  p-2 mb-3">
+            {/* Filters Toolbar */}
+            <div className="bg-white rounded-xl border border-slate-200/80 p-3 mb-4 shadow-2xs font-sans">
                 {viewMode === 'weekly' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Search Employee</label>
-                            <div className="relative">
-                                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* Search Employee */}
+                            <div className="relative min-w-[220px]">
+                                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                 <input
                                     type="text"
                                     placeholder="Search by name or ID..."
-                                    className="w-full pl-7 pr-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                                    className="w-full h-8 pl-8 pr-7 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 !rounded-lg text-[11px] text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium font-sans"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
+                                {searchTerm && (
+                                    <button
+                                        onClick={() => setSearchTerm('')}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 !rounded cursor-pointer"
+                                    >
+                                        <X size={11} />
+                                    </button>
+                                )}
                             </div>
-                        </div>
 
-                        <div>
-                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Filter by Department</label>
-                            <div className="relative">
+                            {/* Filter by Shop */}
+                            <div className="h-8 flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 px-2.5 !rounded-lg text-[11px] transition-colors relative">
+                                <Building2 size={13} className="text-slate-400 shrink-0" />
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 font-sans">Shop</span>
+                                <select
+                                    value={selectedShop}
+                                    onChange={(e) => setSelectedShop(e.target.value)}
+                                    className="bg-transparent focus:outline-none font-bold text-slate-700 cursor-pointer pr-4 max-w-[150px] truncate font-sans text-xs"
+                                >
+                                    <option value="ALL">{isScoped ? 'All My Shops' : 'All Shops'}</option>
+                                    {shopOptions.map(shop => (
+                                        <option key={shop} value={shop}>{shop}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={11} className="text-slate-400 absolute right-2 pointer-events-none" />
+                            </div>
+
+                            {/* Filter by Department */}
+                            <div className="h-8 flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 px-2.5 !rounded-lg text-[11px] transition-colors relative">
+                                <Users size={13} className="text-slate-400 shrink-0" />
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 font-sans">Dept</span>
                                 <select
                                     value={selectedDepartment}
                                     onChange={(e) => setSelectedDepartment(e.target.value)}
-                                    className="w-full appearance-none pl-2 pr-6 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs bg-white font-medium text-gray-700"
+                                    className="bg-transparent focus:outline-none font-bold text-slate-700 cursor-pointer pr-4 max-w-[150px] truncate font-sans text-xs"
                                 >
                                     <option value="ALL">All Departments</option>
                                     {departments.map(dept => (
                                         <option key={dept} value={dept}>{dept}</option>
                                     ))}
                                 </select>
-                                <Filter size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                                <ChevronDown size={11} className="text-slate-400 absolute right-2 pointer-events-none" />
                             </div>
-                        </div>
 
-                        <div>
-                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5 text-center">Week</label>
-                            <div className="flex items-center justify-center gap-1">
+                            {/* Week Navigator */}
+                            <div className="h-8 flex items-center gap-1 bg-slate-50 border border-slate-200 px-1.5 !rounded-lg text-[11px]">
                                 <button
                                     onClick={() => setCurrentWeekStart(subWeeks(currentWeekStart, 1))}
-                                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                    className="p-1 hover:bg-slate-200/70 !rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                                    title="Previous Week"
                                 >
-                                    <ChevronLeft size={14} />
+                                    <ChevronLeft size={13} />
                                 </button>
-                                <span className="text-xs font-semibold text-gray-800 min-w-[100px] text-center">
-                                    {formatDate(currentWeekStart, 'dd MMM')} - {formatDate(addDays(currentWeekStart, 6), 'dd MMM yyyy')}
-                                </span>
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-200/80 !rounded text-[11px] font-mono font-bold text-slate-800">
+                                    <Calendar size={11} className="text-indigo-600" />
+                                    <span>{formatDate(currentWeekStart, 'dd MMM')} - {formatDate(addDays(currentWeekStart, 6), 'dd MMM yyyy')}</span>
+                                </div>
                                 <button
                                     onClick={() => setCurrentWeekStart(addWeeks(currentWeekStart, 1))}
-                                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                    className="p-1 hover:bg-slate-200/70 !rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                                    title="Next Week"
                                 >
-                                    <ChevronRight size={14} />
+                                    <ChevronRight size={13} />
                                 </button>
                                 <button
                                     onClick={() => setCurrentWeekStart(startOfWeek(new Date()))}
-                                    className="ml-1 px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                                    className="ml-0.5 px-2 py-0.5 text-[10px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 font-bold !rounded transition-colors cursor-pointer font-sans"
                                 >
                                     Today
                                 </button>
                             </div>
+
+                            {/* Reset Filters */}
+                            {(selectedShop !== 'ALL' || selectedDepartment !== 'ALL' || searchTerm) && (
+                                <button
+                                    onClick={() => {
+                                        setSelectedShop('ALL');
+                                        setSelectedDepartment('ALL');
+                                        setSearchTerm('');
+                                        setCurrentPage(1);
+                                    }}
+                                    className="h-8 px-2.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 !rounded-lg transition-colors flex items-center gap-1 cursor-pointer border border-dashed border-slate-200 font-sans"
+                                    title="Reset active filters"
+                                >
+                                    <RotateCcw size={11} />
+                                    Reset
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="text-[11px] text-slate-400 font-medium font-sans">
+                            Showing <span className="font-bold text-slate-700 font-mono">{filteredEmployees.length}</span> matching employee{filteredEmployees.length === 1 ? '' : 's'}
                         </div>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <div>
                             <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Search Employee</label>
                             <div className="relative">
@@ -1518,6 +1594,23 @@ const Roster = () => {
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Filter by Shop</label>
+                            <div className="relative">
+                                <select
+                                    value={selectedShop}
+                                    onChange={(e) => setSelectedShop(e.target.value)}
+                                    className="w-full appearance-none pl-2 pr-6 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs bg-white font-medium text-gray-700"
+                                >
+                                    <option value="ALL">{isScoped ? 'All My Shops' : 'All Shops'}</option>
+                                    {shopOptions.map(shop => (
+                                        <option key={shop} value={shop}>{shop}</option>
+                                    ))}
+                                </select>
+                                <Filter size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             </div>
                         </div>
 
@@ -1596,35 +1689,35 @@ const Roster = () => {
 
             {/* Roster Table - Weekly View */}
             {viewMode === 'weekly' ? (
-                <div className="bg-white border border-gray-200 overflow-hidden">
-                    <div className="overflow-x-auto overflow-y-auto max-h-[67vh]">
+                <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden font-sans">
+                    <div className="overflow-x-auto overflow-y-auto max-h-[67vh] scrollbar-thin">
                         <table className="w-full text-xs relative border-collapse">
-                            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
+                            <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20 text-[11px] shadow-2xs font-sans">
                                 <tr>
-                                    <th className="sticky top-0 left-0 bg-gray-50 px-3 py-2 font-medium text-gray-600 text-[10px] z-30 w-[200px] border-r border-gray-200">
+                                    <th className="sticky top-0 left-0 bg-slate-50 px-3.5 py-2.5 font-bold text-slate-600 text-left z-30 min-w-[200px] border-r border-slate-200">
                                         Employee
                                     </th>
-                                    <th className="sticky top-0 bg-gray-50 px-3 py-2 font-medium text-gray-600 text-[10px] z-10 w-[120px] text-center">
+                                    <th className="sticky top-0 bg-slate-50 px-3.5 py-2.5 font-bold text-slate-600 text-center whitespace-nowrap z-10 w-[130px]">
                                         Start Date
                                     </th>
-                                    <th className="sticky top-0 bg-gray-50 px-3 py-2 font-medium text-gray-600 text-[10px] z-10 w-[120px] text-center">
+                                    <th className="sticky top-0 bg-slate-50 px-3.5 py-2.5 font-bold text-slate-600 text-center whitespace-nowrap z-10 w-[130px]">
                                         End Date
                                     </th>
-                                    <th className="sticky top-0 bg-gray-50 px-3 py-2 font-medium text-gray-600 text-[10px] z-10 w-[180px] text-center">
+                                    <th className="sticky top-0 bg-slate-50 px-3.5 py-2.5 font-bold text-slate-600 text-center whitespace-nowrap z-10 min-w-[180px]">
                                         Assigned Shift
                                     </th>
-                                    <th className="sticky top-0 bg-gray-50 px-3 py-2 font-medium text-gray-600 text-[10px] z-10 w-[100px] text-center">
+                                    <th className="sticky top-0 bg-slate-50 px-3.5 py-2.5 font-bold text-slate-600 text-center whitespace-nowrap z-10 w-[120px]">
                                         Action
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-slate-100 font-medium text-xs">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={5} className="text-center py-6">
-                                            <div className="flex items-center justify-center gap-1 text-gray-500 text-xs">
-                                                <Loader2 size={16} className="text-indigo-600 animate-spin" />
-                                                Loading roster data...
+                                        <td colSpan={5} className="text-center py-12">
+                                            <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
+                                                <Loader2 size={24} className="text-indigo-600 animate-spin" />
+                                                <span className="text-xs font-semibold text-slate-700">Loading roster data...</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -1684,11 +1777,12 @@ const Roster = () => {
                                         const endDateDisplay = lastAssigned ? formatDate(lastAssigned, 'dd MMM yyyy') : '-';
 
                                         return (
-                                            <tr key={employee.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="sticky left-0 bg-white hover:bg-gray-50 z-10 px-3 py-2 border-r border-gray-200">
-                                                    <div className="flex items-center gap-2">
+                                            <tr key={employee.id} className="hover:bg-slate-50/80 transition-colors bg-white font-sans">
+                                                {/* Employee */}
+                                                <td className="sticky left-0 bg-white hover:bg-slate-50 z-10 px-3.5 py-2 border-r border-slate-200">
+                                                    <div className="flex items-center gap-2.5 min-w-[190px]">
                                                         <div
-                                                            className="relative flex-shrink-0 cursor-pointer group"
+                                                            className="relative shrink-0 cursor-pointer group"
                                                             onClick={() => openPreviewWindow(employee)}
                                                             title="Click to view employee overview, timecard, payslip & learning progress"
                                                         >
@@ -1696,66 +1790,86 @@ const Roster = () => {
                                                                 <img
                                                                     src={employee.candidate_photo}
                                                                     alt={employee.name_as_per_aadhar}
-                                                                    className="w-7 h-7 rounded-full object-cover border border-gray-200 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm"
+                                                                    className="w-7 h-7 rounded-full object-cover border border-slate-200 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-2xs"
                                                                 />
                                                             ) : (
-                                                                <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-semibold group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-sm">
+                                                                <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center text-[10px] font-bold group-hover:ring-2 group-hover:ring-indigo-500 transition-all shadow-2xs">
                                                                     {employee.name_as_per_aadhar?.charAt(0).toUpperCase() || '?'}
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        <div>
-                                                            <p
-                                                                className="text-xs font-medium text-gray-800 hover:text-indigo-600 cursor-pointer transition-colors"
+                                                        <div className="min-w-0 flex flex-col">
+                                                            <span
+                                                                className="font-bold text-slate-900 text-xs truncate leading-tight hover:text-indigo-600 cursor-pointer transition-colors"
                                                                 onClick={() => openPreviewWindow(employee)}
                                                                 title="Click to view employee overview"
                                                             >
                                                                 {employee.name_as_per_aadhar}
-                                                            </p>
-                                                            <p className="text-[9px] text-gray-500">{employee.employee_id}</p>
-                                                            <p className="text-[8px] text-gray-400">{employee.designation}</p>
+                                                            </span>
+                                                            <div className="flex items-center gap-1.5 mt-0.5 leading-none">
+                                                                <span className="font-mono text-[11px] text-slate-400 font-semibold">
+                                                                    {employee.employee_id}
+                                                                </span>
+                                                                {employee.designation && (
+                                                                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200/60 truncate max-w-[110px]">
+                                                                        {employee.designation}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-2 text-center text-xs font-medium text-gray-700">
+
+                                                {/* Start Date */}
+                                                <td className="px-3.5 py-2 text-center font-mono text-[11px] font-semibold text-slate-600 whitespace-nowrap">
                                                     {startDateDisplay}
                                                 </td>
-                                                <td className="px-3 py-2 text-center text-xs font-medium text-gray-700">
+
+                                                {/* End Date */}
+                                                <td className="px-3.5 py-2 text-center font-mono text-[11px] font-semibold text-slate-600 whitespace-nowrap">
                                                     {endDateDisplay}
                                                 </td>
-                                                <td className="px-3 py-2 text-center">
+
+                                                {/* Assigned Shift */}
+                                                <td className="px-3.5 py-2 text-center whitespace-nowrap">
                                                     {hasShift ? (
                                                         <div className="inline-flex flex-col items-center">
-                                                            <span className={`px-3 py-1 text-xs font-medium rounded ${shiftColor || 'bg-green-100 text-green-700'} border border-gray-100`}>
-                                                                {shiftDisplay}
+                                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border ${shiftColor || 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                                                <ClockIcon size={11} className="shrink-0" />
+                                                                <span>{shiftDisplay}</span>
                                                             </span>
                                                             {shiftTimes && (
-                                                                <span className="text-[9px] text-gray-500 mt-0.5">
+                                                                <span className="font-mono text-[10px] text-slate-500 font-medium mt-0.5">
                                                                     {shiftTimes}
                                                                 </span>
                                                             )}
-                                                            <span className="text-[8px] text-gray-400 mt-0.5">
+                                                            <span className="text-[9px] text-slate-400 font-medium mt-0.5">
                                                                 {assignedShifts.length} day{assignedShifts.length > 1 ? 's' : ''} assigned
                                                             </span>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-xs text-gray-400">—</span>
+                                                        <span className="text-xs text-slate-300 font-mono">—</span>
                                                     )}
                                                 </td>
-                                                <td className="px-3 py-2 text-center">
+
+                                                {/* Action */}
+                                                <td className="px-3.5 py-2 text-center whitespace-nowrap">
                                                     <div className="flex items-center justify-center gap-1.5">
-                                                        {canModify && (<button
-                                                            onClick={() => handleOpenEditSlidePanel(employee)}
-                                                            title="Edit shift assignment"
-                                                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-50"
-                                                        >
-                                                            Edit
-                                                        </button>)}
+                                                        {canModify && (
+                                                            <button
+                                                                onClick={() => handleOpenEditSlidePanel(employee)}
+                                                                title="Edit shift assignment"
+                                                                className="h-7 px-2.5 text-[11px] font-semibold !rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/70 transition-colors cursor-pointer flex items-center gap-1 font-sans"
+                                                            >
+                                                                <Pencil size={11} />
+                                                                Edit
+                                                            </button>
+                                                        )}
                                                         {canModify && hasShift && (
                                                             <button
                                                                 onClick={() => handleOpenDeleteModal(employee)}
                                                                 title="Delete assigned shifts"
-                                                                className="flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-700 transition-colors border border-red-200 px-2 py-1 rounded hover:bg-red-50"
+                                                                className="h-7 px-2 text-[11px] font-semibold !rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200/70 transition-colors cursor-pointer flex items-center gap-1 font-sans"
                                                             >
                                                                 <Trash2 size={11} />
                                                                 Delete
@@ -1768,11 +1882,11 @@ const Roster = () => {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan={5} className="text-center py-8">
-                                            <div className="flex flex-col items-center justify-center text-gray-400">
-                                                <Users size={32} className="mb-2" />
-                                                <p className="text-xs font-medium">No employees found</p>
-                                                <p className="text-[10px] mt-1">Try adjusting your filters</p>
+                                        <td colSpan={5} className="text-center py-12">
+                                            <div className="flex flex-col items-center justify-center text-slate-400 gap-1.5">
+                                                <Users size={32} className="text-slate-300" />
+                                                <p className="text-xs font-bold text-slate-700">No employees found</p>
+                                                <p className="text-[11px] text-slate-400">Try adjusting your filters or search query</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -1937,9 +2051,9 @@ const Roster = () => {
             {/* Assign Shift Modal */}
             {showAssignModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAssignModal(false)}>
-                    <div className="bg-white max-w-md w-full shadow-2xl border border-slate-100" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white max-w-md w-full shadow-2xl border border-slate-100 !rounded-xl overflow-hidden font-sans" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center p-4 border-b bg-gray-50">
-                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 font-sans">
                                 <ClockIcon size={16} className="text-indigo-600" />
                                 Assign Shift
                             </h3>
@@ -2062,9 +2176,9 @@ const Roster = () => {
             {/* Bulk Assign Shift Modal */}
             {showBulkAssignModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowBulkAssignModal(false)}>
-                    <div className="bg-white max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 !rounded-xl overflow-hidden font-sans" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center p-4 border-b bg-gray-50 sticky top-0 z-10">
-                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 font-sans">
                                 <Plus size={16} className="text-emerald-600" />
                                 Bulk Assign Shifts
                             </h3>
@@ -2391,7 +2505,7 @@ const Roster = () => {
                                         </div>
                                     )}
                                     <div>
-                                        <h3 className="font-semibold text-base text-gray-900">{selectedEmployee.name_as_per_aadhar}</h3>
+                                        <h3 className="font-semibold text-base text-slate-900 font-sans">{selectedEmployee.name_as_per_aadhar}</h3>
                                         <p className="text-xs text-gray-500">ID: {selectedEmployee.employee_id}</p>
                                         <p className="text-xs text-gray-500">{selectedEmployee.designation}</p>
                                     </div>
@@ -2410,7 +2524,7 @@ const Roster = () => {
                             {/* Content */}
                             <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                 <div className="bg-white border border-gray-200 p-6 space-y-6">
-                                    <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-100">
+                                    <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-100 font-sans">
                                         Shift Details
                                     </h3>
 
@@ -2493,7 +2607,7 @@ const Roster = () => {
                                     {/* Current Shift Info */}
                                     {selectedEmployee.roster && (
                                         <div className="bg-slate-50 p-4 border border-slate-100">
-                                            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Current Shift Details</h4>
+                                            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 font-sans">Current Shift Details</h4>
                                             <div className="space-y-2 text-sm">
                                                 <div className="flex justify-between py-1 border-b border-dashed border-gray-200">
                                                     <span className="text-gray-500">Shift Type</span>
@@ -2568,7 +2682,7 @@ const Roster = () => {
                                         {editSlideForm.employee_name?.charAt(0).toUpperCase() || '?'}
                                     </div>
                                     <div>
-                                        <h3 className="font-semibold text-base text-gray-900">{editSlideForm.employee_name}</h3>
+                                        <h3 className="font-semibold text-base text-slate-900 font-sans">{editSlideForm.employee_name}</h3>
                                         <p className="text-xs text-gray-500">ID: {editSlideForm.employee_id}</p>
                                     </div>
                                 </div>
@@ -2585,7 +2699,7 @@ const Roster = () => {
                             {/* Content */}
                             <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                 <div className="bg-white border border-gray-200 p-6 space-y-6">
-                                    <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-100">
+                                    <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-100 font-sans">
                                         Assign Shift Range
                                     </h3>
 
@@ -2713,11 +2827,11 @@ const Roster = () => {
             {/* Manage Custom Shifts Modal */}
             {showManageShiftsModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowManageShiftsModal(false); resetShiftForm(); }}>
-                    <div className="bg-white max-w-4xl w-full shadow-2xl border border-slate-100 flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white max-w-4xl w-full shadow-2xl border border-slate-100 flex flex-col max-h-[85vh] !rounded-xl overflow-hidden font-sans" onClick={e => e.stopPropagation()}>
                         {/* Header */}
                         <div className="flex justify-between items-center p-4 border-b bg-gray-50">
                             <div>
-                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 font-sans">
                                     <Database size={16} className="text-slate-700" />
                                     Manage Custom Shifts
                                 </h3>
@@ -2735,7 +2849,7 @@ const Roster = () => {
                         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
                             {/* Left: Shift List */}
                             <div className="flex-1 p-4 overflow-y-auto border-r border-gray-100 bg-gray-50/30">
-                                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3 flex items-center gap-1">
+                                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3 flex items-center gap-1 font-sans">
                                     <ClockIcon size={12} className="text-indigo-600" />
                                     Active Shifts ({customShifts.length})
                                 </h4>
@@ -2779,7 +2893,7 @@ const Roster = () => {
                             {/* Right: Form */}
                             <div className="w-full md:w-80 p-5 bg-white flex flex-col justify-between overflow-y-auto">
                                 <form onSubmit={handleSaveShift} className="space-y-4">
-                                    <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider border-b pb-2">
+                                    <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider border-b pb-2 font-sans">
                                         {editingShiftId ? 'Edit Shift Details' : 'Create Custom Shift'}
                                     </h4>
 
@@ -2888,11 +3002,11 @@ const Roster = () => {
             {/* Delete Shifts Modal */}
             {showDeleteModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowDeleteModal(false); setDeleteEmployee(null); }}>
-                    <div className="bg-white max-w-xl w-full shadow-2xl border border-slate-100 flex flex-col max-h-[85vh] rounded-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white max-w-xl w-full shadow-2xl border border-slate-100 flex flex-col max-h-[85vh] !rounded-xl overflow-hidden font-sans" onClick={e => e.stopPropagation()}>
                         {/* Header */}
                         <div className="flex justify-between items-center p-4 border-b bg-gray-50">
                             <div>
-                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 font-sans">
                                     <Trash2 size={16} className="text-red-500" />
                                     Delete Assigned Shifts
                                 </h3>
@@ -3370,7 +3484,7 @@ const Roster = () => {
 
                                         <div>
                                             <div className="flex items-center gap-2">
-                                                <h2 className="text-lg font-bold text-white tracking-tight">{empName}</h2>
+                                                <h2 className="text-lg font-bold text-white tracking-tight font-sans">{empName}</h2>
                                                 <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-indigo-200 border border-white/10">
                                                     ID: {empId}
                                                 </span>
@@ -3751,7 +3865,7 @@ const Roster = () => {
                                     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
                                         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                                             <div>
-                                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 font-sans">
                                                     🎓 Employee Learning & Task Checklist Report
                                                 </h3>
                                                 <p className="text-xs text-slate-500 mt-0.5">
@@ -3895,7 +4009,7 @@ const Roster = () => {
                                     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
                                         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                                             <div>
-                                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 font-sans">
                                                     💳 Employee Payslip & Payroll History
                                                 </h3>
                                                 <p className="text-xs text-slate-500 mt-0.5">

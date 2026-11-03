@@ -18,6 +18,15 @@ const Payroll = () => {
     const loadedKeysRef = React.useRef({ payroll: null, history: null });
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+    // Month/year limits: past is unrestricted, future is capped at current month + MAX_FUTURE_MONTHS
+    const MAX_FUTURE_MONTHS = 3;
+    const nowForLimits = new Date();
+    const realCurrentIdx = nowForLimits.getFullYear() * 12 + (nowForLimits.getMonth() + 1);
+    const maxAllowedIdx = realCurrentIdx + MAX_FUTURE_MONTHS;
+    const maxAllowedYear = Math.floor((maxAllowedIdx - 1) / 12);
+    const yearOptions = Array.from({ length: maxAllowedYear - 2020 + 1 }, (_, i) => 2020 + i);
+    const isFutureMonth = selectedYear * 12 + selectedMonth > realCurrentIdx;
     const [salaryData, setSalaryData] = useState({ headers: [], rows: [] });
     const [historyData, setHistoryData] = useState({ headers: [], rows: [] });
     const [holdData, setHoldData] = useState({ headers: [], rows: [] });
@@ -91,9 +100,16 @@ const Payroll = () => {
             const empIdStr = String(emp.id || emp.code || '').trim().toLowerCase();
             const empNameStr = String(emp.name || '').trim().toLowerCase();
 
+            const rawEmpId = String(emp.id || emp.code || '').trim();
+            if (!rawEmpId) {
+                setPayrollRecordsModal([]);
+                return;
+            }
+
             const { data, error } = await supabase
                 .from('hr_management_payroll')
-                .select('*');
+                .select('*')
+                .eq('employee_id', rawEmpId);
 
             if (!error && data) {
                 const filtered = data.filter(r => {
@@ -260,6 +276,14 @@ const Payroll = () => {
         const dateInfo = parseTimestampToMonthYear(dateSource);
         if (!dateInfo.month || !dateInfo.year) return { remaining: currentRemaining, deduction: 0 };
 
+        // Monthly Advance is locked strictly to its own month - never bleeds into past/future months
+        const advType = (adv.type || '').toString().trim().toLowerCase();
+        if (advType === 'monthly advance' || advType === 'advance') {
+            if (dateInfo.year !== targetYear || dateInfo.month !== targetMonth) {
+                return { remaining: currentRemaining, deduction: 0 };
+            }
+        }
+
         // Calculate months difference
         const startMonthsSinceEpoch = dateInfo.year * 12 + (dateInfo.month - 1);
         const targetMonthsSinceEpoch = targetYear * 12 + (targetMonth - 1);
@@ -300,6 +324,15 @@ const Payroll = () => {
 
     // Fetch dynamic payroll data from Supabase and Google Sheet advances
     const fetchPayrollData = async () => {
+        // Future months: attendance hasn't occurred, so skip all calculations/queries
+        if (isFutureMonth) {
+            setSalaryData(prev => ({ headers: prev.headers, rows: [] }));
+            setHoldData(prev => ({ headers: prev.headers, rows: [] }));
+            loadedKeysRef.current.payroll = `${selectedYear}-${selectedMonth}`;
+            setError(null);
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -1269,7 +1302,7 @@ const Payroll = () => {
 
     // 1. Update Employee Records: Only updates values in hr_management_employees & draft payroll without sending to payment history or generating payroll
     const handleSavePayrollToDB = async (singleRow = null) => {
-        if (!canModify) return;
+        if (!canModify || isFutureMonth) return;
         const sourceData = activeTab === 'hold' ? holdData : salaryData;
         let rowsToProcess = [];
         if (singleRow) {
@@ -1363,7 +1396,7 @@ const Payroll = () => {
 
     // 2. Mark as Paid: Prompts for shop selection in a single modal, then generates payroll with chosen shop_name
     const handleMarkAsPaid = async (singleRow = null) => {
-        if (!canModify) return;
+        if (!canModify || isFutureMonth) return;
         const sourceData = activeTab === 'hold' ? holdData : salaryData;
         const rowsToProcess = singleRow
             ? [singleRow]
@@ -1481,7 +1514,7 @@ const Payroll = () => {
 
     // 3. Mark as Hold: Sends selected employee data row to Hold tab
     const handleMarkAsHold = async (singleRow = null) => {
-        if (!canModify) return;
+        if (!canModify || isFutureMonth) return;
         const sourceData = activeTab === 'hold' ? holdData : salaryData;
         const rowsToProcess = singleRow
             ? [singleRow]
@@ -1690,7 +1723,11 @@ const Payroll = () => {
         let filtered = data.rows.filter(row => {
             const matchesSearch = row.some(cell => cell && typeof cell !== 'object' && cell.toString().toLowerCase().includes(searchTerm.toLowerCase()));
             const shopVal = activeTab === 'history' ? (row[20] || '') : (row[24] || '');
-            const matchesShop = selectedShop === 'ALL' || !selectedShop || shopVal.toString().trim().toLowerCase() === selectedShop.trim().toLowerCase();
+            const shopValNorm = shopVal.toString().trim().toLowerCase();
+            const selNorm = (selectedShop || '').trim().toLowerCase();
+            // Rows may store the Shop Name or the Full Name; accept either for the selected shop
+            const matchesShop = selectedShop === 'ALL' || !selectedShop || shopValNorm === selNorm ||
+                shopValNorm === (shopFullNameMap[selectedShop] || '').trim().toLowerCase();
             return matchesSearch && matchesShop;
         });
 
@@ -1945,7 +1982,7 @@ const Payroll = () => {
                         <input
                             type="text"
                             placeholder="Search employee, ID, shop..."
-                            className="w-full pl-8 pr-7 py-1.5 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                            className="w-full h-8 pl-8 pr-7 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -1964,53 +2001,80 @@ const Payroll = () => {
                 <div className="flex flex-wrap items-center justify-between gap-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                         {/* Shop Selector */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-                            <Building2 size={12} className="text-slate-400" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Shop</span>
+                        <div className="h-8 flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 px-2.5 rounded-lg text-[11px] transition-colors relative">
+                            <Building2 size={13} className="text-slate-400 shrink-0" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Shop</span>
                             <select
                                 value={selectedShop}
                                 onChange={(e) => {
                                     setSelectedShop(e.target.value);
                                     setCurrentPage(1);
                                 }}
-                                className="text-[11px] bg-transparent focus:outline-none font-bold text-slate-800 cursor-pointer max-w-[130px] truncate"
+                                className="bg-transparent focus:outline-none font-bold text-slate-700 cursor-pointer pr-4 max-w-[140px] truncate"
                             >
                                 <option value="ALL">All Shops</option>
                                 {shopsList.map(s => (
-                                    <option key={s} value={s}>{shopFullNameMap[s] || s}</option>
+                                    <option key={s} value={s}>{s}</option>
                                 ))}
                             </select>
+                            <ChevronDown size={11} className="text-slate-400 absolute right-2 pointer-events-none" />
                         </div>
 
-                        {/* Month & Year Selectors */}
-                        {(activeTab === 'salary' || activeTab === 'hold') && (
-                            <>
-                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-                                    <Calendar size={12} className="text-slate-400" />
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Month</span>
-                                    <select
-                                        value={selectedMonth}
-                                        onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                                        className="text-[11px] bg-transparent focus:outline-none font-bold text-slate-800 cursor-pointer"
-                                    >
-                                        {monthNames.map((m, idx) => (
-                                            <option key={m} value={idx + 1}>{m}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Year</span>
-                                    <select
-                                        value={selectedYear}
-                                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                                        className="text-[11px] bg-transparent focus:outline-none font-bold text-slate-800 cursor-pointer"
-                                    >
-                                        {[2024, 2025, 2026, 2027].map(y => (
-                                            <option key={y} value={y}>{y}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </>
+                        {/* Month Selector */}
+                        <div className="h-8 flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 px-2.5 rounded-lg text-[11px] transition-colors relative">
+                            <Calendar size={13} className="text-slate-400 shrink-0" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Month</span>
+                            <select
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                                className="bg-transparent focus:outline-none font-bold text-slate-700 cursor-pointer pr-4"
+                            >
+                                {monthNames
+                                    .map((m, idx) => ({ name: m, value: idx + 1 }))
+                                    .filter(m => selectedYear * 12 + m.value <= maxAllowedIdx)
+                                    .map(m => (
+                                        <option key={m.name} value={m.value}>{m.name}</option>
+                                    ))}
+                            </select>
+                            <ChevronDown size={11} className="text-slate-400 absolute right-2 pointer-events-none" />
+                        </div>
+
+                        {/* Year Selector */}
+                        <div className="h-8 flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 px-2.5 rounded-lg text-[11px] transition-colors relative">
+                            <Clock size={13} className="text-slate-400 shrink-0" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Year</span>
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => {
+                                    const y = parseInt(e.target.value);
+                                    setSelectedYear(y);
+                                    if (y * 12 + selectedMonth > maxAllowedIdx) {
+                                        setSelectedMonth(maxAllowedIdx - y * 12);
+                                    }
+                                }}
+                                className="bg-transparent focus:outline-none font-bold text-slate-700 cursor-pointer pr-4"
+                            >
+                                {yearOptions.map(y => (
+                                    <option key={y} value={y}>{y}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={11} className="text-slate-400 absolute right-2 pointer-events-none" />
+                        </div>
+
+                        {/* Reset Filters Shortcut */}
+                        {(selectedShop !== 'ALL' || searchTerm) && (
+                            <button
+                                onClick={() => {
+                                    setSelectedShop('ALL');
+                                    setSearchTerm('');
+                                    setCurrentPage(1);
+                                }}
+                                className="h-8 px-2.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1 cursor-pointer border border-dashed border-slate-200"
+                                title="Reset shop and search filters"
+                            >
+                                <RotateCcw size={11} />
+                                Reset
+                            </button>
                         )}
                     </div>
 
@@ -2020,10 +2084,10 @@ const Payroll = () => {
                         <div className="relative">
                             <button
                                 onClick={() => setShowColumnDropdown(prev => !prev)}
-                                className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-[11px] border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                                className="h-8 flex items-center gap-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/70 text-slate-700 font-semibold text-[11px] border border-slate-200 rounded-lg transition-colors cursor-pointer"
                             >
-                                <Columns size={12} className="text-slate-500" />
-                                Customize Columns
+                                <Columns size={13} className="text-slate-500 shrink-0" />
+                                <span>Columns</span>
                                 <ChevronDown size={11} className="text-slate-400" />
                             </button>
                             {showColumnDropdown && (
@@ -2064,18 +2128,18 @@ const Payroll = () => {
 
                         {/* Sort Order */}
                         {(activeTab === 'salary' || activeTab === 'hold') && (
-                            <div className="relative">
+                            <div className="h-8 relative flex items-center bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-lg px-2.5 text-[11px] transition-colors">
+                                <ArrowUpDown size={12} className="text-slate-400 shrink-0 mr-1.5" />
                                 <select
                                     value={sortOrder}
                                     onChange={(e) => setSortOrder(e.target.value)}
-                                    className="appearance-none pl-7 pr-6 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-semibold text-slate-700 rounded-lg cursor-pointer"
+                                    className="bg-transparent focus:outline-none font-semibold text-slate-700 cursor-pointer pr-4"
                                 >
                                     <option value="ASC">Sort: ID (Asc)</option>
                                     <option value="DESC">Sort: ID (Desc)</option>
                                     <option value="DEFAULT">Sort: Default</option>
                                 </select>
-                                <ArrowUpDown size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                <ChevronDown size={11} className="text-slate-400 absolute right-2 pointer-events-none" />
                             </div>
                         )}
                     </div>
@@ -2118,7 +2182,7 @@ const Payroll = () => {
                                 {activeTab === 'salary' && (
                                     <button
                                         onClick={() => handleSavePayrollToDB()}
-                                        disabled={isSavingToDB}
+                                        disabled={isSavingToDB || isFutureMonth}
                                         className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
                                         title="Save basic salary changes and update draft payroll"
                                     >
@@ -2140,7 +2204,7 @@ const Payroll = () => {
                                 {activeTab !== 'hold' && (
                                     <button
                                         onClick={() => handleMarkAsHold()}
-                                        disabled={isSavingToDB}
+                                        disabled={isSavingToDB || isFutureMonth}
                                         className="flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
                                         title="Hold salary payout for selected employees"
                                     >
@@ -2150,7 +2214,7 @@ const Payroll = () => {
                                 )}
                                 <button
                                     onClick={() => handleMarkAsPaid()}
-                                    disabled={isSavingToDB}
+                                    disabled={isSavingToDB || isFutureMonth}
                                     className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] !rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
                                     title="Mark selected records as Paid & generate payroll disbursement"
                                 >
@@ -2167,9 +2231,34 @@ const Payroll = () => {
                         </div>
                     )}
 
-                    {/* Table View */}
-                    <div className="overflow-x-auto max-h-[66vh] scrollbar-thin max-w-full">
-                        <table className="w-full min-w-[1300px] text-xs text-left border-collapse">
+                    {/* Future Month Banner / Clean Empty State */}
+                    {isFutureMonth && (activeTab === 'salary' || activeTab === 'hold') ? (
+                        <div className="py-16 px-6 text-center flex flex-col items-center justify-center">
+                            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/70 text-amber-600 flex items-center justify-center mb-3 shadow-2xs">
+                                <Clock size={26} />
+                            </div>
+                            <h3 className="text-sm font-bold text-slate-800 mb-1">
+                                Future Period: {monthNames[selectedMonth - 1]} {selectedYear}
+                            </h3>
+                            <p className="text-slate-500 text-xs max-w-md mb-4 leading-relaxed">
+                                Payroll cannot be generated for future months because work shifts, employee punches, and attendance logs have not occurred yet.
+                            </p>
+                            <button
+                                onClick={() => {
+                                    setSelectedYear(nowForLimits.getFullYear());
+                                    setSelectedMonth(nowForLimits.getMonth() + 1);
+                                }}
+                                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                                <Calendar size={13} />
+                                Return to Current Month ({monthNames[nowForLimits.getMonth()]} {nowForLimits.getFullYear()})
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Table View */}
+                            <div className="overflow-x-auto max-h-[66vh] scrollbar-thin max-w-full">
+                                <table className="w-full min-w-[1300px] text-xs text-left border-collapse">
                             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 text-[11px] shadow-2xs">
                                 <tr>
                                     {(activeTab === 'salary' || activeTab === 'hold') && (
@@ -2534,6 +2623,8 @@ const Payroll = () => {
                         </table>
                     </div>
                     {renderPagination()}
+                        </>
+                    )}
                 </div>
             )}
 
@@ -2923,7 +3014,7 @@ UNIQUE (employee_id, year, month);`}
                                     <option value="" disabled>No shops available</option>
                                 ) : (
                                     shopsList.map(s => (
-                                        <option key={s} value={s}>{shopFullNameMap[s] || s}</option>
+                                        <option key={s} value={s}>{s}</option>
                                     ))
                                 )}
                             </select>
