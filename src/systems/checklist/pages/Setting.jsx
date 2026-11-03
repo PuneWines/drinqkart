@@ -205,22 +205,6 @@ const Setting = () => {
     dispatch(customDropdownDetails());
     dispatch(givenByDetails());
 
-    // Subscribe to users table changes
-    const subscription = supabase
-      .channel('users-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'users'
-        },
-        () => {
-          // Refresh user data when any change occurs
-          dispatch(userDetails());
-        }
-      )
-      .subscribe();
 
     // Set up interval to check device logs every 60 seconds (reduced frequency)
     const intervalId = setInterval(() => {
@@ -231,7 +215,6 @@ const Setting = () => {
     fetchDeviceLogsAndUpdateStatus();
 
     return () => {
-      supabase.removeChannel(subscription);
       clearInterval(intervalId);
     };
   }, [dispatch, fetchDeviceLogsAndUpdateStatus]);

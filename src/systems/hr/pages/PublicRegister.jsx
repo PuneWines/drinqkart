@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { resolvePlaceFromShop } from '../../../utils/shopLocation'
 import { Upload, Image, User, CreditCard, BookOpen, FileText, X, CheckCircle, ArrowRight, Crop } from 'lucide-react'
 
 const STORAGE_BUCKET = 'HR_System_employee_documents'
@@ -194,7 +195,9 @@ export default function PublicRegister() {
       const formatted = (data || []).map(d => ({
         id: d.id,
         company_name: d.shop_name,
-        shop_name: d.shop_name
+        shop_name: d.shop_name,
+        location: d.location,
+        address: d.address
       }))
       setJoiningCompanies(formatted)
     } catch (error) {
@@ -706,6 +709,31 @@ export default function PublicRegister() {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Shop Name <span className="text-red-500">*</span></label>
+                <select
+                  name="joining_company_name"
+                  value={formData.joining_company_name}
+                  onChange={(e) => {
+                    const shop = e.target.value
+                    setFormData((prev) => ({
+                      ...prev,
+                      joining_company_name: shop,
+                      joining_place: resolvePlaceFromShop(shop, joiningCompanies),
+                    }))
+                  }}
+                  required
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 bg-white"
+                >
+                  <option value="">Select Shop</option>
+                  {joiningCompanies.map((company) => (
+                    <option key={company.id} value={company.company_name}>
+                      {company.company_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                   Joining Place <span className="text-red-500">*</span>
                 </label>
@@ -714,13 +742,9 @@ export default function PublicRegister() {
                   type="text"
                   name="joining_place"
                   value={formData.joining_place}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      joining_place: e.target.value.toUpperCase(),
-                    }))
-                  }
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 uppercase"
+                  readOnly
+                  placeholder="Auto-filled from shop"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed uppercase"
                   required
                 />
               </div>
@@ -738,23 +762,6 @@ export default function PublicRegister() {
                   <option value="User">User</option>
                   <option value="Manager">Manager</option>
                   <option value="HOD">HOD</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Joining Shop Name</label>
-                <select
-                  name="joining_company_name"
-                  value={formData.joining_company_name}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">Select Shop</option>
-                  {joiningCompanies.map((company) => (
-                    <option key={company.id} value={company.company_name}>
-                      {company.company_name}
-                    </option>
-                  ))}
                 </select>
               </div>
 

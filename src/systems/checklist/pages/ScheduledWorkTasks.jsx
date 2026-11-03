@@ -148,6 +148,7 @@ export default function ScheduledWorkTasks() {
   useEffect(() => {
     runPromotionCheck();
     const timer = setInterval(() => {
+      if (document.hidden) return;
       setCurrentTime(new Date());
       runPromotionCheck();
     }, 5 * 60 * 1000); // 5 minutes

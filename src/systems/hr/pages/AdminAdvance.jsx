@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, Check, Clock, Wallet, Banknote, Stethoscope, Hammer, Loader2, Filter, Users, TrendingUp, Database, Plus, Trash2 } from 'lucide-react';
+import { Search, X, Check, Clock, Wallet, Banknote, Stethoscope, Hammer, Loader2, Filter, Users, TrendingUp, Database, Plus, Trash2, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
@@ -36,6 +36,9 @@ const AdminAdvance = () => {
   const [tableLoading, setTableLoading] = useState(false);
   const [submitStatus, setSubmitStatus] = useState('Pending');
   const [addModalType, setAddModalType] = useState('Pending');
+  const [editRecord, setEditRecord] = useState(null);
+  const [editForm, setEditForm] = useState({ amount: '', monthlyDeduction: '', remainingAmount: '', startingMonth: '', reason: '' });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -273,6 +276,60 @@ const AdminAdvance = () => {
     } catch (err) {
       console.error(err);
       toast.error("Failed to delete request: " + err.message);
+    }
+  };
+
+  const openEditModal = (record) => {
+    const effAmount = (record.apprAmount || record.amount || 0);
+    const effDeduction = (record.apprMonthlyDeduction || record.monthlyDeduction || 0);
+    setEditForm({
+      amount: effAmount,
+      monthlyDeduction: effDeduction,
+      remainingAmount: record.remainingAmount !== undefined && record.remainingAmount !== null ? record.remainingAmount : effAmount,
+      startingMonth: record.startingMonth || '',
+      reason: record.reason || ''
+    });
+    setEditRecord(record);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!canModify || !editRecord) return;
+    const amount = Number(editForm.amount);
+    const deduction = Number(editForm.monthlyDeduction);
+    const remaining = Number(editForm.remainingAmount);
+    if (!(amount > 0)) return toast.error('Please enter a valid amount');
+    if (!(deduction > 0)) return toast.error('Please enter a valid monthly deduction');
+    if (deduction > amount) return toast.error('Monthly deduction cannot be greater than the total amount');
+    if (remaining < 0 || remaining > amount) return toast.error('Remaining amount must be between 0 and the total amount');
+
+    setIsSavingEdit(true);
+    try {
+      const updateData = {
+        amount,
+        monthly_deduction: deduction,
+        remaining_amount: remaining,
+        starting_month: editForm.startingMonth || null,
+        reason: editForm.reason
+      };
+      // Keep approved values in sync if they were already set (they take display priority)
+      if (editRecord.apprAmount) updateData.approved_amount = amount;
+      if (editRecord.apprMonthlyDeduction) updateData.approved_monthly_deduction = deduction;
+
+      const { error } = await supabase
+        .from('hr_management_advance_requests')
+        .update(updateData)
+        .eq('id', editRecord.id);
+      if (error) throw error;
+
+      toast.success('Advance updated successfully');
+      setEditRecord(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update advance: ' + err.message);
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -783,6 +840,15 @@ const AdminAdvance = () => {
                         >
                           {record.status?.toLowerCase() === 'pending' ? 'Review' : (mainTab === 'fixed' && subTab === 'pending') ? 'Receive' : 'Details'}
                         </button>
+                        {canModify && mainTab === 'monthly' && (
+                        <button
+                          onClick={() => openEditModal(record)}
+                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                          title="Edit Advance"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        )}
                         {canModify && (
                         <button
                           onClick={() => handleDeleteRequest(record.id)}
@@ -1270,6 +1336,69 @@ ALTER TABLE hr_management_advance_requests ADD COLUMN IF NOT EXISTS remaining_am
                 >
                   {isSubmittingNew ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                   {addModalType === 'Approved' ? 'Record Fixed Advance' : 'Submit Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Monthly Advance Modal */}
+      {editRecord && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setEditRecord(null)}>
+          <div className="bg-white max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Pencil size={18} className="text-indigo-600" />
+                Edit Monthly Advance
+              </h2>
+              <button onClick={() => setEditRecord(null)} className="p-1 hover:bg-gray-100 rounded">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+              <div className="text-sm text-gray-600">
+                <span className="font-semibold text-gray-800">{editRecord.empName}</span> ({editRecord.empId})
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Total Amount (₹)</label>
+                <input type="number" min="0" required value={editForm.amount}
+                  onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Monthly Deduction (₹)</label>
+                <input type="number" min="0" required value={editForm.monthlyDeduction}
+                  onChange={e => setEditForm(f => ({ ...f, monthlyDeduction: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Remaining Amount (₹)</label>
+                <input type="number" min="0" required value={editForm.remainingAmount}
+                  onChange={e => setEditForm(f => ({ ...f, remainingAmount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Starting Month</label>
+                <input type="month" value={editForm.startingMonth}
+                  onChange={e => setEditForm(f => ({ ...f, startingMonth: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Reason</label>
+                <textarea rows={2} value={editForm.reason}
+                  onChange={e => setEditForm(f => ({ ...f, reason: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditRecord(null)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSavingEdit}
+                  className="px-4 py-2 text-white text-xs font-semibold rounded flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 cursor-pointer disabled:opacity-50">
+                  {isSavingEdit ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  Save Changes
                 </button>
               </div>
             </form>

@@ -675,27 +675,24 @@ export const useChatStore = create((set, get) => ({
   initGlobalWhatsAppRealtime: () => {
     if (get()._realtimeSubscribed) return get()._realtimeChannel;
 
+    // Debounce bursts of events into a single refetch
+    let timer = null;
+    const refresh = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        get().fetchWhatsAppConversations();
+        const currentCid = get().selectedConversationId;
+        if (currentCid) {
+          get().fetchWhatsAppMessages(currentCid);
+        }
+      }, 1500);
+    };
+
     const channel = supabase
       .channel('global-whatsapp-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'whatsapp_messages' },
-        (payload) => {
-          console.log('[Global Realtime] whatsapp_messages change:', payload);
-          get().fetchWhatsAppConversations();
-          const currentCid = get().selectedConversationId;
-          if (currentCid) {
-            get().fetchWhatsAppMessages(currentCid);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'whatsapp_conversations' },
-        () => {
-          get().fetchWhatsAppConversations();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_conversations' }, refresh)
       .subscribe();
 
     set({ _realtimeSubscribed: true, _realtimeChannel: channel });

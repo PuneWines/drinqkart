@@ -510,25 +510,13 @@ const VendorPortal = () => {
       fetchPortalData();
     }
 
-    // Realtime subscription for incoming/updated POs
-    const channel = supabase
-      .channel(`realtime:vendor_portal_${vendorId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "purchase_purchase_orders"
-        },
-        () => {
-          fetchPortalData(true);
-        }
-      )
-      .subscribe();
+    // Poll instead of an unfiltered Realtime subscription (external vendors
+    // would otherwise each hold a Realtime connection on all PO changes)
+    const intervalId = setInterval(() => {
+      if (vendorId && !document.hidden) fetchPortalData(true);
+    }, 60000);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => clearInterval(intervalId);
   }, [vendorId]);
 
   // Fetch PO items when expanding a card

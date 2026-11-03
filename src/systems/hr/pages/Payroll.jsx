@@ -14,6 +14,8 @@ const Payroll = () => {
     const canModify = getPagePermission(authUser, 'hr', 'Payroll').canModify;
     const [activeTab, setActiveTab] = useState('salary');
     const [searchTerm, setSearchTerm] = useState('');
+    // Tracks which month/year each dataset was last loaded for, to avoid refetching
+    const loadedKeysRef = React.useRef({ payroll: null, history: null });
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [salaryData, setSalaryData] = useState({ headers: [], rows: [] });
@@ -1049,6 +1051,9 @@ const Payroll = () => {
             const salaryHeaders = headers.filter(h => h !== 'Action');
             setSalaryData({ headers: salaryHeaders, rows: allSalaryRows });
             setHoldData({ headers: salaryHeaders, rows: allHoldRows });
+            loadedKeysRef.current.payroll = `${selectedYear}-${selectedMonth}`;
+            // Payroll changed -> payout history may be stale; force reload next time it's opened
+            loadedKeysRef.current.history = null;
         } catch (err) {
             setError("Failed to fetch payroll: " + err.message);
             console.error(err);
@@ -1233,6 +1238,7 @@ const Payroll = () => {
             });
 
             setHistoryData({ headers, rows });
+            loadedKeysRef.current.history = `${selectedYear}-${selectedMonth}`;
         } catch (err) {
             setError("Failed to fetch history records: " + err.message);
             console.error(err);
@@ -1241,15 +1247,23 @@ const Payroll = () => {
         }
     };
 
+    // Fetch only when the month/year changes or a tab's data hasn't been loaded yet.
+    // Salary & Hold tabs share one dataset. Search/shop/sort are in-memory only.
     useEffect(() => {
         setCurrentPage(1);
         setSelectedEmpIds(new Set());
+        const key = `${selectedYear}-${selectedMonth}`;
         if (activeTab === 'salary' || activeTab === 'hold') {
-            fetchPayrollData();
-        } else {
+            if (loadedKeysRef.current.payroll !== key) fetchPayrollData();
+        } else if (loadedKeysRef.current.history !== key) {
             fetchHistoryData();
         }
-    }, [activeTab, selectedMonth, selectedYear, searchTerm]);
+    }, [activeTab, selectedMonth, selectedYear]);
+
+    // Filtering changes just go back to page 1 (no refetch, selection kept)
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, selectedShop, sortOrder]);
 
 
 

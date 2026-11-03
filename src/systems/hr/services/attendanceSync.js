@@ -1,9 +1,23 @@
 import { supabase } from "../lib/supabase";
+// Biometric synchronization is securely delegated to Supabase Edge Function (hyper-service)
 
-const JOINING_API_URL =
-  "https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch";
-const MASTER_MAP_URL =
-  "https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=MASTER&action=fetch";
+// Load biometric machines from the shop table (single source of truth)
+const fetchShopDevices = async () => {
+  const { data, error } = await supabase
+    .from("shop")
+    .select("shop_name, device_serial, api_name")
+    .not("device_serial", "is", null)
+    .neq("device_serial", "");
+  if (error) {
+    console.error("Error fetching shop devices:", error);
+    return [];
+  }
+  return (data || []).map((s) => ({
+    name: s.shop_name,
+    serial: s.device_serial.trim(),
+    apiName: s.api_name ? s.api_name.trim() : s.shop_name,
+  }));
+};
 
 const monthNames = [
   "January",
@@ -169,171 +183,31 @@ const calculateWorkHoursFromTimes = (inStr, outStr, dateContext = "") => {
 };
 
 export const syncDeviceLogsToSupabase = async (month, year, device) => {
-    const startDay = '01';
-    const endDay = getDaysInMonth(month, year);
-    const paddedMonth = month.toString().padStart(2, '0');
-    const fromDate = `${year}-${paddedMonth}-${startDay}`;
-    const toDate = `${year}-${paddedMonth}-${endDay}`;
+  const startDay = "01";
+  const endDay = getDaysInMonth(month, year);
+  const paddedMonth = month.toString().padStart(2, "0");
+  const fromDate = `${year}-${paddedMonth}-${startDay}`;
+  const toDate = `${year}-${paddedMonth}-${endDay}`;
 
-    const devicesToSync = (device && device.serial && device.serial !== 'ALL') ? [device] : [
-        { name: 'BAWDHAN', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-        { name: 'HINJEWADI', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-        { name: 'WAGHOLI', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-        { name: 'AKOLE', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-        { name: 'MUMBAI', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-        { name: 'KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
-    ];
+  const deviceFilter =
+    device && device.serial && device.serial !== "ALL"
+      ? device.serial || device.name
+      : "ALL";
 
-    const { data: hrEmps } = await supabase
-        .from('hr_management_employees')
-        .select('employee_id, name_as_per_aadhar, joining_place, designation');
+  const { data, error } = await supabase.functions.invoke("hyper-service", {
+    body: {
+      fromDate,
+      toDate,
+      device: deviceFilter,
+    },
+  });
 
-    const empMap = {};
-    (hrEmps || []).forEach(e => {
-        if (e.employee_id) {
-            const rawId = e.employee_id.toString().trim().toLowerCase();
-            const numId = !isNaN(rawId) ? String(parseInt(rawId, 10)) : null;
-            const val = {
-                name: (e.name_as_per_aadhar && e.name_as_per_aadhar !== 'Unknown') ? e.name_as_per_aadhar : `Employee ${e.employee_id}`,
-                store: e.joining_place || '',
-                designation: e.designation || '-'
-            };
-            empMap[rawId] = val;
-            if (numId) empMap[numId] = val;
-        }
-    });
+  if (error) {
+    console.error("Edge Function biometric sync error:", error);
+    throw error;
+  }
 
-    const allPunches = [];
-
-    await Promise.all(devicesToSync.map(async (dev) => {
-        try {
-            const url = `http://103.195.203.77:15167/api/v2/WebAPI/GetDeviceLogs?APIKey=211616032630&SerialNumber=${dev.serial}&DeviceName=${dev.apiName || dev.name}&FromDate=${fromDate}&ToDate=${toDate}`;
-            const res = await fetch(url);
-            if (res.ok) {
-                const text = await res.text();
-                if (text && !text.trim().startsWith('<')) {
-                    const raw = JSON.parse(text);
-                    if (Array.isArray(raw)) {
-                        raw.forEach(p => {
-                            if (p.EmployeeCode && p.LogDate) {
-                                allPunches.push({ ...p, devName: dev.name, devSerial: dev.serial });
-                            }
-                        });
-                    }
-                }
-            }
-        } catch (e) {
-            console.error(`Error fetching CAMS logs for ${dev.name}:`, e);
-        }
-    }));
-
-    if (allPunches.length === 0) return;
-
-    const grouped = {};
-    allPunches.forEach(p => {
-        const empId = p.EmployeeCode.toString().trim();
-        const dateStr = p.LogDate.split(' ')[0];
-        const key = `${empId}_${dateStr}`;
-        if (!grouped[key]) {
-            grouped[key] = { empId, date: dateStr, devName: p.devName, devSerial: p.devSerial, punches: [] };
-        }
-        grouped[key].punches.push(p.LogDate);
-    });
-
-    const { data: existingRows } = await supabase
-        .from('hr_management_attendance_logs')
-        .select('*')
-        .gte('attendance_date', fromDate)
-        .lte('attendance_date', toDate);
-
-    const existingMap = new Map();
-    (existingRows || []).forEach(r => {
-        const k = `${String(r.employee_id).trim().toLowerCase()}_${r.attendance_date}`;
-        existingMap.set(k, r);
-    });
-
-    const formatTimeISTStr = (timeStr) => {
-        if (!timeStr) return '-';
-        try {
-            const d = new Date(timeStr.replace(/-/g, '/'));
-            if (isNaN(d.getTime())) return timeStr;
-            return new Intl.DateTimeFormat('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            }).format(d);
-        } catch (e) { return timeStr; }
-    };
-
-    const upsertRows = Object.values(grouped).map(item => {
-        item.punches.sort((a, b) => new Date(a.replace(/-/g, '/')) - new Date(b.replace(/-/g, '/')));
-        const cleanEmpKey = item.empId.toLowerCase();
-        const numEmpKey = !isNaN(cleanEmpKey) ? String(parseInt(cleanEmpKey, 10)) : null;
-        const empInfo = empMap[cleanEmpKey] || (numEmpKey ? empMap[numEmpKey] : null) || { name: `Employee ${item.empId}`, store: item.devName, designation: '-' };
-
-        const inTimeRaw = item.punches[0];
-        const outTimeRaw = item.punches.length > 1 ? item.punches[item.punches.length - 1] : item.punches[0];
-        const formattedPunches = item.punches.map(p => formatTimeISTStr(p)).join(' | ');
-
-        const existingRec = existingMap.get(`${cleanEmpKey}_${item.date}`);
-        const isManual = existingRec && existingRec.manual_punches && (
-            existingRec.manual_punches.is_manual === true ||
-            existingRec.manual_punches.manual_override === true ||
-            existingRec.manual_punches.absent === true ||
-            existingRec.manual_punches.manual?.is_manual === true ||
-            existingRec.manual_punches.manual?.absent === true ||
-            ['Absent', 'Half Day', 'Weekly Off', 'Day Off', 'On Leave'].includes(existingRec.status)
-        );
-
-        if (isManual) {
-            return {
-                ...existingRec,
-                punch_log: existingRec.punch_log || formattedPunches,
-                updated_at: new Date().toISOString()
-            };
-        }
-
-        let workHoursStr = '00:00:00';
-        if (item.punches.length > 1) {
-            const d1 = new Date(inTimeRaw.replace(/-/g, '/'));
-            const d2 = new Date(outTimeRaw.replace(/-/g, '/'));
-            if (!isNaN(d1) && !isNaN(d2) && d2 > d1) {
-                const diff = Math.floor((d2 - d1) / 1000);
-                const h = Math.floor(diff / 3600);
-                const m = Math.floor((diff % 3600) / 60);
-                const s = diff % 60;
-                workHoursStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            }
-        }
-
-        const lateMins = calculateLateMinutes(inTimeRaw);
-        const derivedStatus = lateMins > 0 ? 'Late' : 'Present';
-
-        return {
-            employee_id: item.empId,
-            employee_name: empInfo.name,
-            designation: empInfo.designation || '-',
-            attendance_date: item.date,
-            status: derivedStatus,
-            late_minute: lateMins,
-            in_time: inTimeRaw.replace(' ', 'T'),
-            out_time: outTimeRaw.replace(' ', 'T'),
-            working_hour: workHoursStr,
-            punch_log: formattedPunches,
-            store_name: empInfo.store || item.devName,
-            serial_number: item.devSerial,
-            updated_at: new Date().toISOString()
-        };
-    });
-
-    if (upsertRows.length > 0) {
-        for (let i = 0; i < upsertRows.length; i += 100) {
-            const batch = upsertRows.slice(i, i + 100);
-            await supabase
-                .from('hr_management_attendance_logs')
-                .upsert(batch, { onConflict: 'employee_id,attendance_date' });
-        }
-    }
+  return data;
 };
 
 /**
@@ -394,14 +268,7 @@ export const syncMonthlyAttendanceFromApi = async (month, year, device) => {
     }
   });
 
-  const DEVICES = [
-    { name: "MADHURA", serial: "C26238441B1E342D" },
-    { name: "TLS", serial: "AMDB25061400335" },
-    { name: "FRIENDS", serial: "AMDB25061400343" },
-    { name: "BALAJI", serial: "C262CC13CF202038" },
-    { name: "KUNAL ULWE", serial: "C2630450C32A2327" },
-    { name: "KUNAL KHARGHAR", serial: "AMDB25120600859" },
-  ];
+  const DEVICES = await fetchShopDevices();
 
   const monthlyAgg = {};
   const totalSundays = getSundaysCount(month, year);

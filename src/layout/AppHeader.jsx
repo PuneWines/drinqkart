@@ -115,17 +115,12 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
   useEffect(() => {
     fetchAssignedCount();
 
-    // Supabase Realtime channel for instant count updates when tickets are assigned or updated
-    const channel = supabase
-      .channel('app_header_help_center')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'help_center_records' }, () => {
-        fetchAssignedCount();
-      })
-      .subscribe();
+    // Poll instead of Realtime to avoid exhausting the Realtime DB pool
+    const intervalId = setInterval(() => {
+      if (!document.hidden) fetchAssignedCount();
+    }, 60000);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => clearInterval(intervalId);
   }, [fetchAssignedCount]);
 
   return (

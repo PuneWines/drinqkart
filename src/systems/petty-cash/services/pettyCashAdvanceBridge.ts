@@ -123,6 +123,9 @@ export async function syncPettyCashAdvances(
         reason: entry.description || "",
         admin_remarks: `Petty Cash Voucher: ${voucherRef}`,
         starting_month: startingMonth,
+        created_at: date
+          ? (date.includes("T") ? date : `${date}T12:00:00.000Z`)
+          : new Date().toISOString(),
       };
     });
 

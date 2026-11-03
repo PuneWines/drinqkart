@@ -192,21 +192,41 @@ export default function LeaveManagement() {
     try {
       const today = new Date().toISOString().split('T')[0]
 
-      // Get all employees
-      const { data: allEmployees } = await supabase
-        .from('hr_management_employees')
-        .select('employee_id, status')
+      // 2 queries total (instead of 1 per employee)
+      const [{ data: allEmployees }, { data: todaysLeaves }] = await Promise.all([
+        supabase.from('hr_management_employees').select('employee_id, status'),
+        supabase
+          .from('hr_management_leaves')
+          .select('employee_id')
+          .eq('status', 'Approved')
+          .lte('from_date', today)
+          .gte('to_date', today),
+      ])
 
-      if (!allEmployees) return
+      if (!allEmployees || !todaysLeaves) return
 
+      const onLeave = new Set(todaysLeaves.map(l => l.employee_id))
+      const toInactive = []
+      const toActive = []
       for (const emp of allEmployees) {
-        const isOnLeave = await checkEmployeeLeaveStatus(emp.employee_id)
-        const expectedStatus = isOnLeave ? 'Inactive' : 'Active'
-
-        if (emp.status !== expectedStatus && emp.status !== 'Left') {
-          await updateEmployeeStatus(emp.employee_id, expectedStatus)
+        if (emp.status === 'Left') continue
+        const expectedStatus = onLeave.has(emp.employee_id) ? 'Inactive' : 'Active'
+        if (emp.status !== expectedStatus) {
+          (expectedStatus === 'Inactive' ? toInactive : toActive).push(emp.employee_id)
         }
       }
+
+      // Bulk update only the rows that changed
+      const now = new Date()
+      if (toInactive.length) {
+        await supabase.from('hr_management_employees')
+          .update({ status: 'Inactive', updated_at: now }).in('employee_id', toInactive)
+      }
+      if (toActive.length) {
+        await supabase.from('hr_management_employees')
+          .update({ status: 'Active', updated_at: now }).in('employee_id', toActive)
+      }
+      if (toInactive.length || toActive.length) await fetchActiveEmployees()
     } catch (error) {
       console.error('Error updating employee statuses:', error)
     }

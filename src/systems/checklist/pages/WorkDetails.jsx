@@ -272,6 +272,7 @@ export default function WorkDetails() {
   useEffect(() => {
     runPromotionCheck();
     const timer = setInterval(() => {
+      if (document.hidden) return;
       runPromotionCheck();
     }, 5 * 60 * 1000); // 5 minutes
     return () => clearInterval(timer);

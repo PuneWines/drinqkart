@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Calendar, QrCode, Copy, Printer, Lock, Upload, Cpu } from 'lucide-react'
+import { Building2, Plus, ShieldAlert, CheckCircle, Search, Edit3, Save, X, Calendar, QrCode, Copy, Printer, Lock, Upload, Cpu, CheckCircle2, AlertTriangle, Loader2, Wifi } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ViewOnlyBanner } from '../../../utils/permissionUtils'
 
@@ -44,6 +44,10 @@ export default function JoiningCompany({ readOnly = false }) {
 
   const [qrModalShop, setQrModalShop] = useState(null)
   const [hasLocationColumn, setHasLocationColumn] = useState(false)
+
+  // Biometric machine verification states
+  const [addVerifyState, setAddVerifyState] = useState({ loading: false, status: null, message: '' })
+  const [editVerifyState, setEditVerifyState] = useState({ loading: false, status: null, message: '' })
 
   const CUSTOM_LOCATIONS_KEY = 'drinqkart_custom_shop_locations'
 
@@ -146,6 +150,61 @@ export default function JoiningCompany({ readOnly = false }) {
     }
   }
 
+  // Biometric device connection tester
+  const verifyDeviceConnection = async (serial, apiName, shopName) => {
+    const cleanSerial = (serial || '').toString().trim()
+    const cleanApiName = (apiName || shopName || '').toString().trim()
+
+    if (!cleanSerial) {
+      return { success: false, message: 'Please enter a device serial number to verify.' }
+    }
+
+    try {
+      // Verification runs server-side so the biometric API key never reaches the browser
+      const { data, error } = await supabase.functions.invoke('hyper-service', {
+        body: { action: 'verify', serial: cleanSerial, apiName: cleanApiName || 'TEST' }
+      })
+      if (error) {
+        return { success: false, message: error.message || 'Verification service error' }
+      }
+      if (data?.success) {
+        return {
+          success: true,
+          count: data.logsToday ?? 0,
+          message: data.message || `Device Online & Verified! (${data.logsToday ?? 0} logs found for today)`
+        }
+      }
+      return { success: false, message: data?.error || 'Verification failed on biometric machine' }
+    } catch (err) {
+      console.error('Biometric verification error:', err)
+      return {
+        success: false,
+        message: err.message || 'Cannot reach verification service'
+      }
+    }
+  }
+
+  const handleVerifyModalDevice = async (formType) => {
+    const isAdd = formType === 'add'
+    const serial = isAdd ? addForm.device_serial : editForm.device_serial
+    const apiName = isAdd ? addForm.api_name : editForm.api_name
+    const shopName = isAdd ? addForm.shop_name : (editingCompany?.shop_name || '')
+
+    if (isAdd) {
+      setAddVerifyState({ loading: true, status: null, message: '' })
+    } else {
+      setEditVerifyState({ loading: true, status: null, message: '' })
+    }
+
+    const res = await verifyDeviceConnection(serial, apiName, shopName)
+
+    if (isAdd) {
+      setAddVerifyState({ loading: false, status: res.success ? 'success' : 'error', message: res.message })
+    } else {
+      setEditVerifyState({ loading: false, status: res.success ? 'success' : 'error', message: res.message })
+    }
+  }
+
   const handleOpenAddModal = () => {
     setAddForm({
       shop_name: '',
@@ -160,6 +219,7 @@ export default function JoiningCompany({ readOnly = false }) {
     })
     setAddQrFile(null)
     setAddQrPreview(null)
+    setAddVerifyState({ loading: false, status: null, message: '' })
     setShowAddModal(true)
   }
 
@@ -245,6 +305,7 @@ export default function JoiningCompany({ readOnly = false }) {
     })
     setEditQrFile(null)
     setEditQrPreview(company.qr_link || null)
+    setEditVerifyState({ loading: false, status: null, message: '' })
   }
 
   const handleUpdateCompany = async (e) => {
@@ -599,13 +660,37 @@ export default function JoiningCompany({ readOnly = false }) {
               </div>
 
               {/* Biometric Machine Integration */}
-              <div className="bg-amber-50/50 p-3.5 border border-amber-200/80 rounded space-y-2.5">
-                <div className="flex items-center gap-1.5">
-                  <Cpu size={14} className="text-[#d4b457]" />
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Biometric Machine Configuration
-                  </span>
+              <div className="bg-slate-50 p-4 border border-slate-200 rounded space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-[#1C120C] text-[#d4b457] flex items-center justify-center">
+                      <Cpu size={13} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-serif font-bold text-slate-900 uppercase tracking-wider block">
+                        Biometric Machine Link
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        Link machine serial for automated attendance sync
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyModalDevice('add')}
+                    disabled={addVerifyState.loading || !addForm.device_serial?.trim()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-[#1C120C] hover:bg-black text-[#d4b457] border border-[#d4b457]/40 rounded shadow-xs cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
+                    title="Verify connection with biometric server"
+                  >
+                    {addVerifyState.loading ? (
+                      <Loader2 size={12} className="animate-spin text-[#d4b457]" />
+                    ) : (
+                      <Wifi size={12} className="text-[#d4b457]" />
+                    )}
+                    <span>{addVerifyState.loading ? 'Testing...' : 'Test Connection'}</span>
+                  </button>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10.5px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -614,7 +699,10 @@ export default function JoiningCompany({ readOnly = false }) {
                     <input
                       type="text"
                       value={addForm.device_serial}
-                      onChange={(e) => setAddForm({ ...addForm, device_serial: e.target.value.trim() })}
+                      onChange={(e) => {
+                        setAddForm({ ...addForm, device_serial: e.target.value.trim() })
+                        setAddVerifyState({ loading: false, status: null, message: '' })
+                      }}
                       placeholder="e.g. C26238441B1E342D"
                       className="w-full px-3 py-2 text-xs font-mono font-bold uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
                     />
@@ -630,15 +718,39 @@ export default function JoiningCompany({ readOnly = false }) {
                     <input
                       type="text"
                       value={addForm.api_name}
-                      onChange={(e) => setAddForm({ ...addForm, api_name: e.target.value.trim() })}
+                      onChange={(e) => {
+                        setAddForm({ ...addForm, api_name: e.target.value.trim() })
+                        setAddVerifyState({ loading: false, status: null, message: '' })
+                      }}
                       placeholder="e.g. BAVDHAN"
-                      className="w-full px-3 py-2 text-xs uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
+                      className="w-full px-3 py-2 text-xs uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded font-medium"
                     />
                     <span className="text-[10px] text-slate-500 mt-0.5 block">
                       Leave blank to default to Shop Name
                     </span>
                   </div>
                 </div>
+
+                {/* Verification Feedback Banner */}
+                {addVerifyState.status === 'success' && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded flex items-start gap-2 text-xs text-emerald-900 animate-in fade-in duration-200">
+                    <CheckCircle2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-emerald-800 uppercase tracking-wide text-[11px]">Machine Online & Verified</p>
+                      <p className="text-[11px] text-emerald-700 mt-0.5 font-medium">{addVerifyState.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                {addVerifyState.status === 'error' && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-300 rounded flex items-start gap-2 text-xs text-rose-900 animate-in fade-in duration-200">
+                    <AlertTriangle size={15} className="text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-800 uppercase tracking-wide text-[11px]">Verification Failed</p>
+                      <p className="text-[11px] text-rose-700 mt-0.5 font-medium">{addVerifyState.message}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -824,13 +936,37 @@ export default function JoiningCompany({ readOnly = false }) {
               </div>
 
               {/* Biometric Machine Integration */}
-              <div className="bg-amber-50/50 p-3.5 border border-amber-200/80 rounded space-y-2.5">
-                <div className="flex items-center gap-1.5">
-                  <Cpu size={14} className="text-[#d4b457]" />
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Biometric Machine Configuration
-                  </span>
+              <div className="bg-slate-50 p-4 border border-slate-200 rounded space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-[#1C120C] text-[#d4b457] flex items-center justify-center">
+                      <Cpu size={13} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-serif font-bold text-slate-900 uppercase tracking-wider block">
+                        Biometric Machine Link
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        Link machine serial for automated attendance sync
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyModalDevice('edit')}
+                    disabled={editVerifyState.loading || !editForm.device_serial?.trim()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-[#1C120C] hover:bg-black text-[#d4b457] border border-[#d4b457]/40 rounded shadow-xs cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
+                    title="Verify connection with biometric server"
+                  >
+                    {editVerifyState.loading ? (
+                      <Loader2 size={12} className="animate-spin text-[#d4b457]" />
+                    ) : (
+                      <Wifi size={12} className="text-[#d4b457]" />
+                    )}
+                    <span>{editVerifyState.loading ? 'Testing...' : 'Test Connection'}</span>
+                  </button>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10.5px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -839,7 +975,10 @@ export default function JoiningCompany({ readOnly = false }) {
                     <input
                       type="text"
                       value={editForm.device_serial}
-                      onChange={(e) => setEditForm({ ...editForm, device_serial: e.target.value.trim() })}
+                      onChange={(e) => {
+                        setEditForm({ ...editForm, device_serial: e.target.value.trim() })
+                        setEditVerifyState({ loading: false, status: null, message: '' })
+                      }}
                       placeholder="e.g. C26238441B1E342D"
                       className="w-full px-3 py-2 text-xs font-mono font-bold uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
                     />
@@ -855,15 +994,39 @@ export default function JoiningCompany({ readOnly = false }) {
                     <input
                       type="text"
                       value={editForm.api_name}
-                      onChange={(e) => setEditForm({ ...editForm, api_name: e.target.value.trim() })}
+                      onChange={(e) => {
+                        setEditForm({ ...editForm, api_name: e.target.value.trim() })
+                        setEditVerifyState({ loading: false, status: null, message: '' })
+                      }}
                       placeholder="e.g. BAVDHAN"
-                      className="w-full px-3 py-2 text-xs uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded"
+                      className="w-full px-3 py-2 text-xs uppercase border border-slate-300 focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] bg-white text-slate-900 rounded font-medium"
                     />
                     <span className="text-[10px] text-slate-500 mt-0.5 block">
                       Leave blank to default to Shop Name
                     </span>
                   </div>
                 </div>
+
+                {/* Verification Feedback Banner */}
+                {editVerifyState.status === 'success' && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded flex items-start gap-2 text-xs text-emerald-900 animate-in fade-in duration-200">
+                    <CheckCircle2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-emerald-800 uppercase tracking-wide text-[11px]">Machine Online & Verified</p>
+                      <p className="text-[11px] text-emerald-700 mt-0.5 font-medium">{editVerifyState.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                {editVerifyState.status === 'error' && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-300 rounded flex items-start gap-2 text-xs text-rose-900 animate-in fade-in duration-200">
+                    <AlertTriangle size={15} className="text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-800 uppercase tracking-wide text-[11px]">Verification Failed</p>
+                      <p className="text-[11px] text-rose-700 mt-0.5 font-medium">{editVerifyState.message}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

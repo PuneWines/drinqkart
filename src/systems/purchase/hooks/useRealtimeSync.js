@@ -64,17 +64,6 @@ export function useRealtimeSync() {
           queryClient.invalidateQueries({ queryKey: ["purchaseOrderPageData"] });
         }
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "purchase_dashboard",
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["purchaseDashboardLogs"] });
-        }
-      )
       .subscribe();
 
     return () => {

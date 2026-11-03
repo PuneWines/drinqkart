@@ -700,6 +700,7 @@ const WorkTasksTab = ({
 
   useEffect(() => {
     const timer = setInterval(() => {
+      if (document.hidden) return;
       setCurrentTime(new Date());
       fetchData(0, false, true);
     }, 5 * 60 * 1000); // 5 minutes interval

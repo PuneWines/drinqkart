@@ -7,18 +7,6 @@ import {
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
-const DEVICES = [
-    { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-    { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-    { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-    { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-    { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-    { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
-];
-
-const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
-const MASTER_MAP_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=MASTER&action=fetch';
-
 const MyAttendance = () => {
     const DUMMY_ATTENDANCE = [
         {
@@ -344,33 +332,30 @@ const MyAttendance = () => {
             const loggedInName = (user.Name || user.name || '').toString().trim().toLowerCase();
             const loggedInCode = (user.Username || user.username || '').toString().trim().toLowerCase();
 
-            // 1. Fetch Mapping Data
-            const [jRes, dmRes] = await Promise.all([
-                fetch(JOINING_API_URL).then(r => r.json()),
-                fetch(MASTER_MAP_URL).then(r => r.json())
+            // 1. Fetch mapping data from Supabase (employees + shop machines)
+            const [empRes, shopRes] = await Promise.all([
+                supabase
+                    .from('hr_management_employees')
+                    .select('employee_id, name_as_per_aadhar, designation'),
+                supabase
+                    .from('shop')
+                    .select('shop_name, device_serial, api_name')
+                    .not('device_serial', 'is', null)
+                    .neq('device_serial', '')
             ]);
 
-            let currentJoining = [];
-            if (jRes.success) {
-                const rawRows = jRes.data || jRes;
-                const headers = rawRows[5];
-                const dataRows = rawRows.slice(6);
-                const getIdx = (name) => headers.findIndex(h => h && h.toString().trim().toLowerCase() === name.toLowerCase());
-                currentJoining = dataRows.map(r => ({
-                    id: r[getIdx('Employee ID')]?.toString().trim(),
-                    name: r[getIdx('Name As Per Aadhar')]?.toString().trim(),
-                    designation: r[getIdx('Designation')]?.toString().trim()
-                })).filter(h => h.id);
-            }
+            const currentJoining = (empRes.data || []).map(e => ({
+                id: e.employee_id?.toString().trim(),
+                name: e.name_as_per_aadhar?.toString().trim(),
+                designation: e.designation?.toString().trim()
+            })).filter(h => h.id);
 
-            let currentMapping = [];
-            if (dmRes.success) {
-                currentMapping = dmRes.data.slice(1).map(r => ({
-                    userId: r[5]?.toString().trim(),
-                    name: r[6]?.toString().trim(),
-                    storeName: r[9]?.toString().trim()
-                }));
-            }
+            const shopDevices = (shopRes.data || []).map(s => ({
+                name: s.shop_name,
+                serial: s.device_serial.trim(),
+                apiName: s.api_name ? s.api_name.trim() : s.shop_name
+            }));
+            const currentMapping = [];
 
             // 2. Fetch Live Device Logs
             const yearNum = parseInt(selectedYear);
@@ -381,17 +366,34 @@ const MyAttendance = () => {
             const queryStart = `${yearNum}-${paddedMonth}-01`;
             const queryEnd = `${yearNum}-${paddedMonth}-${lastDay}`;
 
-            const allResponses = await Promise.all(
-                DEVICES.map(async (device) => {
-                    try {
-                        const url = `/api/device-logs?APIKey=211616032630&SerialNumber=${device.serial}&DeviceName=${device.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
-                        const res = await fetch(url);
-                        return res.ok ? await res.json() : [];
-                    } catch (e) { return []; }
-                })
-            );
+            // Punches come from the synced hr_management_attendance_logs table (no direct biometric API calls from the browser)
+            const to24h = (t) => {
+                const m = t.trim().match(/^(d{1,2}):(d{2})(?::d{2})?s*(AM|PM)?$/i);
+                if (!m) return null;
+                let h = parseInt(m[1], 10);
+                const ap = (m[3] || '').toUpperCase();
+                if (ap === 'PM' && h < 12) h += 12;
+                if (ap === 'AM' && h === 12) h = 0;
+                return `${String(h).padStart(2, '0')}:${m[2]}:00`;
+            };
+            const { data: dbRows, error: dbErr } = await supabase
+                .from('hr_management_attendance_logs')
+                .select('employee_id, attendance_date, punch_log, serial_number')
+                .gte('attendance_date', queryStart)
+                .lte('attendance_date', queryEnd);
+            if (dbErr) throw dbErr;
 
-            const rawLogs = allResponses.flat();
+            const knownSerials = new Set(shopDevices.map(d => d.serial.toLowerCase()));
+            const rawLogs = [];
+            (dbRows || []).forEach(row => {
+                const serial = (row.serial_number || '').toString().trim().toLowerCase();
+                // Only keep punches from machines registered in the shop table (rows without a serial are kept)
+                if (serial && serial !== '-' && knownSerials.size > 0 && !knownSerials.has(serial)) return;
+                (row.punch_log || '').split('|').forEach(part => {
+                    const t = to24h(part);
+                    if (t) rawLogs.push({ EmployeeCode: row.employee_id, LogDate: `${row.attendance_date} ${t}` });
+                });
+            });
             const filteredLogs = rawLogs.filter(log => log.LogDate && log.LogDate.split(' ')[0] >= '2026-04-01');
 
             // 3. Process and Aggregate

@@ -6,26 +6,16 @@ import { supabase } from '../lib/supabase';
 import useShopStore from '../../purchase/store/useShopStore';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
+const ALL_DEVICES_OPTION = { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' };
 
-const DEVICES = [
-  { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' },
-  { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-  { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-  { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-  { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-  { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-  { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
-];
-
-const JOINING_API_URL = 'https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=JOINING&action=fetch';
 
 // Resolve store location from punch attendance log device serial or device_id
-const resolvePunchedStore = (attendance, deviceMapping = []) => {
+const resolvePunchedStore = (attendance, deviceMapping = [], devices = []) => {
   if (!attendance) return null;
   const serial = (attendance.serial_number || attendance.serialNo || '').toString().trim();
 
   if (serial && serial !== '-' && serial !== 'ALL') {
-    const matchedDevice = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
+    const matchedDevice = devices.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
     if (matchedDevice && matchedDevice.name !== 'ALL DEVICES') {
       return matchedDevice.name;
     }
@@ -369,7 +359,28 @@ const AttendanceDaily = () => {
   const todayDate = getLocalDateString();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDevice, setSelectedDevice] = useState(DEVICES[0]);
+  const [biometricDevices, setBiometricDevices] = useState([ALL_DEVICES_OPTION]);
+  const [selectedDevice, setSelectedDevice] = useState(ALL_DEVICES_OPTION);
+  useEffect(() => {
+    const loadDevices = async () => {
+      const { data } = await supabase
+        .from('shop')
+        .select('shop_name, device_serial, api_name')
+        .not('device_serial', 'is', null)
+        .neq('device_serial', '');
+      if (data && data.length > 0) {
+        setBiometricDevices([
+          ALL_DEVICES_OPTION,
+          ...data.map(s => ({
+            name: s.shop_name,
+            serial: s.device_serial.trim(),
+            apiName: s.api_name ? s.api_name.trim() : s.shop_name
+          }))
+        ]);
+      }
+    };
+    loadDevices();
+  }, []);
   const [selectedStore, setSelectedStore] = useState('ALL');
   const [attendanceData, setAttendanceData] = useState([]);
   const [holidaysData, setHolidaysData] = useState([]); // Store holidays from public.holidays table
@@ -1589,294 +1600,33 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Sync device logs helper for custom date range
+  // Sync device logs helper for custom date range via Edge Function
   const syncLogsForRange = async (queryStart, queryEnd, targetMonth = currentMonth) => {
     setLoading(true);
     setError(null);
 
     try {
-      let currentJoining = joiningData || [];
-      if (currentJoining.length === 0) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
-          const jResponse = await fetch(JOINING_API_URL, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (jResponse.ok) {
-            const jText = await jResponse.text();
-            if (jText && !jText.trim().startsWith('<')) {
-              const jResult = JSON.parse(jText);
-              if (jResult && jResult.success) {
-                const rawRows = jResult.data || jResult;
-                const headers = rawRows[5] || [];
-                const dataRows = rawRows.slice(6);
+      // Ensure device mapping from shop table is populated
+      const currentMapping = biometricDevices
+        .filter(d => d.serial && d.serial !== 'ALL')
+        .map(d => ({ serialNo: d.serial, storeName: d.name }));
+      setDeviceMapping(currentMapping);
 
-                const getIdx = (name) => headers.findIndex(h => h && h.toString().trim().toLowerCase() === name.toLowerCase());
-                const empIdIdx = getIdx('Employee ID');
-                const nameIdx = getIdx('Name As Per Aadhar');
-                const desIdx = getIdx('Designation');
-                const storeIdx = getIdx('Joining Place');
+      const deviceFilter = selectedDevice.name === 'ALL DEVICES'
+        ? 'ALL'
+        : (selectedDevice.serial || selectedDevice.name);
 
-                currentJoining = dataRows.map(r => ({
-                  id: r[empIdIdx]?.toString().trim(),
-                  name: r[nameIdx]?.toString().trim(),
-                  designation: r[getIdx('Designation')]?.toString().trim() || r[desIdx]?.toString().trim(),
-                  store: r[getIdx('Joining Place')]?.toString().trim() || r[storeIdx]?.toString().trim()
-                })).filter(h => h.id);
-                setJoiningData(currentJoining);
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('Could not fetch joining sheet or timed out:', e);
+      const { data, error: fnError } = await supabase.functions.invoke('hyper-service', {
+        body: {
+          fromDate: queryStart,
+          toDate: queryEnd,
+          device: deviceFilter
         }
-      }
-
-      let currentMapping = deviceMapping || [];
-      const MASTER_MAP_URL = `https://script.google.com/macros/s/AKfycbyGp3onARkG7QfXKSZ22J6PokX-rYEYjOd-loijl7CqfnmDev_-aukiXp1vZ7yToJKQ/exec?sheet=MASTER&action=fetch`;
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const dmResponse = await fetch(MASTER_MAP_URL, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (dmResponse.ok) {
-          const dmText = await dmResponse.text();
-          if (dmText && !dmText.trim().startsWith('<')) {
-            const dmResult = JSON.parse(dmText);
-            if (dmResult && dmResult.success) {
-              const rows = dmResult.data.slice(1);
-              currentMapping = rows.map(r => ({
-                userId: r[5]?.toString().trim(),
-                name: r[6]?.toString().trim(),
-                deviceId: r[7]?.toString().trim(),
-                serialNo: r[8]?.toString().trim(),
-                storeName: r[9]?.toString().trim()
-              }));
-              setDeviceMapping(currentMapping);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Could not fetch master map sheet or timed out:', e);
-      }
-
-      let rawLogsData = [];
-      const DEVICE_LOG_API_BASE = 'http://103.195.203.77:15167/api/v2/WebAPI/GetDeviceLogs';
-      if (selectedDevice.name === 'ALL DEVICES') {
-        const otherDevices = DEVICES.filter(d => d.name !== 'ALL DEVICES');
-        const allResponses = await Promise.all(
-          otherDevices.map(async (device) => {
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 5000);
-              const url = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${device.serial}&DeviceName=${device.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
-              const res = await fetch(url, { signal: controller.signal });
-              clearTimeout(timeoutId);
-              if (!res.ok) return [];
-              const text = await res.text();
-              if (!text || text.trim().startsWith('<')) return [];
-              const logs = JSON.parse(text);
-              return Array.isArray(logs) ? logs.map(l => ({ ...l, _DeviceName: device.name })) : [];
-            } catch (e) {
-              // Silently handle expected timeout/unreachable hardware devices
-              if (e.name !== 'AbortError') {
-                console.warn(`Device ${device.name} (${device.apiName}) is offline/unreachable:`, e.message || e);
-              }
-              return [];
-            }
-          })
-        );
-        rawLogsData = allResponses.flat();
-      } else {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-          const API_URL = `${DEVICE_LOG_API_BASE}?APIKey=211616032630&SerialNumber=${selectedDevice.serial}&DeviceName=${selectedDevice.apiName}&FromDate=${queryStart}&ToDate=${queryEnd}`;
-          const response = await fetch(API_URL, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (response.ok) {
-            const text = await response.text();
-            if (text && !text.trim().startsWith('<')) {
-              const data = JSON.parse(text);
-              rawLogsData = Array.isArray(data) ? data.map(l => ({ ...l, _DeviceName: selectedDevice.name })) : [];
-            }
-          }
-        } catch (e) {
-          console.error('Error fetching device logs:', e);
-        }
-      }
-
-      if (!rawLogsData || rawLogsData.length === 0) {
-        await fetchAttendanceFromDB(targetMonth);
-        setLoading(false);
-        return;
-      }
-
-      const filteredLogs = rawLogsData.filter(log => {
-        if (!log.LogDate) return false;
-        const logDateStr = log.LogDate.split(' ')[0];
-        return logDateStr >= queryStart && logDateStr <= queryEnd;
       });
 
-      filteredLogs.sort((a, b) => new Date(a.LogDate) - new Date(b.LogDate));
-
-      const grouped = {};
-      filteredLogs.forEach(log => {
-        if (!log.EmployeeCode || !log.LogDate) return;
-        const dateStr = log.LogDate.split(' ')[0];
-        const key = `${log.EmployeeCode}_${dateStr}`;
-
-        if (!grouped[key]) {
-          grouped[key] = {
-            EmployeeCode: log.EmployeeCode.toString().trim(),
-            Date: dateStr,
-            SerialNumber: log.SerialNumber,
-            SourceDeviceName: log._DeviceName,
-            logs: []
-          };
-        }
-        grouped[key].logs.push(log.LogDate);
-      });
-
-      const aggregatedData = Object.values(grouped).map(group => {
-        const logs = group.logs;
-        let inTime = '-';
-        let outTime = '-';
-        let punchMiss = 'No';
-        let punchMissMsg = '';
-
-        if (logs.length === 1) {
-          const punchTime = logs[0];
-          const timePart = punchTime.split(' ')[1] || '';
-          const hours = parseInt(timePart.split(':')[0]) || 0;
-
-          punchMiss = 'Yes';
-          if (hours >= 15) {
-            outTime = punchTime;
-            punchMissMsg = 'Morning Punch Miss';
-          } else {
-            inTime = punchTime;
-            punchMissMsg = 'Evening Punch Miss';
-          }
-        } else {
-          inTime = logs[0];
-          outTime = logs[logs.length - 1];
-        }
-
-        const serial = group.SerialNumber.toString().trim();
-        const code = group.EmployeeCode.toString().trim();
-        const isNumeric = !isNaN(code) && code !== '';
-
-        const empMeta = currentJoining.find(e =>
-          (e.id && e.id.toLowerCase() === code.toLowerCase()) ||
-          (e.name && e.name.toLowerCase() === code.toLowerCase())
-        );
-
-        const mappingList = Array.isArray(currentMapping) ? currentMapping : [];
-        let dMap = mappingList.find(m => m.userId && m.userId.toString().toLowerCase() === code.toLowerCase());
-
-        if (!dMap) {
-          const entryName = (empMeta?.name || code).toString().trim().toLowerCase();
-          dMap = mappingList.find(m => m.name && m.name.toString().toLowerCase() === entryName);
-        }
-
-        // Also cross-reference against hr_management_employees table
-        const hrEmp = (employeesData || []).find(e => {
-          const eId = String(e.employee_id || e.id || '').trim().toLowerCase();
-          const cleanCode = code.toLowerCase();
-          return eId === cleanCode || eId.replace(/^0+/, '') === cleanCode.replace(/^0+/, '');
-        });
-
-        const displayName = (dMap && dMap.name && dMap.name !== 'Unknown')
-          ? dMap.name
-          : (empMeta && empMeta.name && empMeta.name !== 'Unknown')
-            ? empMeta.name
-            : (hrEmp && hrEmp.name_as_per_aadhar && hrEmp.name_as_per_aadhar !== 'Unknown')
-              ? hrEmp.name_as_per_aadhar
-              : (isNumeric ? `Employee ${code}` : code);
-        const displayCode = dMap ? dMap.userId : (empMeta ? empMeta.id : (hrEmp ? hrEmp.employee_id : (isNumeric ? code : 'Unknown')));
-
-        // Preserve actual hardware punch device store and serial number
-        const matchedPunchDevice = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === serial.toLowerCase());
-        const displayStore = matchedPunchDevice ? matchedPunchDevice.name : (group.SourceDeviceName && group.SourceDeviceName !== 'ALL DEVICES' ? group.SourceDeviceName : (dMap ? dMap.storeName : (empMeta ? empMeta.store : (hrEmp ? hrEmp.joining_place : '-'))));
-        const displayDeviceId = dMap ? dMap.deviceId : '-';
-        const displayAssignedSerial = serial || (dMap ? dMap.serialNo : '-');
-
-        let actualLunchMs = 0;
-        if (logs.length > 2) {
-          for (let i = 1; i < logs.length - 1; i += 2) {
-            const lOut = parseISTToDate(logs[i]);
-            const lIn = parseISTToDate(logs[i + 1]);
-            if (lOut && lIn) {
-              actualLunchMs += Math.max(0, lIn - lOut);
-            }
-          }
-        }
-
-        const standardLunchMs = 2.5 * 3600 * 1000;
-        const wasteTimeMs = Math.max(0, actualLunchMs - standardLunchMs);
-        const displayLunchMs = Math.min(actualLunchMs, standardLunchMs);
-        const standardLunchStr = calculateHoursMins(displayLunchMs);
-
-        const workHrs = punchMiss === 'Yes' ? '00:00:00' : calculateWorkHours(inTime, outTime, group.Date, standardLunchStr);
-
-        const dateObj = parseISTToDate(group.Date);
-        const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(dateObj);
-
-        const lateMins = calculateLateMinutes(inTime, group.Date);
-
-        let status = 'Present';
-        if (lateMins > 0) status = 'Late';
-
-        const punchLogStr = logs.map(l => formatTimeIST(l)).join(' | ');
-
-        let punchLogStatus = 'Bahar';
-        if (logs.length > 0) {
-          if (logs.length % 2 === 1) {
-            if (logs.length === 1) {
-              const punchTime = logs[0];
-              const timePart = punchTime.split(' ')[1] || '';
-              const hours = parseInt(timePart.split(':')[0]) || 0;
-              punchLogStatus = hours >= 15 ? 'Bahar' : 'Andar';
-            } else {
-              punchLogStatus = 'Andar';
-            }
-          } else {
-            punchLogStatus = 'Bahar';
-          }
-        }
-
-        return {
-          EmployeeID: displayCode,
-          EmployeeName: displayName,
-          Date: group.Date,
-          Day: dayName,
-          IsWorkingDay: 'Yes',
-          InTime: inTime,
-          StandardLunch: calculateHoursMins(displayLunchMs),
-          WasteTime: calculateHoursMins(wasteTimeMs),
-          OutTime: outTime,
-          PunchLog: punchLogStr,
-          PunchLogStatus: punchLogStatus,
-          StoreName: displayStore,
-          DeviceID: displayDeviceId,
-          Designation: empMeta ? empMeta.designation : (hrEmp ? hrEmp.designation : '-'),
-          SerialNumber: serial,
-          AssignedSerial: displayAssignedSerial,
-          Status: status,
-          WorkingHour: workHrs,
-          Overtime: '0h 0m',
-          LateMinute: lateMins,
-          PunchMiss: punchMiss,
-          PunchMissMsg: punchMissMsg,
-          RawLogs: logs
-        };
-      });
-
-      const changedRows = await saveAttendanceToDB(aggregatedData);
-
-      if (changedRows && changedRows.length > 0) {
-        await syncToMachineDataSheet(changedRows);
+      if (fnError) {
+        console.error('Edge function attendance sync error:', fnError);
+        throw new Error(fnError.message || 'Biometric sync failed');
       }
 
       await fetchAttendanceFromDB(targetMonth);
@@ -2221,7 +1971,7 @@ const AttendanceDaily = () => {
         const employee = allEmployees.find(
           e => String(e.employee_id).trim().toLowerCase() === cleanEmpId.toLowerCase()
         );
-        const matchedDevice = DEVICES.find(
+        const matchedDevice = biometricDevices.find(
           d => d.name.toUpperCase() === (employee?.store_name || '').toUpperCase()
         );
         const serialNo = matchedDevice ? matchedDevice.serial : '-';
@@ -3037,7 +2787,7 @@ const AttendanceDaily = () => {
         const roster = getEmployeeRoster(employee.id, selectedDate);
         const empProfile = employeesData.find(e => e.employee_id === employee.id || e.id === employee.id);
         const assignedStore = empProfile?.joining_place || employee.store_name || '-';
-        const punchedStore = resolvePunchedStore(attendance, deviceMapping) || '-';
+        const punchedStore = resolvePunchedStore(attendance, deviceMapping, biometricDevices) || '-';
         const dateObj = new Date(selectedDate);
         exportData.push({
           'Employee ID': employee.id,
@@ -3071,7 +2821,7 @@ const AttendanceDaily = () => {
           const roster = getEmployeeRoster(employee.id, day.fullDate);
           const empProfile = employeesData.find(e => e.employee_id === employee.id || e.id === employee.id);
           const assignedStore = empProfile?.joining_place || employee.store_name || '-';
-          const punchedStore = resolvePunchedStore(attendance, deviceMapping) || '-';
+          const punchedStore = resolvePunchedStore(attendance, deviceMapping, biometricDevices) || '-';
           exportData.push({
             'Employee ID': employee.id,
             'Employee Name': employee.name,
@@ -4049,7 +3799,7 @@ const AttendanceDaily = () => {
                           .filter(p => Boolean(p) && !isBefore9AM(p)).length;
                       }
 
-                      const rawPunchedShop = resolvePunchedStore(attendance, deviceMapping) || '';
+                      const rawPunchedShop = resolvePunchedStore(attendance, deviceMapping, biometricDevices) || '';
                       const punchedShopName = rawPunchedShop.toString().trim();
 
                       return (
@@ -4529,7 +4279,7 @@ const AttendanceDaily = () => {
                                   const att = selectedEmployee.attendance;
                                   const sn = att?.serial_number || att?.serialNo || att?.device_id || att?.device_serial || null;
                                   if (!sn || sn === '-') return '-';
-                                  const matchedDev = DEVICES.find(d => d.serial && d.serial.toString().trim().toLowerCase() === sn.toString().trim().toLowerCase());
+                                  const matchedDev = biometricDevices.find(d => d.serial && d.serial.toString().trim().toLowerCase() === sn.toString().trim().toLowerCase());
                                   return matchedDev ? `${sn} (${matchedDev.name})` : sn;
                                 })()}
                               </span>

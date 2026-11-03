@@ -5,15 +5,6 @@ import * as XLSX from 'xlsx';
 import { getMonthlyAttendanceFromSupabase, syncMonthlyAttendanceFromApi } from '../services/attendanceSync';
 import { supabase } from '../lib/supabase';
 
-const DEVICES = [
-    { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-    { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-    { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-    { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-    { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-    { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
-];
-
 const ALL_DEVICES_OPTION = { name: 'ALL DEVICES', apiName: 'ALL', serial: 'ALL' };
 
 const formatSecsToHrsMins = (totalSecs) => {
@@ -28,6 +19,24 @@ const AttendanceMonthly = () => {
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedDevice, setSelectedDevice] = useState(ALL_DEVICES_OPTION);
+    const [devices, setDevices] = useState([]);
+    useEffect(() => {
+        const loadDevices = async () => {
+            const { data } = await supabase
+                .from('shop')
+                .select('shop_name, device_serial, api_name')
+                .not('device_serial', 'is', null)
+                .neq('device_serial', '');
+            if (data) {
+                setDevices(data.map(s => ({
+                    name: s.shop_name,
+                    serial: s.device_serial.trim(),
+                    apiName: s.api_name ? s.api_name.trim() : s.shop_name
+                })));
+            }
+        };
+        loadDevices();
+    }, []);
     const [attendanceData, setAttendanceData] = useState([]);
     const [loading, setLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
@@ -868,14 +877,14 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                                     if (selected === 'ALL DEVICES') {
                                         setSelectedDevice(ALL_DEVICES_OPTION);
                                     } else {
-                                        const device = DEVICES.find(d => d.name === selected);
+                                        const device = devices.find(d => d.name === selected);
                                         if (device) setSelectedDevice(device);
                                     }
                                 }}
                                 className="w-full appearance-none pl-2 pr-6 py-1.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs bg-white"
                             >
                                 <option value="ALL DEVICES">📊 All Devices</option>
-                                {DEVICES.map(d => (
+                                {devices.map(d => (
                                     <option key={d.name} value={d.name}>{d.name}</option>
                                 ))}
                             </select>

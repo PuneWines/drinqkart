@@ -8,16 +8,7 @@ import { LEGACY_PLACE_SHOP, resolvePlaceFromShop as resolvePlaceFromShopRows } f
 // Storage bucket name
 const STORAGE_BUCKET = 'HR_System_employee_documents'
 
-const DEVICES = [
-  { name: 'MADHURA', apiName: 'BAVDHAN', serial: 'C26238441B1E342D' },
-  { name: 'TLS', apiName: 'HINJEWADI', serial: 'AMDB25061400335' },
-  { name: 'FRIENDS', apiName: 'WAGHOLI', serial: 'AMDB25061400343' },
-  { name: 'BALAJI', apiName: 'AKOLE', serial: 'C262CC13CF202038' },
-  { name: 'KUNAL ULWE', apiName: 'MUMBAI', serial: 'C2630450C32A2327' },
-  { name: 'KUNAL KHARGHAR', apiName: 'KHARGHAR', serial: 'AMDB25120600859' }
-];
-
-const resolveDeviceStore = (log) => {
+const resolveDeviceStore = (log, devices = []) => {
 
 
 
@@ -78,7 +69,7 @@ const resolveDeviceStore = (log) => {
   if (!log) return '';
   const serial = (log.serial_number || log.serialNo || '').toString().trim();
   if (serial && serial !== '-' && serial !== 'ALL') {
-    const dev = DEVICES.find(d => d.serial.toLowerCase() === serial.toLowerCase());
+    const dev = devices.find(d => d.serial.toLowerCase() === serial.toLowerCase());
     if (dev) return dev.name;
   }
   return log.store_name || log.shop_name || log.device_name || log.device_location || '';
@@ -380,13 +371,21 @@ export default function EmployeeManagement() {
         console.warn('Could not fetch attendance logs for transfer check:', logsErr);
       }
 
+      // Machine serial -> shop name, from the shop table
+      const { data: shopRows } = await supabase
+        .from('shop')
+        .select('shop_name, device_serial')
+        .not('device_serial', 'is', null)
+        .neq('device_serial', '');
+      const shopDevices = (shopRows || []).map(s => ({ name: s.shop_name, serial: s.device_serial.trim() }));
+
       // Build map of employee_id -> last punched store name
       const lastPunchStoreMap = {};
       if (latestLogs && latestLogs.length > 0) {
         latestLogs.forEach(log => {
           if (log && log.employee_id) {
             const empKey = log.employee_id.toString().trim().toLowerCase();
-            const logStore = resolveDeviceStore(log);
+            const logStore = resolveDeviceStore(log, shopDevices);
             if (!lastPunchStoreMap[empKey] && logStore) {
               lastPunchStoreMap[empKey] = logStore.toString().trim();
             }

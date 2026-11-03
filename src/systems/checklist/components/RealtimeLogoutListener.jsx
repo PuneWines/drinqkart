@@ -69,41 +69,8 @@ const RealtimeLogoutListener = () => {
   }, [navigate]);
 
   // ✅ Admin listener to see logout notifications
-  useEffect(() => {
-    const role = localStorage.getItem("role");
-    if (role !== "admin") return;
-
-    const adminSubscription = supabase
-      .channel("admin-user-status-watch")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "users",
-        },
-        (payload) => {
-          console.log("📡 Realtime event received:", payload); // 👈 Add this
-          const updatedUser = payload.new;
-          const previousUser = payload.old;
-
-          if (previousUser?.status === "active" && updatedUser?.status === "inactive") {
-            console.log("🚨 User changed from active → inactive:", updatedUser.user_name);
-            if (Notification.permission === "granted") {
-              new Notification("User Logged Out", {
-                body: `User "${updatedUser.user_name}" has been logged out.`,
-                icon: "/logo.png",
-              });
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(adminSubscription);
-    };
-  }, []);
+  // (Removed: unfiltered admin-wide `users` realtime listener — it was a
+  // notification-only feature and loaded the Realtime pool for every admin.)
 
 
   // ✅ Check user status on refresh

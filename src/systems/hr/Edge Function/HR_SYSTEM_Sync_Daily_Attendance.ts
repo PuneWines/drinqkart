@@ -766,7 +766,7 @@ Deno.serve(async (req: Request) => {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type",
+        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
       },
     });
   }
@@ -775,6 +775,9 @@ Deno.serve(async (req: Request) => {
     let fromDate: string | undefined;
     let toDate: string | undefined;
     let deviceFilter = "ALL";
+    let action: string | undefined;
+    let verifySerial: string | undefined;
+    let verifyApiName: string | undefined;
 
     if (req.method === "POST") {
       try {
@@ -782,12 +785,52 @@ Deno.serve(async (req: Request) => {
         fromDate = body.fromDate;
         toDate = body.toDate;
         deviceFilter = body.device ?? "ALL";
+        action = body.action;
+        verifySerial = body.serial;
+        verifyApiName = body.apiName;
       } catch { /* empty body */ }
     } else {
       const url = new URL(req.url);
       fromDate = url.searchParams.get("fromDate") ?? undefined;
       toDate = url.searchParams.get("toDate") ?? undefined;
       deviceFilter = url.searchParams.get("device") ?? "ALL";
+      action = url.searchParams.get("action") ?? undefined;
+      verifySerial = url.searchParams.get("serial") ?? undefined;
+      verifyApiName = url.searchParams.get("apiName") ?? undefined;
+    }
+
+    // ── ACTION: VERIFY BIOMETRIC DEVICE CONNECTION (keeps API key server-side) ──
+    if (action === "verify") {
+      const jsonHeaders = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
+      if (!verifySerial || !verifySerial.trim()) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Missing required 'serial' parameter." }),
+          { status: 400, headers: jsonHeaders }
+        );
+      }
+      const today = getTodayIST();
+      const testDevice: BiometricDevice = {
+        name: verifyApiName || "TEST_DEVICE",
+        serial: verifySerial.trim(),
+        apiName: verifyApiName || "TEST_DEVICE",
+      };
+      const result = await fetchRawLogsForDevice(testDevice, today, today);
+      if (result.error) {
+        return new Response(
+          JSON.stringify({ success: false, error: result.error }),
+          { status: 200, headers: jsonHeaders }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          success: true,
+          online: true,
+          serial: testDevice.serial,
+          logsToday: result.logs.length,
+          message: `Device Online & Verified! (${result.logs.length} logs found for today)`,
+        }),
+        { status: 200, headers: jsonHeaders }
+      );
     }
 
     const todayIST = getTodayIST();

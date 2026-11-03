@@ -145,6 +145,7 @@ const UserTasks = () => {
 
   useEffect(() => {
     const timer = setInterval(() => {
+      if (document.hidden) return
       setCurrentTime(new Date())
       if (currentUsername) {
         loadTasks(true)

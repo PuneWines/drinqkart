@@ -364,9 +364,10 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
         });
 
         // Real-time subscription to postgres changes
-        const channel = supabase
-          .channel(`gift_stock_realtime_${c}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: tbl }, () => {
+        // Polling instead of Realtime to avoid exhausting the Realtime DB pool
+        const poll = () => {
+          if (typeof document !== 'undefined' && document.hidden) return;
+          {
             let rtQuery = supabase.from(tbl).select('*');
             if (isDirectEntryOnly && (c === 'ins' || c === 'outs')) {
               const assigned = getUserAssignedShops(user);
@@ -383,10 +384,9 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
                 cb(mapped);
               }
             });
-          })
-          .subscribe();
-
-        return channel;
+          }
+        };
+        return { __poll: setInterval(poll, 60000) };
       },
       put: async function (c, id, data) {
         const tbl = TABLE_MAP[c];
@@ -2023,8 +2023,8 @@ export default function GiftStockDashboard({ defaultTab = 'dashboard' }) {
       container.removeEventListener('click', handleClick);
       window.removeEventListener('keydown', handleKeyDown);
       channels.forEach((ch) => {
-        if (ch) {
-          supabase.removeChannel(ch);
+        if (ch && ch.__poll) {
+          clearInterval(ch.__poll);
         }
       });
     };
