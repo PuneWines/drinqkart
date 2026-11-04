@@ -2,7 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { isUserShopScoped, getUserAssignedShops, getPagePermission } from '../../../utils/permissionUtils';
-import { Check, CheckCircle2, Clock, AlertCircle, RefreshCw, Search, Filter, X } from 'lucide-react';
+import {
+  Check, CheckCircle2, Clock, AlertCircle, RefreshCw, Search, Filter, X,
+  GraduationCap, ClipboardCheck, Users, ChevronDown, CheckCheck
+} from 'lucide-react';
 
 /* ---------------- Task Catalogue ---------------- */
 const TASKS = [
@@ -97,21 +100,21 @@ export default function EmployeeLearning() {
   const [submitting, setSubmitting] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
+  // Search & Filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFilterShop, setSelectedFilterShop] = useState('');
+  const [isSubmissionLogOpen, setIsSubmissionLogOpen] = useState(false);
+
   // Modal State
   const [selectedModalEmp, setSelectedModalEmp] = useState(null);
 
   // Role & Permission Checks for Checklist Creation
   const userRole = (currentUserObj?.role || '').toLowerCase().trim();
-  const userNameClean = (currentUserObj?.user_name || currentUserObj?.username || '').toLowerCase().trim();
-
-  // Creation is governed by the page's modify permission (superadmin/masteradmin/hod bypass inside getPagePermission);
-  // admin/manager roles with view-only access must not see create controls.
   const canCreateChecklist = getPagePermission(currentUserObj, 'hr', 'Employee Learning').canModify;
 
   useEffect(() => {
     loadInitialData();
 
-    // Auto-refresh when returning to window/tab
     const onFocus = () => loadInitialData();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
@@ -144,7 +147,7 @@ export default function EmployeeLearning() {
 
       setShops(allShops);
 
-      // Fetch active users from 'users' table (Master Settings user management) and HR tables
+      // Fetch active users from 'users' table and HR tables
       const [{ data: masterUsersData }, { data: hrMgmtData }] = await Promise.all([
         supabase.from('users').select('*').then(res => res, () => ({ data: [] })),
         supabase.from('hr_management_employees').select('*').then(res => res, () => ({ data: [] }))
@@ -189,12 +192,10 @@ export default function EmployeeLearning() {
 
         if (!name) return;
 
-        // If user is explicitly set inactive in Master Setting users table, skip
         if ((normId && inactiveUserEmpIdSet.has(normId)) || (normName && inactiveUserNameSet.has(normName))) {
           return;
         }
 
-        // Check local record status
         const rawStatus = emp.status ?? details.status ?? emp.is_active ?? details.is_active ?? 'Active';
         const isInactive =
           rawStatus === false ||
@@ -206,7 +207,6 @@ export default function EmployeeLearning() {
         const dedupeKey = normId || normName;
         const existing = combinedMap.get(dedupeKey);
 
-        // If not added, or existing entry has shorter name/missing shop, prefer full HR record
         if (!existing || (name.trim().length > (existing.name_as_per_aadhar || '').length)) {
           combinedMap.set(dedupeKey, {
             id: id || name,
@@ -218,10 +218,8 @@ export default function EmployeeLearning() {
         }
       };
 
-      // 1. Process HR table first so full Aadhar name and exact employee_id take primary precedence
       (hrMgmtData || []).forEach(addEmp);
 
-      // 2. Add users table entries only if employee_id or name doesn't already exist
       (masterUsersData || []).forEach(u => {
         const rawStatus = u.status ?? u.is_active ?? 'active';
         const isInactive =
@@ -252,12 +250,6 @@ export default function EmployeeLearning() {
       const combinedList = Array.from(combinedMap.values());
       combinedList.sort((a, b) => a.name_as_per_aadhar.localeCompare(b.name_as_per_aadhar));
 
-      // -------------------------------------------------------------
-      // ROLE & SHOP ACCESS CONTROL:
-      // - User: Only sees himself/herself
-      // - Manager: Sees all employees belonging to their affiliated shop(s)
-      // - Admin / MasterAdmin: Sees all employees across all shops
-      // -------------------------------------------------------------
       let scopedList = combinedList;
 
       if (currentUserObj) {
@@ -268,7 +260,6 @@ export default function EmployeeLearning() {
         if (isScoped) {
           const userShopsList = getUserAssignedShops(currentUserObj).map(s => s.toLowerCase());
           if (userRole === 'admin' || userRole === 'manager') {
-            // Admin & Manager: Access to all employees belonging to their affiliated shop(s)
             if (userShopsList.length > 0) {
               scopedList = combinedList.filter(emp => {
                 const empShopNorm = (emp.joining_company_name || emp.shop_name || '').toString().trim().toLowerCase();
@@ -276,7 +267,6 @@ export default function EmployeeLearning() {
               });
             }
           } else {
-            // Regular Employee / User: Filter by employee_id or name fallback
             scopedList = combinedList.filter(emp => {
               const empIdNorm = (emp.employee_id || emp.id || '').toString().trim().toLowerCase();
               const empNameNorm = (emp.name_as_per_aadhar || emp.name || emp.candidate_name || '').toString().trim().toLowerCase();
@@ -298,7 +288,6 @@ export default function EmployeeLearning() {
               return matchId || matchName;
             });
 
-            // Fallback if no match found in database tables
             if (scopedList.length === 0 && (currentEmpId || currentUserName)) {
               scopedList = [{
                 id: currentUserObj.employee_id || currentUserObj.id || currentEmpId || currentUserName,
@@ -315,10 +304,7 @@ export default function EmployeeLearning() {
       setEmployees(scopedList);
       setFilteredEmployees(scopedList);
 
-      // 1. Sync / fetch task catalog from Supabase hr_learning_tasks
       await syncTasksWithSupabase();
-
-      // 2. Load submissions from Supabase hr_learning_submissions
       await loadSubmissionsFromSupabase(combinedList, scopedList);
     } catch (err) {
       console.error('Error loading initial data:', err);
@@ -334,7 +320,6 @@ export default function EmployeeLearning() {
         .select('*');
 
       if (!fetchErr && (!existingDbTasks || existingDbTasks.length === 0)) {
-        // Table is empty or freshly created — auto populate seed records
         const seedPayload = TASKS.map(t => ({
           id: t.id,
           level: t.level,
@@ -380,9 +365,6 @@ export default function EmployeeLearning() {
           };
         });
 
-        // -------------------------------------------------------------
-        // SCOPE SUBMISSIONS BASED ON ROLE & SHOP ACCESS
-        // -------------------------------------------------------------
         if (currentUserObj) {
           const isScoped = isUserShopScoped(currentUserObj);
           const currentEmpId = (currentUserObj.employee_id || '').toString().trim().toLowerCase();
@@ -398,7 +380,6 @@ export default function EmployeeLearning() {
                 });
               }
             } else {
-              // Regular Employee / User: Filter submissions by employee_id or employee_name fallback
               mappedSubs = mappedSubs.filter(s => {
                 const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
                 const subEmpName = (s.employee || '').toString().trim().toLowerCase();
@@ -447,231 +428,208 @@ export default function EmployeeLearning() {
 
   const saveSubmissionToSupabase = async (newSub) => {
     try {
-      // Check if submission record already exists for this employee_id or employee_name
-      let existingId = null;
+      let existingRecordId = null;
+
       if (newSub.employee_id) {
-        const { data: existingByEmpId } = await supabase
+        const { data: byId } = await supabase
           .from('hr_learning_submissions')
           .select('id')
           .eq('employee_id', newSub.employee_id)
           .limit(1);
-        if (existingByEmpId && existingByEmpId.length > 0) {
-          existingId = existingByEmpId[0].id;
+
+        if (byId && byId.length > 0) {
+          existingRecordId = byId[0].id;
         }
       }
 
-      if (!existingId && newSub.employee) {
-        const { data: existingByName } = await supabase
+      if (!existingRecordId && newSub.employee) {
+        const { data: byName } = await supabase
           .from('hr_learning_submissions')
           .select('id')
           .eq('employee_name', newSub.employee)
           .limit(1);
-        if (existingByName && existingByName.length > 0) {
-          existingId = existingByName[0].id;
+
+        if (byName && byName.length > 0) {
+          existingRecordId = byName[0].id;
         }
       }
 
       const payload = {
-        submission_date: newSub.date,
-        shop_name: newSub.shop,
-        employee_name: newSub.employee,
         employee_id: newSub.employee_id || null,
-        tasks_data: newSub.tasks
+        employee_name: newSub.employee,
+        shop_name: newSub.shop,
+        submission_date: newSub.date,
+        tasks_data: newSub.tasks,
+        submitted_by: currentUserObj?.user_name || currentUserObj?.username || 'admin',
+        updated_at: new Date().toISOString()
       };
 
-      if (existingId) {
-        payload.id = existingId;
-        const { error } = await supabase
+      if (existingRecordId) {
+        await supabase
           .from('hr_learning_submissions')
-          .upsert([payload]);
-        if (error) throw error;
+          .update(payload)
+          .eq('id', existingRecordId);
       } else {
-        const { error } = await supabase
+        await supabase
           .from('hr_learning_submissions')
-          .insert([payload]);
-        if (error) throw error;
+          .insert([{ ...payload, created_at: new Date().toISOString() }]);
       }
-
-      await loadSubmissionsFromSupabase();
     } catch (e) {
-      console.warn('Fallback to local storage submission save:', e.message || e);
-      // Filter out existing sub for this employee in local storage array
-      const filteredOld = submissions.filter(s => {
-        const sameId = s.employee_id && newSub.employee_id && (s.employee_id.toString().trim() === newSub.employee_id.toString().trim());
-        const sameName = s.employee && newSub.employee && (s.employee.toString().trim().toLowerCase() === newSub.employee.toString().trim().toLowerCase());
-        return !(sameId || sameName);
-      });
-      const updated = [newSub, ...filteredOld];
-      setSubmissions(updated);
-      localStorage.setItem('drinqkart_employee_learning_submissions', JSON.stringify(updated));
+      console.error('Error saving submission to Supabase:', e);
     }
   };
 
   const handleShopChange = (e) => {
-    const shopVal = e.target.value;
-    setSelectedShop(shopVal);
+    const shop = e.target.value;
+    setSelectedShop(shop);
     setSelectedEmployee('');
     setCheckedTasks({});
 
-    if (!shopVal) {
-      setFilteredEmployees([]);
-      return;
+    if (!shop) {
+      setFilteredEmployees(employees);
+    } else {
+      const match = employees.filter((emp) => {
+        const empShop = (emp.joining_company_name || emp.joining_place || emp.shop_name || '').toLowerCase();
+        const searchShop = shop.toLowerCase();
+        return empShop.includes(searchShop) || searchShop.includes(empShop);
+      });
+      setFilteredEmployees(match.length > 0 ? match : employees);
     }
-
-    const shopLower = shopVal.toLowerCase().trim();
-
-    // Filter employees assigned to this specific shop
-    const matched = employees.filter(emp => {
-      const empShop = (
-        emp.joining_company_name ||
-        emp.shop_name ||
-        emp.user_access ||
-        emp.joining_place ||
-        ''
-      ).toLowerCase().trim();
-
-      if (!empShop) return false;
-
-      // Direct match or partial token match (e.g. "Kunal Ulwe" / "Kunal")
-      return (
-        empShop === shopLower ||
-        empShop.includes(shopLower) ||
-        shopLower.includes(empShop)
-      );
-    });
-
-    setFilteredEmployees(matched);
   };
 
   const handleEmployeeChange = (e) => {
-    const empVal = e.target.value;
-    setSelectedEmployee(empVal);
+    const empId = e.target.value;
+    setSelectedEmployee(empId);
 
-    if (!empVal) {
-      setCheckedTasks({});
-      return;
-    }
-
-    const empObj = filteredEmployees.find(
-      (emp) =>
-        (emp.employee_id && emp.employee_id.toString().trim() === empVal.toString().trim()) ||
-        (emp.id && emp.id.toString().trim() === empVal.toString().trim()) ||
-        (emp.name_as_per_aadhar && emp.name_as_per_aadhar.trim() === empVal.trim())
+    const empObj = employees.find(
+      (emp) => (emp.employee_id && emp.employee_id.toString() === empId) || emp.id.toString() === empId
     );
+    const empName = empObj?.name_as_per_aadhar || empObj?.name || empObj?.employee_name || empId;
 
-    const empId = empObj?.employee_id || empObj?.id || empVal;
-    const empName = empObj?.name_as_per_aadhar || empVal;
-
-    // Search existing submission for this employee
-    const existingSub = submissions.find((s) => {
-      const sameId = s.employee_id && empId && (s.employee_id.toString().trim() === empId.toString().trim());
-      const sameName = s.employee && empName && (s.employee.toString().trim().toLowerCase() === empName.toString().trim().toLowerCase());
-      return sameId || sameName;
+    const empSubs = submissions.filter((s) => {
+      const matchId = empObj?.employee_id && s.employee_id && s.employee_id.toString().trim() === empObj.employee_id.toString().trim();
+      const matchName = s.employee && empName && s.employee.trim().toLowerCase() === empName.trim().toLowerCase();
+      return matchId || matchName;
     });
 
-    if (existingSub && Array.isArray(existingSub.tasks)) {
-      const initialChecked = {};
-      existingSub.tasks.forEach((t) => {
-        if (t.checked) {
-          initialChecked[t.id] = true;
-        }
+    if (empSubs.length > 0) {
+      const latestSub = empSubs[0];
+      const taskState = {};
+      (latestSub.tasks || []).forEach((t) => {
+        if (t.checked) taskState[t.id] = true;
       });
-      setCheckedTasks(initialChecked);
+      setCheckedTasks(taskState);
     } else {
       setCheckedTasks({});
     }
   };
 
-  const toggleTask = (id) => {
-    setCheckedTasks(prev => ({
+  const toggleTask = (taskId) => {
+    setCheckedTasks((prev) => ({
       ...prev,
-      [id]: !prev[id]
+      [taskId]: !prev[taskId],
     }));
   };
 
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
-  };
-
   const handleSubmit = async () => {
-    if (!canCreateChecklist) {
-      showToast('Permission Denied: Only Manager & Admin can submit checklists');
+    if (!selectedShop) {
+      alert('Please select a Shop.');
+      return;
+    }
+    if (!selectedEmployee) {
+      alert('Please select an Employee.');
       return;
     }
 
-    if (!selectedShop || !selectedEmployee) return;
-
-    const empObj = employees.find(
-      (e) =>
-        e.employee_id?.toString() === selectedEmployee?.toString() ||
-        e.id?.toString() === selectedEmployee?.toString() ||
-        e.name_as_per_aadhar === selectedEmployee
-    );
-    const empName = empObj ? empObj.name_as_per_aadhar : selectedEmployee;
-    const empId = empObj ? empObj.employee_id || empObj.id : selectedEmployee;
-
-    const newRecord = {
-      ts: Date.now(),
-      date: new Date().toISOString().slice(0, 10),
-      shop: selectedShop,
-      employee: empName,
-      employee_id: empId ? empId.toString() : null,
-      tasks: TASKS.map(t => ({
-        id: t.id,
-        en: t.en,
-        hi: t.hi,
-        dept: t.dept,
-        level: t.level,
-        checked: !!checkedTasks[t.id]
-      }))
-    };
-
     setSubmitting(true);
     try {
-      await saveSubmissionToSupabase(newRecord);
-      showToast(`Checklist submitted for ${empName}`);
+      const empObj = employees.find(
+        (emp) => (emp.employee_id && emp.employee_id.toString() === selectedEmployee) || emp.id.toString() === selectedEmployee
+      );
+      const empName = empObj ? empObj.name_as_per_aadhar || empObj.name || empObj.employee_name : selectedEmployee;
+      const empId = empObj ? empObj.employee_id || empObj.id : selectedEmployee;
+
+      const taskPayload = TASKS.map((t) => ({
+        id: t.id,
+        level: t.level,
+        dept: t.dept,
+        en: t.en,
+        hi: t.hi,
+        tag: t.tag,
+        checked: !!checkedTasks[t.id],
+      }));
+
+      const newSubmission = {
+        id: 'sub_' + Date.now(),
+        ts: Date.now(),
+        date: new Date().toISOString().slice(0, 10),
+        shop: selectedShop,
+        employee: empName,
+        employee_id: empId,
+        tasks: taskPayload,
+      };
+
+      await saveSubmissionToSupabase(newSubmission);
+
+      const existingIndex = submissions.findIndex((s) => {
+        const matchId = empId && s.employee_id && s.employee_id.toString().trim() === empId.toString().trim();
+        const matchName = s.employee && empName && s.employee.trim().toLowerCase() === empName.trim().toLowerCase();
+        return matchId || matchName;
+      });
+
+      let updatedSubs;
+      if (existingIndex >= 0) {
+        updatedSubs = [...submissions];
+        updatedSubs[existingIndex] = newSubmission;
+      } else {
+        updatedSubs = [newSubmission, ...submissions];
+      }
+
+      setSubmissions(updatedSubs);
+      localStorage.setItem('drinqkart_employee_learning_submissions', JSON.stringify(updatedSubs));
+
+      setToastMsg(`Checklist saved successfully for ${empName}!`);
+      setTimeout(() => setToastMsg(''), 3500);
+
+      setSelectedEmployee('');
       setCheckedTasks({});
+      setActiveTab('dashboard');
     } catch (e) {
-      console.error('Submission error:', e);
-      showToast(`Saved locally for ${empName}`);
+      console.error('Submit error:', e);
+      alert('Failed to save checklist.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Metrics
+  const totalSubs = submissions.length;
+  const totalTasksTicked = useMemo(() => {
+    return submissions.reduce((acc, sub) => {
+      const checked = (sub.tasks || []).filter((t) => t.checked).length;
+      return acc + checked;
+    }, 0);
+  }, [submissions]);
+
+  const activeEmployeesSet = useMemo(() => {
+    return new Set(submissions.map((s) => (s.employee_id || s.employee || '').toString().toLowerCase())).size;
+  }, [submissions]);
+
   const deptOrder = () => {
-    const seen = [];
-    TASKS.forEach(t => {
-      if (!seen.includes(t.dept)) seen.push(t.dept);
-    });
-    return seen;
+    return Array.from(new Set(TASKS.map((t) => t.dept)));
   };
 
   const getInitials = (name) => {
-    if (!name) return 'EMP';
+    if (!name) return '??';
     const parts = name.trim().split(' ');
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return name.slice(0, 2).toUpperCase();
   };
-
-  // Dashboard calculations
-  const totalSubs = submissions.length;
-  const totalTasksTicked = submissions.reduce((sum, s) => sum + s.tasks.filter(t => t.checked).length, 0);
-  const activeEmployeesSet = new Set(submissions.map(s => s.employee)).size;
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFilterShop, setSelectedFilterShop] = useState('');
-  const [isSubmissionLogOpen, setIsSubmissionLogOpen] = useState(false);
 
   const filteredEmps = useMemo(() => {
     return employees.filter((emp) => {
       if (selectedFilterShop) {
-        const empShop = (
-          emp.joining_company_name ||
-          emp.joining_place ||
-          emp.shop_name ||
-          ''
-        ).toLowerCase().trim();
+        const empShop = (emp.joining_company_name || emp.joining_place || emp.shop_name || '').toLowerCase().trim();
         const filterShop = selectedFilterShop.toLowerCase().trim();
         const matchShop = empShop === filterShop || empShop.includes(filterShop) || filterShop.includes(empShop);
         if (!matchShop) return false;
@@ -679,22 +637,11 @@ export default function EmployeeLearning() {
 
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase().trim();
-      const empName = (
-        emp.name_as_per_aadhar ||
-        emp.name ||
-        emp.employee_name ||
-        emp.candidate_name ||
-        ''
-      ).toLowerCase();
-      const empId = (emp.employee_id || emp.id || '').toString().toLowerCase();
-      const empShop = (
-        emp.joining_company_name ||
-        emp.joining_place ||
-        emp.shop_name ||
-        ''
-      ).toLowerCase();
+      const name = (emp.name_as_per_aadhar || emp.name || emp.employee_name || emp.candidate_name || '').toLowerCase();
+      const id = (emp.employee_id || emp.id || '').toString().toLowerCase();
+      const shop = (emp.joining_company_name || emp.joining_place || emp.shop_name || '').toLowerCase();
 
-      return empName.includes(term) || empId.includes(term) || empShop.includes(term);
+      return name.includes(term) || id.includes(term) || shop.includes(term);
     });
   }, [employees, searchTerm, selectedFilterShop]);
 
@@ -719,60 +666,74 @@ export default function EmployeeLearning() {
   }, [submissions, searchTerm, selectedFilterShop]);
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Toast */}
+    <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 md:p-6 space-y-5 font-sans text-xs text-slate-800">
+      {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#4f9d8a] text-[#0e1a17] px-5 py-3 rounded-md font-semibold text-sm shadow-xl transition-all animate-bounce">
-          {toastMsg}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-700 text-white px-5 py-3 !rounded-xl font-bold text-xs shadow-2xl transition-all flex items-center gap-2 border border-emerald-600 animate-fade-in font-sans">
+          <CheckCircle2 size={16} />
+          <span>{toastMsg}</span>
         </div>
       )}
 
-      {/* Full-width Header Bar matching HR System style */}
-      <div className="bg-white shadow-sm border border-slate-200 p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 flex items-center gap-2">
-            <span className="text-[#d4b457]">Employee Learning</span> — Staff Task Checklist
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Track department and level-wise employee learning progress across 4 levels.
-          </p>
+      {/* Page Header matching standard DRINQKART Enterprise style */}
+      <div className="bg-white p-4 sm:p-5 !rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-3 bg-indigo-50 text-indigo-700 !rounded-2xl border border-indigo-100/80 shadow-2xs shrink-0">
+            <GraduationCap size={24} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight truncate font-sans">
+              Employee Learning <span className="text-slate-400 font-normal">— Staff Task Checklist</span>
+            </h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5 font-sans">
+              Track department and level-wise employee learning progress across 4 levels.
+            </p>
+          </div>
         </div>
 
-        {/* Action Button */}
-        {canCreateChecklist && (
-          <div className="flex items-center gap-3">
+        {/* Action Controls */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          {canCreateChecklist && (
             <button
               onClick={() => setShowNewChecklistModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#d4b457] hover:bg-[#c3a346] text-slate-950 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer rounded"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white !rounded-lg shadow-2xs transition-all cursor-pointer font-sans"
             >
-              <span className="text-sm font-bold">+</span>
+              <span className="text-sm font-bold leading-none">+</span>
               <span>New Checklist</span>
             </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={loadInitialData}
+            disabled={loading}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 !rounded-lg shadow-2xs transition-all cursor-pointer font-sans"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin text-indigo-600" : ""} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Content Area */}
       <div className="min-w-0">
         {activeTab === 'form' ? (
-          <section className="space-y-6">
-            <div className="bg-white border border-slate-200 p-5 shadow-sm">
-              <h1 className="text-xl font-serif font-bold text-slate-900">Employee Task Checklist Matrix</h1>
-              <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+          <section className="space-y-5">
+            <div className="bg-white border border-slate-200/80 p-5 shadow-2xs !rounded-2xl">
+              <h2 className="text-lg font-bold text-slate-900 font-sans">Employee Task Checklist Matrix</h2>
+              <p className="text-xs text-slate-500 mt-1 max-w-2xl font-medium">
                 Select the shop and employee, then tick off each completed task across all four levels — grouped by department, same as the register.
               </p>
             </div>
 
             {/* Form Selection Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-              <div className="bg-white border border-slate-200 p-4 shadow-sm rounded">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+              <div className="bg-white border border-slate-200/80 p-4 shadow-2xs !rounded-xl">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2 font-sans">
                   SHOP NAME *
                 </label>
                 <select
                   value={selectedShop}
                   onChange={handleShopChange}
-                  className="w-full bg-slate-50 text-slate-900 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#d4b457] cursor-pointer font-medium"
+                  className="w-full bg-slate-50 text-slate-900 border border-slate-300 !rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer font-medium"
                 >
                   <option value="">Select shop…</option>
                   {shops.length > 0 ? (
@@ -790,15 +751,15 @@ export default function EmployeeLearning() {
                 </select>
               </div>
 
-              <div className="bg-white border border-slate-200 p-4 shadow-sm rounded">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+              <div className="bg-white border border-slate-200/80 p-4 shadow-2xs !rounded-xl">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2 font-sans">
                   EMPLOYEE *
                 </label>
                 <select
                   disabled={!selectedShop}
                   value={selectedEmployee}
                   onChange={handleEmployeeChange}
-                  className="w-full bg-slate-50 text-slate-900 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#d4b457] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer font-medium"
+                  className="w-full bg-slate-50 text-slate-900 border border-slate-300 !rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer font-medium"
                 >
                   <option value="">
                     {!selectedShop
@@ -822,93 +783,95 @@ export default function EmployeeLearning() {
 
             {/* Checklist Matrix Table */}
             {!selectedShop || !selectedEmployee ? (
-              <div className="bg-white border border-dashed border-slate-300 rounded-lg p-12 text-center text-slate-400 text-sm">
+              <div className="bg-white border border-dashed border-slate-300 !rounded-2xl p-12 text-center text-slate-400 text-xs font-medium">
                 Select a shop and employee above to load the interactive task checklist.
               </div>
             ) : (
-              <div className="bg-white border border-slate-200 shadow-sm overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[950px] text-sm">
-                  <thead>
-                    <tr className="bg-[#1C120C] text-[#d4b457] text-[11px] uppercase font-serif tracking-wider border-b border-[#1C120C]">
-                      <th className="py-3.5 px-4 min-w-[150px]">DEPARTMENT</th>
-                      <th className="py-3.5 px-4 min-w-[220px]">LEVEL 1</th>
-                      <th className="py-3.5 px-2 w-11 text-center">✓</th>
-                      <th className="py-3.5 px-4 min-w-[220px]">LEVEL 2</th>
-                      <th className="py-3.5 px-2 w-11 text-center">✓</th>
-                      <th className="py-3.5 px-4 min-w-[220px]">LEVEL 3</th>
-                      <th className="py-3.5 px-2 w-11 text-center">✓</th>
-                      <th className="py-3.5 px-4 min-w-[220px]">LEVEL 4</th>
-                      <th className="py-3.5 px-2 w-11 text-center">✓</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-800">
-                    {deptOrder().map((dept) => {
-                      const deptTasks = TASKS.filter((t) => t.dept === dept).sort((a, b) => a.level - b.level);
-                      return deptTasks.map((t, idx) => {
-                        const checked = !!checkedTasks[t.id];
-                        return (
-                          <tr key={t.id} className={idx === 0 ? 'border-t border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}>
-                            <td className="py-2.5 px-4 text-emerald-700 font-bold text-xs whitespace-nowrap">
-                              {idx === 0 ? dept : ''}
-                            </td>
+              <div className="bg-white border border-slate-200/80 shadow-2xs !rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[950px] text-xs">
+                    <thead>
+                      <tr className="bg-slate-800 text-slate-200 text-[10px] uppercase font-bold tracking-wider border-b border-slate-700">
+                        <th className="py-3 px-4 min-w-[150px]">DEPARTMENT</th>
+                        <th className="py-3 px-4 min-w-[220px]">LEVEL 1</th>
+                        <th className="py-3 px-2 w-11 text-center">✓</th>
+                        <th className="py-3 px-4 min-w-[220px]">LEVEL 2</th>
+                        <th className="py-3 px-2 w-11 text-center">✓</th>
+                        <th className="py-3 px-4 min-w-[220px]">LEVEL 3</th>
+                        <th className="py-3 px-2 w-11 text-center">✓</th>
+                        <th className="py-3 px-4 min-w-[220px]">LEVEL 4</th>
+                        <th className="py-3 px-2 w-11 text-center">✓</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                      {deptOrder().map((dept) => {
+                        const deptTasks = TASKS.filter((t) => t.dept === dept).sort((a, b) => a.level - b.level);
+                        return deptTasks.map((t, idx) => {
+                          const checked = !!checkedTasks[t.id];
+                          return (
+                            <tr key={t.id} className={idx === 0 ? 'border-t border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}>
+                              <td className="py-2.5 px-4 text-indigo-700 font-bold text-xs whitespace-nowrap">
+                                {idx === 0 ? dept : ''}
+                              </td>
 
-                            {[1, 2, 3, 4].map((lvl) => {
-                              if (t.level === lvl) {
+                              {[1, 2, 3, 4].map((lvl) => {
+                                if (t.level === lvl) {
+                                  return (
+                                    <React.Fragment key={lvl}>
+                                      <td className="py-2.5 px-4">
+                                        <p className="text-slate-900 text-xs font-semibold">{t.en}</p>
+                                        {t.hi && <p className="text-slate-500 text-[11px] mt-0.5">{t.hi}</p>}
+                                        {t.tag && (
+                                          <span className="inline-block mt-1 text-[10px] text-slate-500 border border-slate-200 bg-slate-50 !rounded-full px-2 py-0.5 font-medium">
+                                            {t.tag}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-2.5 px-2 text-center">
+                                        <button
+                                          onClick={() => toggleTask(t.id)}
+                                          className={`w-5 h-5 !rounded-md border flex items-center justify-center transition-all cursor-pointer ${checked
+                                            ? 'bg-emerald-600 border-emerald-600 text-white font-bold'
+                                            : 'bg-white border-slate-300 text-transparent hover:border-indigo-400'
+                                            }`}
+                                        >
+                                          ✓
+                                        </button>
+                                      </td>
+                                    </React.Fragment>
+                                  );
+                                }
                                 return (
                                   <React.Fragment key={lvl}>
-                                    <td className="py-2.5 px-4">
-                                      <p className="text-slate-900 text-xs font-semibold">{t.en}</p>
-                                      {t.hi && <p className="text-slate-500 text-[11px] mt-0.5">{t.hi}</p>}
-                                      {t.tag && (
-                                        <span className="inline-block mt-1 text-[10px] text-slate-500 border border-slate-300 rounded-full px-2 py-0.5 font-medium">
-                                          {t.tag}
-                                        </span>
-                                      )}
-                                    </td>
+                                    <td></td>
                                     <td className="py-2.5 px-2 text-center">
-                                      <button
-                                        onClick={() => toggleTask(t.id)}
-                                        className={`w-5 h-5 rounded border border-slate-300 flex items-center justify-center transition-all cursor-pointer ${checked
-                                          ? 'bg-[#d4b457] border-[#d4b457] text-slate-950 font-bold'
-                                          : 'bg-white text-transparent hover:border-[#d4b457]'
-                                          }`}
-                                      >
-                                        ✓
-                                      </button>
+                                      <button disabled className="w-5 h-5 !rounded-md border border-slate-100 bg-slate-50 opacity-30 cursor-not-allowed" />
                                     </td>
                                   </React.Fragment>
                                 );
-                              }
-                              return (
-                                <React.Fragment key={lvl}>
-                                  <td></td>
-                                  <td className="py-2.5 px-2 text-center">
-                                    <button disabled className="w-5 h-5 rounded border border-slate-100 bg-slate-50 opacity-30 cursor-not-allowed" />
-                                  </td>
-                                </React.Fragment>
-                              );
-                            })}
-                          </tr>
-                        );
-                      });
-                    })}
-                  </tbody>
-                </table>
+                              })}
+                            </tr>
+                          );
+                        });
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
             {/* Sticky Submit Bar */}
             {selectedShop && selectedEmployee && (
-              <div className="sticky bottom-0 bg-white/95 backdrop-blur-xs p-4 border border-slate-200 shadow-lg rounded-t flex flex-wrap items-center justify-between gap-4">
+              <div className="sticky bottom-0 bg-white/95 backdrop-blur-xs p-4 border border-slate-200/80 shadow-lg !rounded-t-2xl flex flex-wrap items-center justify-between gap-4 font-sans">
                 <div className="text-xs text-slate-600 flex items-center gap-4 font-medium">
                   <span>
-                    <b className="text-slate-900 font-bold">
+                    <b className="text-slate-900 font-bold font-mono">
                       {Object.values(checkedTasks).filter(Boolean).length}
                     </b>{' '}
                     of {TASKS.length} tasks ticked overall
                   </span>
                   <span className="hidden sm:inline">·</span>
-                  <span className="hidden sm:inline">
+                  <span className="hidden sm:inline font-mono">
                     {[1, 2, 3, 4]
                       .map((lvl) => {
                         const total = TASKS.filter((t) => t.level === lvl).length;
@@ -922,7 +885,7 @@ export default function EmployeeLearning() {
                 <button
                   onClick={handleSubmit}
                   disabled={submitting}
-                  className="bg-[#d4b457] hover:bg-[#c3a346] text-slate-950 px-6 py-2.5 rounded text-xs font-bold uppercase tracking-wider transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 !rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-2xs cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving…' : 'Submit Checklist'}
                 </button>
@@ -931,45 +894,56 @@ export default function EmployeeLearning() {
           </section>
         ) : (
           /* Dashboard View */
-          <section className="space-y-6">
-            {canCreateChecklist && (
-              <div className="flex justify-end hidden">
-                <button
-                  onClick={() => setShowNewChecklistModal(true)}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#d4b457] hover:bg-[#c3a346] text-slate-950 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer rounded shrink-0"
-                >
-                  <span className="text-base font-bold">+</span>
-                  <span>New Checklist</span>
-                </button>
-              </div>
-            )}
-
-            {/* Stat Row */}
+          <section className="space-y-5">
+            {/* KPI Stat Row matching enterprise StaticsCard design */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white border border-slate-200 shadow-sm p-4 rounded">
-                <div className="text-3xl font-serif font-bold text-slate-900">{totalSubs}</div>
-                <div className="text-[11px] text-slate-500 mt-1 uppercase tracking-wider font-mono font-bold">CHECKLISTS SUBMITTED</div>
+              <div className="bg-white border border-slate-200/80 shadow-2xs p-4 sm:p-5 !rounded-2xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider font-sans">
+                    Checklists Submitted
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100/80 text-indigo-700 flex items-center justify-center">
+                    <ClipboardCheck size={16} />
+                  </div>
+                </div>
+                <div className="text-3xl font-mono font-bold text-slate-900">{totalSubs}</div>
               </div>
-              <div className="bg-white border border-slate-200 shadow-sm p-4 rounded">
-                <div className="text-3xl font-serif font-bold text-[#d4b457]">{totalTasksTicked}</div>
-                <div className="text-[11px] text-slate-500 mt-1 uppercase tracking-wider font-mono font-bold">TASKS COMPLETED (TOTAL)</div>
+
+              <div className="bg-white border border-slate-200/80 shadow-2xs p-4 sm:p-5 !rounded-2xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider font-sans">
+                    Tasks Completed (Total)
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-violet-50 border border-violet-100/80 text-violet-700 flex items-center justify-center">
+                    <CheckCheck size={16} />
+                  </div>
+                </div>
+                <div className="text-3xl font-mono font-bold text-violet-700">{totalTasksTicked}</div>
               </div>
-              <div className="bg-white border border-slate-200 shadow-sm p-4 rounded">
-                <div className="text-3xl font-serif font-bold text-emerald-600">{activeEmployeesSet}</div>
-                <div className="text-[11px] text-slate-500 mt-1 uppercase tracking-wider font-mono font-bold">EMPLOYEES WITH RECORDS</div>
+
+              <div className="bg-white border border-slate-200/80 shadow-2xs p-4 sm:p-5 !rounded-2xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider font-sans">
+                    Employees With Records
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100/80 text-emerald-700 flex items-center justify-center">
+                    <Users size={16} />
+                  </div>
+                </div>
+                <div className="text-3xl font-mono font-bold text-emerald-600">{activeEmployeesSet}</div>
               </div>
             </div>
 
             {/* Filter & Search Bar */}
-            <div className="bg-white border border-slate-200 p-3 sm:p-4 rounded shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="bg-white border border-slate-200/80 p-3.5 sm:p-4 !rounded-xl shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 font-sans">
               <div className="relative flex-1">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search by employee name, ID, or shop location..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] transition-all"
+                  className="w-full h-9 pl-9 pr-8 bg-white border border-slate-200 !rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-sans shadow-2xs"
                 />
                 {searchTerm && (
                   <button
@@ -988,7 +962,7 @@ export default function EmployeeLearning() {
                 <select
                   value={selectedFilterShop}
                   onChange={(e) => setSelectedFilterShop(e.target.value)}
-                  className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#d4b457] focus:border-[#d4b457] cursor-pointer font-medium"
+                  className="w-full h-9 appearance-none pl-3 pr-8 bg-white border border-slate-200 !rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer shadow-2xs font-sans"
                 >
                   <option value="">All Shops ({shops.length})</option>
                   {shops.map((s) => (
@@ -1008,7 +982,7 @@ export default function EmployeeLearning() {
                     setSearchTerm('');
                     setSelectedFilterShop('');
                   }}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded border border-slate-300 transition-colors whitespace-nowrap cursor-pointer flex items-center justify-center gap-1.5"
+                  className="h-9 px-3.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold !rounded-lg border border-slate-200 transition-colors whitespace-nowrap cursor-pointer flex items-center justify-center gap-1.5 font-sans shadow-2xs"
                 >
                   <RefreshCw size={12} />
                   <span>Reset</span>
@@ -1016,35 +990,29 @@ export default function EmployeeLearning() {
               )}
             </div>
 
-            {/* Submission Log & History (Collapsible Section, placed above Active Employees Directory) */}
-            <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded">
+            {/* Submission Log & History (Collapsible Section) */}
+            <div className="bg-white border border-slate-200/80 shadow-2xs overflow-hidden !rounded-xl font-sans">
               <button
                 type="button"
                 onClick={() => setIsSubmissionLogOpen((prev) => !prev)}
-                className="w-full p-4 bg-slate-50 hover:bg-slate-100 border-b border-slate-200 flex items-center justify-between cursor-pointer transition-colors text-left select-none"
+                className="w-full p-4 bg-slate-50 hover:bg-slate-100/80 border-b border-slate-200/80 flex items-center justify-between cursor-pointer transition-colors text-left select-none"
               >
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 font-sans">
                     <span>Submission Log & History</span>
                     <span className="text-xs font-mono font-normal text-slate-500">
                       ({filteredSubs.length}{filteredSubs.length !== submissions.length ? ` of ${submissions.length}` : ''})
                     </span>
                   </h2>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#1C120C] text-[#d4b457] border border-[#d4b457]/30">
+                  <span className="text-[10px] font-bold px-2 py-0.5 !rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                     {isSubmissionLogOpen ? 'Expanded' : 'Collapsed — Click to View'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-600 text-xs font-semibold">
                   <span>{isSubmissionLogOpen ? 'Hide' : 'Show'}</span>
-                  <svg
-                    className={`w-4 h-4 transform transition-transform duration-200 text-[#d4b457] ${isSubmissionLogOpen ? 'rotate-180' : ''
-                      }`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <ChevronDown
+                    className={`w-4 h-4 transform transition-transform duration-200 text-slate-500 ${isSubmissionLogOpen ? 'rotate-180' : ''}`}
+                  />
                 </div>
               </button>
 
@@ -1052,7 +1020,7 @@ export default function EmployeeLearning() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-[#1C120C] text-[#d4b457] uppercase font-serif text-[11px] tracking-wider border-b border-[#1C120C]">
+                      <tr className="bg-slate-800 text-slate-200 uppercase font-bold text-[10px] tracking-wider border-b border-slate-700">
                         <th className="py-3 px-4">Date</th>
                         <th className="py-3 px-4">Shop</th>
                         <th className="py-3 px-4">Employee</th>
@@ -1062,7 +1030,7 @@ export default function EmployeeLearning() {
                         <th className="py-3 px-4 text-center">By level</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                    <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
                       {filteredSubs.length === 0 ? (
                         <tr>
                           <td colSpan="7" className="py-8 text-center text-slate-400 italic">
@@ -1074,7 +1042,7 @@ export default function EmployeeLearning() {
                                   setSearchTerm('');
                                   setSelectedFilterShop('');
                                 }}
-                                className="mt-2 inline-flex items-center gap-1 text-xs text-[#d4b457] hover:underline font-bold"
+                                className="mt-2 inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline font-bold"
                               >
                                 Clear filters
                               </button>
@@ -1089,12 +1057,12 @@ export default function EmployeeLearning() {
                           return (
                             <tr key={s.id || idx} className="hover:bg-slate-50 transition-colors">
                               <td className="py-3 px-4 font-mono font-bold text-slate-500 whitespace-nowrap">{s.date}</td>
-                              <td className="py-3 px-4 font-medium text-slate-900">{s.shop}</td>
+                              <td className="py-3 px-4 font-semibold text-slate-900">{s.shop}</td>
                               <td className="py-3 px-4 text-slate-950 font-bold">
                                 <button
                                   type="button"
                                   onClick={() => setSelectedModalEmp(s.employee)}
-                                  className="hover:underline hover:text-[#c3a346] text-left cursor-pointer"
+                                  className="hover:underline hover:text-indigo-600 text-left cursor-pointer"
                                 >
                                   {s.employee}
                                 </button>
@@ -1103,7 +1071,7 @@ export default function EmployeeLearning() {
                                 {totalTasks}
                               </td>
                               <td className="py-3 px-4 text-center">
-                                <span className="inline-block font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
+                                <span className="inline-block font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 !rounded-full text-[11px]">
                                   {done}
                                 </span>
                               </td>
@@ -1111,7 +1079,7 @@ export default function EmployeeLearning() {
                                 <div className="inline-flex items-center gap-2">
                                   <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
                                     <div
-                                      className={`h-full ${pct === 100 ? 'bg-emerald-500' : 'bg-[#d4b457]'}`}
+                                      className={`h-full ${pct === 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`}
                                       style={{ width: `${pct}%` }}
                                     />
                                   </div>
@@ -1125,9 +1093,9 @@ export default function EmployeeLearning() {
                                   return (
                                     <span
                                       key={lvl}
-                                      className={`inline-block text-[10px] font-mono px-2 py-0.5 rounded border mr-1 ${d === 0
+                                      className={`inline-block text-[10px] font-mono px-2 py-0.5 !rounded-md border mr-1 ${d === 0
                                           ? 'border-slate-200 bg-slate-50 text-slate-400'
-                                          : 'border-[#d4b457]/40 bg-[#1C120C] text-[#d4b457] font-bold'
+                                          : 'border-indigo-200 bg-indigo-50 text-indigo-700 font-bold'
                                         }`}
                                     >
                                       L{lvl} {d}/{total}
@@ -1146,9 +1114,9 @@ export default function EmployeeLearning() {
             </div>
 
             {/* Active Employees Directory Table */}
-            <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded">
-              <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+            <div className="bg-white border border-slate-200/80 shadow-2xs overflow-hidden !rounded-xl font-sans">
+              <div className="p-4 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 font-sans">
                   <span>Active Employees Directory</span>
                   <span className="text-xs font-mono font-normal text-slate-500">
                     ({filteredEmps.length}{filteredEmps.length !== employees.length ? ` of ${employees.length}` : ''})
@@ -1159,7 +1127,7 @@ export default function EmployeeLearning() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-[#1C120C] text-[#d4b457] uppercase font-serif text-[11px] tracking-wider border-b border-[#1C120C]">
+                    <tr className="bg-slate-800 text-slate-200 uppercase font-bold text-[10px] tracking-wider border-b border-slate-700">
                       <th className="py-3 px-4">Employee ID</th>
                       <th className="py-3 px-4">Employee Name</th>
                       <th className="py-3 px-4">Shop Location</th>
@@ -1168,10 +1136,19 @@ export default function EmployeeLearning() {
                       <th className="py-3 px-4 text-center">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {filteredEmps.length === 0 ? (
+                  <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                    {loading ? (
                       <tr>
-                        <td colSpan="6" className="py-8 text-center text-slate-400 italic">
+                        <td colSpan="6" className="py-12 text-center text-slate-400">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <RefreshCw size={20} className="animate-spin text-indigo-600" />
+                            <span className="text-xs font-semibold text-slate-600">Loading active employees directory...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredEmps.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="py-10 text-center text-slate-400 italic">
                           <p>{employees.length === 0 ? 'No active employees found.' : 'No active employees match your search or filter criteria.'}</p>
                           {(searchTerm || selectedFilterShop) && (
                             <button
@@ -1180,7 +1157,7 @@ export default function EmployeeLearning() {
                                 setSearchTerm('');
                                 setSelectedFilterShop('');
                               }}
-                              className="mt-2 inline-flex items-center gap-1 text-xs text-[#d4b457] hover:underline font-bold"
+                              className="mt-2 inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline font-bold"
                             >
                               Clear filters
                             </button>
@@ -1194,7 +1171,6 @@ export default function EmployeeLearning() {
                         const empIdNorm = empId.toLowerCase();
                         const empNameNorm = (empName || '').toString().trim().toLowerCase();
 
-                        // Match submissions by employee_id or name with bidirectional cross-resolution
                         const empSubs = submissions.filter((s) => {
                           const subEmpId = (s.employee_id || '').toString().trim().toLowerCase();
                           const subEmpName = (s.employee || '').toString().trim().toLowerCase();
@@ -1214,14 +1190,14 @@ export default function EmployeeLearning() {
 
                           return matchId || matchName;
                         });
-                        const doneCount = empSubs.reduce((n, s) => n + s.tasks.filter((t) => t.checked).length, 0);
+                        const doneCount = empSubs.reduce((n, s) => n + (s.tasks || []).filter((t) => t.checked).length, 0);
 
                         return (
                           <tr key={emp.id || emp.employee_id} className="hover:bg-slate-50 transition-colors">
                             <td className="py-3 px-4 font-mono text-slate-500 font-bold">{empId || 'N/A'}</td>
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-full bg-[#1C120C] border border-[#d4b457]/40 flex items-center justify-center font-serif text-[11px] text-[#d4b457] font-bold shrink-0">
+                                <div className="w-8 h-8 !rounded-full bg-indigo-50 border border-indigo-200/80 flex items-center justify-center text-xs text-indigo-700 font-bold shrink-0 font-sans shadow-2xs">
                                   {getInitials(empName)}
                                 </div>
                                 <span className="font-bold text-slate-900">{empName}</span>
@@ -1234,14 +1210,14 @@ export default function EmployeeLearning() {
                               {empSubs.length}
                             </td>
                             <td className="py-3 px-4 text-center">
-                              <span className="inline-block font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
+                              <span className="inline-block font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 !rounded-full text-[11px]">
                                 {doneCount} tasks
                               </span>
                             </td>
                             <td className="py-3 px-4 text-center">
                               <button
                                 onClick={() => setSelectedModalEmp(empName)}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-[#1C120C] hover:bg-[#2a1c13] text-[#d4b457] text-[11px] font-bold rounded transition-colors cursor-pointer shadow-2xs"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold !rounded-lg border border-indigo-200/80 transition-colors cursor-pointer shadow-2xs font-sans"
                               >
                                 View Profile
                               </button>
@@ -1261,34 +1237,34 @@ export default function EmployeeLearning() {
       {/* Employee Modal */}
       {selectedModalEmp && (
         <div
-          className="fixed inset-0 z-50 bg-[#1A1A1A]/70 backdrop-blur-xs flex items-start justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-4 overflow-y-auto"
           onClick={() => setSelectedModalEmp(null)}
         >
           <div
-            className="bg-white border border-slate-300 rounded-lg max-w-6xl xl:max-w-7xl w-full my-6 overflow-hidden shadow-2xl"
+            className="bg-white border border-slate-200 !rounded-2xl max-w-6xl xl:max-w-7xl w-full my-6 overflow-hidden shadow-2xl font-sans"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="bg-[#1C120C] text-white p-5 border-b border-[#d4b457]/30 flex items-center justify-between">
+            <div className="bg-slate-900 text-white p-5 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-full bg-[#1C120C] border border-[#d4b457] flex items-center justify-center font-serif text-base text-[#d4b457] font-bold shadow-2xs">
+                <div className="w-11 h-11 !rounded-full bg-indigo-900/60 border border-indigo-400/80 flex items-center justify-center text-sm text-indigo-200 font-bold shadow-2xs font-sans">
                   {getInitials(selectedModalEmp)}
                 </div>
                 <div>
-                  <h2 className="text-lg font-serif font-bold text-white">{selectedModalEmp}</h2>
-                  <div className="text-xs text-[#d4b457]/80 font-mono">Staff Learning Profile & Task Progress</div>
+                  <h2 className="text-lg font-bold text-white font-sans">{selectedModalEmp}</h2>
+                  <div className="text-xs text-indigo-300 font-sans font-medium">Staff Learning Profile & Task Progress</div>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedModalEmp(null)}
-                className="text-white/60 hover:text-white p-1 text-xl cursor-pointer"
+                className="text-slate-400 hover:text-white p-1.5 hover:bg-white/10 !rounded-lg text-lg transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 max-h-[85vh] overflow-y-auto space-y-6 text-slate-800">
+            <div className="p-5 max-h-[85vh] overflow-y-auto space-y-6 text-slate-800 font-sans">
               {(() => {
                 const modalEmpObj = employees.find(e =>
                   (e.name_as_per_aadhar && e.name_as_per_aadhar === selectedModalEmp) ||
@@ -1314,7 +1290,7 @@ export default function EmployeeLearning() {
                 });
                 if (empSubs.length === 0) {
                   return (
-                    <div className="bg-slate-50 border border-dashed border-slate-300 p-6 text-center text-slate-400 rounded text-sm italic">
+                    <div className="bg-slate-50 border border-dashed border-slate-300 p-8 text-center text-slate-400 !rounded-xl text-xs font-medium italic">
                       No checklists submitted for this employee yet.
                     </div>
                   );
@@ -1335,30 +1311,30 @@ export default function EmployeeLearning() {
                       const totalIssuesCount = totalNotOkCount;
 
                       return (
-                        <div className="bg-slate-50 border border-slate-200 p-4 rounded flex flex-wrap items-center justify-between gap-4">
+                        <div className="bg-slate-50 border border-slate-200/80 p-4 !rounded-xl flex flex-wrap items-center justify-between gap-4 font-sans">
                           <div>
-                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Learning Progress Summary</div>
-                            <div className="text-lg font-serif font-bold text-slate-900 mt-0.5">
+                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">Learning Progress Summary</div>
+                            <div className="text-lg font-bold text-slate-900 mt-0.5 font-sans">
                               {totalCheckedCount} of {totalTasksCount} Tasks Completed ({Math.round((totalCheckedCount / totalTasksCount) * 100)}%)
                             </div>
                           </div>
 
-                          {/* Quick Metrics Badges matching Shop Visit format */}
+                          {/* Quick Metrics Badges */}
                           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-500/30 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-300 !rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                               ✅ {totalCheckedCount}/{totalTasksCount} Checked
                             </span>
                             {totalNotOkCount > 0 && (
-                              <span className="bg-red-50 text-red-600 border border-red-500/30 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                              <span className="bg-red-50 text-red-600 border border-red-300 !rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                                 ❌ {totalNotOkCount} Not OK
                               </span>
                             )}
                             {totalMissingCount > 0 && (
-                              <span className="bg-amber-50 text-amber-700 border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                              <span className="bg-amber-50 text-amber-700 border border-amber-300 !rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                                 ⚠️ {totalMissingCount} Missing
                               </span>
                             )}
-                            <span className={`text-xs font-extrabold px-3 py-1.5 rounded-lg border shadow-2xs ${totalIssuesCount === 0
+                            <span className={`text-xs font-extrabold px-3 py-1.5 !rounded-lg border shadow-2xs ${totalIssuesCount === 0
                                 ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                                 : 'bg-red-100 text-red-800 border-red-300'
                               }`}>
@@ -1370,22 +1346,22 @@ export default function EmployeeLearning() {
                     })()}
 
                     {/* Matrix Checklist Report */}
-                    <div className="bg-white border border-slate-200 shadow-xs overflow-x-auto rounded">
+                    <div className="bg-white border border-slate-200/80 shadow-2xs overflow-x-auto !rounded-xl">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="bg-[#1C120C] text-[#d4b457] text-[10px] uppercase font-serif tracking-wider border-b border-[#1C120C]">
-                            <th className="py-2.5 px-2 w-[110px]">DEPT</th>
-                            <th className="py-2.5 px-2 font-bold">LEVEL 1</th>
+                          <tr className="bg-slate-800 text-slate-200 text-[10px] uppercase font-bold tracking-wider border-b border-slate-700">
+                            <th className="py-2.5 px-3 w-[110px]">DEPT</th>
+                            <th className="py-2.5 px-3 font-bold">LEVEL 1</th>
                             <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                            <th className="py-2.5 px-2 font-bold">LEVEL 2</th>
+                            <th className="py-2.5 px-3 font-bold">LEVEL 2</th>
                             <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                            <th className="py-2.5 px-2 font-bold">LEVEL 3</th>
+                            <th className="py-2.5 px-3 font-bold">LEVEL 3</th>
                             <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                            <th className="py-2.5 px-2 font-bold">LEVEL 4</th>
+                            <th className="py-2.5 px-3 font-bold">LEVEL 4</th>
                             <th className="py-2.5 px-1 w-8 text-center">✓</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-800">
+                        <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
                           {deptOrder().map((dept) => {
                             const tasksByLevel = {
                               1: TASKS.filter((t) => t.dept === dept && t.level === 1),
@@ -1406,7 +1382,7 @@ export default function EmployeeLearning() {
                                 key={`${dept}-${rowIdx}`}
                                 className={rowIdx === 0 ? 'border-t-2 border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}
                               >
-                                <td className="py-2 px-2 text-emerald-700 font-bold text-[11px] whitespace-nowrap align-top">
+                                <td className="py-2 px-3 text-indigo-700 font-bold text-[11px] whitespace-nowrap align-top">
                                   {rowIdx === 0 ? dept : ''}
                                 </td>
 
@@ -1415,7 +1391,7 @@ export default function EmployeeLearning() {
                                   if (!task) {
                                     return (
                                       <React.Fragment key={lvl}>
-                                        <td className="py-2 px-2"></td>
+                                        <td className="py-2 px-3"></td>
                                         <td className="py-2 px-1 text-center"></td>
                                       </React.Fragment>
                                     );
@@ -1424,7 +1400,7 @@ export default function EmployeeLearning() {
                                   const isChecked = checkedSet.has(task.id);
                                   return (
                                     <React.Fragment key={lvl}>
-                                      <td className={`py-2 px-2 align-top min-w-[150px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 rounded-sm' : ''}`}>
+                                      <td className={`py-2 px-3 align-top min-w-[150px] ${isChecked ? 'bg-emerald-50/70 border border-emerald-200/80 !rounded-sm' : ''}`}>
                                         <p className={`text-xs font-semibold leading-tight ${isChecked ? 'text-emerald-950 font-bold' : 'text-slate-800'}`}>
                                           {task.en}
                                         </p>
@@ -1432,8 +1408,8 @@ export default function EmployeeLearning() {
                                       </td>
                                       <td className="py-2 px-1 text-center align-top">
                                         <div
-                                          className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs mx-auto ${isChecked
-                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                          className={`w-5 h-5 !rounded-md flex items-center justify-center font-bold text-xs mx-auto ${isChecked
+                                            ? 'bg-emerald-600 text-white shadow-2xs'
                                             : 'bg-red-50 text-red-500 border border-red-200'
                                             }`}
                                         >
@@ -1452,14 +1428,14 @@ export default function EmployeeLearning() {
 
                     {/* Submission History */}
                     <div className="pt-2">
-                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Submission Log & History</h3>
-                      <div className="space-y-1">
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 font-sans">Submission Log & History</h3>
+                      <div className="space-y-1.5">
                         {empSubs.map((s, idx) => {
-                          const d = s.tasks.filter((t) => t.checked).length;
+                          const d = (s.tasks || []).filter((t) => t.checked).length;
                           return (
-                            <div key={idx} className="text-xs text-slate-700 font-medium bg-slate-50 border border-slate-200 p-2 rounded flex justify-between">
+                            <div key={idx} className="text-xs text-slate-700 font-medium bg-slate-50 border border-slate-200/80 p-2.5 !rounded-lg flex justify-between">
                               <span>📅 {s.date} — {s.shop}</span>
-                              <span className="font-bold text-emerald-700">{d}/{s.tasks.length} completed</span>
+                              <span className="font-bold text-emerald-700 font-mono">{d}/{s.tasks?.length || 0} completed</span>
                             </div>
                           );
                         })}
@@ -1476,44 +1452,44 @@ export default function EmployeeLearning() {
       {/* Full-Screen Scrollable New Checklist Modal */}
       {showNewChecklistModal && canCreateChecklist && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-2 sm:p-6 overflow-hidden"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-6 overflow-hidden"
           onClick={() => setShowNewChecklistModal(false)}
         >
           <div
-            className="bg-white border border-slate-300 rounded-lg max-w-6xl w-full h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-fade-in"
+            className="bg-white border border-slate-200 !rounded-2xl max-w-6xl w-full h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-fade-in font-sans"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="bg-[#1C120C] text-white p-4 sm:p-5 border-b border-[#d4b457]/30 flex items-center justify-between shrink-0">
+            <div className="bg-slate-900 text-white p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 font-sans">
               <div>
-                <span className="text-[#d4b457] text-[10px] font-mono font-bold tracking-widest uppercase block mb-0.5">
+                <span className="text-indigo-400 text-[10px] font-mono font-bold tracking-widest uppercase block mb-0.5">
                   Staff Task Checklist Entry
                 </span>
-                <h2 className="text-lg sm:text-xl font-serif font-bold text-white flex items-center gap-2">
-                  <span className="text-[#d4b457]">✓</span>
+                <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2 font-sans">
+                  <span className="text-indigo-400">✓</span>
                   <span>New Staff Checklist</span>
                 </h2>
               </div>
               <button
                 onClick={() => setShowNewChecklistModal(false)}
-                className="text-white/60 hover:text-white p-1.5 hover:bg-white/10 rounded-lg text-lg transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-white p-1.5 hover:bg-white/10 !rounded-lg text-lg transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {/* Modal Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar bg-slate-50 font-sans">
               {/* Form Selection Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
-                <div className="bg-white border border-slate-200 shadow-sm rounded p-4">
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <div className="bg-white border border-slate-200/80 shadow-2xs !rounded-xl p-4">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2 font-sans">
                     SHOP NAME *
                   </label>
                   <select
                     value={selectedShop}
                     onChange={handleShopChange}
-                    className="w-full bg-slate-50 text-slate-900 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#d4b457] cursor-pointer font-medium"
+                    className="w-full bg-slate-50 text-slate-900 border border-slate-300 !rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer font-medium font-sans"
                   >
                     <option value="">Select shop…</option>
                     {shops.length > 0 ? (
@@ -1528,15 +1504,15 @@ export default function EmployeeLearning() {
                   </select>
                 </div>
 
-                <div className="bg-white border border-slate-200 shadow-sm rounded p-4">
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <div className="bg-white border border-slate-200/80 shadow-2xs !rounded-xl p-4">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2 font-sans">
                     EMPLOYEE *
                   </label>
                   <select
                     disabled={!selectedShop}
                     value={selectedEmployee}
                     onChange={handleEmployeeChange}
-                    className="w-full bg-slate-50 text-slate-900 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#d4b457] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer font-medium"
+                    className="w-full bg-slate-50 text-slate-900 border border-slate-300 !rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer font-medium font-sans"
                   >
                     <option value="">
                       {!selectedShop
@@ -1560,109 +1536,110 @@ export default function EmployeeLearning() {
 
               {/* Checklist Matrix Table */}
               {!selectedShop || !selectedEmployee ? (
-                <div className="bg-white border border-dashed border-slate-300 rounded-lg p-12 text-center text-slate-400 text-sm italic">
+                <div className="bg-white border border-dashed border-slate-300 !rounded-2xl p-12 text-center text-slate-400 text-xs italic font-medium font-sans">
                   Please select a shop and an employee above to load the interactive task checklist matrix.
                 </div>
               ) : (
-                <div className="bg-white border border-slate-200 shadow-sm overflow-x-auto rounded">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-[#1C120C] text-[#d4b457] text-[10px] uppercase font-serif tracking-wider border-b border-[#1C120C]">
-                        <th className="py-2.5 px-2 w-[110px]">DEPT</th>
-                        <th className="py-2.5 px-2 font-bold">LEVEL 1</th>
-                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                        <th className="py-2.5 px-2 font-bold">LEVEL 2</th>
-                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                        <th className="py-2.5 px-2 font-bold">LEVEL 3</th>
-                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                        <th className="py-2.5 px-2 font-bold">LEVEL 4</th>
-                        <th className="py-2.5 px-1 w-8 text-center">✓</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-800">
-                      {deptOrder().map((dept) => {
-                        // Find max number of tasks across levels for this department
-                        const tasksByLevel = {
-                          1: TASKS.filter((t) => t.dept === dept && t.level === 1),
-                          2: TASKS.filter((t) => t.dept === dept && t.level === 2),
-                          3: TASKS.filter((t) => t.dept === dept && t.level === 3),
-                          4: TASKS.filter((t) => t.dept === dept && t.level === 4),
-                        };
-                        const maxRows = Math.max(
-                          tasksByLevel[1].length,
-                          tasksByLevel[2].length,
-                          tasksByLevel[3].length,
-                          tasksByLevel[4].length,
-                          1
-                        );
+                <div className="bg-white border border-slate-200/80 shadow-2xs overflow-hidden !rounded-xl font-sans">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-800 text-slate-200 text-[10px] uppercase font-bold tracking-wider border-b border-slate-700">
+                          <th className="py-2.5 px-3 w-[110px]">DEPT</th>
+                          <th className="py-2.5 px-3 font-bold">LEVEL 1</th>
+                          <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                          <th className="py-2.5 px-3 font-bold">LEVEL 2</th>
+                          <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                          <th className="py-2.5 px-3 font-bold">LEVEL 3</th>
+                          <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                          <th className="py-2.5 px-3 font-bold">LEVEL 4</th>
+                          <th className="py-2.5 px-1 w-8 text-center">✓</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                        {deptOrder().map((dept) => {
+                          const tasksByLevel = {
+                            1: TASKS.filter((t) => t.dept === dept && t.level === 1),
+                            2: TASKS.filter((t) => t.dept === dept && t.level === 2),
+                            3: TASKS.filter((t) => t.dept === dept && t.level === 3),
+                            4: TASKS.filter((t) => t.dept === dept && t.level === 4),
+                          };
+                          const maxRows = Math.max(
+                            tasksByLevel[1].length,
+                            tasksByLevel[2].length,
+                            tasksByLevel[3].length,
+                            tasksByLevel[4].length,
+                            1
+                          );
 
-                        return Array.from({ length: maxRows }).map((_, rowIdx) => (
-                          <tr
-                            key={`${dept}-${rowIdx}`}
-                            className={rowIdx === 0 ? 'border-t-2 border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}
-                          >
-                            <td className="py-2 px-2 text-emerald-700 font-bold text-[11px] whitespace-nowrap align-top">
-                              {rowIdx === 0 ? dept : ''}
-                            </td>
+                          return Array.from({ length: maxRows }).map((_, rowIdx) => (
+                            <tr
+                              key={`${dept}-${rowIdx}`}
+                              className={rowIdx === 0 ? 'border-t-2 border-slate-200 bg-slate-50/50' : 'hover:bg-slate-50'}
+                            >
+                              <td className="py-2 px-3 text-indigo-700 font-bold text-[11px] whitespace-nowrap align-top">
+                                {rowIdx === 0 ? dept : ''}
+                              </td>
 
-                            {[1, 2, 3, 4].map((lvl) => {
-                              const task = tasksByLevel[lvl][rowIdx];
-                              if (!task) {
+                              {[1, 2, 3, 4].map((lvl) => {
+                                const task = tasksByLevel[lvl][rowIdx];
+                                if (!task) {
+                                  return (
+                                    <React.Fragment key={lvl}>
+                                      <td className="py-2 px-3"></td>
+                                      <td className="py-2 px-1 text-center"></td>
+                                    </React.Fragment>
+                                  );
+                                }
+
+                                const checked = !!checkedTasks[task.id];
                                 return (
                                   <React.Fragment key={lvl}>
-                                    <td className="py-2 px-2"></td>
-                                    <td className="py-2 px-1 text-center"></td>
+                                    <td className="py-2 px-3 align-top max-w-[180px]">
+                                      <p className="text-slate-900 text-xs font-semibold leading-tight">{task.en}</p>
+                                      {task.hi && <p className="text-slate-500 text-[10px] mt-0.5 leading-tight">{task.hi}</p>}
+                                      {task.tag && (
+                                        <span className="inline-block mt-1 text-[9px] text-slate-500 border border-slate-200 bg-slate-50 !rounded px-1.5 py-0.2 font-medium">
+                                          {task.tag}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-1 text-center align-top">
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleTask(task.id)}
+                                        className={`w-4.5 h-4.5 !rounded-md border flex items-center justify-center transition-all cursor-pointer ${checked
+                                          ? 'bg-emerald-600 border-emerald-600 text-white font-bold text-[10px]'
+                                          : 'bg-white border-slate-300 text-transparent hover:border-indigo-400'
+                                          }`}
+                                      >
+                                        ✓
+                                      </button>
+                                    </td>
                                   </React.Fragment>
                                 );
-                              }
-
-                              const checked = !!checkedTasks[task.id];
-                              return (
-                                <React.Fragment key={lvl}>
-                                  <td className="py-2 px-2 align-top max-w-[180px]">
-                                    <p className="text-slate-900 text-xs font-semibold leading-tight">{task.en}</p>
-                                    {task.hi && <p className="text-slate-500 text-[10px] mt-0.5 leading-tight">{task.hi}</p>}
-                                    {task.tag && (
-                                      <span className="inline-block mt-1 text-[9px] text-slate-500 border border-slate-300 rounded px-1.5 py-0.2 font-medium">
-                                        {task.tag}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="py-2 px-1 text-center align-top">
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleTask(task.id)}
-                                      className={`w-4 h-4 rounded border border-slate-300 flex items-center justify-center transition-all cursor-pointer ${checked
-                                        ? 'bg-[#d4b457] border-[#d4b457] text-slate-950 font-bold text-[10px]'
-                                        : 'bg-white text-transparent hover:border-[#d4b457]'
-                                        }`}
-                                    >
-                                      ✓
-                                    </button>
-                                  </td>
-                                </React.Fragment>
-                              );
-                            })}
-                          </tr>
-                        ));
-                      })}
-                    </tbody>
-                  </table>
+                              })}
+                            </tr>
+                          ));
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Modal Fixed Footer Submit Bar */}
-            <div className="bg-white p-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 shrink-0 shadow-lg">
+            <div className="bg-slate-50 p-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 shrink-0 shadow-lg font-sans">
               <div className="text-xs text-slate-600 flex items-center gap-4 font-medium">
                 <span>
-                  <b className="text-slate-900 font-bold">
+                  <b className="text-slate-900 font-bold font-mono">
                     {Object.values(checkedTasks).filter(Boolean).length}
                   </b>{' '}
                   of {TASKS.length} tasks ticked overall
                 </span>
                 <span className="hidden sm:inline">·</span>
-                <span className="hidden sm:inline">
+                <span className="hidden sm:inline font-mono">
                   {[1, 2, 3, 4]
                     .map((lvl) => {
                       const total = TASKS.filter((t) => t.level === lvl).length;
@@ -1677,7 +1654,7 @@ export default function EmployeeLearning() {
                 <button
                   type="button"
                   onClick={() => setShowNewChecklistModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider rounded border border-slate-300 transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider !rounded-lg border border-slate-200 transition-colors cursor-pointer font-sans shadow-2xs"
                 >
                   Cancel
                 </button>
@@ -1687,7 +1664,7 @@ export default function EmployeeLearning() {
                     setShowNewChecklistModal(false);
                   }}
                   disabled={submitting || !selectedShop || !selectedEmployee}
-                  className="bg-[#d4b457] hover:bg-[#c3a346] text-slate-950 px-6 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 !rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs font-sans"
                 >
                   {submitting ? 'Saving…' : 'Submit Checklist'}
                 </button>

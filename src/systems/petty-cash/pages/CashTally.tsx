@@ -280,7 +280,7 @@ export default function CashTally({
         const { data, error } = await supabase
           .from('users')
           .select('shop_name')
-          .or(`user_name.eq."${loggedInName}",username.eq."${loggedInName}"`);
+          .eq('user_name', loggedInName);
 
         if (!error && data && data.length > 0) {
           const rawShopsStr = data.map((d: any) => d.shop_name).filter(Boolean).join(',');

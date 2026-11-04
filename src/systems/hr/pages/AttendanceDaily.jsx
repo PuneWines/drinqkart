@@ -649,16 +649,19 @@ const AttendanceDaily = () => {
   const isEmployeeInTable = (employeeId) => {
     if (!employeeId) return false;
     const cleanId = employeeId.toString().trim().toLowerCase();
+    const numCleanId = cleanId.replace(/^0+/, '');
     const inHr = employeesData.some(emp => {
       const empId = emp.id?.toString().trim().toLowerCase();
       const empEmployeeId = emp.employee_id?.toString().trim().toLowerCase();
-      return empId === cleanId || empEmployeeId === cleanId;
+      const numEmpId = empEmployeeId ? empEmployeeId.replace(/^0+/, '') : '';
+      return empId === cleanId || empEmployeeId === cleanId || (numCleanId && numEmpId === numCleanId);
     });
     if (inHr) return true;
     return masterUsers.some(u => {
       const uEmpId = u.employee_id?.toString().trim().toLowerCase();
       const uId = u.id?.toString().trim().toLowerCase();
-      return (uEmpId && uEmpId === cleanId) || (uId && uId === cleanId);
+      const numUEmpId = uEmpId ? uEmpId.replace(/^0+/, '') : '';
+      return (uEmpId && uEmpId === cleanId) || (uId && uId === cleanId) || (numCleanId && numUEmpId === numCleanId);
     });
   };
 
@@ -1407,9 +1410,11 @@ const AttendanceDaily = () => {
         ...new Map(
           merged.map(item => {
             const cleanId = String(item.employee_id || '').trim();
+            const numCleanId = cleanId.replace(/^0+/, '');
             const matchedProfile = employeesData.find(e =>
               (e.employee_id && String(e.employee_id).trim().toLowerCase() === cleanId.toLowerCase()) ||
-              (e.id && String(e.id).trim().toLowerCase() === cleanId.toLowerCase())
+              (e.id && String(e.id).trim().toLowerCase() === cleanId.toLowerCase()) ||
+              Boolean(numCleanId && e.employee_id && String(e.employee_id).trim().toLowerCase().replace(/^0+/, '') === numCleanId)
             );
             const resolvedName = matchedProfile ? (matchedProfile.name_as_per_aadhar || matchedProfile.user_name || matchedProfile.name || item.employee_name) : item.employee_name;
             return [
@@ -1616,7 +1621,7 @@ const AttendanceDaily = () => {
         ? 'ALL'
         : (selectedDevice.serial || selectedDevice.name);
 
-      const { data, error: fnError } = await supabase.functions.invoke('hyper-service', {
+      const { data, error: fnError } = await supabase.functions.invoke('HR_SYSTEM_Sync_Daily_Attendance', {
         body: {
           fromDate: queryStart,
           toDate: queryEnd,
@@ -2551,9 +2556,11 @@ const AttendanceDaily = () => {
     const baseList = employees
       .map(emp => {
         const cleanEmpId = String(emp.id || '').trim().toLowerCase();
+        const numEmpId = cleanEmpId.replace(/^0+/, '');
         let empProfile = employeesData.find(e =>
           (e.employee_id && String(e.employee_id).trim().toLowerCase() === cleanEmpId) ||
-          (e.id && String(e.id).trim().toLowerCase() === cleanEmpId)
+          (e.id && String(e.id).trim().toLowerCase() === cleanEmpId) ||
+          Boolean(numEmpId && e.employee_id && String(e.employee_id).trim().toLowerCase().replace(/^0+/, '') === numEmpId)
         );
         if (!empProfile) {
           const userMatch = masterUsers.find(u =>
@@ -2759,7 +2766,7 @@ const AttendanceDaily = () => {
 
   useEffect(() => {
     fetchAttendanceFromDB();
-    syncDeviceLogs();
+    // syncDeviceLogs is handled via background cron or manual refresh button
   }, [currentMonth]);
 
   // Fetch logs from Supabase on load / date change

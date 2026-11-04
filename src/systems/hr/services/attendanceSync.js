@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-// Biometric synchronization is securely delegated to Supabase Edge Function (hyper-service)
+// Biometric synchronization is securely delegated to Supabase Edge Function (HR_SYSTEM_Sync_Daily_Attendance)
 
 // Load biometric machines from the shop table (single source of truth)
 const fetchShopDevices = async () => {
@@ -194,7 +194,7 @@ export const syncDeviceLogsToSupabase = async (month, year, device) => {
       ? device.serial || device.name
       : "ALL";
 
-  const { data, error } = await supabase.functions.invoke("hyper-service", {
+  const { data, error } = await supabase.functions.invoke("HR_SYSTEM_Sync_Daily_Attendance", {
     body: {
       fromDate,
       toDate,

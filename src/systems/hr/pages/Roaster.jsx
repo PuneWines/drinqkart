@@ -482,7 +482,7 @@ const Roster = () => {
                     .order('name_as_per_aadhar'),
                 supabase
                     .from('users')
-                    .select('employee_id, user_name, username, emp_name, status, is_active')
+                    .select('employee_id, user_name, emp_name, status, is_active')
             ]);
 
             if (error) throw error;

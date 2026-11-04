@@ -192,7 +192,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let { data: usersData } = await supabase
         .from('users')
         .select('*')
-        .or(`user_name.eq."${searchName}",username.eq."${searchName}"`)
+        .eq('user_name', searchName)
         .maybeSingle();
 
       if (usersData) {
@@ -263,7 +263,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let { data: usersData, error } = await supabase
         .from('users')
         .select('*')
-        .or(`user_name.ilike.${inputUser},username.ilike.${inputUser}`)
+        .ilike('user_name', inputUser)
         .maybeSingle();
 
       if (!usersData) {

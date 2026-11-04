@@ -19,19 +19,18 @@ const Attendance = () => {
     };
 
     return (
-        <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
+        <div className="min-h-full flex flex-col bg-gray-50">
             {/* Header Section */}
-            <div className="bg-gray-100 border-gray-200 sticky top-0 z-20">
-                <div className="px-10 py-2">
+            <div className="bg-gray-100 border-b border-gray-200 sticky top-0 z-20">
+                <div className="px-6 sm:px-10 py-2">
                     <div className="flex items-center justify-between">
                         <div>
                             <h1 className="text-md font-bold text-gray-900 flex items-center gap-2">
                                 <Clock size={16} className="text-indigo-600" />
                                 Attendance Management
                             </h1>
-
                         </div>
-                        <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
                             <Calendar size={14} className="text-gray-400" />
                             <span className="text-xs text-gray-600">
                                 {new Date().toLocaleDateString('en-IN', {
@@ -46,19 +45,15 @@ const Attendance = () => {
                 </div>
             </div>
 
-            {/* Summary Stats Cards - Only for Daily View */}
-
-
-
             {/* Main Content */}
-            <div className="p-8 pt-2 flex-grow overflow-hidden">
+            <div className="p-4 sm:p-6 pt-2 flex-grow">
                 {activeSubTab === 'daily' ? (
                     <Attendancedaily />
                 ) : (
                     <AttendanceMonthly />
                 )}
             </div>
-        </div >
+        </div>
     );
 };
 

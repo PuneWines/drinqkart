@@ -161,7 +161,7 @@ export default function JoiningCompany({ readOnly = false }) {
 
     try {
       // Verification runs server-side so the biometric API key never reaches the browser
-      const { data, error } = await supabase.functions.invoke('hyper-service', {
+      const { data, error } = await supabase.functions.invoke('HR_SYSTEM_Sync_Daily_Attendance', {
         body: { action: 'verify', serial: cleanSerial, apiName: cleanApiName || 'TEST' }
       })
       if (error) {

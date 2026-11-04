@@ -82,7 +82,7 @@ const useAuthStore = create((set, get) => ({
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .or(`user_name.eq.${username},username.eq.${username}`)
+        .eq('user_name', username)
         .eq('password', password)
         .single();
 

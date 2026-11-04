@@ -352,12 +352,13 @@ async function fetchRawLogsForDevice(
   fromDate: string,
   toDate: string
 ): Promise<DeviceFetchResult> {
-  const devName = device.apiName || device.name;
+  const devName = (device.apiName || device.name).trim();
+  const serial = (device.serial || "").trim();
   const url =
     `${DEVICE_LOG_API_BASE}` +
     `?APIKey=${BIOMETRIC_API_KEY}` +
-    `&SerialNumber=${encodeURIComponent(device.serial)}` +
-    `&DeviceName=${encodeURIComponent(devName)}` +
+    `&SerialNumber=${serial}` +
+    `&DeviceName=${devName}` +
     `&FromDate=${fromDate}` +
     `&ToDate=${toDate}`;
 
@@ -455,6 +456,7 @@ function aggregateLogs(
       const key = `${empId}_${dateStr}`;
       if (!grouped[key]) {
         const empMeta = findEmployee(employees, empId);
+        if (!empMeta) return; // Skip if employee profile not found in HR system
         const homeDevice = configuredDevices.find(
           (d) => d.name.toLowerCase() === (empMeta?.store || "").toLowerCase()
         );
@@ -469,18 +471,22 @@ function aggregateLogs(
     });
   });
 
-  return Object.values(grouped).map((group) => {
+  return Object.values(grouped).map((group): AggregatedRecord | null => {
     const logs = group.logs;
     const code = group.EmployeeCode.toString().trim();
     const serial = group.SerialNumber ? group.SerialNumber.toString().trim() : "";
-    const isNumeric = !isNaN(Number(code)) && code !== "";
 
     // Match employee against Supabase hr_management_employees
     const empMeta = findEmployee(employees, code);
 
-    const displayName = empMeta ? empMeta.name : (isNumeric ? "Unknown" : code);
-    const displayCode = empMeta ? empMeta.id : code;
-    const designation = empMeta ? empMeta.designation : "-";
+    // If employee is not registered in HR FMS, skip this attendance record
+    if (!empMeta) {
+      return null;
+    }
+
+    const displayName = empMeta.name || "Employee";
+    const displayCode = empMeta.id || code;
+    const designation = empMeta.designation || "-";
 
     // Matches punch machine against dynamic shop devices
     const matchedPunchDevice = configuredDevices.find(
@@ -488,11 +494,13 @@ function aggregateLogs(
     );
     const displayStore = matchedPunchDevice
       ? matchedPunchDevice.name
-      : (group.SourceDeviceName && group.SourceDeviceName !== "ALL DEVICES"
-          ? group.SourceDeviceName
-          : (empMeta?.store || "-"));
+      : (empMeta.store && empMeta.store !== "-"
+          ? empMeta.store
+          : (group.SourceDeviceName && group.SourceDeviceName !== "ALL DEVICES"
+              ? group.SourceDeviceName
+              : "-"));
 
-    const displayAssignedSerial = serial || "-";
+    const displayAssignedSerial = serial || (matchedPunchDevice ? matchedPunchDevice.serial : "-");
 
     // Find shift for this employee on this date
     const shift = findShift(rosterList, code, displayCode, group.Date);
@@ -577,7 +585,7 @@ function aggregateLogs(
       RawLogs: logs,
       ShiftType: shift?.shift_type ?? null,
     };
-  });
+  }).filter((record): record is AggregatedRecord => record !== null);
 }
 
 // ---------------------------------------------------------------------------
@@ -891,15 +899,30 @@ Deno.serve(async (req: Request) => {
       console.warn("[sync-attendance] Warning: No shops found with device_serial configured.");
     }
 
-    // Filter devices
-    const devicesToQuery =
-      deviceFilter.toUpperCase() === "ALL"
+    // Filter devices (tolerant matching on name, serial, or apiName)
+    const cleanFilter = (deviceFilter || "ALL").toString().trim().toUpperCase();
+    let devicesToQuery =
+      cleanFilter === "ALL"
         ? configuredDevices
-        : configuredDevices.filter(
-            (d) =>
-              d.name.toUpperCase() === deviceFilter.toUpperCase() ||
-              d.serial.toUpperCase() === deviceFilter.toUpperCase()
-          );
+        : configuredDevices.filter((d) => {
+            const dName = d.name.trim().toUpperCase();
+            const dSerial = d.serial.trim().toUpperCase();
+            const dApi = d.apiName.trim().toUpperCase();
+            return (
+              dName === cleanFilter ||
+              dSerial === cleanFilter ||
+              dApi === cleanFilter ||
+              dName.includes(cleanFilter) ||
+              cleanFilter.includes(dName)
+            );
+          });
+
+    if (devicesToQuery.length === 0 && configuredDevices.length > 0) {
+      console.warn(
+        `[sync-attendance] Device filter "${deviceFilter}" didn't match any configured shop; querying all ${configuredDevices.length} shops.`
+      );
+      devicesToQuery = configuredDevices;
+    }
 
     // Fetch logs from biometric hardware
     const rawResponses: DeviceFetchResult[] = await Promise.all(
