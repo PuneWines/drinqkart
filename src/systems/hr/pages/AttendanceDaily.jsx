@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
 import { Search, Download, Calendar, Loader2, CheckCircle, X, Clock, Pencil, Filter, Users, User, Clock as ClockIcon, TrendingUp, Database, RefreshCw, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Plus, ChevronDown, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -7,6 +7,35 @@ import useShopStore from '../../purchase/store/useShopStore';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
 const ALL_DEVICES_OPTION = { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' };
+
+// Module-level shared formatter and helpers to eliminate allocation churn
+const kolkataTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Kolkata',
+  hour: 'numeric',
+  minute: 'numeric',
+  hour12: false
+});
+
+const parseToMinutes = (tStr) => {
+  if (!tStr) return 0;
+  try {
+    const clean = tStr.trim().toUpperCase();
+    const isPM = clean.endsWith('PM');
+    const isAM = clean.endsWith('AM');
+    let timePart = clean;
+    if (isPM || isAM) {
+      timePart = clean.slice(0, -2).trim();
+    }
+    const [hStr, mStr] = timePart.split(':');
+    let h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10) || 0;
+    if (isPM && h < 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    return h * 60 + m;
+  } catch (e) {
+    return 0;
+  }
+};
 
 
 // Resolve store location from punch attendance log device serial or device_id
@@ -645,25 +674,73 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Check if employee exists in employees table or master users
-  const isEmployeeInTable = (employeeId) => {
+  // Precomputed Profile Map and Matched Employees Set for O(1) instantaneous lookups
+  const { empProfileMap, matchedEmployeeIdsSet } = useMemo(() => {
+    const profileMap = new Map();
+    const matchedSet = new Set();
+
+    (employeesData || []).forEach(e => {
+      const id = String(e.id || '').trim().toLowerCase();
+      const empId = String(e.employee_id || e.employee_code || e.code || '').trim().toLowerCase();
+      const numId = empId ? empId.replace(/^0+/, '') : (id ? id.replace(/^0+/, '') : '');
+
+      if (id) {
+        profileMap.set(id, e);
+        matchedSet.add(id);
+      }
+      if (empId) {
+        profileMap.set(empId, e);
+        matchedSet.add(empId);
+      }
+      if (numId) {
+        profileMap.set(numId, e);
+        matchedSet.add(numId);
+      }
+    });
+
+    (masterUsers || []).forEach(u => {
+      const id = String(u.id || '').trim().toLowerCase();
+      const empId = String(u.employee_id || '').trim().toLowerCase();
+      const numId = empId ? empId.replace(/^0+/, '') : (id ? id.replace(/^0+/, '') : '');
+
+      const userProfile = {
+        id: u.employee_id || u.id,
+        employee_id: u.employee_id || u.id,
+        name: u.user_name,
+        user_name: u.user_name,
+        name_as_per_aadhar: u.user_name,
+        joining_place: u.shop_name,
+        shop_name: u.shop_name,
+        designation: u.role || u.Designation || 'User',
+        candidate_photo: u.profile_image || u.HR_SYSTEM_employee_details?.candidate_photo,
+        photo_url: u.profile_image,
+        isFromMasterUsers: true
+      };
+
+      if (id) {
+        if (!profileMap.has(id)) profileMap.set(id, userProfile);
+        matchedSet.add(id);
+      }
+      if (empId) {
+        if (!profileMap.has(empId)) profileMap.set(empId, userProfile);
+        matchedSet.add(empId);
+      }
+      if (numId) {
+        if (!profileMap.has(numId)) profileMap.set(numId, userProfile);
+        matchedSet.add(numId);
+      }
+    });
+
+    return { empProfileMap: profileMap, matchedEmployeeIdsSet: matchedSet };
+  }, [employeesData, masterUsers]);
+
+  // Check if employee exists in employees table or master users (O(1))
+  const isEmployeeInTable = useCallback((employeeId) => {
     if (!employeeId) return false;
-    const cleanId = employeeId.toString().trim().toLowerCase();
+    const cleanId = String(employeeId).trim().toLowerCase();
     const numCleanId = cleanId.replace(/^0+/, '');
-    const inHr = employeesData.some(emp => {
-      const empId = emp.id?.toString().trim().toLowerCase();
-      const empEmployeeId = emp.employee_id?.toString().trim().toLowerCase();
-      const numEmpId = empEmployeeId ? empEmployeeId.replace(/^0+/, '') : '';
-      return empId === cleanId || empEmployeeId === cleanId || (numCleanId && numEmpId === numCleanId);
-    });
-    if (inHr) return true;
-    return masterUsers.some(u => {
-      const uEmpId = u.employee_id?.toString().trim().toLowerCase();
-      const uId = u.id?.toString().trim().toLowerCase();
-      const numUEmpId = uEmpId ? uEmpId.replace(/^0+/, '') : '';
-      return (uEmpId && uEmpId === cleanId) || (uId && uId === cleanId) || (numCleanId && numUEmpId === numCleanId);
-    });
-  };
+    return matchedEmployeeIdsSet.has(cleanId) || (Boolean(numCleanId) && matchedEmployeeIdsSet.has(numCleanId));
+  }, [matchedEmployeeIdsSet]);
 
   // Fetch roster data from shift_roster table
   const fetchRosterData = async (employeeId, dateStr) => {
@@ -689,15 +766,27 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Get roster for an employee on a specific date (returns latest assigned entry if duplicates exist)
-  const getEmployeeRoster = (employeeId, date) => {
-    if (!rosterData || rosterData.length === 0) return null;
-    const matches = rosterData.filter(r =>
-      (r.employee_id?.toString().toLowerCase() === employeeId?.toString().toLowerCase()) &&
-      (r.date === date)
-    );
-    return matches.length > 0 ? matches[matches.length - 1] : null;
-  };
+  const rosterMap = useMemo(() => {
+    const map = new Map();
+    (rosterData || []).forEach(r => {
+      if (!r.date) return;
+      const cleanEmpId = String(r.employee_id || '').trim().toLowerCase();
+      const numEmpId = cleanEmpId.replace(/^0+/, '');
+      map.set(`${cleanEmpId}_${r.date}`, r);
+      if (numEmpId && numEmpId !== cleanEmpId) {
+        map.set(`${numEmpId}_${r.date}`, r);
+      }
+    });
+    return map;
+  }, [rosterData]);
+
+  // Get roster for an employee on a specific date (O(1))
+  const getEmployeeRoster = useCallback((employeeId, date) => {
+    if (!employeeId || !date) return null;
+    const cleanId = String(employeeId).trim().toLowerCase();
+    const numId = cleanId.replace(/^0+/, '');
+    return rosterMap.get(`${cleanId}_${date}`) || (numId ? rosterMap.get(`${numId}_${date}`) : null) || null;
+  }, [rosterMap]);
 
   // Fetch leaves from hr_management_leaves
   const fetchLeavesData = async () => {
@@ -712,6 +801,35 @@ const AttendanceDaily = () => {
       console.warn('Could not fetch leaves data:', e);
     }
   };
+
+  const leavesMap = useMemo(() => {
+    const map = new Map();
+    (leavesData || []).forEach(l => {
+      const lEmpId = (l.employee_id || l.employeeId || '').toString().trim().toLowerCase();
+      const numId = lEmpId.replace(/^0+/, '');
+      const st = (l.status || '').trim().toLowerCase();
+      const isApproved = !st || st === 'approved';
+      if (!isApproved) return;
+      if (!map.has(lEmpId)) map.set(lEmpId, []);
+      map.get(lEmpId).push(l);
+      if (numId && numId !== lEmpId) {
+        if (!map.has(numId)) map.set(numId, []);
+        map.get(numId).push(l);
+      }
+    });
+    return map;
+  }, [leavesData]);
+
+  const getLeaveForEmployeeAndDate = useCallback((empIdClean, date) => {
+    if (!empIdClean || !date) return null;
+    const numId = empIdClean.replace(/^0+/, '');
+    const userLeaves = leavesMap.get(empIdClean) || (numId ? leavesMap.get(numId) : null) || [];
+    return userLeaves.find(l => {
+      const from = l.from_date || l.fromDate;
+      const to = l.to_date || l.toDate;
+      return from && to && from <= date && to >= date;
+    }) || null;
+  }, [leavesMap]);
 
   // Fetch holidays from public.holidays table
   const fetchHolidaysData = async (dateStr) => {
@@ -738,11 +856,20 @@ const AttendanceDaily = () => {
     }
   };
 
-  // Helper to check if a specific date is a global company holiday
-  const getHolidayForDate = (date) => {
-    if (!holidaysData || holidaysData.length === 0 || !date) return null;
-    return holidaysData.find(h => (h.holiday_date || '').trim() === date.trim()) || null;
-  };
+  const holidaysMap = useMemo(() => {
+    const map = new Map();
+    (holidaysData || []).forEach(h => {
+      const d = (h.holiday_date || '').trim();
+      if (d) map.set(d, h);
+    });
+    return map;
+  }, [holidaysData]);
+
+  // Helper to check if a specific date is a global company holiday (O(1))
+  const getHolidayForDate = useCallback((date) => {
+    if (!date) return null;
+    return holidaysMap.get(date.trim()) || null;
+  }, [holidaysMap]);
 
   // Helper to find leave info or reason for an absent streak
   const getLeaveInfoForStreak = (employeeId, startFullDate, endFullDate, streak = []) => {
@@ -1123,12 +1250,7 @@ const AttendanceDaily = () => {
       const inDate = parseISTToDate(inStr);
       if (!inDate) return 0;
 
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: false
-      }).formatToParts(inDate);
+      const parts = kolkataTimeFormatter.formatToParts(inDate);
 
       const hour = parseInt(parts.find(p => p.type === 'hour').value, 10);
       const minute = parseInt(parts.find(p => p.type === 'minute').value, 10);
@@ -2355,23 +2477,34 @@ const AttendanceDaily = () => {
     return days;
   };
 
-  // Get attendance status for an employee on a specific date
-  const getAttendanceForDate = (employeeId, date) => {
+  // Precomputed Attendance Map for O(1) instantaneous lookup
+  const attendanceMap = useMemo(() => {
+    const map = new Map();
+    (attendanceData || []).forEach(a => {
+      if (!a.employee_id || !a.attendance_date) return;
+      const cleanEmpId = String(a.employee_id).trim().toLowerCase();
+      const numEmpId = cleanEmpId.replace(/^0+/, '');
+      map.set(`${cleanEmpId}_${a.attendance_date}`, a);
+      if (numEmpId && numEmpId !== cleanEmpId) {
+        map.set(`${numEmpId}_${a.attendance_date}`, a);
+      }
+    });
+    return map;
+  }, [attendanceData]);
+
+  // Get attendance status for an employee on a specific date (O(1))
+  const getAttendanceForDate = useCallback((employeeId, date) => {
     if (!employeeId || !date) return { status: 'Absent', in_time: '-', out_time: '-' };
     const empIdClean = String(employeeId).trim().toLowerCase();
+    const numEmpId = empIdClean.replace(/^0+/, '');
 
     // Check if date is before employee's date of joining
-    const empProfile = employeesData.find(e =>
-      (e.employee_id && String(e.employee_id).trim().toLowerCase() === empIdClean) ||
-      (e.id && String(e.id).trim().toLowerCase() === empIdClean)
-    );
+    const empProfile = empProfileMap.get(empIdClean) || (numEmpId ? empProfileMap.get(numEmpId) : null);
     const rawDoj = empProfile?.date_of_joining || empProfile?.doj || empProfile?.joining_date;
     const empDojStr = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : null;
 
     // 1. Check if an explicit attendance record exists
-    const record = attendanceData.find(
-      a => a.employee_id && String(a.employee_id).trim().toLowerCase() === empIdClean && a.attendance_date === date
-    );
+    const record = attendanceMap.get(`${empIdClean}_${date}`) || (numEmpId ? attendanceMap.get(`${numEmpId}_${date}`) : null);
 
     if (record) {
       const isManualAbsent = record.manual_punches?.absent === true ||
@@ -2433,28 +2566,15 @@ const AttendanceDaily = () => {
     }
 
     // 3. Check approved leave applications from hr_management_leaves
-    if (leavesData && leavesData.length > 0) {
-      const approvedLeave = leavesData.find(l => {
-        const lEmpId = (l.employee_id || l.employeeId)?.toString().trim().toLowerCase();
-        if (lEmpId !== empIdClean) return false;
-        const st = (l.status || '').trim().toLowerCase();
-        const isApproved = !st || st === 'approved';
-        if (!isApproved) return false;
-        const from = l.from_date || l.fromDate;
-        const to = l.to_date || l.toDate;
-        if (!from || !to) return false;
-        return from <= date && to >= date;
-      });
-
-      if (approvedLeave) {
-        return {
-          status: 'On Leave',
-          in_time: '-',
-          out_time: '-',
-          leave_type: approvedLeave.leave_type || approvedLeave.leaveType || 'Approved Leave',
-          reason: approvedLeave.reason || approvedLeave.remarks || 'Approved Leave Application'
-        };
-      }
+    const approvedLeave = getLeaveForEmployeeAndDate(empIdClean, date);
+    if (approvedLeave) {
+      return {
+        status: 'On Leave',
+        in_time: '-',
+        out_time: '-',
+        leave_type: approvedLeave.leave_type || approvedLeave.leaveType || 'Approved Leave',
+        reason: approvedLeave.reason || approvedLeave.remarks || 'Approved Leave Application'
+      };
     }
 
     // 4. Check roster shift for weekly off / day off
@@ -2478,7 +2598,7 @@ const AttendanceDaily = () => {
       return { status: 'Future', in_time: '-', out_time: '-' };
     }
     return { status: 'Absent', in_time: '-', out_time: '-' };
-  };
+  }, [empProfileMap, attendanceMap, getEmployeeRoster, getHolidayForDate, getLeaveForEmployeeAndDate]);
 
   // Change month
   const changeMonth = (delta) => {
@@ -2500,21 +2620,8 @@ const AttendanceDaily = () => {
   const { shops: storeMasterList, shopsDetails } = useShopStore();
   const shops = (storeMasterList && storeMasterList.length > 0) ? storeMasterList : [];
 
-  const resolveLocationToShop = (locStr, details = []) => {
-    if (!locStr) return '';
-    const clean = String(locStr).trim().toUpperCase();
-    if (!clean) return '';
-    const directMatch = details.find(d => (d.shop_name || '').toUpperCase() === clean);
-    if (directMatch && directMatch.shop_name) return directMatch.shop_name;
-    const normalized = clean.replace(/BAWDHAN/g, 'BAVDHAN').replace(/HINJHWADI/g, 'HINJEWADI').replace(/WAGOLI/g, 'WAGHOLI');
-    const matched = details.find(d => {
-      const full = (d.full_name || '').toUpperCase();
-      const addr = (d.address || '').toUpperCase();
-      const loc = (d.location || '').toUpperCase();
-      const sName = (d.shop_name || '').toUpperCase();
-      return full.includes(normalized) || addr.includes(normalized) || loc.includes(normalized) || (normalized.length > 3 && sName.includes(normalized));
-    });
-    if (matched && matched.shop_name) return matched.shop_name;
+  const locationToShopMap = useMemo(() => {
+    const map = new Map();
     const LEGACY_MAP = {
       'BAVDHAN': 'MADHURA',
       'BAWDHAN': 'MADHURA',
@@ -2528,8 +2635,38 @@ const AttendanceDaily = () => {
       'MUMBAI ULWE': 'KUNAL ULWE',
       'KHARGHAR': 'KUNAL KHARGHAR'
     };
-    return LEGACY_MAP[clean] || clean;
-  };
+    Object.entries(LEGACY_MAP).forEach(([k, v]) => map.set(k, v));
+
+    (shopsDetails || []).forEach(d => {
+      const sName = (d.shop_name || d.name || '').trim().toUpperCase();
+      if (!sName) return;
+      map.set(sName, sName);
+      if (d.location) map.set(d.location.trim().toUpperCase(), sName);
+      if (d.full_name) map.set(d.full_name.trim().toUpperCase(), sName);
+      if (d.address) map.set(d.address.trim().toUpperCase(), sName);
+    });
+
+    return map;
+  }, [shopsDetails]);
+
+  const resolveLocationToShop = useCallback((locStr) => {
+    if (!locStr) return '';
+    const clean = String(locStr).trim().toUpperCase();
+    if (!clean) return '';
+    if (locationToShopMap.has(clean)) return locationToShopMap.get(clean);
+
+    const normalized = clean.replace(/BAWDHAN/g, 'BAVDHAN').replace(/HINJHWADI/g, 'HINJEWADI').replace(/WAGOLI/g, 'WAGHOLI');
+    if (locationToShopMap.has(normalized)) return locationToShopMap.get(normalized);
+
+    const matched = (shopsDetails || []).find(d => {
+      const full = (d.full_name || '').toUpperCase();
+      const addr = (d.address || '').toUpperCase();
+      const loc = (d.location || '').toUpperCase();
+      const sName = (d.shop_name || '').toUpperCase();
+      return full.includes(normalized) || addr.includes(normalized) || loc.includes(normalized) || (normalized.length > 3 && sName.includes(normalized));
+    });
+    return matched?.shop_name || clean;
+  }, [locationToShopMap, shopsDetails]);
 
   // Helper to map shop name to location dynamically
   const getMappedLocation = (shopName) => {
@@ -2541,42 +2678,29 @@ const AttendanceDaily = () => {
     return detail?.location || detail?.address || cleanName;
   };
 
-  // Filter employees
-  const filteredEmployees = (() => {
+  // Filter employees (memoized for instantaneous scrolling & search)
+  const filteredEmployees = useMemo(() => {
     // Helper to check if employee/user is inactive
     const isEmpInactive = (id, name) => {
       const cleanId = (id || '').toString().trim().toLowerCase();
+      const numId = cleanId.replace(/^0+/, '');
       const cleanName = (name || '').toString().trim().toLowerCase();
       if (cleanId && inactiveEmpIds.has(cleanId)) return true;
+      if (numId && inactiveEmpIds.has(numId)) return true;
       if (cleanName && inactiveEmpNames.has(cleanName)) return true;
       return false;
     };
+
+    const employeesWithLogsSet = new Set(
+      employees.map(e => String(e.id || '').trim().toLowerCase())
+    );
 
     // 1. Get employees with logs (matched or unmatched)
     const baseList = employees
       .map(emp => {
         const cleanEmpId = String(emp.id || '').trim().toLowerCase();
         const numEmpId = cleanEmpId.replace(/^0+/, '');
-        let empProfile = employeesData.find(e =>
-          (e.employee_id && String(e.employee_id).trim().toLowerCase() === cleanEmpId) ||
-          (e.id && String(e.id).trim().toLowerCase() === cleanEmpId) ||
-          Boolean(numEmpId && e.employee_id && String(e.employee_id).trim().toLowerCase().replace(/^0+/, '') === numEmpId)
-        );
-        if (!empProfile) {
-          const userMatch = masterUsers.find(u =>
-            (u.employee_id && String(u.employee_id).trim().toLowerCase() === cleanEmpId) ||
-            (u.id && String(u.id).trim().toLowerCase() === cleanEmpId)
-          );
-          if (userMatch) {
-            empProfile = {
-              name_as_per_aadhar: userMatch.user_name,
-              user_name: userMatch.user_name,
-              shop_name: userMatch.shop_name,
-              joining_place: userMatch.shop_name,
-              designation: userMatch.role || userMatch.Designation || 'User'
-            };
-          }
-        }
+        const empProfile = empProfileMap.get(cleanEmpId) || (numEmpId ? empProfileMap.get(numEmpId) : null);
         const resolvedName = empProfile ? (empProfile.name_as_per_aadhar || empProfile.user_name || empProfile.name || emp.name) : emp.name;
         return {
           ...emp,
@@ -2591,54 +2715,51 @@ const AttendanceDaily = () => {
         // Exclude inactive employees
         if (isEmpInactive(emp.id, emp.name)) return false;
 
-        const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          emp.id?.toLowerCase().includes(searchTerm.toLowerCase());
+        const cleanEmpId = String(emp.id || '').trim().toLowerCase();
+        const numEmpId = cleanEmpId.replace(/^0+/, '');
 
-        const punchedLoc = (resolvePunchedStore(emp) || '').trim().toUpperCase();
+        const matchesSearch = !searchTerm ||
+          emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          cleanEmpId.includes(searchTerm.toLowerCase());
+        if (!matchesSearch) return false;
+
+        const punchedLoc = (resolvePunchedStore(emp, deviceMapping, biometricDevices) || '').trim().toUpperCase();
         const rawAssigned = (emp.store_name || emp.joining_place || '').trim().toUpperCase();
-        const mappedShopName = resolveLocationToShop(rawAssigned, shopsDetails) || rawAssigned;
+        const mappedShopName = resolveLocationToShop(rawAssigned) || rawAssigned;
 
         const matchesStore = selectedStore === 'ALL' ||
           selectedStore === mappedShopName ||
           selectedStore === rawAssigned ||
           selectedStore === punchedLoc;
+        if (!matchesStore) return false;
 
         const isMatched = isEmployeeInTable(emp.id);
 
-        let matchesFilterMode = true;
-        if (matchFilter === 'MATCHED') {
-          matchesFilterMode = isMatched;
-        } else if (matchFilter === 'UNMATCHED') {
-          matchesFilterMode = !isMatched;
-        }
+        if (matchFilter === 'MATCHED' && !isMatched) return false;
+        if (matchFilter === 'UNMATCHED' && isMatched) return false;
 
         // Status filter: check today's attendance status for daily view
-        let matchesStatus = true;
         if (statusFilter !== 'ALL') {
           const att = getAttendanceForDate(emp.id, selectedDate);
           const empStatus = att?.status || 'Absent';
           if (statusFilter === 'Present') {
-            matchesStatus = empStatus === 'Present' || empStatus === 'Late';
-          } else {
-            matchesStatus = empStatus === statusFilter;
+            if (empStatus !== 'Present' && empStatus !== 'Late') return false;
+          } else if (empStatus !== statusFilter) {
+            return false;
           }
         }
 
-        return matchesSearch && matchesStore && matchesFilterMode && matchesStatus;
+        return true;
       });
 
     // 2. If showing verified or all (matchFilter is not UNMATCHED), append remaining employees from users table
     let combined = baseList;
     if (matchFilter !== 'UNMATCHED') {
-      const hasAttendance = (empId) => {
-        const cleanEmpId = String(empId || '').trim().toLowerCase();
-        return employees.some(e => String(e.id || '').trim().toLowerCase() === cleanEmpId);
-      };
-
       const remaining = employeesData
         .filter(emp => {
           const empId = emp.employee_id || emp.id;
           const cleanEmpId = String(empId || '').trim().toLowerCase();
+          const numEmpId = cleanEmpId.replace(/^0+/, '');
           const name = emp.name_as_per_aadhar || emp.user_name || '';
 
           // Exclude inactive employees
@@ -2654,20 +2775,24 @@ const AttendanceDaily = () => {
           }
 
           // Exclude if already in employees list (meaning they have logs)
-          if (hasAttendance(cleanEmpId)) return false;
+          if (employeesWithLogsSet.has(cleanEmpId) || (numEmpId && employeesWithLogsSet.has(numEmpId))) return false;
 
           // Remaining employees (no log) are always 'Absent'
           if (statusFilter !== 'ALL' && statusFilter !== 'Absent') return false;
 
           // Apply search term and store filters
-          const id = cleanEmpId;
-          const store = emp.shop_name || emp.joining_place || '';
+          const matchesSearch = !searchTerm ||
+            name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            cleanEmpId.includes(searchTerm.toLowerCase());
+          if (!matchesSearch) return false;
 
-          const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            id.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesStore = selectedStore === 'ALL' || store === selectedStore;
+          const rawAssigned = (emp.shop_name || emp.joining_place || '').trim().toUpperCase();
+          const mappedShopName = resolveLocationToShop(rawAssigned) || rawAssigned;
+          const matchesStore = selectedStore === 'ALL' ||
+            selectedStore === mappedShopName ||
+            selectedStore === rawAssigned;
 
-          return matchesSearch && matchesStore;
+          return matchesStore;
         })
         .map(emp => ({
           id: String(emp.employee_id || emp.id || '').trim(),
@@ -2693,7 +2818,26 @@ const AttendanceDaily = () => {
     }
 
     return uniqueFiltered;
-  })();
+  }, [
+    employees,
+    employeesData,
+    searchTerm,
+    selectedStore,
+    matchFilter,
+    statusFilter,
+    selectedDate,
+    empProfileMap,
+    matchedEmployeeIdsSet,
+    attendanceMap,
+    inactiveEmpIds,
+    inactiveEmpNames,
+    resolveLocationToShop,
+    isEmployeeInTable,
+    getAttendanceForDate,
+    deviceMapping,
+    biometricDevices,
+    viewMode
+  ]);
 
   const pageSize = 15;
   const totalPages = Math.ceil(filteredEmployees.length / pageSize);
@@ -2765,24 +2909,20 @@ const AttendanceDaily = () => {
   }, [selectedDate, currentMonth, viewMode]);
 
   useEffect(() => {
-    fetchAttendanceFromDB();
+    fetchAttendanceFromDB(currentMonth);
     // syncDeviceLogs is handled via background cron or manual refresh button
   }, [currentMonth]);
 
-  // Fetch logs from Supabase on load / date change
+  // Keep month synchronized if selected date belongs to a different month
   useEffect(() => {
-    if (viewMode === 'daily' && selectedDate) {
-      const autoFetch = async () => {
-        try {
-          console.log(`[Auto Fetch] Fetching logs for ${selectedDate}...`);
-          await fetchAttendanceFromDB(currentMonth);
-        } catch (err) {
-          console.error('[Auto Fetch] Failed:', err);
-        }
-      };
-      autoFetch();
+    if (selectedDate) {
+      const [y, m] = selectedDate.split('-').map(Number);
+      if (y && m && (y !== currentMonth.getFullYear() || (m - 1) !== currentMonth.getMonth())) {
+        const nextMonth = new Date(y, m - 1, 1);
+        setCurrentMonth(nextMonth);
+      }
     }
-  }, [selectedDate, viewMode]);
+  }, [selectedDate]);
 
   // Download Excel
   const downloadExcel = () => {
@@ -3055,12 +3195,12 @@ const AttendanceDaily = () => {
 
       {viewMode === 'calendar' ? (
         /* Calendar View - Compact */
-        <div className="bg-white rounded-md border border-gray-200 overflow-hidden flex flex-col h-[calc(88vh-220px)] min-h-[500px] shadow-sm">
-          <div className="overflow-x-auto overflow-y-auto flex-1 scrollbar-thin">
-            <table className="w-full text-xs relative border-collapse min-w-[1200px]">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+        <div className="bg-white rounded-md border border-gray-200 overflow-hidden flex flex-col shadow-sm">
+          <div className="overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <table className="w-full text-xs border-collapse min-w-[1200px]">
+              <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="sticky top-0 left-0 bg-gray-50 px-2 py-1.5 font-medium text-gray-600 text-[10px] z-30 min-w-[80px] border-">
+                  <th className="bg-gray-50 px-2 py-1.5 font-medium text-gray-600 text-[10px] min-w-[80px] border-r">
                     Employee
                   </th>
                   {days.map((day, idx) => {
@@ -3068,7 +3208,7 @@ const AttendanceDaily = () => {
                     return (
                       <th
                         key={idx}
-                        className={`sticky top-0 px-0.5 py-1.5 font-medium text-center text-[10px] min-w-[32px] z-10 transition-colors ${isHovered
+                        className={`px-0.5 py-1.5 font-medium text-center text-[10px] min-w-[32px] transition-colors ${isHovered
                             ? 'bg-indigo-100 text-indigo-950 font-bold ring-1 ring-indigo-400 z-30'
                             : day.isWeekend
                               ? 'bg-red-50 text-gray-700'
@@ -3447,7 +3587,6 @@ const AttendanceDaily = () => {
                                                 className="h-full flex-1 flex items-center justify-center relative cursor-pointer"
                                                 title={`Click to edit attendance for ${item.day.fullDate}`}
                                                 onMouseEnter={() => setHoveredCell({ empId: employee.id, idx: item.idx })}
-                                                onMouseMove={() => setHoveredCell({ empId: employee.id, idx: item.idx })}
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   handleEmployeeSelect(
@@ -3627,22 +3766,22 @@ const AttendanceDaily = () => {
       ) : (
         /* Daily List View - Compact */
         <>
-          <div className="bg-white rounded-md overflow-hidden shadow-sm">
-            <div className="overflow-x-auto overflow-y-auto max-h-[calc(89vh-220px)] scrollbar-thin">
-              <table className="w-full text-xs relative border-collapse">
-                <thead className=" border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+          <div className="bg-white rounded-md shadow-sm border border-gray-200">
+            <div className="w-full">
+              <table className="w-full text-xs border-collapse">
+                <thead className="border-b border-gray-200 bg-gray-50">
                   <tr>
-                    <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[40px] z-10">#</th>
-                    <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[10vw] z-10">Employee</th>
-                    <th className="sticky top-0 bg-gray-50 text-left px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[100px] z-10">Location</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[80px] z-10">Status</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[90px] z-10">In Time (IST)</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[90px] z-10">Out Time (IST)</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[180px] z-10">Manual Log & Punch Log</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[120px] z-10">Lunch Hours</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[70px] z-10">Hours</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[60px] z-10">Late</th>
-                    <th className="sticky top-0 bg-gray-50 text-center px-2 py-1.5 font-medium text-gray-600 text-[10px] w-[50px] z-10">Action</th>
+                    <th className="bg-gray-50 text-left px-2 py-2 font-medium text-gray-600 text-[10px] w-[40px]">#</th>
+                    <th className="bg-gray-50 text-left px-2 py-2 font-medium text-gray-600 text-[10px] w-[10vw]">Employee</th>
+                    <th className="bg-gray-50 text-left px-2 py-2 font-medium text-gray-600 text-[10px] w-[100px]">Location</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[80px]">Status</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[90px]">In Time (IST)</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[90px]">Out Time (IST)</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[180px]">Manual Log & Punch Log</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[120px]">Lunch Hours</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[70px]">Hours</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[60px]">Late</th>
+                    <th className="bg-gray-50 text-center px-2 py-2 font-medium text-gray-600 text-[10px] w-[50px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -3675,27 +3814,6 @@ const AttendanceDaily = () => {
                       // Format manual and api punches
                       let manualPunchesDisplay = '-';
                       let apiPunchesDisplay = '-';
-
-                      // Helper to parse times in "10:05 AM" or "10:05" formats into minutes for sorting
-                      const parseToMinutes = (tStr) => {
-                        try {
-                          const clean = tStr.trim().toUpperCase();
-                          const isPM = clean.endsWith('PM');
-                          const isAM = clean.endsWith('AM');
-                          let timePart = clean;
-                          if (isPM || isAM) {
-                            timePart = clean.slice(0, -2).trim();
-                          }
-                          const [hStr, mStr] = timePart.split(':');
-                          let h = parseInt(hStr, 10);
-                          const m = parseInt(mStr, 10) || 0;
-                          if (isPM && h < 12) h += 12;
-                          if (isAM && h === 12) h = 0;
-                          return h * 60 + m;
-                        } catch (e) {
-                          return 0;
-                        }
-                      };
 
                       if (attendance?.manual_punches) {
                         const punchesObj = attendance.manual_punches;
@@ -3782,8 +3900,8 @@ const AttendanceDaily = () => {
                         );
                       };
 
-                      const employeeProfile = resolveEmployeeProfile(employee, employeesData, masterUsers);
-                      const candidatePhoto = getEmployeePhoto(employee, employeesData, masterUsers);
+                      const employeeProfile = empProfileMap.get(employee.id) || resolveEmployeeProfile(employee, employeesData, masterUsers);
+                      const candidatePhoto = employeeProfile?.candidate_photo || getEmployeePhoto(employee, employeesData, masterUsers);
                       const employeeRoster = getEmployeeRoster(employee.id, selectedDate);
 
                       // Calculate valid punch count (filtering out pre-9 AM punches)
@@ -3839,7 +3957,7 @@ const AttendanceDaily = () => {
                                   )}
                                   {employeeRoster && (
                                     <span
-                                      className="absolute -top-1 -left-1 w-3 h-3 bg-indigo-600 rounded-full border border-white flex items-center justify-center text-[7px] text-white font-bold leading-none select-none shadow-sm cursor-help animate-pulse"
+                                      className="absolute -top-1 -left-1 w-3 h-3 bg-indigo-600 rounded-full border border-white flex items-center justify-center text-[7px] text-white font-bold leading-none select-none shadow-sm cursor-help"
                                       title={`Shift Assigned: ${employeeRoster.shift_type} (${employeeRoster.start_time?.substring(0, 5)} - ${employeeRoster.end_time?.substring(0, 5)})`}
                                     >
                                       S

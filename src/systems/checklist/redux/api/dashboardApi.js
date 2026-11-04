@@ -63,7 +63,7 @@ export const fetchDashboardDataApi = async (
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       // Admin: strictly limited to their assigned shop(s)
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
@@ -84,14 +84,16 @@ export const fetchDashboardDataApi = async (
 
 
     // Apply shop filter if provided (for checklist and delegation)
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.ilike('shop_name', shopFilter);
-    } else if (role === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || "";
-      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      if (managerShops.length > 0) {
-        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
-        query = query.or(orCondition);
+    if (dashboardType !== 'ea') {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (role === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
       }
     }
 
@@ -229,7 +231,7 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       // Admin: strictly limited to their assigned shop(s)
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
@@ -255,14 +257,16 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     }
 
     // Apply shop filter
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.ilike('shop_name', shopFilter);
-    } else if (role === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || "";
-      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      if (managerShops.length > 0) {
-        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
-        query = query.or(orCondition);
+    if (dashboardType !== 'ea') {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (role === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
       }
     }
 
@@ -398,7 +402,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
         const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
@@ -555,7 +559,7 @@ export const fetchStaffTasksDataApi = async (
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
         const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
@@ -881,7 +885,7 @@ export const getStaffTasksCountApi = async (
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
         const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
@@ -1225,18 +1229,20 @@ export const fetchChecklistDataByDateRangeApi = async (
     const upperRole = (role || "").toUpperCase();
     // Apply role-based filtering
     if (upperRole === 'USER' && username) {
-      query = query.eq('name', username);
+      query = query.eq(dashboardType === 'ea' ? 'doer_name' : 'name', username);
     }
 
     // Apply shop filter
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.ilike('shop_name', shopFilter);
-    } else if (upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || "";
-      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      if (managerShops.length > 0) {
-        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
-        query = query.or(orCondition);
+    if (dashboardType !== 'ea') {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
       }
     }
 
@@ -1321,18 +1327,20 @@ export const getChecklistDateRangeCountApi = async (
     const upperRole = (role || "").toUpperCase();
     // Apply role-based filtering
     if (upperRole === 'USER' && username) {
-      query = query.eq('name', username);
+      query = query.eq(dashboardType === 'ea' ? 'doer_name' : 'name', username);
     }
 
     // Apply shop filter
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.ilike('shop_name', shopFilter);
-    } else if (upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || "";
-      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      if (managerShops.length > 0) {
-        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
-        query = query.or(orCondition);
+    if (dashboardType !== 'ea') {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
       }
     }
 
@@ -1412,18 +1420,20 @@ export const getChecklistDateRangeStatsApi = async (
     const upperRole = (role || "").toUpperCase();
     // Apply role-based filtering
     if (upperRole === 'USER' && username) {
-      totalQuery = totalQuery.eq('name', username);
+      totalQuery = totalQuery.eq(dashboardType === 'ea' ? 'doer_name' : 'name', username);
     }
 
     // Apply shop filter
-    if (shopFilter && shopFilter !== 'all') {
-      totalQuery = totalQuery.ilike('shop_name', shopFilter);
-    } else if (upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || "";
-      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      if (managerShops.length > 0) {
-        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
-        totalQuery = totalQuery.or(orCondition);
+    if (dashboardType !== 'ea') {
+      if (shopFilter && shopFilter !== 'all') {
+        totalQuery = totalQuery.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          totalQuery = totalQuery.or(orCondition);
+        }
       }
     }
 
@@ -1454,16 +1464,18 @@ export const getChecklistDateRangeStatsApi = async (
         .lte('planned_date', `${endDate}T23:59:59`);
     }
     if (upperRole === 'USER' && username) {
-      completedQuery = completedQuery.eq('name', username);
+      completedQuery = completedQuery.eq(dashboardType === 'ea' ? 'doer_name' : 'name', username);
     }
-    if (shopFilter && shopFilter !== 'all') {
-      completedQuery = completedQuery.ilike('shop_name', shopFilter);
-    } else if (upperRole === 'MANAGER') {
-      const userAccess = localStorage.getItem('user_access') || "";
-      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
-      if (managerShops.length > 0) {
-        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
-        completedQuery = completedQuery.or(orCondition);
+    if (dashboardType !== 'ea') {
+      if (shopFilter && shopFilter !== 'all') {
+        completedQuery = completedQuery.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          completedQuery = completedQuery.or(orCondition);
+        }
       }
     }
     if (staffFilter && staffFilter !== 'all' && (upperRole === 'ADMIN' || upperRole === 'MANAGER')) {
@@ -1669,7 +1681,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
         const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
@@ -1788,7 +1800,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
         const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];
@@ -1906,7 +1918,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     const roleLower = (localStorage.getItem('role') || role || '').toLowerCase().trim();
     if (roleLower === 'user' && username) {
       query = query.eq(nameField, username);
-    } else if (isUserShopScoped()) {
+    } else if (isUserShopScoped() && dashboardType !== 'ea') {
       const assigned = getUserAssignedShops();
       if (assigned.length > 0) {
         const allowedShops = [...new Set(assigned.flatMap(s => [s, s.toUpperCase(), s.toLowerCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()]))];

@@ -21,7 +21,7 @@ const Attendance = () => {
     return (
         <div className="min-h-full flex flex-col bg-gray-50">
             {/* Header Section */}
-            <div className="bg-gray-100 border-b border-gray-200 sticky top-0 z-20">
+            <div className="bg-gray-100 border-b border-gray-200">
                 <div className="px-6 sm:px-10 py-2">
                     <div className="flex items-center justify-between">
                         <div>
