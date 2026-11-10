@@ -845,6 +845,7 @@ export const fetchPaginatedScheduledWorkTasksApi = async ({ page, limit, searchT
       .select('*, shop!inner(id, shop_name), task_assignments(*)', { count: 'exact' })
       .eq('is_active', true);
 
+    const userAssignedShops = getUserAssignedShops();
     if (userAssignedShops) {
       query = query.in('shop.shop_name', userAssignedShops);
     } else if (role === 'manager' && managerShops && managerShops.length > 0) {

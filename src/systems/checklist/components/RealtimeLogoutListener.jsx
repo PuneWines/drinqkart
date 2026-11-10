@@ -5,10 +5,10 @@ import supabase from "../SupabaseClient";
 const RealtimeLogoutListener = () => {
   const navigate = useNavigate();
 
-  // ✅ Ask notification permission
+  // ✅ Ask notification permission only if not already decided (prevents browser console warning)
   useEffect(() => {
-    if ("Notification" in window) {
-      Notification.requestPermission();
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
     }
   }, []);
 

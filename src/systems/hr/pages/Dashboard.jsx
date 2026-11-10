@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Users, UserCheck, Clock, UserX, UserMinus, Briefcase, Calendar, TrendingUp, Award, PieChart, Filter, Search, AlertCircle, Eye } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
@@ -126,6 +127,18 @@ export default function Dashboard() {
         });
         return shops.size > 0 ? shops : null;
     };
+
+    const navigate = useNavigate()
+    const location = useLocation()
+    const [pendingVerification, setPendingVerification] = useState(0)
+
+    useEffect(() => {
+        supabase
+            .from('hr_management_employees')
+            .select('id', { count: 'exact', head: true })
+            .eq('verification_status', 'Pending')
+            .then(({ count, error }) => { if (!error) setPendingVerification(count || 0) })
+    }, [])
 
     // Employee stats
     const [totalEmployee, setTotalEmployee] = useState(0)
@@ -974,6 +987,22 @@ export default function Dashboard() {
                 </div>
             ) : (
                 <>
+                    {pendingVerification > 0 && (
+                        <div
+                            onClick={() => navigate(`${location.pathname.replace(/\/+$/, '')}/employees?tab=action`)}
+                            className="mb-4 flex items-center justify-between gap-3 cursor-pointer bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 hover:bg-amber-100/70 transition-colors"
+                        >
+                            <div className="flex items-center gap-3">
+                                <AlertCircle size={20} className="text-amber-600" />
+                                <div>
+                                    <p className="text-sm font-bold text-amber-900">Action Required: {pendingVerification} employee{pendingVerification === 1 ? '' : 's'} awaiting Office Verification</p>
+                                    <p className="text-xs text-amber-700">Click to review and verify new employees</p>
+                                </div>
+                            </div>
+                            <span className="text-xs font-bold text-amber-700">Review →</span>
+                        </div>
+                    )}
+
                     {/* ── Today's Attendance Stat Cards ── */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
                         {/* Present */}

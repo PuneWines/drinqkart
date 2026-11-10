@@ -29,36 +29,7 @@ import { generateWorkTasksApi, resetWorkTasksApi, checkAndPromoteAssignmentsApi,
 import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../services/whatsappService";
 import { ViewOnlyBanner, getPagePermission, getUserAssignedShops } from "../../../utils/permissionUtils";
 
-const isAssignmentExpired = (item) => {
-  if (!item.end_datetime) return false;
-  const str = String(item.end_datetime).trim();
-  const datePart = str.split(/[T ]/)[0] || "";
-  if (!datePart || datePart === "2000-01-01" || datePart.startsWith("0000") || datePart.startsWith("1970")) {
-    return false;
-  }
-
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  // If end date is in the future, it is definitely not expired
-  if (datePart > todayStr) return false;
-
-  let timePart = "";
-  if (str.includes("T")) timePart = str.split("T")[1]?.substring(0, 8) || "";
-  else if (str.includes(" ")) timePart = str.split(" ")[1]?.substring(0, 8) || "";
-  if (!timePart || timePart.startsWith("00:00")) timePart = "23:59:59";
-
-  const [y, m, d] = datePart.split("-").map(Number);
-  const [hh, mm, ss] = timePart.split(":").map(Number);
-  if (!y || !m || !d) return false;
-
-  const endWithDuration = new Date(y, m - 1, d, hh || 23, mm || 59, ss || 59);
-  const durationMins = Number(item.duration || item.estimated_minutes || 0);
-  if (durationMins > 0) {
-    endWithDuration.setMinutes(endWithDuration.getMinutes() + durationMins);
-  }
-
-  return now > endWithDuration;
-};
+import { isAssignmentExpired } from "../utils/assignmentStatus";
 
 const getTaskStatusInfo = (item, isModified) => {
   if (isModified) {
@@ -994,19 +965,6 @@ export default function WorkDetails() {
     setSearchDropdown(prev => ({ ...prev, term: "" }));
   };
 
-
-
-  if (loading && masterTasks.length === 0) {
-    return (
-      <AdminLayout>
-        <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
-          <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-          <p className="text-gray-500 font-medium animate-pulse">Loading work definitions...</p>
-        </div>
-      </AdminLayout>
-    );
-  }
-
   return (
     <AdminLayout>
       <div className="flex flex-col gap-4 mt-2 animate-in fade-in duration-500 pb-20 md:pb-4">
@@ -1063,7 +1021,7 @@ export default function WorkDetails() {
             <div className="bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 flex items-center justify-center gap-2 shrink-0">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">
-                {filteredTasks.length} / {masterTasks.length} Records
+                {loading && masterTasks.length === 0 ? "Loading..." : `${filteredTasks.length} / ${masterTasks.length} Records`}
               </span>
             </div>
           </div>
@@ -1267,7 +1225,17 @@ export default function WorkDetails() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredTasks.map((item, index) => {
+              {loading && masterTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="py-24 text-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+                      <p className="text-gray-500 font-medium text-xs animate-pulse">Loading work definitions...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredTasks.map((item, index) => {
                 const isModified = !!modifiedRows[item.taskId];
                 const isActive = item.status === 'ACTIVE' && !isModified;
 
@@ -1490,10 +1458,10 @@ export default function WorkDetails() {
 
                   </Fragment>
                 );
-              })}
+              }))}
             </tbody>
           </table>
-          {filteredTasks.length === 0 && (
+          {!loading && filteredTasks.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-3">
               <LayoutGrid size={48} className="text-gray-200" />
               <p className="text-gray-400 font-bold tracking-widest uppercase text-xs">No matching work records found</p>
@@ -1503,7 +1471,13 @@ export default function WorkDetails() {
 
         {/* Mobile View Cards */}
         <div className="md:hidden space-y-4 p-4 bg-gray-50/30 rounded-b-xl border-x border-b border-gray-100">
-          {filteredTasks.map((item, index) => {
+          {loading && masterTasks.length === 0 ? (
+            <div className="py-16 text-center flex flex-col items-center justify-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm">
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+              <p className="text-gray-500 font-medium text-xs animate-pulse">Loading work definitions...</p>
+            </div>
+          ) : (
+            filteredTasks.map((item, index) => {
             const isModified = !!modifiedRows[item.taskId];
             const isActive = item.status === 'ACTIVE' && !isModified;
 
@@ -1776,9 +1750,9 @@ export default function WorkDetails() {
 
               </div>
             );
-          })}
+          }))}
 
-          {filteredTasks.length === 0 && (
+          {!loading && filteredTasks.length === 0 && (
             <div className="py-12 text-center flex flex-col items-center gap-2">
               <LayoutGrid size={36} className="text-gray-300" />
               <p className="text-gray-400 font-bold tracking-wider uppercase text-[10px]">No matching work records found</p>

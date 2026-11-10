@@ -109,13 +109,41 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
 
   const currentUrl = `${location.pathname}${location.search}`;
 
-  const isSubtabActive = (subTo) => {
+  const isSubtabActive = (subTo, subItem) => {
     if (!subTo) return false;
     if (subTo === currentUrl) return true;
     if (subTo.includes('?')) {
       return currentUrl === subTo;
     }
-    return location.pathname === subTo;
+    if (location.pathname === subTo) return true;
+
+    // Support explicit aliases if defined
+    if (subItem?.aliases && subItem.aliases.some((alias) => location.pathname.startsWith(alias))) {
+      return true;
+    }
+
+    // Support nested routes for Work Records (/dashboard/work-records/bulk-import, /dashboard/work-details/scheduled)
+    if (subTo === '/dashboard/work-details' && (
+      location.pathname.startsWith('/dashboard/work-details') ||
+      location.pathname.startsWith('/dashboard/work-records')
+    )) {
+      return true;
+    }
+
+    // Support nested routes for Delegation
+    if (subTo === '/dashboard/delegation' && location.pathname.startsWith('/dashboard/delegation')) {
+      return true;
+    }
+
+    // Support nested routes for Settings
+    if (subTo === '/dashboard/setting' && (
+      location.pathname === '/dashboard/setting' ||
+      location.pathname === '/dashboard/users-management'
+    )) {
+      return true;
+    }
+
+    return false;
   };
 
   useEffect(() => {
@@ -123,8 +151,8 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
       const initialExpanded = {};
       activeSystem.subtabs.forEach((sub) => {
         if (sub.children) {
-          const isChildActive = sub.children.some((child) => isSubtabActive(child.to));
-          if (isChildActive || isSubtabActive(sub.to)) {
+          const isChildActive = sub.children.some((child) => isSubtabActive(child.to, child));
+          if (isChildActive || isSubtabActive(sub.to, sub)) {
             initialExpanded[sub.label] = true;
           }
         }
@@ -294,8 +322,8 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                 }
 
                 if (sub.children && sub.children.length > 0) {
-                  const isChildActive = sub.children.some((child) => isSubtabActive(child.to));
-                  const isParentActive = isSubtabActive(sub.to) || isChildActive;
+                  const isChildActive = sub.children.some((child) => isSubtabActive(child.to, child));
+                  const isParentActive = isSubtabActive(sub.to, sub) || isChildActive;
                   const isExpanded = expandedTabs[sub.label] ?? isParentActive;
                   const ParentIcon = getSubtabIcon(sub.label);
 
@@ -327,7 +355,7 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                       {isExpanded && (
                         <div className="pl-3 space-y-1 border-l-2 border-[#C9A84C]/30 ml-4 my-1">
                           {sub.children.map((child, cIdx) => {
-                            const isThisChildActive = isSubtabActive(child.to);
+                            const isThisChildActive = isSubtabActive(child.to, child);
                             const ChildIcon = getSubtabIcon(child.label);
 
                             return (
@@ -352,7 +380,7 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                   );
                 }
 
-                const isActive = isSubtabActive(sub.to);
+                const isActive = isSubtabActive(sub.to, sub);
                 const SubIcon = getSubtabIcon(sub.label);
 
                 return (
@@ -517,8 +545,8 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                 }
 
                 if (sub.children && sub.children.length > 0) {
-                  const isChildActive = sub.children.some((child) => isSubtabActive(child.to));
-                  const isParentActive = isSubtabActive(sub.to) || isChildActive;
+                  const isChildActive = sub.children.some((child) => isSubtabActive(child.to, child));
+                  const isParentActive = isSubtabActive(sub.to, sub) || isChildActive;
                   const isExpanded = expandedTabs[sub.label] ?? isParentActive;
                   const ParentIcon = getSubtabIcon(sub.label);
 
@@ -553,7 +581,7 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                       {(!isCollapsed && isExpanded) && (
                         <div className="pl-3 space-y-1 border-l-2 border-[#C9A84C]/30 ml-4 my-1">
                           {sub.children.map((child, cIdx) => {
-                            const isThisChildActive = isSubtabActive(child.to);
+                            const isThisChildActive = isSubtabActive(child.to, child);
                             const ChildIcon = getSubtabIcon(child.label);
 
                             return (
@@ -577,7 +605,7 @@ const AppSidebar = ({ isMobileMenuOpen, onCloseMobileMenu, externalCollapsed, on
                   );
                 }
 
-                const isActive = isSubtabActive(sub.to);
+                const isActive = isSubtabActive(sub.to, sub);
                 const SubIcon = getSubtabIcon(sub.label);
 
                 return (

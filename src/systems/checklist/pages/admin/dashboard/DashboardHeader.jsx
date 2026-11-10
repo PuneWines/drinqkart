@@ -102,100 +102,47 @@ export default function DashboardHeader({
                 {/* Right: Filters Toolbar (Desktop) */}
                 {(mainTab === "default" || mainTab === "work") && (
                     <div className="flex flex-wrap items-center gap-2.5">
-                        {/* Date Range Picker */}
+                        {/* Date Range: separate Start / End date */}
                         {isAdmin && (
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowDateRangePicker(!showDateRangePicker)}
-                                    className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-[13px] font-medium border border-slate-200 !rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-2 font-sans"
-                                >
-                                    <Calendar size={14} className="text-slate-400" />
-                                    <span>
-                                        {startDate && endDate ? `${startDate} to ${endDate}` : "Date Range"}
-                                    </span>
-                                    {startDate && endDate && (
-                                        <span
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                clearDateRange();
-                                            }}
-                                            className="hover:text-red-500 p-0.5 ml-0.5"
-                                            title="Clear date range"
-                                        >
-                                            <X size={13} />
-                                        </span>
-                                    )}
-                                    <ChevronDown size={14} className="text-slate-400 ml-0.5" />
-                                </button>
-
-                                {showDateRangePicker && (
-                                    <>
-                                        <div
-                                            className="fixed inset-0 z-40"
-                                            onClick={() => setShowDateRangePicker(false)}
-                                        />
-                                        <div className="absolute top-full right-0 sm:left-0 sm:right-auto mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-4 w-76 sm:w-84 font-sans">
-                                            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                                                <h3 className="text-xs sm:text-[13px] font-bold text-slate-800 uppercase tracking-wider">
-                                                    Select Date Range
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowDateRangePicker(false)}
-                                                    className="text-slate-400 hover:text-slate-600 p-1"
-                                                >
-                                                    <X size={15} />
-                                                </button>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-3 my-3">
-                                                <div>
-                                                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
-                                                        From Date
-                                                    </label>
-                                                    <input
-                                                        type="date"
-                                                        value={startDate}
-                                                        onChange={(e) => setStartDate(e.target.value)}
-                                                        max={endDate || getTodayDate()}
-                                                        className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs sm:text-[13px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
-                                                        To Date
-                                                    </label>
-                                                    <input
-                                                        type="date"
-                                                        value={endDate}
-                                                        onChange={(e) => setEndDate(e.target.value)}
-                                                        min={startDate}
-                                                        max={getTodayDate()}
-                                                        className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs sm:text-[13px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 pt-2.5 border-t border-slate-100">
-                                                <button
-                                                    type="button"
-                                                    onClick={clearDateRange}
-                                                    className="h-9 flex-1 py-1.5 px-3 !rounded-lg text-xs sm:text-[13px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
-                                                >
-                                                    Clear
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={applyDateRange}
-                                                    disabled={!startDate || !endDate}
-                                                    className="h-9 flex-1 py-1.5 px-3 !rounded-lg text-xs sm:text-[13px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                >
-                                                    Apply Filter
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </>
+                            <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Start Date</span>
+                                    <input
+                                        type="date"
+                                        value={startDate}
+                                        max={endDate || getTodayDate()}
+                                        onChange={(e) => {
+                                            const v = e.target.value
+                                            setStartDate(v)
+                                            if (v && endDate && v <= endDate && onDateRangeChange) onDateRangeChange(v, endDate)
+                                        }}
+                                        className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs sm:text-[13px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                </label>
+                                <label className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">End Date</span>
+                                    <input
+                                        type="date"
+                                        value={endDate}
+                                        min={startDate}
+                                        max={getTodayDate()}
+                                        onChange={(e) => {
+                                            const v = e.target.value
+                                            setEndDate(v)
+                                            if (v && startDate && startDate <= v && onDateRangeChange) onDateRangeChange(startDate, v)
+                                        }}
+                                        className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs sm:text-[13px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                </label>
+                                {(startDate || endDate) && (
+                                    <button
+                                        type="button"
+                                        onClick={clearDateRange}
+                                        className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-red-500 hover:bg-slate-50"
+                                        title="Clear date range"
+                                    >
+                                        <X size={14} />
+                                    </button>
                                 )}
                             </div>
                         )}

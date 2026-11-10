@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles, Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText, ExternalLink, ChevronLeft, Printer, Download } from 'lucide-react'
+import {
+  Users, UserPlus, Search, Eye, Edit, Trash2, X, Save, XCircle, Sparkles,
+  Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText,
+  ExternalLink, ChevronLeft, ChevronRight, Printer, Download, CheckCircle2,
+  AlertCircle, Clock, Store, ChevronDown, Activity, Check, RotateCcw,
+  UserX, Zap, Building, Phone, Calendar
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { scopeQueryToUserShops, getUserAssignedShops, isApexAdmin, getPagePermission } from '../../../utils/permissionUtils'
 import { useAuth } from '../../../context/AuthContext'
@@ -92,10 +98,12 @@ export default function EmployeeManagement() {
   const [editFormData, setEditFormData] = useState({})
   const [joiningCompanies, setJoiningCompanies] = useState([])
   const [shopFilter, setShopFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [shopSearchInput, setShopSearchInput] = useState('')
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false)
   const shopDropdownRef = useRef(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [activeTab, setActiveTab] = useState('all') // 'all' | 'action'
 
 
   // File preview states for add form
@@ -393,6 +401,16 @@ export default function EmployeeManagement() {
         });
       }
 
+      // Active / Inactive status comes from Master Setting (users table), matched by employee id
+      const { data: userStatusRows } = await supabase.from("users").select("employee_id, user_name, status");
+      const userStatusById = {};
+      const userStatusByName = {};
+      (userStatusRows || []).forEach((u) => {
+        const st = (u.status || "active").toString().toLowerCase().trim() === "inactive" ? "Inactive" : "Active";
+        if (u.employee_id) userStatusById[u.employee_id.toString().trim().toLowerCase()] = st;
+        if (u.user_name) userStatusByName[u.user_name.toString().trim().toLowerCase()] = st;
+      });
+
       if (hrData && hrData.length > 0) {
         hrData.forEach(emp => {
           const details = emp.HR_SYSTEM_employee_data || {}
@@ -453,6 +471,14 @@ export default function EmployeeManagement() {
             resume_url: emp.resume_url || details.resume_url || null,
             created_at: emp.created_at || details.created_at,
             updated_at: emp.updated_at || details.updated_at || null,
+            // Rows without the column (migration not yet run) are treated as Verified
+            user_status: userStatusById[(empId || "").toString().trim().toLowerCase()]
+              || userStatusByName[(name || "").toString().trim().toLowerCase()]
+              || (((emp.status || emp.employee_status || "Active").toString().toLowerCase() === "inactive") ? "Inactive" : "Active"),
+            verification_status: emp.verification_status || 'Verified',
+            verified_by: emp.verified_by || '',
+            verified_at: emp.verified_at || null,
+            verification_remarks: emp.verification_remarks || '',
             _raw: emp
           })
         })
@@ -476,9 +502,38 @@ export default function EmployeeManagement() {
       emp.mobile_no?.includes(searchTerm)
 
     const matchesShop = shopFilter === '' || emp.joining_company_name === shopFilter
+    const matchesTab = activeTab === 'all' || emp.verification_status === 'Pending'
 
-    return matchesSearch && matchesShop;
+    const matchesStatus = statusFilter === '' || (emp.user_status || 'Active') === statusFilter
+
+    return matchesSearch && matchesShop && matchesTab && matchesStatus;
   })
+
+  const pendingCount = employees.filter(e => e.verification_status === 'Pending').length
+
+  const handleVerification = async (emp, newStatus) => {
+    let remarks = null
+    if (newStatus === 'Rejected') {
+      remarks = window.prompt(`Reason for rejecting ${emp.name_as_per_aadhar}?`)
+      if (remarks === null) return
+    } else if (!window.confirm(`Mark ${emp.name_as_per_aadhar} (${emp.employee_id}) as Office Verified?`)) {
+      return
+    }
+    const { error } = await supabase
+      .from('hr_management_employees')
+      .update({
+        verification_status: newStatus,
+        verified_by: authUser?.user_name || authUser?.name || authUser?.email || null,
+        verified_at: new Date().toISOString(),
+        verification_remarks: remarks
+      })
+      .eq('id', emp.id)
+    if (error) {
+      alert('Could not update verification: ' + error.message)
+      return
+    }
+    await fetchEmployees()
+  }
 
   const pageSize = 15;
   const totalPages = Math.ceil(filteredEmployees.length / pageSize);
@@ -487,23 +542,24 @@ export default function EmployeeManagement() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, shopFilter]);
+  }, [searchTerm, shopFilter, statusFilter, activeTab]);
 
   const renderPagination = () => {
     if (totalPages <= 1) return null;
     return (
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-100 text-xs">
-        <div className="text-gray-500">
-          Showing <span className="font-semibold">{(activePage - 1) * pageSize + 1}</span> to <span className="font-semibold">{Math.min(activePage * pageSize, filteredEmployees.length)}</span> of <span className="font-semibold">{filteredEmployees.length}</span> employees
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-50/80 border-t border-slate-200/80 text-xs font-sans">
+        <div className="text-slate-500 font-medium">
+          Showing <span className="font-semibold text-slate-800">{(activePage - 1) * pageSize + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(activePage * pageSize, filteredEmployees.length)}</span> of <span className="font-semibold text-slate-800">{filteredEmployees.length}</span> employees
         </div>
         <div className="flex items-center gap-1.5">
           <button
             disabled={activePage === 1}
             type="button"
             onClick={() => setCurrentPage(activePage - 1)}
-            className="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium rounded shadow-sm"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold rounded-lg shadow-2xs cursor-pointer"
           >
-            Previous
+            <ChevronLeft size={13} />
+            <span>Previous</span>
           </button>
           <div className="flex items-center gap-1">
             {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -512,14 +568,15 @@ export default function EmployeeManagement() {
                 const showEllipsis = index > 0 && page - arr[index - 1] > 1;
                 return (
                   <React.Fragment key={page}>
-                    {showEllipsis && <span className="text-gray-400 px-1">...</span>}
+                    {showEllipsis && <span className="text-slate-400 px-1 font-bold">...</span>}
                     <button
                       onClick={() => setCurrentPage(page)}
                       type="button"
-                      className={`w-7 h-7 flex items-center justify-center font-medium rounded transition-colors ${activePage === page
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-white border border-gray-300 hover:bg-gray-50 text-gray-700'
-                        }`}
+                      className={`min-w-7 h-7 px-2 flex items-center justify-center font-bold text-xs rounded-lg transition-colors cursor-pointer ${
+                        activePage === page
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'
+                      }`}
                     >
                       {page}
                     </button>
@@ -531,9 +588,10 @@ export default function EmployeeManagement() {
             disabled={activePage === totalPages}
             type="button"
             onClick={() => setCurrentPage(activePage + 1)}
-            className="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium rounded shadow-sm"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold rounded-lg shadow-2xs cursor-pointer"
           >
-            Next
+            <span>Next</span>
+            <ChevronRight size={13} />
           </button>
         </div>
       </div>
@@ -1434,31 +1492,38 @@ export default function EmployeeManagement() {
   }
 
   return (
-    <div className="p-6 lg:p-8 pt-5 pb-0">
-      {/* Header */}
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-indigo-600 text-white shadow-sm"><Users size={18} /></span>
-            Employees
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">Manage employee records, documents and banking details</p>
+    <div className="p-4 sm:p-6 lg:p-8 pt-4 space-y-4 max-w-full font-sans">
+      {/* Page Header */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="p-3 bg-indigo-50 text-indigo-700 rounded-2xl border border-indigo-100/80 shadow-2xs shrink-0">
+            <Users size={24} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight truncate">
+              Employees
+            </h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Manage employee records, documents, verification status and banking details
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           {canModify && (<>
             <button
               onClick={() => {
                 resetForm()
                 setShowForm(true)
               }}
-              className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-2xs hover:shadow-xs transition-all cursor-pointer"
             >
-              <UserPlus size={14} />
-              Add New Employee
+              <UserPlus size={15} />
+              <span>Add New Employee</span>
             </button>
-            <label className="flex items-center gap-2 px-3 py-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer text-xs font-semibold rounded-lg shadow-sm">
-              <Upload size={14} />
-              Import CSV
+            <label className="flex items-center gap-2 px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all cursor-pointer text-xs font-semibold rounded-lg shadow-2xs">
+              <Upload size={14} className="text-slate-500" />
+              <span>Import CSV</span>
               <input
                 type="file"
                 accept=".csv"
@@ -1469,124 +1534,486 @@ export default function EmployeeManagement() {
           </>)}
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 px-3 py-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors text-xs font-semibold rounded-lg shadow-sm"
+            className="flex items-center gap-2 px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all text-xs font-semibold rounded-lg shadow-2xs cursor-pointer"
           >
-            <ExternalLink size={14} />
-            Export CSV
+            <Download size={14} className="text-slate-500" />
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Filter and Search Section */}
-      <div className="flex gap-3 mb-4 items-center flex-wrap bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by name, ID, designation, mobile or shop..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-          />
+      {/* KPI Stat Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Card 1: Total */}
+        <div
+          onClick={() => { setActiveTab('all'); setStatusFilter(''); }}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-2xs hover:shadow-xs ${
+            activeTab === 'all' && !statusFilter ? 'border-indigo-400 ring-2 ring-indigo-100/60' : 'border-slate-200/80 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Total Staff</span>
+            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100/80">
+              <Users size={16} />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-extrabold text-slate-900 font-mono">{employees.length}</span>
+            <span className="text-[11px] text-slate-400 font-medium">registered</span>
+          </div>
         </div>
 
-        <div className="relative w-56">
-          <select
-            value={shopFilter}
-            onChange={(e) => setShopFilter(e.target.value)}
-            className="w-full appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-          >
-            <option value="">All Shops</option>
-            {filterShopOptions.map((company) => (
-              <option key={company.id} value={company.company_name}>{company.company_name}</option>
-            ))}
-          </select>
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[10px]">▼</span>
+        {/* Card 2: Active */}
+        <div
+          onClick={() => { setStatusFilter(statusFilter === 'Active' ? '' : 'Active'); }}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-2xs hover:shadow-xs ${
+            statusFilter === 'Active' ? 'border-emerald-400 ring-2 ring-emerald-100/60' : 'border-slate-200/80 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Active</span>
+            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100/80">
+              <Activity size={16} />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-extrabold text-emerald-600 font-mono">
+              {employees.filter(e => (e.user_status || 'Active') === 'Active').length}
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">active status</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-4 ml-auto">
-          <div className="flex items-center gap-2 px-3.5 py-2 bg-indigo-50 border border-indigo-100 rounded-lg">
-            <Users size={16} className="text-indigo-600" />
-            <span className="text-xs font-semibold text-gray-600">Total Employees:</span>
-            <span className="text-sm font-bold text-indigo-600">{filteredEmployees.length}</span>
+        {/* Card 3: Action Required (Pending) */}
+        <div
+          onClick={() => { setActiveTab('action'); }}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-2xs hover:shadow-xs ${
+            activeTab === 'action' ? 'border-amber-400 ring-2 ring-amber-100/60 bg-amber-50/20' : 'border-slate-200/80 hover:border-amber-200'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">Action Required</span>
+            <div className="p-2 rounded-lg bg-amber-50 text-amber-600 border border-amber-200/80">
+              <AlertCircle size={16} className={pendingCount > 0 ? 'animate-pulse' : ''} />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className={`text-2xl font-extrabold font-mono ${pendingCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
+              {pendingCount}
+            </span>
+            <span className="text-[11px] text-amber-600 font-medium">pending verify</span>
+          </div>
+        </div>
+
+        {/* Card 4: Inactive */}
+        <div
+          onClick={() => { setStatusFilter(statusFilter === 'Inactive' ? '' : 'Inactive'); }}
+          className={`p-3.5 bg-white rounded-xl border transition-all cursor-pointer shadow-2xs hover:shadow-xs ${
+            statusFilter === 'Inactive' ? 'border-slate-400 ring-2 ring-slate-100' : 'border-slate-200/80 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Inactive</span>
+            <div className="p-2 rounded-lg bg-slate-100 text-slate-600 border border-slate-200/80">
+              <UserX size={16} />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-extrabold text-slate-600 font-mono">
+              {employees.filter(e => e.user_status === 'Inactive').length}
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">disabled</span>
           </div>
         </div>
       </div>
 
+      {/* Navigation Tabs and Filters */}
+      <div className="space-y-3">
+        {/* View Tabs */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="bg-slate-100/90 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`h-9 px-4 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'all'
+                  ? 'bg-white text-indigo-700 shadow-2xs border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              <Users size={14} className={activeTab === 'all' ? 'text-indigo-600' : 'text-slate-400'} />
+              <span>All Employees</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'all' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {employees.length}
+              </span>
+            </button>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-        <div className="overflow-x-auto overflow-y-auto max-h-[73vh] scrollbar-thin">
-          <table className="w-full min-w-[1100px] table-fixed text-xs">
-            <thead className="bg-slate-50 border-b border-gray-200 sticky top-0 z-10">
+            <button
+              type="button"
+              onClick={() => setActiveTab('action')}
+              className={`h-9 px-4 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'action'
+                  ? 'bg-amber-500 text-white shadow-2xs border border-amber-600'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              <AlertCircle size={14} className={activeTab === 'action' ? 'text-white' : 'text-amber-500'} />
+              <span>Action Required</span>
+              {pendingCount > 0 && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  activeTab === 'action' ? 'bg-white text-amber-700' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Toolbar */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 flex-1 flex-wrap min-w-0">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name, ID, mobile, designation, shop..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9 w-full pl-8 pr-8 text-xs border border-slate-200 rounded-lg bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition shadow-2xs text-slate-800 placeholder-slate-400"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Shop Filter */}
+            <div className="relative min-w-[190px]">
+              <Store size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <select
+                value={shopFilter}
+                onChange={(e) => setShopFilter(e.target.value)}
+                className="h-9 w-full appearance-none pl-8 pr-8 text-xs border border-slate-200 rounded-lg font-semibold text-slate-700 bg-white hover:bg-slate-50 outline-none cursor-pointer shadow-2xs transition focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="">All Shops</option>
+                {filterShopOptions.map((company) => (
+                  <option key={company.id} value={company.company_name}>{company.company_name}</option>
+                ))}
+              </select>
+              <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
+            {/* Status Filter */}
+            <div className="relative min-w-[140px]">
+              <Activity size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-9 w-full appearance-none pl-8 pr-8 text-xs border border-slate-200 rounded-lg font-semibold text-slate-700 bg-white hover:bg-slate-50 outline-none cursor-pointer shadow-2xs transition focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
+            {/* Reset Button */}
+            {(searchTerm || shopFilter || statusFilter || activeTab !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setShopFilter('');
+                  setStatusFilter('');
+                  setActiveTab('all');
+                }}
+                className="h-9 inline-flex items-center gap-1.5 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 rounded-lg transition-colors cursor-pointer"
+              >
+                <RotateCcw size={12} />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
+
+          {/* Showing count indicator */}
+          <div className="flex items-center gap-2 shrink-0 self-end lg:self-center">
+            <span className="h-9 inline-flex items-center text-xs font-semibold text-slate-600 bg-slate-50 px-3.5 rounded-lg border border-slate-200/80 whitespace-nowrap shadow-2xs">
+              Showing: <b className="text-indigo-700 ml-1 font-mono">{filteredEmployees.length}</b>
+              <span className="text-slate-400 mx-1">/</span>
+              <span className="text-slate-500 font-mono">{employees.length}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Table Container */}
+      <div className="bg-white rounded-xl overflow-hidden border border-slate-200/80 shadow-2xs">
+        <div className="overflow-x-auto overflow-y-auto max-h-[73vh] table-scrollbar">
+          <table className="w-full min-w-[1250px] text-left text-xs whitespace-nowrap border-collapse">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-xs text-slate-600 text-[11px] font-bold tracking-wider uppercase border-b border-slate-200 shadow-2xs select-none">
               <tr>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[22%]">Employee</th>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[9%]">Joined</th>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[10%]">Mobile</th>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[14%]">Father Name</th>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[10%]">Designation</th>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[15%]">Shop / Location</th>
-                <th className="text-left px-3 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[12%]">Transferred</th>
-                <th className="text-left px-3 pr-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-[130px]">Actions</th>
+                <th className="px-3.5 py-3 text-left w-[240px]">Employee</th>
+                <th className="px-3 py-3 text-left w-[100px]">Joined</th>
+                <th className="px-3 py-3 text-left w-[110px]">Mobile</th>
+                <th className="px-3 py-3 text-left w-[130px]">Father Name</th>
+                <th className="px-3 py-3 text-left w-[120px]">Designation</th>
+                <th className="px-3 py-3 text-left w-[160px]">Shop / Location</th>
+                <th className="px-3 py-3 text-left w-[140px]">Transferred</th>
+                <th className="px-3 py-3 text-left w-[100px]">Status</th>
+                <th className="px-3 py-3 text-left w-[190px]">Office Verification</th>
+                <th className="px-3.5 pr-5 py-3 text-right w-[110px]">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">Loading...</td>
+                  <td colSpan="10" className="text-center py-16">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="w-8 h-8 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                      <span className="text-xs font-semibold text-slate-500">Loading employees directory...</span>
+                    </div>
+                  </td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">No employees found</td>
+                  <td colSpan="10" className="text-center py-12 px-4">
+                    <div className="flex flex-col items-center justify-center max-w-sm mx-auto text-center">
+                      <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3 border border-indigo-100">
+                        <Users size={28} />
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-800">No employees found</h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {searchTerm || shopFilter || statusFilter || activeTab !== 'all'
+                          ? 'No records match your active filter criteria. Try resetting filters.'
+                          : 'Get started by adding a new employee or importing a CSV file.'}
+                      </p>
+                      {(searchTerm || shopFilter || statusFilter || activeTab !== 'all') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchTerm('');
+                            setShopFilter('');
+                            setStatusFilter('');
+                            setActiveTab('all');
+                          }}
+                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <RotateCcw size={12} />
+                          <span>Reset all filters</span>
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ) : (
                 paginatedEmployees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-indigo-50/40 transition-colors align-top">
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
+                  <tr key={emp.id} className="hover:bg-indigo-50/40 transition-colors align-middle">
+                    {/* Employee Profile */}
+                    <td className="px-3.5 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         {emp.candidate_photo ? (
-                          <img src={emp.candidate_photo} alt={emp.name_as_per_aadhar} className="w-8 h-8 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm" />
+                          <img
+                            src={emp.candidate_photo}
+                            alt={emp.name_as_per_aadhar}
+                            className="w-9 h-9 shrink-0 rounded-full object-cover ring-2 ring-indigo-100 shadow-2xs"
+                          />
                         ) : (
-                          <div className="w-8 h-8 shrink-0 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-semibold">
-                            {emp.name_as_per_aadhar?.charAt(0) || '?'}
+                          <div className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center text-xs font-bold shadow-2xs ring-2 ring-indigo-100">
+                            {emp.name_as_per_aadhar?.charAt(0)?.toUpperCase() || '?'}
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="font-medium text-gray-900 break-words leading-tight">{emp.name_as_per_aadhar}</div>
-                          <div className="text-[11px] text-gray-500 mt-0.5">ID: {emp.employee_id}</div>
+                          <div
+                            onClick={() => handleViewDetails(emp)}
+                            className="font-semibold text-slate-900 truncate text-[13px] hover:text-indigo-600 transition-colors cursor-pointer"
+                          >
+                            {emp.name_as_per_aadhar}
+                          </div>
+                          <div className="inline-flex items-center gap-1 mt-0.5">
+                            <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200/60">
+                              ID: {emp.employee_id || '-'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-gray-600">{emp.date_of_joining}</td>
-                    <td className="px-3 py-3 text-gray-600">{emp.mobile_no}</td>
-                    <td className="px-3 py-3 text-gray-600 break-words">{emp.father_name || '-'}</td>
-                    <td className="px-3 py-3 text-gray-600 break-words">{emp.designation}</td>
-                    <td className="px-3 py-3">
-                      <div className="text-gray-800 font-medium break-words leading-tight">{emp.joining_company_name || '-'}</div>
-                      {emp.joining_place && <div className="text-[11px] text-gray-500 mt-0.5 break-words">{emp.joining_place}</div>}
+
+                    {/* Joined Date */}
+                    <td className="px-3 py-3 text-slate-600 font-medium">
+                      {emp.date_of_joining || '—'}
                     </td>
+
+                    {/* Mobile Number */}
+                    <td className="px-3 py-3 font-mono text-slate-700 font-medium">
+                      {emp.mobile_no || '—'}
+                    </td>
+
+                    {/* Father Name */}
+                    <td className="px-3 py-3 text-slate-600">
+                      {emp.father_name || '—'}
+                    </td>
+
+                    {/* Designation */}
+                    <td className="px-3 py-3">
+                      <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/60">
+                        {emp.designation || '—'}
+                      </span>
+                    </td>
+
+                    {/* Shop / Location */}
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-800 leading-tight">
+                        {emp.joining_company_name || '—'}
+                      </div>
+                      {emp.joining_place && (
+                        <div className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                          {emp.joining_place}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Transferred */}
                     <td className="px-3 py-3">
                       {!emp.transferred_shop || emp.transferred_shop === 'Not Transferred' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-50 text-slate-500 border border-slate-200/70">
                           Not Transferred
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 break-words" title={`Assigned: ${emp.joining_place || 'N/A'} | Punched at: ${emp.transferred_shop}`}>
-                          ⚡ {emp.transferred_shop}
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs"
+                          title={`Assigned: ${emp.joining_place || 'N/A'} | Punched at: ${emp.transferred_shop}`}
+                        >
+                          <Zap size={11} className="text-amber-500 fill-amber-500" />
+                          <span>{emp.transferred_shop}</span>
                         </span>
                       )}
                     </td>
+
+                    {/* Status (Active / Inactive) */}
                     <td className="px-3 py-3">
-                      <div className="flex flex-nowrap items-center gap-1.5 pr-2">
-                        <button onClick={() => handleViewDetails(emp)} className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" title="View Details">
-                          <Eye size={16} />
+                      {emp.user_status === 'Inactive' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Master User account status">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                          Inactive
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs" title="Master User account status">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                          </span>
+                          Active
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Office Verification */}
+                    <td className="px-3 py-3">
+                      {emp.verification_status === 'Verified' ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            title={emp.verified_by ? `Verified by ${emp.verified_by}${emp.verified_at ? ' on ' + new Date(emp.verified_at).toLocaleDateString('en-IN') : ''}` : 'Office Verified'}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200/80 shadow-2xs w-fit"
+                          >
+                            <CheckCircle2 size={12} className="text-teal-600" />
+                            Office Verified
+                          </span>
+                          {emp.verified_by && (
+                            <span className="text-[10px] text-slate-400 font-medium truncate max-w-[170px]" title={`By ${emp.verified_by}`}>
+                              by {emp.verified_by}
+                            </span>
+                          )}
+                        </div>
+                      ) : emp.verification_status === 'Rejected' ? (
+                        <div className="flex flex-col gap-1">
+                          <span
+                            title={emp.verification_remarks ? `Reason: ${emp.verification_remarks}` : 'Rejected'}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs w-fit"
+                          >
+                            <XCircle size={12} className="text-rose-600" />
+                            Rejected
+                          </span>
+                          {emp.verification_remarks && (
+                            <span className="text-[10px] text-rose-500 italic truncate max-w-[170px]" title={emp.verification_remarks}>
+                              "{emp.verification_remarks}"
+                            </span>
+                          )}
+                          {canModify && (
+                            <button
+                              type="button"
+                              onClick={() => handleVerification(emp, 'Verified')}
+                              className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 underline text-left cursor-pointer w-fit"
+                            >
+                              Re-verify
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs w-fit">
+                            <AlertCircle size={12} className="text-amber-600 animate-pulse" />
+                            Action Required
+                          </span>
+                          {canModify && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleVerification(emp, 'Verified')}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors cursor-pointer"
+                                title="Mark as Office Verified"
+                              >
+                                <Check size={11} strokeWidth={2.5} />
+                                Verify
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleVerification(emp, 'Rejected')}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
+                                title="Reject verification"
+                              >
+                                <X size={11} strokeWidth={2.5} />
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-3.5 pr-5 py-3 text-right">
+                      <div className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-slate-100/80 border border-slate-200/60 shadow-2xs">
+                        <button
+                          onClick={() => handleViewDetails(emp)}
+                          className="p-1.5 rounded-md text-slate-600 hover:text-indigo-600 hover:bg-white transition-all cursor-pointer shadow-none hover:shadow-2xs"
+                          title="View Details"
+                        >
+                          <Eye size={14} />
                         </button>
                         {canModify && (<>
-                          <button onClick={() => openEditPanel(emp)} className="p-1.5 rounded-md text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors" title="Edit">
-                            <Edit size={16} />
+                          <button
+                            onClick={() => openEditPanel(emp)}
+                            className="p-1.5 rounded-md text-slate-600 hover:text-blue-600 hover:bg-white transition-all cursor-pointer shadow-none hover:shadow-2xs"
+                            title="Edit Employee"
+                          >
+                            <Edit size={14} />
                           </button>
-                          <button onClick={() => handleDelete(emp)} className="p-1.5 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors" title="Delete">
-                            <Trash2 size={16} />
+                          <button
+                            onClick={() => handleDelete(emp)}
+                            className="p-1.5 rounded-md text-slate-600 hover:text-rose-600 hover:bg-white transition-all cursor-pointer shadow-none hover:shadow-2xs"
+                            title="Delete Employee"
+                          >
+                            <Trash2 size={14} />
                           </button>
                         </>)}
                       </div>

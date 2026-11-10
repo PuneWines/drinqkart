@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw, Image, ClipboardList, Layers } from 'lucide-react';
+import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw, Image, ClipboardList, Layers, Clock, AlertCircle } from 'lucide-react';
 import AdminLayout from '../components/layout/AdminLayout';
 import { useDispatch, useSelector } from 'react-redux';
 import { createShop, createUser, deleteUser, shopOnlyDetails, givenByDetails, shopDetails, updateShop, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteShop, deleteAssignFrom, updateCustomDropdown, updateAssignFrom, createMachineEntries, uploadProfileImage, fetchMasterTasksAll, createMasterTask, updateMasterTask, deleteMasterTask, fetchLevelsAll, createLevel, updateLevel, deleteLevel } from '../redux/slice/settingSlice';
 import { uploadPartImageApi } from '../redux/api/settingApi';
 import supabase from '../SupabaseClient';
+import { getShifts, getShiftsSync, saveShiftApi, deleteShiftApi } from '../services/shiftService';
 import CalendarComponent from '../components/CalendarComponent';
 import { createPortal } from 'react-dom';
 import { sendTaskReassignmentNotification } from '../services/whatsappService';
@@ -97,6 +98,114 @@ const Setting = () => {
   const [levelForm, setLevelForm] = useState({
     level_name: ''
   });
+
+  // Shift Management State
+  const [shiftsList, setShiftsList] = useState(() => getShiftsSync());
+  const [shiftsLoading, setShiftsLoading] = useState(false);
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [editingShiftId, setEditingShiftId] = useState(null);
+  const [savingShift, setSavingShift] = useState(false);
+  const [shiftSearch, setShiftSearch] = useState('');
+  const [shiftForm, setShiftForm] = useState({
+    shift_name: '',
+    start_time: '09:00',
+    end_time: '18:00'
+  });
+
+  const resetShiftForm = () => {
+    setShiftForm({
+      shift_name: '',
+      start_time: '09:00',
+      end_time: '18:00'
+    });
+    setEditingShiftId(null);
+  };
+
+  const calculateShiftDuration = (start, end) => {
+    if (!start || !end) return '-';
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    let startMin = (sh || 0) * 60 + (sm || 0);
+    let endMin = (eh || 0) * 60 + (em || 0);
+    if (endMin < startMin) {
+      endMin += 24 * 60; // Overnight shift
+    }
+    const diffMin = endMin - startMin;
+    const hrs = Math.floor(diffMin / 60);
+    const mins = diffMin % 60;
+    return `${hrs}h${mins > 0 ? ` ${mins}m` : ''}`;
+  };
+
+  const fetchShifts = useCallback(async (force = false) => {
+    if (shiftsList.length === 0) setShiftsLoading(true);
+    try {
+      const data = await getShifts({ forceRefresh: force });
+      setShiftsList(data || []);
+    } catch (err) {
+      console.error("Error fetching shifts:", err);
+      setShiftsList([]);
+    } finally {
+      setShiftsLoading(false);
+    }
+  }, [shiftsList.length]);
+
+  useEffect(() => {
+    fetchShifts();
+  }, [fetchShifts]);
+
+  const handleSaveShift = async (e) => {
+    if (e) e.preventDefault();
+    if (!shiftForm.shift_name.trim()) {
+      showToast("Shift Name is required", "error");
+      return;
+    }
+    if (!shiftForm.start_time || !shiftForm.end_time) {
+      showToast("Start and End Times are required", "error");
+      return;
+    }
+
+    setSavingShift(true);
+    try {
+      await saveShiftApi({
+        id: editingShiftId,
+        shift_name: shiftForm.shift_name.trim(),
+        start_time: shiftForm.start_time,
+        end_time: shiftForm.end_time
+      });
+
+      showToast(editingShiftId ? "Shift updated successfully!" : "Shift created successfully!", "success");
+      setShowShiftModal(false);
+      resetShiftForm();
+      await fetchShifts(true);
+    } catch (err) {
+      console.error('Error saving shift:', err);
+      showToast(`Failed to save shift: ${err.message || 'Database error'}`, "error");
+    } finally {
+      setSavingShift(false);
+    }
+  };
+
+  const handleEditShift = (shift) => {
+    setEditingShiftId(shift.id);
+    setShiftForm({
+      shift_name: shift.shift_name || '',
+      start_time: shift.start_time || '09:00',
+      end_time: shift.end_time || '18:00'
+    });
+    setShowShiftModal(true);
+  };
+
+  const handleDeleteShift = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this shift?")) return;
+    try {
+      await deleteShiftApi(id);
+      showToast("Shift deleted successfully!", "success");
+      await fetchShifts(true);
+    } catch (err) {
+      console.error('Error deleting shift:', err);
+      showToast(`Failed to delete shift: ${err.message || 'Database error'}`, "error");
+    }
+  };
 
   const { userData, shops, shopsOnly, givenBy, customDropdowns, masterTasks, levels, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
@@ -221,11 +330,43 @@ const Setting = () => {
 
 
   // Add manual refresh button handler
-  const handleManualRefresh = () => {
-    fetchDeviceLogsAndUpdateStatus();
-    if (activeTab === 'automate') {
-      dispatch(fetchMasterTasksAll());
-      dispatch(fetchLevelsAll());
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (activeTab === 'shifts') {
+        await fetchShifts(true);
+      } else if (activeTab === 'automate') {
+        await Promise.all([
+          dispatch(fetchMasterTasksAll()),
+          dispatch(fetchLevelsAll()),
+          dispatch(shopDetails())
+        ]);
+      } else if (activeTab === 'categories') {
+        await Promise.all([
+          dispatch(customDropdownDetails()),
+          dispatch(shopDetails())
+        ]);
+      } else if (activeTab === 'leave') {
+        await Promise.all([
+          dispatch(userDetails()),
+          dispatch(shopDetails())
+        ]);
+      } else {
+        await Promise.all([
+          dispatch(userDetails()),
+          dispatch(shopDetails()),
+          dispatch(customDropdownDetails())
+        ]);
+      }
+      fetchDeviceLogsAndUpdateStatus();
+      showToast("Data refreshed successfully!", "success");
+    } catch (err) {
+      console.error("Refresh error:", err);
+      showToast("Data refreshed", "info");
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 500);
     }
   };
 
@@ -255,6 +396,9 @@ const Setting = () => {
         resetLevelForm();
         setShowLevelModal(true);
       }
+    } else if (activeTab === 'shifts') {
+      resetShiftForm();
+      setShowShiftModal(true);
     }
     // No action for leave tab
   };
@@ -452,6 +596,8 @@ const Setting = () => {
       dispatch(fetchMasterTasksAll());
       dispatch(fetchLevelsAll());
       dispatch(shopDetails());
+    } else if (tab === 'shifts') {
+      fetchShifts();
     }
   };
 
@@ -1130,10 +1276,10 @@ const Setting = () => {
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max xscrol">
               {[
-
                 { id: 'leave', label: 'Leave', icon: Calendar },
                 { id: 'categories', label: 'Machines', icon: Settings },
                 { id: 'automate', label: 'Automate', icon: ClipboardList },
+                { id: 'shifts', label: 'Shifts', icon: Clock },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1176,7 +1322,7 @@ const Setting = () => {
                       handleAddButtonClick();
                     }
                   }}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white rounded-lg font-bold shadow-md hover:bg-purple-700 transition-all text-sm"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white rounded-lg font-bold shadow-md hover:bg-purple-700 transition-all text-sm cursor-pointer"
                 >
                   <Plus size={18} />
                   <span className="hidden sm:inline">
@@ -2156,6 +2302,129 @@ const Setting = () => {
           </div>
         )}
 
+        {/* Shifts Tab (Shift Management) */}
+        {activeTab === 'shifts' && (
+          <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-purple-100">
+            <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-pink-50 px-8 py-6 border-b border-purple-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <Clock className="w-6 h-6 text-purple-600" />
+                  Shift Management
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Define working shifts with standard start and end times to auto-fill task definitions in Master Task Entry.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+                  <input
+                    type="text"
+                    placeholder="Search shifts..."
+                    value={shiftSearch}
+                    onChange={(e) => setShiftSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-purple-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 font-medium"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    resetShiftForm();
+                    setShowShiftModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all font-bold text-xs shadow-md whitespace-nowrap cursor-pointer"
+                >
+                  <Plus size={15} />
+                  <span>Add Shift</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8">
+              {shiftsLoading ? (
+                <div className="py-20 text-center">
+                  <RefreshCw className="w-8 h-8 text-purple-600 animate-spin mx-auto mb-3" />
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Loading Shifts...</p>
+                </div>
+              ) : (
+                (() => {
+                  const filteredShifts = shiftsList.filter(s =>
+                    (s.shift_name || '').toLowerCase().includes(shiftSearch.toLowerCase())
+                  );
+
+                  if (filteredShifts.length === 0) {
+                    return (
+                      <div className="py-20 text-center text-gray-400 font-medium">
+                        <Clock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-base font-bold text-slate-700">No Shifts Configured</p>
+                        <p className="text-xs text-slate-400 mt-1">Create your first shift by clicking "Add Shift" above.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-purple-100 text-[11px] font-black uppercase tracking-widest text-slate-500">
+                            <th className="py-3 px-4">Shift Name</th>
+                            <th className="py-3 px-4">Start Time</th>
+                            <th className="py-3 px-4">End Time</th>
+                            <th className="py-3 px-4">Duration</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-purple-50/60 text-xs font-semibold text-slate-700">
+                          {filteredShifts.map((shift) => (
+                            <tr key={shift.id} className="hover:bg-purple-50/30 transition-colors">
+                              <td className="py-3.5 px-4 font-bold text-purple-900 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                                {shift.shift_name}
+                              </td>
+                              <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
+                                <span className="bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+                                  {shift.start_time}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
+                                <span className="bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+                                  {shift.end_time}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  {calculateShiftDuration(shift.start_time, shift.end_time)}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={() => handleEditShift(shift)}
+                                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Edit Shift"
+                                  >
+                                    <Edit size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteShift(shift.id)}
+                                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Delete Shift"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          </div>
+        )}
+
 
         {/* User Modal */}
         {showUserModal && (
@@ -3054,6 +3323,104 @@ const Setting = () => {
                   <div className="flex justify-end gap-3 pt-4">
                     <button type="button" onClick={() => setShowLevelModal(false)} className="px-6 py-2 text-xs font-black text-gray-400 uppercase tracking-widest">Cancel</button>
                     <button type="submit" className="px-8 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all uppercase tracking-widest">Save Level</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Shift Modal */}
+        {showShiftModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in" onClick={() => setShowShiftModal(false)}></div>
+            <div className="relative bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 border border-white/50 flex flex-col">
+              <div className="bg-gradient-to-br from-purple-600 to-indigo-600 px-8 py-6 relative">
+                <div className="relative z-10 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xl font-black text-white tracking-tight">
+                      {editingShiftId ? 'Edit Shift' : 'Create New Shift'}
+                    </h3>
+                    <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
+                      Configure shift hours
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowShiftModal(false)}
+                    className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-8">
+                <form onSubmit={handleSaveShift} className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                      Shift Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Morning Shift, General Shift"
+                      value={shiftForm.shift_name}
+                      onChange={(e) => setShiftForm({ ...shiftForm, shift_name: e.target.value })}
+                      required
+                      className="w-full px-3.5 py-2.5 text-xs font-bold border border-slate-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                        Start Time *
+                      </label>
+                      <input
+                        type="time"
+                        value={shiftForm.start_time}
+                        onChange={(e) => setShiftForm({ ...shiftForm, start_time: e.target.value })}
+                        required
+                        className="w-full px-3.5 py-2.5 text-xs font-bold border border-slate-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                        End Time *
+                      </label>
+                      <input
+                        type="time"
+                        value={shiftForm.end_time}
+                        onChange={(e) => setShiftForm({ ...shiftForm, end_time: e.target.value })}
+                        required
+                        className="w-full px-3.5 py-2.5 text-xs font-bold border border-slate-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {shiftForm.start_time && shiftForm.end_time && (
+                    <div className="p-3 bg-purple-50 border border-purple-100 rounded-xl flex items-center justify-between text-xs">
+                      <span className="font-bold text-purple-700">Calculated Duration:</span>
+                      <span className="font-mono font-bold text-purple-900 bg-white px-2 py-0.5 rounded border border-purple-200">
+                        {calculateShiftDuration(shiftForm.start_time, shiftForm.end_time)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowShiftModal(false)}
+                      className="px-5 py-2.5 text-xs font-black text-gray-400 uppercase tracking-wider hover:text-gray-600 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingShift}
+                      className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-black rounded-xl hover:shadow-lg transition-all flex items-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                    >
+                      <Save size={15} />
+                      <span>{savingShift ? 'Saving...' : editingShiftId ? 'Update Shift' : 'Save Shift'}</span>
+                    </button>
                   </div>
                 </form>
               </div>

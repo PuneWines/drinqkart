@@ -1845,7 +1845,8 @@ export default function MasterSetting() {
     }
   };
 
-  const filteredUsers = users.filter((u) => {
+  // Users matching scope, search and shop filter (before the status filter) - used for status counts
+  const baseFilteredUsers = users.filter((u) => {
     // If shop-scoped Admin, only show users belonging to their assigned shop(s)
     if (isShopAdmin && userAssignedShops.length > 0) {
       const targetShopSources = [
@@ -1914,22 +1915,21 @@ export default function MasterSetting() {
       }
     }
 
-    if (statusFilter !== "all") {
-      const userStatus = (u.status || "active").toLowerCase().trim();
-      if (statusFilter === "active" && userStatus !== "active") return false;
-      if (statusFilter === "inactive" && userStatus !== "inactive") return false;
-    }
-
     return true;
   });
 
-  const activeUsersCount = useMemo(() => {
-    return users.filter((u) => (u.status || "active").toLowerCase().trim() === "active").length;
-  }, [users]);
+  const filteredUsers = baseFilteredUsers.filter((u) => {
+    if (statusFilter === "all") return true;
+    return (u.status || "active").toLowerCase().trim() === statusFilter;
+  });
 
-  const inactiveUsersCount = useMemo(() => {
-    return users.filter((u) => (u.status || "active").toLowerCase().trim() === "inactive").length;
-  }, [users]);
+  const activeUsersCount = baseFilteredUsers.filter(
+    (u) => (u.status || "active").toLowerCase().trim() === "active"
+  ).length;
+
+  const inactiveUsersCount = baseFilteredUsers.filter(
+    (u) => (u.status || "active").toLowerCase().trim() === "inactive"
+  ).length;
 
   // Helper to check permission level for a given Master Setting module: returns 'modify' | 'view' | 'none'
   const getMasterSettingPagePermission = (pageLabel) => {
@@ -2277,7 +2277,7 @@ export default function MasterSetting() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full appearance-none pl-3.5 pr-8 py-3 bg-white border-[0.5px] border-[#1A1A1A]/20 text-xs font-bold uppercase tracking-wider text-[#1A1A1A] focus:outline-none focus:border-[#C9A84C] cursor-pointer shadow-xs"
             >
-              <option value="all">All Status ({users.length})</option>
+              <option value="all">All Status ({baseFilteredUsers.length})</option>
               <option value="active">Active ({activeUsersCount})</option>
               <option value="inactive">Inactive ({inactiveUsersCount})</option>
             </select>

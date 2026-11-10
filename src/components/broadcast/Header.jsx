@@ -6,7 +6,7 @@ export default function Header() {
   const { messageStats, activeDashboardTab, setActiveDashboardTab } = useChatStore()
 
   return (
-    <header className="h-11 sm:h-12 bg-white flex items-center justify-between px-3 sm:px-4 py-1 shadow-xs z-10 select-none border-b border-gray-100 gap-2 shrink-0">
+    <header className="h-11 sm:h-12 bg-white flex items-center justify-between px-3 sm:px-4 py-1 shadow-xs z-10 border-b border-gray-100 gap-2 shrink-0">
       {/* Logo Area */}
       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
         <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#25D366] to-green-600 flex items-center justify-center text-white text-base sm:text-xl font-bold shadow-md shadow-green-500/20 shrink-0">
@@ -14,7 +14,7 @@ export default function Header() {
         </div>
         <div className="min-w-0 flex-1">
           <h1 className="text-xs sm:text-lg md:text-xl font-bold text-gray-900 tracking-tight leading-snug truncate sm:whitespace-normal">
-            WhatsApp Broadcast Dashboard
+            WHATSAPP
           </h1>
           <p className="text-[10px] sm:text-xs text-gray-500 font-medium truncate sm:whitespace-normal">
             Send messages, reports & updates to all shops instantly
@@ -55,7 +55,7 @@ export default function Header() {
         <div className="bg-[#f3f6fb] rounded-xl px-3 py-1 text-center min-w-[75px] border border-gray-100">
           <div>
             <h3 className="text-emerald-500 text-sm font-bold leading-none mb-0.5">{messageStats.sent}</h3>
-            <span className="text-[10px] text-gray-500 font-medium">Sent</span>
+            <span className="text-[10px] text-gray-500 font-medium">Total Sent</span>
           </div>
         </div>
 

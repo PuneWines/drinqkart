@@ -17,6 +17,8 @@ const formatWhatsAppNumber = (rawPhone) => {
   }
 }
 
+let broadcastInFlight = false
+
 const INITIAL_ATTACHMENTS = []
 
 const INITIAL_BROADCAST_HISTORY = [
@@ -387,6 +389,23 @@ export const useChatStore = create((set, get) => ({
   sendDashboardBroadcast: async () => {
     const { composerText, selectedShopIds, selectedEmployeeIds, attachments, scheduledCampaign, shops, templates } = get()
     if ((!composerText.trim() && attachments.length === 0) || selectedEmployeeIds.length === 0) return
+    if (broadcastInFlight) return
+    broadcastInFlight = true
+
+    // Resolve recipients once: must belong to a selected shop AND be a selected employee, de-duplicated by phone
+    const seenPhones = new Set();
+    const selectedEmployees = [];
+    for (const shop of shops) {
+      if (!selectedShopIds.includes(shop.id)) continue;
+      for (const emp of shop.employees || []) {
+        if (!selectedEmployeeIds.includes(emp.id)) continue;
+        const { cleanPhone } = formatWhatsAppNumber(emp.phone);
+        if (!cleanPhone || seenPhones.has(cleanPhone)) continue;
+        seenPhones.add(cleanPhone);
+        selectedEmployees.push(emp);
+      }
+    }
+    console.table(selectedEmployees.map((e) => ({ name: e.name, phone: e.phone })));
 
     // 1. Resolve shop target text
     const targetShopNames = shops
@@ -404,7 +423,7 @@ export const useChatStore = create((set, get) => ({
         {
           campaign_title: composerText.split('\n')[0].substring(0, 30) || (attachments[0]?.name ? `Attachment: ${attachments[0].name}` : 'WhatsApp Campaign'),
           shop_target: shopTarget,
-          sent_count: selectedEmployeeIds.length,
+          sent_count: selectedEmployees.length,
           status: scheduledCampaign ? 'Scheduled' : 'Sent',
           files: attachments.map((a) => a.url),
           template: templateName,
@@ -419,9 +438,6 @@ export const useChatStore = create((set, get) => ({
       const PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
       const PHONE_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
       const TOKEN = import.meta.env.VITE_MAYTAPI_ACCESS_TOKEN;
-
-      const allEmployees = shops.flatMap((s) => s.employees || []);
-      const selectedEmployees = allEmployees.filter((emp) => selectedEmployeeIds.includes(emp.id));
 
       const logsToInsert = [];
 
@@ -656,7 +672,9 @@ export const useChatStore = create((set, get) => ({
       set({ attachments: [], composerText: '' });
     } catch (err) {
       console.error('Error logging broadcast campaign:', err);
-      alert('Failed to log campaign to Supabase.');
+      throw err;
+    } finally {
+      broadcastInFlight = false;
     }
   },
 

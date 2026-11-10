@@ -87,7 +87,7 @@ export default function ShopEmployeePanel() {
           />
           <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
         </div>
-        <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0 text-xs sm:text-sm font-semibold text-gray-700">
+        <label className="flex items-center gap-1.5 cursor-pointer shrink-0 text-xs sm:text-sm font-semibold text-gray-700">
           <input
             type="checkbox"
             checked={showNamesOnly}
@@ -203,7 +203,7 @@ export default function ShopEmployeePanel() {
                   <div
                     key={shop.id}
                     onClick={() => toggleShopSelection(shop.id)}
-                    className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none ${
+                    className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all cursor-pointer ${
                       isSelected
                         ? 'border-[#25D366] bg-emerald-50/50 shadow-sm'
                         : 'border-transparent bg-gray-50 hover:border-[#25D366]/40 hover:-translate-y-0.5'

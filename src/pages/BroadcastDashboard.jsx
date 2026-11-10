@@ -34,7 +34,7 @@ export default function BroadcastDashboard() {
   }, [loadShopsAndEmployees, fetchTemplates, fetchBroadcastHistory, fetchMessageStats])
 
   return (
-    <div className="h-screen w-full flex flex-col bg-[#f3f6fb] overflow-hidden select-none">
+    <div className="h-screen w-full flex flex-col bg-[#f3f6fb] overflow-hidden">
       {/* Top Navigation Header with View Toggle */}
       <Header />
 

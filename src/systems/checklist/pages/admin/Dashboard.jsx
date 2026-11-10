@@ -36,6 +36,18 @@ import RepairView from "./dashboard/views/RepairView.jsx"
 import EAView from "./dashboard/views/EAView.jsx"
 import TaskManagementTabs from "../../components/TaskManagementTabs.jsx"
 
+// Default range: this week's Monday up to today
+const getCurrentWeekRange = () => {
+  const fmt = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  const today = new Date()
+  const dayOfWeek = today.getDay() // 0 = Sunday
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - daysSinceMonday)
+  return { startDate: fmt(monday), endDate: fmt(today) }
+}
+
 export default function AdminDashboard() {
   const [mainTab, setMainTab] = useState(() => {
     const saved = localStorage.getItem("dashboard_active_tab") || "checklist";
@@ -143,20 +155,7 @@ export default function AdminDashboard() {
   })
 
   // New state for date range filtering - default to last week (Monday to Sunday)
-  const [dateRange, setDateRange] = useState(() => {
-    const today = new Date()
-    const dayOfWeek = today.getDay()
-    const daysToSubtract = (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + 7
-    const prevMonday = new Date(today)
-    prevMonday.setDate(today.getDate() - daysToSubtract)
-    const prevSunday = new Date(prevMonday)
-    prevSunday.setDate(prevMonday.getDate() + 6)
-    return {
-      startDate: prevMonday.toISOString().split('T')[0],
-      endDate: prevSunday.toISOString().split('T')[0],
-      filtered: true,
-    }
-  })
+  const [dateRange, setDateRange] = useState(() => ({ ...getCurrentWeekRange(), filtered: true }))
 
   // State to store filtered statistics
   const [filteredDateStats, setFilteredDateStats] = useState({
@@ -233,6 +232,11 @@ export default function AdminDashboard() {
         overdueTasks: summary.overdueTasks,
         completionRate: summary.completionRate,
       }));
+
+      // Also sync filteredDateStats so displayStats immediately reflects the new summary without layout jump
+      if (dateRange.filtered && summary) {
+        setFilteredDateStats(summary);
+      }
     } catch (error) {
       console.error("Error fetching summary stats:", error);
     }
@@ -591,9 +595,7 @@ export default function AdminDashboard() {
       setIsLoadingMore(true);
       if (page === 1) {
         setHasMoreData(true);
-        if (!append) {
-          setShopData(prev => ({ ...prev, allTasks: [] }));
-        }
+        // Retain existing tasks during reload to prevent layout shuffle/flickering
       }
 
       // Optimized: Only fetch the requested page of data
@@ -715,18 +717,20 @@ export default function AdminDashboard() {
           // OLD:
           // uniqueStaff = await getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null);
           // NEW: React Query cached fetch
-          uniqueStaff = await queryClient.fetchQuery({
+          const fetchedStaff = await queryClient.fetchQuery({
             queryKey: ['staffList', currentShopFilter],
             queryFn: () => getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null),
             staleTime: 5 * 60 * 1000
           });
+          const taskStaffNames = (data || []).map((task) => task.name || task.assigned_person || task.doer_name).filter((name) => name && name.trim() !== "");
+          uniqueStaff = [...new Set([...(fetchedStaff || []), ...taskStaffNames])].sort((a, b) => a.localeCompare(b));
         } catch (error) {
           console.error('Error fetching staff from users table:', error);
           uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
         }
       }
 
-      if (currentUserRoleForStaff !== "admin" && currentUsername) {
+      if (currentUserRoleForStaff !== "admin" && currentUsername && (currentShopFilter === 'all' || !currentShopFilter)) {
         if (!uniqueStaff.some(staff => staff.toLowerCase() === currentUsername.toLowerCase())) {
           uniqueStaff.push(currentUsername)
         }
@@ -1292,19 +1296,8 @@ export default function AdminDashboard() {
     }
     setCurrentPage(1)
     setHasMoreData(true)
-    // Maintain date range as filtered previous week when dashboard type changes
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const daysToSubtract = (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + 7;
-    const prevMonday = new Date(today);
-    prevMonday.setDate(today.getDate() - daysToSubtract);
-    const prevSunday = new Date(prevMonday);
-    prevSunday.setDate(prevMonday.getDate() + 6);
-    setDateRange({
-      startDate: prevMonday.toISOString().split('T')[0],
-      endDate: prevSunday.toISOString().split('T')[0],
-      filtered: true
-    });
+    // Maintain date range as current week (Monday to yesterday) when dashboard type changes
+    setDateRange({ ...getCurrentWeekRange(), filtered: true });
   }, [dashboardType])
 
   const getTasksByView = (view) => {

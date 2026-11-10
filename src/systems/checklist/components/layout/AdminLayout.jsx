@@ -1,7 +1,7 @@
 "use client";
 import aceLogo from "../../assets/logo1.png";
 
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector, Provider, ReactReduxContext } from "react-redux";
 import store from "../../redux/store";
@@ -154,6 +154,8 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
   const [hasDelegationTasks, setHasDelegationTasks] = useState(true);
+  const lastSyncedUserRef = useRef({ username: "", timestamp: 0 });
+  const lastNotificationFetchRef = useRef(0);
 
   useEffect(() => {
     const checkDelegation = async () => {
@@ -205,7 +207,7 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
       href: "/dashboard/work-details",
       label: "Work Records",
       icon: LayoutGrid,
-      active: location.pathname === "/dashboard/work-details",
+      active: location.pathname.startsWith("/dashboard/work-details") || location.pathname.startsWith("/dashboard/work-records"),
       showFor: ["admin", "user", "hod", "manager"],
     },
     {
@@ -396,7 +398,9 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
     };
     initPageAccess();
 
-    if (storedUsername) {
+    const now = Date.now();
+    if (storedUsername && (lastSyncedUserRef.current.username !== storedUsername || now - lastSyncedUserRef.current.timestamp > 5 * 60 * 1000)) {
+      lastSyncedUserRef.current = { username: storedUsername, timestamp: now };
       syncUserData();
     }
 
@@ -408,11 +412,13 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
     );
   }, [navigate, location.pathname, hasDelegationTasks]);
 
-  // Fetch notifications globally for badge count
+  // Fetch notifications globally for badge count (throttled to once per minute to avoid route-change jank)
   useEffect(() => {
     const role = localStorage.getItem("role");
     const userId = localStorage.getItem("user-id");
-    if (role) {
+    const now = Date.now();
+    if (role && (!lastNotificationFetchRef.current || now - lastNotificationFetchRef.current > 60 * 1000)) {
+      lastNotificationFetchRef.current = now;
       dispatch(fetchNotifications({ role: role.toLowerCase(), userId }));
     }
   }, [dispatch, location.pathname]);

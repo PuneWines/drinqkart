@@ -23,7 +23,7 @@ export const systems = [
       { label: 'Announcements', to: '/dashboard/notifications' },
       { label: 'Quick Task', to: '/dashboard/quick-task' },
       { label: 'Assign Task', to: '/dashboard/assign-task' },
-      { label: 'Work Records', to: '/dashboard/work-details' },
+      { label: 'Work Records', to: '/dashboard/work-details', aliases: ['/dashboard/work-records'] },
       { label: 'Delegation', to: '/dashboard/delegation' },
       { label: 'All Tasks', to: '/dashboard/task' },
       { label: 'Calendar', to: '/dashboard/calendar' },

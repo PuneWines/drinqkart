@@ -26,6 +26,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  Building,
+  Briefcase,
 } from "lucide-react";
 import TaskManagementTabs from "../../components/TaskManagementTabs";
 import { customDropdownDetails } from "../../redux/slice/settingSlice";
@@ -90,7 +92,73 @@ const AllTasks = () => {
   const [error, setError] = useState(null);
   const [dateFilter, setDateFilter] = useState("all"); // all, today, overdue, upcoming
   const [workEmployeeFilter, setWorkEmployeeFilter] = useState("all");
-  const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false, workEmployee: false });
+  const [selectedShop, setSelectedShop] = useState("all");
+  const [selectedDepartment, setSelectedDepartment] = useState("all");
+  const [workDepartments, setWorkDepartments] = useState([]);
+  const [allShopsList, setAllShopsList] = useState([]);
+  const [dbDepartments, setDbDepartments] = useState(["RETAIL", "EXCISE", "TECHNICAL", "GODOWN", "ACCOUNTS", "OFFICE"]);
+  const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false, workEmployee: false, shopFilter: false, departmentFilter: false });
+  const shopFilterRef = useRef(null);
+  const departmentFilterRef = useRef(null);
+  const workEmployeeRef = useRef(null);
+  const dateFilterRef = useRef(null);
+
+  const toggleDropdown = useCallback((key) => {
+    setDropdownOpen(prev => ({
+      dateFilter: false,
+      workEmployee: false,
+      shopFilter: false,
+      departmentFilter: false,
+      [key]: !prev[key]
+    }));
+  }, []);
+
+  const closeAllDropdowns = useCallback(() => {
+    setDropdownOpen({ dateFilter: false, workEmployee: false, shopFilter: false, departmentFilter: false });
+  }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      setDropdownOpen(prev => {
+        let changed = false;
+        const next = { ...prev };
+
+        if (prev.shopFilter && shopFilterRef.current && !shopFilterRef.current.contains(e.target)) {
+          next.shopFilter = false;
+          changed = true;
+        }
+        if (prev.departmentFilter && departmentFilterRef.current && !departmentFilterRef.current.contains(e.target)) {
+          next.departmentFilter = false;
+          changed = true;
+        }
+        if (prev.workEmployee && workEmployeeRef.current && !workEmployeeRef.current.contains(e.target)) {
+          next.workEmployee = false;
+          changed = true;
+        }
+        if (prev.dateFilter && dateFilterRef.current && !dateFilterRef.current.contains(e.target)) {
+          next.dateFilter = false;
+          changed = true;
+        }
+
+        return changed ? next : prev;
+      });
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setDropdownOpen({ dateFilter: false, workEmployee: false, shopFilter: false, departmentFilter: false });
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
   const childSubmitRef = useRef(null);
   const handleRegisterSubmit = useCallback((fn) => {
     childSubmitRef.current = fn;
@@ -127,8 +195,9 @@ const AllTasks = () => {
     return `${year}-${month}-${day}`;
   };
 
-  const [username, setUsername] = useState("");
-  const [userRole, setUserRole] = useState("");
+  const [username, setUsername] = useState(() => localStorage.getItem("user-name") || "");
+  const [userRole, setUserRole] = useState(() => localStorage.getItem("role") || "");
+  const tabDataCache = useRef({});
 
   // ---- RBAC: Can the current user submit a given task? ----
   // User role: can only submit tasks where task.name === username
@@ -163,10 +232,10 @@ const AllTasks = () => {
   // Use planned_date for checklist/delegation sort — task_start_date is same for all occurrences of a recurring task
   const sortDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
   const [holidaysList, setHolidaysList] = useState([]);
-  const [workingDaysList, setWorkingDaysList] = useState([]);
+  const holidaysRef = useRef([]);
   const [allUsers, setAllUsers] = useState([]);
 
-  const filteredEmployeesList = useMemo(() => {
+  const baseEmployeesList = useMemo(() => {
     const role = (userRole || "").toLowerCase();
     const currentUsername = username || "";
 
@@ -192,21 +261,59 @@ const AllTasks = () => {
     return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
   }, [allUsers, userRole, username]);
 
-  // Fetch holidays and users on mount
+  // When a shop is selected, list only employees whose PRIMARY shop (users.shop_name) is that shop.
+  // Shops in user_access are extra assigned access and must not make someone appear under it.
+  const filteredEmployeesList = useMemo(() => {
+    const role = (userRole || "").toLowerCase();
+    if (!selectedShop || selectedShop === "all" || role === "user" || role === "employee") {
+      return baseEmployeesList;
+    }
+    const target = selectedShop.trim().toLowerCase();
+    const primaryNames = new Set(
+      allUsers
+        .filter((u) => typeof u === "object" && (u.shop_name || "").trim().toLowerCase() === target)
+        .map((u) => u.user_name)
+    );
+    return baseEmployeesList.filter((name) => primaryNames.has(name));
+  }, [baseEmployeesList, allUsers, selectedShop, userRole]);
+
+  // Drop a stale employee selection that does not belong to the newly selected shop
+  useEffect(() => {
+    const role = (userRole || "").toLowerCase();
+    if (role === "user" || role === "employee") return;
+    if (workEmployeeFilter !== "all" && !filteredEmployeesList.includes(workEmployeeFilter)) {
+      setWorkEmployeeFilter("all");
+    }
+  }, [filteredEmployeesList, workEmployeeFilter, userRole]);
+
+  // Fetch holidays, users, and shops on mount
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [holidaysRes, usersRes, workingDaysRes] = await Promise.all([
+        const [holidaysRes, usersRes, shopsRes, deptsRes] = await Promise.all([
           supabase.from('holidays').select('holiday_date'),
           supabase.from('users').select('user_name, shop_name, user_access').eq('status', 'active').order('user_name', { ascending: true }),
-          supabase.from('working_day_calender').select('working_date')
+          supabase.from('shop').select('id, shop_name').order('shop_name', { ascending: true }),
+          supabase.from('master_work_tasks').select('department').not('department', 'is', null)
         ]);
 
-        if (holidaysRes.data) setHolidaysList(holidaysRes.data.map(h => h.holiday_date));
+        if (holidaysRes.data) {
+          const hList = holidaysRes.data.map(h => h.holiday_date);
+          holidaysRef.current = hList;
+          setHolidaysList(hList);
+        }
         if (usersRes.data) {
           setAllUsers(usersRes.data);
         }
-        if (workingDaysRes.data) setWorkingDaysList(workingDaysRes.data.map(w => w.working_date));
+        if (shopsRes.data) {
+          setAllShopsList(shopsRes.data.map(s => s.shop_name).filter(Boolean));
+        }
+        if (deptsRes?.data) {
+          const list = Array.from(new Set(deptsRes.data.map(d => d.department?.trim()).filter(Boolean)));
+          if (list.length > 0) {
+            setDbDepartments(prev => Array.from(new Set([...prev, ...list])).sort());
+          }
+        }
       } catch (err) {
         console.error("Error fetching initial data:", err);
       }
@@ -215,27 +322,58 @@ const AllTasks = () => {
     dispatch(customDropdownDetails());
   }, [dispatch]);
 
+  const uniqueShops = useMemo(() => {
+    const set = new Set();
+    allShopsList.forEach(s => {
+      if (s && s.trim()) set.add(s.trim());
+    });
+    tasks.forEach(t => {
+      const s = (t.shop || t.shop_name || "").trim();
+      if (s && s !== "-" && s !== "—") set.add(s);
+    });
+    historyData.forEach(t => {
+      const s = (t.shop || t.shop_name || "").trim();
+      if (s && s !== "-" && s !== "—") set.add(s);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allShopsList, tasks, historyData]);
+
+  const availableDepartments = useMemo(() => {
+    if (activeTab === "work") {
+      const set = new Set();
+      workDepartments.forEach(d => {
+        if (d && d.trim()) set.add(d.trim());
+      });
+      // Fallback to dbDepartments if workDepartments is not yet loaded
+      if (set.size === 0) {
+        dbDepartments.forEach(d => {
+          if (d && d.trim()) set.add(d.trim());
+        });
+      }
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }
+    return [];
+  }, [activeTab, workDepartments, dbDepartments]);
+
 
   // Check user credentials
   useEffect(() => {
-    const role = localStorage.getItem("role");
-    const user = localStorage.getItem("user-name");
+    const role = localStorage.getItem("role") || "";
+    const user = localStorage.getItem("user-name") || "";
 
     if (!user) {
       window.location.href = "/login";
       return;
     }
 
-    setUserRole(role || "");
-    setUsername(user || "");
-    const lowerRole = (role || "").toLowerCase();
+    if (user !== username) setUsername(user);
+    if (role !== userRole) setUserRole(role);
+    const lowerRole = role.toLowerCase();
     if (lowerRole === "user" || lowerRole === "employee") {
       setShowHistory(false);
-      setWorkEmployeeFilter(user || "");
+      setWorkEmployeeFilter(user);
     }
-
-    console.log(userRole)
-  }, []);
+  }, [username, userRole]);
 
   // Format date to dd/mm/yyyy
   const formatDate = useCallback((dateString) => {
@@ -286,31 +424,36 @@ const AllTasks = () => {
 
   const getTimeStatus = useCallback((dateString, taskStatus) => {
     if (!dateString) return "—";
-    let date;
-    if (typeof dateString === 'string' && dateString.includes('-') && !dateString.includes('T') && !dateString.includes(' ')) {
-      const parts = dateString.split('-');
-      date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    let taskTime;
+    if (typeof dateString === 'number') {
+      taskTime = dateString;
+    } else if (typeof dateString === 'string') {
+      if (dateString.length >= 10 && dateString[4] === '-' && dateString[7] === '-') {
+        const y = parseInt(dateString.slice(0, 4), 10);
+        const m = parseInt(dateString.slice(5, 7), 10) - 1;
+        const d = parseInt(dateString.slice(8, 10), 10);
+        taskTime = new Date(y, m, d).getTime();
+      } else {
+        const d = new Date(dateString);
+        taskTime = isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      }
     } else {
-      date = new Date(dateString);
+      const d = new Date(dateString);
+      taskTime = isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     }
-    if (isNaN(date.getTime())) return "—";
+    if (taskTime === null || isNaN(taskTime)) return "—";
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const taskDate = new Date(date);
-    taskDate.setHours(0, 0, 0, 0);
-
+    const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
     const isExtended = taskStatus?.toLowerCase() === "extended" || taskStatus?.toLowerCase() === "extend";
 
-    // Extended tasks should show as "Today" until the planned date passes
     if (isExtended) {
-      if (taskDate < today) return "Overdue";
-      return "Today"; // Treat both today and upcoming as "Today" for extended tasks
+      if (taskTime < todayTime) return "Overdue";
+      return "Today";
     }
 
-    if (taskDate < today) return "Overdue";
-    if (taskDate.getTime() === today.getTime()) return "Today";
+    if (taskTime < todayTime) return "Overdue";
+    if (taskTime === todayTime) return "Today";
     return "Upcoming";
   }, []);
 
@@ -364,14 +507,31 @@ const AllTasks = () => {
   };
 
   // Fetch tasks based on active state (Pending or History)
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (forceRefresh = false) => {
     if (!username) return;
+
+    if (activeTab === "work") {
+      setIsLoading(false);
+      return;
+    }
+
+    const cacheKey = `${activeTab}_${showHistory ? 'hist' : 'pend'}_${selectedShop}_${startDate}_${endDate}`;
+
+    // If cache exists and not forcing a refresh, immediately use cached data for instant render
+    if (!forceRefresh && tabDataCache.current[cacheKey]) {
+      const cached = tabDataCache.current[cacheKey];
+      if (showHistory) {
+        setHistoryData(cached);
+      } else {
+        setTasks(cached);
+      }
+      setIsLoading(false);
+      return;
+    }
 
     try {
       setIsLoading(true);
       setError(null);
-      setTasks([]);
-      setHistoryData([]);
 
       let tableName;
       let dateColumn;
@@ -428,6 +588,7 @@ const AllTasks = () => {
               { id: "time_status", label: "Time Status" },
               { id: "id", label: "Task ID" },
               { id: "issue_description", label: "Issue Detail" },
+              { id: "shop", label: "Shop" },
               { id: "submission_date", label: "Submission Date" },
               { id: "filled_by", label: "Form Filled By" },
               { id: "assigned_person", label: "Assigned To" },
@@ -445,6 +606,7 @@ const AllTasks = () => {
               { id: "time_status", label: "Time" },
               { id: "id", label: "ID" },
               { id: "issue_description", label: "Detail" },
+              { id: "shop", label: "Shop" },
               { id: "filled_by", label: "Filled By" },
               { id: "assigned_person", label: "Assigned" },
               { id: "machine_name", label: "Machine" },
@@ -564,16 +726,34 @@ const AllTasks = () => {
       }
 
       if (applyNameFilter) {
-        // Checklist, Maintenance, Repair, EA all have a field for the assigned person
-        // Repair uses assigned_person, EA uses doer_name, others use name
         query = query.in(nameField, reportingUsers);
       }
 
+      // Pushdown shop filter to database when specific shop is selected
+      if (selectedShop && selectedShop !== "all") {
+        if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
+          query = query.ilike('shop_name', `%${selectedShop.trim()}%`);
+        } else if (activeTab === "repair") {
+          query = query.or(`shop_name.ilike.%${selectedShop.trim()}%,shop.ilike.%${selectedShop.trim()}%`);
+        }
+      }
+
       if (showHistory) {
+        const dateField = activeTab === "repair" ? "submission_date" : (activeTab === "ea" ? "created_at" : completionField);
+        if (startDate) {
+          query = query.gte(dateField, `${startDate}T00:00:00`);
+        }
+        if (endDate) {
+          query = query.lte(dateField, `${endDate}T23:59:59`);
+        }
+
         if (activeTab === "repair") {
           query = query.not("submission_date", "is", null).order("submission_date", { ascending: false });
         } else if (activeTab === "ea") {
-          query = supabase.from("ea_tasks_done").select("*").order("created_at", { ascending: false });
+          query = supabase.from("ea_tasks_done").select("*");
+          if (startDate) query = query.gte("created_at", `${startDate}T00:00:00`);
+          if (endDate) query = query.lte("created_at", `${endDate}T23:59:59`);
+          query = query.order("created_at", { ascending: false });
           if (applyNameFilter) {
             query = query.in('doer_name', reportingUsers);
           }
@@ -586,14 +766,12 @@ const AllTasks = () => {
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
         } else if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
-          // Pre-filter: Don't fetch absurdly old records, keep UI fast and avoid freezing.
-          // Fetch overdue (up to 1.5 years back) to upcoming tasks (up to 6 months forward)
+          // Pre-filter: Focus on active overdue and near-term upcoming tasks to keep UI instantaneous
           const pastDate = new Date();
-          pastDate.setFullYear(pastDate.getFullYear() - 1);
-          pastDate.setMonth(pastDate.getMonth() - 6);
+          pastDate.setDate(pastDate.getDate() - 60); // 60 days overdue window
 
           const futureDate = new Date();
-          futureDate.setMonth(futureDate.getMonth() + 6);
+          futureDate.setDate(futureDate.getDate() + 21); // 3 weeks upcoming window
 
           query = query
             .is(completionField, null)
@@ -646,27 +824,26 @@ const AllTasks = () => {
         }
       }
 
-      // Fetch
-      const { data, error: fetchError } = await query.limit(10000);
+      // Fetch with optimized limit
+      const queryLimit = showHistory ? 1000 : 2000;
+      const { data, error: fetchError } = await query.limit(queryLimit);
 
       if (fetchError) throw fetchError;
 
       let allFetchedData = data || [];
 
-
       if (allFetchedData.length > 0) {
-        // Filter out tasks that fall on holidays or non-working days (respect the updated calendar)
+        // Filter out tasks that fall on holidays (respect the calendar using cached Set)
+        const hArr = holidaysRef.current && holidaysRef.current.length > 0 ? holidaysRef.current : holidaysList;
+        const holidaySet = new Set(hArr);
+
         const filteredData = allFetchedData.filter(item => {
-          if (activeTab === "repair") return true; // Repairs are reactive, ignore calendar
+          if (activeTab === "repair") return true;
 
           const taskDate = (item.planned_date || item.task_start_date || item.created_at)?.split('T')[0];
           if (!taskDate) return true;
 
-          const isHoliday = holidaysList.includes(taskDate);
-
-          // Remove strict working day check to align with Dashboard and ensure 
-          // all assigned tasks are visible to doers. 
-          return !isHoliday;
+          return !holidaySet.has(taskDate);
         });
 
         const mappedData = filteredData.map(item => ({
@@ -676,13 +853,15 @@ const AllTasks = () => {
           shop: item.shop || item.shop_name || (activeTab === "ea" ? "EA" : "-")
         }));
 
+        tabDataCache.current[cacheKey] = mappedData;
+
         if (showHistory) {
           setHistoryData(mappedData);
         } else {
-          const missingIdCount = mappedData.filter(d => !d.series_id).length;
           setTasks(mappedData);
         }
       } else {
+        tabDataCache.current[cacheKey] = [];
         if (showHistory) {
           setHistoryData([]);
         } else {
@@ -695,7 +874,7 @@ const AllTasks = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [username, userRole, activeTab, showHistory, holidaysList, workingDaysList, debouncedSearchTerm, dateFilter]);
+  }, [username, userRole, activeTab, showHistory, selectedShop, debouncedSearchTerm, startDate, endDate]);
 
   useEffect(() => {
     fetchData();
@@ -703,107 +882,151 @@ const AllTasks = () => {
 
   // Filtering Logic
   const filteredPendingTasks = useMemo(() => {
-    // Multi-level sort: Priority Group (Overdue > Today > Upcoming) → Date
-    const sortedTasks = [...tasks].sort((a, b) => {
-      const statusA = getTimeStatus(a[statusDateColumn], a.status);
-      const statusB = getTimeStatus(b[statusDateColumn], b.status);
+    const term = (searchTerm || "").trim().toLowerCase();
+    const selShop = selectedShop && selectedShop !== "all" ? selectedShop.trim().toLowerCase() : null;
+    const selDept = selectedDepartment && selectedDepartment !== "all" ? selectedDepartment.trim().toLowerCase() : null;
 
-      const rank = { "Overdue": 0, "Today": 1, "Upcoming": 2 };
-      const groupA = rank[statusA] !== undefined ? rank[statusA] : 3;
-      const groupB = rank[statusB] !== undefined ? rank[statusB] : 3;
+    // Step 1: Pre-filter by shop, department, and search term BEFORE sorting
+    const candidates = [];
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
 
-      if (groupA !== groupB) return groupA - groupB;
+      // Apply shop filter
+      if (selShop) {
+        const taskShop = (task.shop || task.shop_name || "").trim().toLowerCase();
+        if (taskShop !== selShop) continue;
+      }
 
-      // Same group, sort by date
-      const dateA = a[sortDateColumn] ? new Date(a[sortDateColumn]) : new Date(0);
-      const dateB = b[sortDateColumn] ? new Date(b[sortDateColumn]) : new Date(0);
-      return dateA - dateB;
-    });
+      // Apply department filter
+      if (selDept) {
+        const taskDept = (task.department || task.dept || task.project_type || task.task_level || "").trim().toLowerCase();
+        if (taskDept !== selDept) continue;
+      }
 
-    const seen = new Set();
+      // Search term
+      if (term) {
+        const matches = Object.values(task).some(
+          (val) => val && val.toString().toLowerCase().includes(term)
+        );
+        if (!matches) continue;
+      }
 
-    return sortedTasks.filter((task) => {
-      const matchesSearch = searchTerm
-        ? Object.values(task).some(
-          (val) => val && val.toString().toLowerCase().includes(searchTerm.toLowerCase())
-        )
-        : true;
-
-      if (!matchesSearch) return false;
-
+      // Pre-compute date status, rank, and sort time once
       const taskDateValue = task[statusDateColumn];
-      const status = taskDateValue ? getTimeStatus(taskDateValue, task.status) : null;
+      const status = taskDateValue ? getTimeStatus(taskDateValue, task.status) : "—";
 
-      // Apply the dropdown date filter
+      // Apply dateFilter dropdown
       if (taskDateValue && status) {
-        if (dateFilter === "all") {
-          // Show all: overdue + today + upcoming
-        } else if (dateFilter === "today") {
-          if (status !== "Today") return false;
+        if (dateFilter === "today") {
+          if (status !== "Today") continue;
         } else if (dateFilter === "overdue" || dateFilter === "not_done") {
-          if (status !== "Overdue" && status !== "Not Done") return false;
+          if (status !== "Overdue" && status !== "Not Done") continue;
         } else if (dateFilter === "upcoming") {
-          if (status !== "Upcoming") return false;
+          if (status !== "Upcoming") continue;
         }
       }
 
-      // Smart deduplication for checklist, delegation, and maintenance tabs
+      const rank = status === "Overdue" ? 0 : (status === "Today" ? 1 : (status === "Upcoming" ? 2 : 3));
+      const sortDateVal = task[sortDateColumn];
+      let sortTime = 0;
+      if (sortDateVal) {
+        if (typeof sortDateVal === 'string' && sortDateVal.length >= 10 && sortDateVal[4] === '-' && sortDateVal[7] === '-') {
+          const y = parseInt(sortDateVal.slice(0, 4), 10);
+          const m = parseInt(sortDateVal.slice(5, 7), 10) - 1;
+          const d = parseInt(sortDateVal.slice(8, 10), 10);
+          sortTime = new Date(y, m, d).getTime();
+        } else {
+          const parsed = new Date(sortDateVal).getTime();
+          sortTime = isNaN(parsed) ? 0 : parsed;
+        }
+      }
+
+      candidates.push({
+        task,
+        _status: status,
+        _rank: rank,
+        _sortTime: sortTime,
+        _taskDateValue: taskDateValue
+      });
+    }
+
+    // Step 2: Ultra-fast numeric sort (Overdue -> Today -> Upcoming, then by Date)
+    candidates.sort((a, b) => a._rank - b._rank || a._sortTime - b._sortTime);
+
+    // Step 3: Smart deduplication for checklist, delegation, and maintenance tabs
+    const seen = new Set();
+    const result = [];
+
+    for (let i = 0; i < candidates.length; i++) {
+      const item = candidates[i];
+      const task = item.task;
+
       if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
         const descKey = task.task_description || task.issue_description || "";
         const nameKey = task.name || task.assigned_person || task.doer_name || "";
         const shopKey = task.shop || task.shop_name || "";
-
-        // Use series_id or assignment_id as the unique identifier if available, otherwise fallback to the old key
         const seriesBase = task.series_id || task.assignment_id || `${shopKey}::${descKey}::${nameKey}`;
 
-        if (status === "Upcoming") {
+        if (item._status === "Upcoming") {
           // UPCOMING: only show the NEXT (earliest) occurrence per task series
           const key = `upcoming::${seriesBase}`;
-          if (seen.has(key)) return false;
+          if (seen.has(key)) continue;
           seen.add(key);
         } else {
           // OVERDUE & TODAY: show each day individually
-          const taskDate = taskDateValue ? new Date(taskDateValue).toDateString() : "";
-          const key = `${seriesBase}::${taskDate}`;
-          if (seen.has(key)) return false;
+          const dateStr = item._taskDateValue ? (typeof item._taskDateValue === 'string' ? item._taskDateValue.split('T')[0] : new Date(item._taskDateValue).toDateString()) : "";
+          const key = `${seriesBase}::${dateStr}`;
+          if (seen.has(key)) continue;
           seen.add(key);
         }
+      }
+
+      result.push(task);
+    }
+
+    return result;
+  }, [tasks, searchTerm, activeTab, dateFilter, sortDateColumn, statusDateColumn, getTimeStatus, selectedShop, selectedDepartment]);
+
+  const filteredHistoryTasks = useMemo(() => {
+    const completionField = "submission_date";
+    const term = (searchTerm || "").trim().toLowerCase();
+    const selShop = selectedShop && selectedShop !== "all" ? selectedShop.trim().toLowerCase() : null;
+    const selDept = selectedDepartment && selectedDepartment !== "all" ? selectedDepartment.trim().toLowerCase() : null;
+
+    const startTs = startDate ? new Date(startDate + "T00:00:00").getTime() : null;
+    const endTs = endDate ? new Date(endDate + "T23:59:59").getTime() : null;
+
+    return historyData.filter((task) => {
+      // Apply shop filter
+      if (selShop) {
+        const taskShop = (task.shop || task.shop_name || "").trim().toLowerCase();
+        if (taskShop !== selShop) return false;
+      }
+
+      // Apply department filter
+      if (selDept) {
+        const taskDept = (task.department || task.dept || task.project_type || task.task_level || "").trim().toLowerCase();
+        if (taskDept !== selDept) return false;
+      }
+
+      if (term) {
+        const matchesSearch = Object.values(task).some(
+          (val) => val && val.toString().toLowerCase().includes(term)
+        );
+        if (!matchesSearch) return false;
+      }
+
+      if (startTs || endTs) {
+        const rawDate = task[completionField];
+        if (!rawDate) return false;
+        const itemTs = new Date(rawDate).getTime();
+        if (startTs && itemTs < startTs) return false;
+        if (endTs && itemTs > endTs) return false;
       }
 
       return true;
     });
-  }, [tasks, searchTerm, activeTab, dateFilter, sortDateColumn, statusDateColumn, getTimeStatus]);
-
-  const filteredHistoryTasks = useMemo(() => {
-    const completionField = "submission_date";
-
-    return historyData.filter((task) => {
-      const matchesSearch = searchTerm
-        ? Object.values(task).some(
-          (val) => val && val.toString().toLowerCase().includes(searchTerm.toLowerCase())
-        )
-        : true;
-
-      let matchesDateRange = true;
-      if (startDate || endDate) {
-        const itemDate = task[completionField] ? new Date(task[completionField]) : null;
-        if (!itemDate) return false;
-
-        if (startDate) {
-          const start = new Date(startDate);
-          start.setHours(0, 0, 0, 0);
-          if (itemDate < start) matchesDateRange = false;
-        }
-        if (endDate) {
-          const end = new Date(endDate);
-          end.setHours(23, 59, 59, 999);
-          if (itemDate > end) matchesDateRange = false;
-        }
-      }
-
-      return matchesSearch && matchesDateRange;
-    });
-  }, [historyData, searchTerm, startDate, endDate, activeTab]);
+  }, [historyData, searchTerm, startDate, endDate, activeTab, selectedShop, selectedDepartment]);
 
   // Handle Selections
   const handleSelectItem = useCallback((id, isChecked) => {
@@ -906,7 +1129,7 @@ const AllTasks = () => {
   // Reset visible count when filters or UI scope changes
   useEffect(() => {
     setVisibleCount(50);
-  }, [activeTab, showHistory, searchTerm, dateFilter, startDate, endDate]);
+  }, [activeTab, showHistory, searchTerm, dateFilter, startDate, endDate, selectedShop, selectedDepartment]);
 
   // Output pagination definitions successfully hoisted.
 
@@ -1032,7 +1255,8 @@ const AllTasks = () => {
 
       setIsModalOpen(false);
       showToast("Repair task updated successfully!", "success");
-      fetchData(); // Refresh list
+      tabDataCache.current = {};
+      fetchData(true); // Refresh list
     } catch (error) {
       console.error(error);
       showToast("Failed to update task: " + error.message, "error");
@@ -1246,7 +1470,8 @@ const AllTasks = () => {
       setUploadedImages({});
       setStatusData({});
       setExtendedDateData({});
-      fetchData();
+      tabDataCache.current = {};
+      fetchData(true);
     } catch (err) {
       console.error("Submission error:", err);
       alert("Failed to submit tasks: " + err.message);
@@ -1312,144 +1537,244 @@ const AllTasks = () => {
                   setShowHistory(false);
                   setSelectedItems(new Set());
                   setSearchTerm("");
+                  setSelectedDepartment("all");
                   setDateFilter("all");
                   setWorkEmployeeFilter((userRole || "").toLowerCase() === "user" ? (username || "") : "all");
                 }} />
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 flex-grow justify-end">
-                <div className="relative flex-grow max-w-sm">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+              <div className="flex flex-wrap items-center gap-2 flex-grow justify-start xl:justify-end">
+                {/* Search Bar - ALWAYS visible */}
+                <div className="relative w-full sm:w-64 min-w-[190px]">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={15} />
                   <input
                     type="text"
-                    placeholder={showHistory ? "Search history..." : "Search..."}
+                    placeholder={selectedShop !== "all" ? `Search in ${selectedShop}...` : "Search tasks, description, person..."}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-4 py-1.5 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 text-xs bg-white/80"
+                    className="w-full pl-9 pr-8 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 text-xs font-medium bg-white text-gray-700 shadow-2xs transition-all placeholder:text-gray-400"
                   />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {userRole && userRole.toLowerCase() !== "user" && (
+                  {searchTerm && (
                     <button
-                      onClick={() => {
-                        const nextShowHistory = !showHistory;
-                        setShowHistory(nextShowHistory);
-                        setSearchTerm("");
-                        if (nextShowHistory) {
-                          setStartDate(getFirstDayOfMonth());
-                          setEndDate(getCurrentDayOfMonth());
-                        } else {
-                          setStartDate("");
-                          setEndDate("");
-                        }
-                      }}
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 hover:text-purple-600 transition-all shadow-sm"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-0.5"
                     >
-                      {showHistory ? (
-                        <><ArrowLeft className="h-4 w-4" /><span>Live</span></>
-                      ) : (
-                        <><History className="h-4 w-4" /><span>History</span></>
-                      )}
+                      <X size={14} />
                     </button>
                   )}
+                </div>
 
-                  {activeTab === "work" && (
-                    <div className="relative">
+                {userRole && userRole.toLowerCase() !== "user" && (
+                  <button
+                    onClick={() => {
+                      const nextShowHistory = !showHistory;
+                      setShowHistory(nextShowHistory);
+                      setSearchTerm("");
+                      closeAllDropdowns();
+                      if (nextShowHistory) {
+                        setStartDate(getFirstDayOfMonth());
+                        setEndDate(getCurrentDayOfMonth());
+                      } else {
+                        setStartDate("");
+                        setEndDate("");
+                      }
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 hover:text-purple-600 transition-all shadow-sm shrink-0"
+                  >
+                    {showHistory ? (
+                      <><ArrowLeft className="h-4 w-4" /><span>Live</span></>
+                    ) : (
+                      <><History className="h-4 w-4" /><span>History</span></>
+                    )}
+                  </button>
+                )}
+
+                {/* Shop Filter - for ALL tabs - ALWAYS visible */}
+                <div ref={shopFilterRef} className="relative shrink-0">
+                  <button
+                    onClick={() => toggleDropdown('shopFilter')}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${selectedShop !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    title="Filter by Shop"
+                  >
+                    <Building className="h-3.5 w-3.5" />
+                    <span>{selectedShop === 'all' ? 'All Shops' : selectedShop}</span>
+                    <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.shopFilter ? 'rotate-180' : ''}`} />
+                  </button>
+                  {dropdownOpen?.shopFilter && (
+                    <div className="absolute z-50 mt-2 w-52 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-y-auto max-h-64 animate-in fade-in slide-in-from-top-2 duration-200">
                       <button
-                        onClick={() => setDropdownOpen(prev => ({ ...prev, workEmployee: !prev.workEmployee }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${workEmployeeFilter !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'}`}
+                        onClick={() => {
+                          setSelectedShop("all");
+                          setSelectedDepartment("all");
+                          setSearchTerm("");
+                          setSelectedItems(new Set());
+                          closeAllDropdowns();
+                        }}
+                        className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${selectedShop === 'all' ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
                       >
-                        <Users className="h-3.5 w-3.5" />
-                        <span>{workEmployeeFilter === 'all' ? 'All Employees' : workEmployeeFilter}</span>
-                        <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.workEmployee ? 'rotate-180' : ''}`} />
+                        All Shops
                       </button>
-                      {dropdownOpen?.workEmployee && (
-                        <div className="absolute z-50 mt-2 w-48 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-y-auto max-h-60 animate-in fade-in slide-in-from-top-2 duration-200">
-                          {(userRole || "").toLowerCase() !== "user" && (
+                      {uniqueShops.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => {
+                            setSelectedShop(s);
+                            setSelectedDepartment("all");
+                            setSelectedItems(new Set());
+                            closeAllDropdowns();
+                          }}
+                          className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${selectedShop === s ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Department Filter - ONLY for Work tab */}
+                {activeTab === "work" && (
+                  <div ref={departmentFilterRef} className="relative animate-in fade-in duration-200 shrink-0">
+                    <button
+                      onClick={() => toggleDropdown('departmentFilter')}
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${selectedDepartment !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                      title="Filter by Department"
+                    >
+                      <Briefcase className="h-3.5 w-3.5" />
+                      <span>{selectedDepartment === 'all' ? 'All Depts' : selectedDepartment}</span>
+                      <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.departmentFilter ? 'rotate-180' : ''}`} />
+                    </button>
+                    {dropdownOpen?.departmentFilter && (
+                      <div className="absolute z-50 mt-2 w-52 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-y-auto max-h-64 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <button
+                          onClick={() => {
+                            setSelectedDepartment("all");
+                            setSelectedItems(new Set());
+                            closeAllDropdowns();
+                          }}
+                          className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${selectedDepartment === 'all' ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          All Departments
+                        </button>
+                        {availableDepartments.length > 0 ? (
+                          availableDepartments.map((dept) => (
                             <button
+                              key={dept}
                               onClick={() => {
-                                setWorkEmployeeFilter("all");
+                                setSelectedDepartment(dept);
                                 setSelectedItems(new Set());
-                                setDropdownOpen(prev => ({ ...prev, workEmployee: false }));
+                                closeAllDropdowns();
                               }}
-                              className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === 'all' ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                              className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${selectedDepartment === dept ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
                             >
-                              All Employees
+                              {dept}
                             </button>
-                          )}
-                          {filteredEmployeesList.map((user) => (
+                          ))
+                        ) : (
+                          <div className="px-4 py-2 text-xs text-gray-400 italic">
+                            No specific departments found
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "work" && (
+                  <div ref={workEmployeeRef} className="relative shrink-0">
+                    <button
+                      onClick={() => toggleDropdown('workEmployee')}
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${workEmployeeFilter !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'}`}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>{workEmployeeFilter === 'all' ? 'All Employees' : workEmployeeFilter}</span>
+                      <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.workEmployee ? 'rotate-180' : ''}`} />
+                    </button>
+                    {dropdownOpen?.workEmployee && (
+                      <div className="absolute z-50 mt-2 w-48 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-y-auto max-h-60 animate-in fade-in slide-in-from-top-2 duration-200">
+                        {(userRole || "").toLowerCase() !== "user" && (
+                          <button
+                            onClick={() => {
+                              setWorkEmployeeFilter("all");
+                              setSelectedItems(new Set());
+                              closeAllDropdowns();
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === 'all' ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            All Employees
+                          </button>
+                        )}
+                        {filteredEmployeesList.map((user) => (
+                          <button
+                            key={user}
+                            onClick={() => {
+                              setWorkEmployeeFilter(user);
+                              setSelectedItems(new Set());
+                              closeAllDropdowns();
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === user ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            {user}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!showHistory && (
+                  <>
+                    <div ref={dateFilterRef} className="relative shrink-0">
+                      <button
+                        onClick={() => toggleDropdown('dateFilter')}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${dateFilter !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'}`}
+                      >
+                        <Filter className="h-3 w-3" />
+                        <span className="capitalize">{dateFilter === "not_done" ? "Not Done" : dateFilter}</span>
+                        <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.dateFilter ? 'rotate-180' : ''}`} />
+                      </button>
+                      {dropdownOpen?.dateFilter && (
+                        <div className="absolute z-50 mt-2 w-40 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                          {(activeTab === "work"
+                            ? [
+                              { id: 'all', label: 'All Tasks' },
+                              { id: 'today', label: 'Today' },
+                              { id: 'upcoming', label: 'Upcoming' }
+                            ]
+                            : [
+                              { id: 'all', label: 'All Tasks' },
+                              { id: 'overdue', label: 'Overdue' },
+                              { id: 'today', label: 'Today' },
+                              { id: 'upcoming', label: 'Upcoming' }
+                            ]
+                          ).map((filter) => (
                             <button
-                              key={user}
+                              key={filter.id}
                               onClick={() => {
-                                setWorkEmployeeFilter(user);
+                                setDateFilter(filter.id);
                                 setSelectedItems(new Set());
-                                setDropdownOpen(prev => ({ ...prev, workEmployee: false }));
+                                closeAllDropdowns();
                               }}
-                              className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === user ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                              className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
                             >
-                              {user}
+                              {filter.label}
                             </button>
                           ))}
                         </div>
                       )}
                     </div>
-                  )}
 
-                  {!showHistory && (
-                    <>
-                      <div className="relative">
-                        <button
-                          onClick={() => setDropdownOpen(prev => ({ ...prev, dateFilter: !prev.dateFilter }))}
-                          className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${dateFilter !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'}`}
-                        >
-                          <Filter className="h-3 w-3" />
-                          <span className="capitalize">{dateFilter === "not_done" ? "Not Done" : dateFilter}</span>
-                          <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.dateFilter ? 'rotate-180' : ''}`} />
-                        </button>
-                        {dropdownOpen?.dateFilter && (
-                          <div className="absolute z-50 mt-2 w-40 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                            {(activeTab === "work"
-                              ? [
-                                { id: 'all', label: 'All Tasks' },
-                                { id: 'today', label: 'Today' },
-                                { id: 'upcoming', label: 'Upcoming' }
-                              ]
-                              : [
-                                { id: 'all', label: 'All Tasks' },
-                                { id: 'overdue', label: 'Overdue' },
-                                { id: 'today', label: 'Today' },
-                                { id: 'upcoming', label: 'Upcoming' }
-                              ]
-                            ).map((filter) => (
-                              <button
-                                key={filter.id}
-                                onClick={() => {
-                                  setDateFilter(filter.id);
-                                  setSelectedItems(new Set());
-                                  setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
-                                }}
-                                className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
-                              >
-                                {filter.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {activeTab !== "repair" && (
-                        <button
-                          onClick={activeTab === "work" ? () => childSubmitRef.current?.() : handleSubmit}
-                          disabled={!isModifyAllowed || selectedItems.size === 0 || isSubmitting}
-                          className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-40 shadow-md shadow-purple-600/10 transition-all disabled:cursor-not-allowed"
-                        >
-                          {isSubmitting ? "..." : `Submit (${selectedItems.size})`}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
+                    {activeTab !== "repair" && (
+                      <button
+                        onClick={activeTab === "work" ? () => childSubmitRef.current?.() : handleSubmit}
+                        disabled={!isModifyAllowed || selectedItems.size === 0 || isSubmitting}
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-40 shadow-md shadow-purple-600/10 transition-all disabled:cursor-not-allowed shrink-0"
+                      >
+                        {isSubmitting ? "..." : `Submit (${selectedItems.size})`}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1483,6 +1808,11 @@ const AllTasks = () => {
             setIsSubmitting={setIsSubmitting}
             registerSubmit={handleRegisterSubmit}
             isModifyAllowed={isModifyAllowed}
+            shopFilter={selectedShop}
+            setShopFilter={setSelectedShop}
+            departmentFilter={selectedDepartment}
+            setDepartmentFilter={setSelectedDepartment}
+            onDepartmentsChange={setWorkDepartments}
           />
         ) : (
           <>
@@ -1544,7 +1874,7 @@ const AllTasks = () => {
                 ) : error ? (
                   <div className="py-20 text-center">
                     <p className="text-red-500 mb-2 font-medium">{error}</p>
-                    <button onClick={fetchData} className="text-sm text-purple-600 underline">Try again</button>
+                    <button onClick={() => fetchData(true)} className="text-sm text-purple-600 underline">Try again</button>
                   </div>
                 ) : (
                   <>
@@ -1674,6 +2004,7 @@ const AllTasks = () => {
                                             <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
                                               <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                                             </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">{task.shop || task.shop_name || "—"}</td>
                                             <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
                                             <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
                                               <span className="font-bold text-gray-900">{task.assigned_person || "—"}</span>
@@ -1696,6 +2027,7 @@ const AllTasks = () => {
                                             <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
                                               <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                                             </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">{task.shop || task.shop_name || "—"}</td>
                                             <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
                                               {task.submission_date ? new Date(task.submission_date).toLocaleString() : "—"}
                                             </td>
@@ -1950,10 +2282,27 @@ const AllTasks = () => {
                             })
                           ) : (
                             <tr>
-                              <td colSpan={tableHeaders.length + 6} className="px-6 py-20 text-center text-gray-400">
-                                <div className="flex flex-col items-center gap-2">
-                                  <Search size={40} className="text-gray-200" />
-                                  <p>No {showHistory ? "history" : "pending tasks"} found.</p>
+                              <td colSpan={tableHeaders.length + 6} className="px-6 py-24 text-center">
+                                <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                                  <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
+                                    <Search size={22} />
+                                  </div>
+                                  <p className="text-sm font-bold text-gray-700">No {showHistory ? "history records" : "pending tasks"} found</p>
+                                  <p className="text-xs text-gray-400">
+                                    {searchTerm 
+                                      ? `No matches for "${searchTerm}". Try a different keyword.` 
+                                      : selectedShop !== 'all' 
+                                        ? `No ${showHistory ? "history records" : "pending tasks"} for ${selectedShop} with current filters.` 
+                                        : "All tasks are up to date."}
+                                  </p>
+                                  {searchTerm && (
+                                    <button
+                                      onClick={() => setSearchTerm("")}
+                                      className="mt-2 text-xs font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg border border-purple-100 transition-colors"
+                                    >
+                                      Clear Search
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2289,9 +2638,26 @@ const AllTasks = () => {
                           )
                         })
                       ) : (
-                        <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
-                          <Search size={40} className="text-gray-200 mx-auto mb-3" />
-                          <p className="text-gray-400 text-sm">No tasks found.</p>
+                        <div className="text-center py-16 px-4 bg-white rounded-2xl border border-gray-100 shadow-2xs">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto mb-2.5">
+                            <Search size={22} />
+                          </div>
+                          <p className="text-sm font-bold text-gray-700 mb-1">No {showHistory ? "history records" : "pending tasks"} found</p>
+                          <p className="text-xs text-gray-400 max-w-xs mx-auto">
+                            {searchTerm 
+                              ? `No matches for "${searchTerm}".` 
+                              : selectedShop !== 'all' 
+                                ? `No ${showHistory ? "history" : "pending tasks"} for ${selectedShop}.` 
+                                : "All tasks are up to date."}
+                          </p>
+                          {searchTerm && (
+                            <button
+                              onClick={() => setSearchTerm("")}
+                              className="mt-3 text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100"
+                            >
+                              Clear Search
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

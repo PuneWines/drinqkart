@@ -420,7 +420,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
       let targetShops = [];
       if (shopFilter && shopFilter !== 'all') {
         targetShops = [shopFilter.toLowerCase()];
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
@@ -445,7 +445,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     } else {
       if (shopFilter && shopFilter !== 'all') {
         query = query.ilike('shop_name', shopFilter);
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
         if (managerShops.length > 0) {
@@ -1158,20 +1158,11 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
 
     // Filter by shop if provided
     if (shopFilter && shopFilter !== 'all') {
+      const shopFilterLower = shopFilter.trim().toLowerCase();
       staff = staff.filter(user => {
-        const userAccessStr = (user.user_access || "").toLowerCase();
-        const shopFilterLower = shopFilter.toLowerCase();
-
-        // If user_access contains admin, check their shop_name
-        if (userAccessStr === 'admin' || userAccessStr.includes('admin')) {
-          const userShopNameStr = (user.shop_name || "").toLowerCase();
-          const shopNameList = userShopNameStr.split(',').map(dept => dept.trim());
-          return shopNameList.includes(shopFilterLower);
-        }
-
-        // Otherwise, check user_access
-        const userAccessList = userAccessStr.split(',').map(dept => dept.trim());
-        return userAccessList.includes(shopFilterLower);
+        const userShopNameStr = (user.shop_name || "").toLowerCase();
+        const shopNameList = userShopNameStr.split(',').map(s => s.trim()).filter(Boolean);
+        return shopNameList.includes(shopFilterLower);
       });
     }
 
@@ -1699,7 +1690,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
       let targetShops = [];
       if (shopFilter && shopFilter !== 'all') {
         targetShops = [shopFilter.toLowerCase()];
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
@@ -1724,7 +1715,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
     } else {
       if (shopFilter && shopFilter !== 'all') {
         query = query.ilike('shop_name', shopFilter);
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
         if (managerShops.length > 0) {
@@ -1818,7 +1809,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
       let targetShops = [];
       if (shopFilter && shopFilter !== 'all') {
         targetShops = [shopFilter.toLowerCase()];
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
@@ -1843,7 +1834,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     } else {
       if (shopFilter && shopFilter !== 'all') {
         query = query.ilike('shop_name', shopFilter);
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
         if (managerShops.length > 0) {
@@ -1936,7 +1927,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
       let targetShops = [];
       if (shopFilter && shopFilter !== 'all') {
         targetShops = [shopFilter.toLowerCase()];
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
@@ -1961,7 +1952,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     } else {
       if (shopFilter && shopFilter !== 'all') {
         query = query.ilike('shop_name', shopFilter);
-      } else if (upperRole === 'MANAGER') {
+      } else if (roleLower === 'manager') {
         const userAccess = localStorage.getItem('user_access') || "";
         const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
         if (managerShops.length > 0) {

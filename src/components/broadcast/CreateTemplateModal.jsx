@@ -32,7 +32,7 @@ export default function CreateTemplateModal() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-55 p-4 animate-in fade-in select-none">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-55 p-4 animate-in fade-in">
       <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 flex flex-col gap-4">
         <div className="flex justify-between items-center pb-3 border-b border-gray-100">
           <h3 className="text-md font-bold text-gray-900 flex items-center gap-1.5">

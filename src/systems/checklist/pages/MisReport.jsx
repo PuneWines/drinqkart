@@ -81,7 +81,6 @@ function StaffTasksPage() {
                         }
                     });
                     setUserRolesMap(rMap);
-                    setUserReportedByMap(repMap);
                 }
             } catch (err) {
                 console.error("Error fetching user roles:", err);

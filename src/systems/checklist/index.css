@@ -50,10 +50,10 @@
     background: linear-gradient(to right, #7E22CE, #BE185D);
 }
 
-/* Improve scrolling performance for large tables */
+/* Hardware accelerated scrolling performance */
 .h-\[calc\(100vh-250px\)\] {
     transform: translateZ(0);
-    will-change: transform;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Ensure thin smooth scrolling for all scrollbars */

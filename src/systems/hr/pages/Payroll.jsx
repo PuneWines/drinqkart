@@ -434,6 +434,8 @@ const Payroll = () => {
                     .select('employee_id, employee_name, status, attendance_date')
                     .gte('attendance_date', startDateStr)
                     .lte('attendance_date', endDateStr)
+                    .order('attendance_date', { ascending: true })
+                    .order('id', { ascending: true })
                     .range(logPage * logPageSize, (logPage + 1) * logPageSize - 1);
 
                 if (logsError) throw logsError;
@@ -462,6 +464,8 @@ const Payroll = () => {
                     .select('employee_id, date, shift_type')
                     .gte('date', startDateStr)
                     .lte('date', endDateStr)
+                    .order('date', { ascending: true })
+                    .order('id', { ascending: true })
                     .range(rosterPage * rosterPageSize, (rosterPage + 1) * rosterPageSize - 1);
 
                 if (rosterErr) throw rosterErr;
@@ -521,9 +525,15 @@ const Payroll = () => {
                 const dojStr = rawDoj ? (rawDoj.includes('T') ? rawDoj.split('T')[0] : rawDoj.substring(0, 10)) : null;
 
                 if (code) {
+                    const cleanCode = code.replace(/^0+/, '');
                     verifiedIds.add(code);
+                    if (cleanCode) verifiedIds.add(cleanCode);
                     empIdToKeyMap[code] = code;
-                    if (dojStr) empDojMap[code] = dojStr;
+                    if (cleanCode) empIdToKeyMap[cleanCode] = code;
+                    if (dojStr) {
+                        empDojMap[code] = dojStr;
+                        if (cleanCode) empDojMap[cleanCode] = dojStr;
+                    }
                 }
                 if (name) {
                     verifiedIds.add(name);
@@ -539,6 +549,31 @@ const Payroll = () => {
                 const name = e.name_as_per_aadhar?.toString().trim().toLowerCase();
                 if (code) allEmpIdToKeyMap[code] = code;
                 if (name && code) allEmpIdToKeyMap[name] = code;
+            });
+
+            // Map roster off-days (Weekly Off / Day Off) per employee key and date
+            const rosterOffDaysMap = {};
+            (dbRosters || []).forEach(r => {
+                const empId = r.employee_id?.toString().trim();
+                if (!empId) return;
+                const empIdLower = empId.toLowerCase();
+                const cleanEmpId = empIdLower.replace(/^0+/, '');
+                if (isInactiveRecord(empId) || isInactiveRecord(empIdLower)) return;
+                const matchedKey = empIdToKeyMap[empIdLower] || empIdToKeyMap[cleanEmpId] || empIdLower;
+                if (isInactiveRecord(matchedKey)) return;
+
+                const empDoj = empDojMap[matchedKey] || empDojMap[empIdLower] || empDojMap[cleanEmpId];
+                if (empDoj && r.date < empDoj) return;
+
+                const sType = r.shift_type?.toString().trim().toLowerCase() || '';
+                if (sType === 'weekly off' || sType === 'wo' || sType === 'weeklyoff' || sType === 'day off' || sType === 'do' || sType === 'dayoff' || sType === 'off') {
+                    if (!rosterOffDaysMap[matchedKey]) rosterOffDaysMap[matchedKey] = new Set();
+                    rosterOffDaysMap[matchedKey].add(r.date);
+                    if (cleanEmpId) {
+                        if (!rosterOffDaysMap[cleanEmpId]) rosterOffDaysMap[cleanEmpId] = new Set();
+                        rosterOffDaysMap[cleanEmpId].add(r.date);
+                    }
+                }
             });
 
             // Track logged dates per employee key to prevent duplicate roster addition
@@ -619,7 +654,14 @@ const Payroll = () => {
                     const statuses = empInfo.dates[dateStr];
                     const isHolidayDate = holidayDates.has(dateStr);
 
-                    const isFullPresent = isHolidayDate || statuses.some(s =>
+                    const isRosterOffDate = Boolean(
+                        (rosterOffDaysMap[empKey] && rosterOffDaysMap[empKey].has(dateStr)) ||
+                        (rosterOffDaysMap[empKey.replace(/^0+/, '')] && rosterOffDaysMap[empKey.replace(/^0+/, '')].has(dateStr)) ||
+                        (empInfo.empId && rosterOffDaysMap[empInfo.empId.toLowerCase()] && rosterOffDaysMap[empInfo.empId.toLowerCase()].has(dateStr)) ||
+                        (empInfo.empId && rosterOffDaysMap[empInfo.empId.toLowerCase().replace(/^0+/, '')] && rosterOffDaysMap[empInfo.empId.toLowerCase().replace(/^0+/, '')].has(dateStr))
+                    );
+
+                    const isFullPresent = isHolidayDate || isRosterOffDate || statuses.some(s =>
                         s === 'present' || s === 'late' || s === 'weekly off' || s === 'day off' || s === 'wo' || s === 'do' || s === 'holiday'
                     );
                     const isHalfDay = !isFullPresent && statuses.some(s => s === 'half day');
@@ -950,9 +992,17 @@ const Payroll = () => {
 
                 const dailyRate = totalDays > 0 ? salary / totalDays : 0;
                 const calculatedProrated = Math.round(dailyRate * (present + extraDays));
-                const proratedSalary = (savedPayroll && savedPayroll.prorated_salary !== null && savedPayroll.prorated_salary !== undefined)
-                    ? Number(savedPayroll.prorated_salary)
-                    : calculatedProrated;
+                const hasAttendanceChanged = Boolean(
+                    savedPayroll &&
+                    savedPayroll.total_present !== null &&
+                    savedPayroll.total_present !== undefined &&
+                    Number(savedPayroll.total_present) !== present
+                );
+                const proratedSalary = (!isPaidRecord && hasAttendanceChanged)
+                    ? calculatedProrated
+                    : (savedPayroll && savedPayroll.prorated_salary !== null && savedPayroll.prorated_salary !== undefined)
+                        ? Number(savedPayroll.prorated_salary)
+                        : calculatedProrated;
 
                 const netSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction + wayOff));
 
@@ -1022,8 +1072,16 @@ const Payroll = () => {
 
                 const dailyRate = totalDays > 0 ? salary / totalDays : 0;
                 const calculatedProrated = Math.round(dailyRate * (present + extraDays));
+                const hasAttendanceChanged = Boolean(
+                    savedPayroll &&
+                    savedPayroll.total_present !== null &&
+                    savedPayroll.total_present !== undefined &&
+                    Number(savedPayroll.total_present) !== present
+                );
                 const savedProrated = savedPayroll ? Number(savedPayroll.prorated_salary) : null;
-                const proratedSalary = (savedProrated !== null && savedProrated !== undefined && savedPayroll) ? savedProrated : calculatedProrated;
+                const proratedSalary = (!isPaidRecord && hasAttendanceChanged)
+                    ? calculatedProrated
+                    : ((savedProrated !== null && savedProrated !== undefined && savedPayroll) ? savedProrated : calculatedProrated);
                 const unmatchedNetSalary = Math.round(Math.max(0, proratedSalary - breakageDeduction - medicalDeduction - rtoDeduction + seasonalBonus + referralBonus - advDeduction + wayOff));
 
                 return [

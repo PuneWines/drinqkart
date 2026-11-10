@@ -627,6 +627,7 @@ const AttendanceDaily = () => {
         const { data, error } = await supabase
           .from('hr_management_employees')
           .select('*')
+          .order('id', { ascending: true })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;
@@ -1485,6 +1486,7 @@ const AttendanceDaily = () => {
           .gte('attendance_date', startDateStr)
           .lte('attendance_date', endDateStr)
           .order('attendance_date', { ascending: true })
+          .order('id', { ascending: true })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;
@@ -1580,6 +1582,7 @@ const AttendanceDaily = () => {
         const { data, error } = await supabase
           .from('hr_management_employees')
           .select('employee_id, name_as_per_aadhar, designation, joining_company_name, joining_place')
+          .order('id', { ascending: true })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;
@@ -1608,6 +1611,7 @@ const AttendanceDaily = () => {
           .from('hr_management_attendance_logs')
           .select('employee_id, employee_name, designation, store_name')
           .not('employee_id', 'is', null)
+          .order('id', { ascending: true })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;

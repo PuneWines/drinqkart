@@ -700,7 +700,17 @@ export default function ScheduledWorkTasks() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredTasks.map((item, index) => {
+              {loading && masterTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="py-24 text-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                      <p className="text-gray-500 font-medium text-xs animate-pulse">Loading scheduled work tasks...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredTasks.map((item, index) => {
                 const isModified = !!modifiedRows[item.taskId];
                 const displayStart = item.next_start_datetime || item.start_datetime || (item.start_time ? `T${item.start_time}` : "");
                 const displayEnd = item.next_end_datetime || item.end_datetime || (item.end_time ? `T${item.end_time}` : "");
@@ -891,10 +901,10 @@ export default function ScheduledWorkTasks() {
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
-          {filteredTasks.length === 0 && (
+          {!loading && filteredTasks.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-3">
               <LayoutGrid size={48} className="text-gray-200" />
               <p className="text-gray-400 font-bold tracking-widest uppercase text-xs">No matching scheduled work records found</p>
@@ -904,7 +914,13 @@ export default function ScheduledWorkTasks() {
 
         {/* Mobile View Card List */}
         <div className="md:hidden space-y-4 p-4 bg-gray-50/30 rounded-b-xl border-x border-b border-gray-100">
-          {filteredTasks.map((item, index) => {
+          {loading && masterTasks.length === 0 ? (
+            <div className="py-16 text-center flex flex-col items-center justify-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm">
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              <p className="text-gray-500 font-medium text-xs animate-pulse">Loading scheduled work tasks...</p>
+            </div>
+          ) : (
+            filteredTasks.map((item, index) => {
             const isModified = !!modifiedRows[item.taskId];
             const displayStart = item.next_start_datetime || "";
             const displayEnd = item.next_end_datetime || "";
@@ -1075,7 +1091,14 @@ export default function ScheduledWorkTasks() {
                 </div>
               </div>
             );
-          })}
+          }))}
+
+          {!loading && filteredTasks.length === 0 && (
+            <div className="py-12 text-center flex flex-col items-center gap-2">
+              <LayoutGrid size={36} className="text-gray-300" />
+              <p className="text-gray-400 font-bold tracking-wider uppercase text-[10px]">No matching scheduled work records found</p>
+            </div>
+          )}
         </div>
       </div>
     </AdminLayout>

@@ -232,12 +232,16 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                     .from('hr_management_attendance_logs')
                     .select('*')
                     .gte('attendance_date', startDateStr)
-                    .lte('attendance_date', endDateStr)
-                    .range(page * pageSize, (page + 1) * pageSize - 1);
+                    .lte('attendance_date', endDateStr);
 
                 if (selectedDevice.serial !== 'ALL') {
                     query = query.eq('serial_number', selectedDevice.serial);
                 }
+
+                query = query
+                    .order('attendance_date', { ascending: true })
+                    .order('id', { ascending: true })
+                    .range(page * pageSize, (page + 1) * pageSize - 1);
 
                 const { data, error: fetchErr } = await query;
                 if (fetchErr) throw fetchErr;
@@ -343,14 +347,37 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
 
                     const rEntry = (rosterData || []).find(r => {
                         const rEmpId = (r.employee_id || '').toString().trim().toLowerCase().replace(/^0+/, '');
-                        return rEmpId === empKey && r.date === dateStr;
+                        const rEmpIdRaw = (r.employee_id || '').toString().trim().toLowerCase();
+                        const rName = (r.employee_name || '').toString().trim().toLowerCase();
+                        const empNameLower = (empName || '').toString().trim().toLowerCase();
+                        const cleanEmpKey = (empKey || '').toString().trim().toLowerCase().replace(/^0+/, '');
+                        const rawEmpIdLower = (empId || '').toString().trim().toLowerCase();
+                        const cleanEmpIdLower = rawEmpIdLower.replace(/^0+/, '');
+
+                        const isIdMatch = (
+                            rEmpId === cleanEmpKey ||
+                            rEmpIdRaw === cleanEmpKey ||
+                            rEmpId === cleanEmpIdLower ||
+                            rEmpIdRaw === rawEmpIdLower ||
+                            rEmpIdRaw === cleanEmpKey ||
+                            rEmpId === rawEmpIdLower
+                        );
+                        const isNameMatch = Boolean(empNameLower && rName && empNameLower === rName);
+
+                        return (isIdMatch || isNameMatch) && r.date === dateStr;
                     });
 
                     const hasRoster = !!(rEntry && rEntry.shift_type);
+                    const rShiftLower = String(rEntry?.shift_type || '').toLowerCase();
                     const isRosterWeeklyOff = hasRoster && (
-                        String(rEntry.shift_type).toLowerCase().includes('weekly off') ||
-                        String(rEntry.shift_type).toLowerCase() === 'wo' ||
-                        String(rEntry.shift_type).toLowerCase() === 'weeklyoff'
+                        rShiftLower.includes('weekly off') ||
+                        rShiftLower === 'wo' ||
+                        rShiftLower === 'weeklyoff'
+                    );
+                    const isRosterDayOff = hasRoster && (
+                        rShiftLower.includes('day off') ||
+                        rShiftLower === 'do' ||
+                        rShiftLower === 'dayoff'
                     );
 
                     let inTime = att?.in_time;
@@ -413,16 +440,19 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                         status = isLate ? 'Late' : 'Present';
                         presentCount++;
                         if (isLate || status === 'Late') lateCount++;
-                    } else if (!status || status === 'Absent') {
-                        if (isRosterWeeklyOff) {
+                    } else if (!status || status === 'Absent' || !hasPunches) {
+                        if (isRosterWeeklyOff || status === 'Weekly Off' || status === 'WO') {
                             status = 'Weekly Off';
                             weeklyOffCount++;
+                        } else if (isRosterDayOff || status === 'Day Off' || status === 'DO') {
+                            status = 'Day Off';
+                            dayOffCount++;
                         } else {
                             status = 'Absent';
                         }
-                    } else if (status === 'Weekly Off' || status === 'WO') {
+                    } else if (status === 'Weekly Off' || status === 'WO' || isRosterWeeklyOff) {
                         weeklyOffCount++;
-                    } else if (status === 'Day Off' || status === 'DO') {
+                    } else if (status === 'Day Off' || status === 'DO' || isRosterDayOff) {
                         dayOffCount++;
                     }
 
@@ -524,6 +554,7 @@ const calculateWorkHours = (inTimeStr, outTimeStr, dateStr, lunchStr = '00:00:00
                 const { data, error } = await supabase
                     .from('hr_management_employees')
                     .select('*')
+                    .order('id', { ascending: true })
                     .range(page * pageSize, (page + 1) * pageSize - 1);
 
                 if (error) throw error;

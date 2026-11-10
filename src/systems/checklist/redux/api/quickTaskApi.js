@@ -1,6 +1,7 @@
 import supabase from "../../SupabaseClient";
 import { deleteUnsubmittedFutureWorkTasks } from "./workRecordsApi";
 import { getUserAssignedShops, isUserShopScoped, isUserSuperadmin } from "../../../../utils/permissionUtils";
+import { isAssignmentExpired } from "../../utils/assignmentStatus";
 
 // Helper to parse JSON strings if accidentally stored as such
 const parseJsonIfNeeded = (val) => {
@@ -442,6 +443,12 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
       .map(row => {
       const master = row.master_work_tasks || {};
       const shopName = master.shop?.shop_name || "N/A";
+      // Same rule as Work Records: an expired assignment with no next one scheduled is AVAILABLE,
+      // even if the DB status has not been swept yet.
+      const derivedAvailable =
+        !row.next_start_datetime &&
+        (row.status === 'AVAILABLE' ||
+          isAssignmentExpired({ end_datetime: row.end_datetime, estimated_minutes: master.estimated_minutes }));
       return {
         ...row,
         id: row.id,
@@ -450,12 +457,12 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
         task_description: master.task_name || "N/A",
         shop_name: shopName,
         shop: shopName,
-        name: row.employee_name,
-        given_by: row.manager_name,
+        name: derivedAvailable ? "" : row.employee_name,
+        given_by: derivedAvailable ? "" : row.manager_name,
         duration: master.estimated_minutes ? `${Math.floor(master.estimated_minutes / 60).toString().padStart(2, '0')}:${(master.estimated_minutes % 60).toString().padStart(2, '0')}` : "00:00",
         task_start_date: row.start_datetime,
         end_datetime: row.end_datetime,
-        status: row.status
+        status: derivedAvailable ? 'AVAILABLE' : row.status
       };
     });
 

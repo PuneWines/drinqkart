@@ -20,7 +20,7 @@ export default function TemplatesModal() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
       {/* Templates Catalog Modal */}
       <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl flex flex-col gap-4 border border-gray-100 max-h-[85vh] overflow-hidden">
         <div className="flex justify-between items-center pb-3 border-b border-gray-100">

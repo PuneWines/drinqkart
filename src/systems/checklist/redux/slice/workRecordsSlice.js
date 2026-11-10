@@ -38,7 +38,7 @@ const workRecordsSlice = createSlice({
   initialState: {
     tasks: [],
     assignments: [],
-    loading: false,
+    loading: true,
     saving: false,
     error: null,
   },

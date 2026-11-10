@@ -26,7 +26,12 @@ const store = configureStore({
         ea: eaReducer,
         notifications: notificationReducer,
         workRecords: workRecordsReducer
-    }
+    },
+    middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware({
+            serializableCheck: false,
+            immutableCheck: false,
+        }),
 })
 
 export default store;

@@ -67,12 +67,10 @@ export default function StaffTasksTable({
     setSelectedMonth(currentMonth);
   }, []);
 
-  // Reset pagination when filters change
+  // Reset pagination when filters change without wiping table rows to prevent layout shuffle
   useEffect(() => {
     setCurrentPage(1)
-    setStaffMembers([])
     setHasMoreData(true)
-    setTotalStaffCount(0)
   }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth, dateRange])
 
   // Function to load staff data from server

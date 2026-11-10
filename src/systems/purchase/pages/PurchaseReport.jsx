@@ -95,6 +95,26 @@ function fmtQty(v) {
   return Number(num.toFixed(2)).toLocaleString("en-IN");
 }
 
+// Transporter / receiver quantities are saved in the PO item's own unit (boxes for box items).
+// The report works in bottles everywhere, so convert box counts using bottles-per-box.
+function getBottlesPerBox(r, poItem) {
+  let perBox = parseFloat(poItem?.bcs ?? poItem?.bc_s ?? r.bcs ?? r.bc_s) || 0;
+  if (!perBox) {
+    const q = parseFloat(r.po_qty), b = parseFloat(r.po_box);
+    if (q > 0 && b > 0) perBox = q / b;
+  }
+  return perBox;
+}
+
+function makeToBottles(r, poItem) {
+  const orderBox = parseFloat(poItem?.orderBox ?? poItem?.order_box ?? 0) || 0;
+  const qtyType = poItem?.qtyType || (orderBox >= 0.9 ? "Box" : "Bottles");
+  if (qtyType !== "Box") return (v) => v;
+  const perBox = getBottlesPerBox(r, poItem);
+  if (!perBox) return (v) => v;
+  return (v) => (v == null || isNaN(v) ? v : Math.round(v * perBox));
+}
+
 // Only items whose indent has a generated PO, narrowed by the page filters
 function applyFilters(query, { shopFilter, startDate, endDate, search }) {
   query = query.not("po_number", "is", null);
@@ -172,11 +192,18 @@ async function enrichRows(list, companies = []) {
       (i) => (i.item_name || i.itemName || i.name) === r.item_name
     );
 
+    const toBottles = makeToBottles(r, poItem);
+
     // ──────────────────────────────────────────────
     // 1. Indent Stage
     // ──────────────────────────────────────────────
-    const indentQty = r.order_qty != null ? parseFloat(r.order_qty) : 0;
     const indentBox = r.order_box != null ? parseFloat(r.order_box) : 0;
+    // order_qty can hold a box/case count on some rows, so derive bottles from boxes x bottles-per-box
+    const indentPerBox = getBottlesPerBox(r, poItem);
+    const indentQty =
+      indentBox > 0 && indentPerBox > 0
+        ? Math.round(indentBox * indentPerBox * 100) / 100
+        : r.order_qty != null ? parseFloat(r.order_qty) : 0;
 
     let indentStatus = "Raised";
     if (r.po_action === "Direct Added in PO") {
@@ -287,7 +314,7 @@ async function enrichRows(list, companies = []) {
         });
         if (matchKey) foundDel = delMap[matchKey];
       }
-      transporterQty = foundDel?.deliveredQty != null ? parseFloat(foundDel.deliveredQty) : poQty;
+      transporterQty = foundDel?.deliveredQty != null ? toBottles(parseFloat(foundDel.deliveredQty)) : poQty;
     } else if (hasRejectedTransporter) {
       transporterStatus = "Rejected";
       transporterQty = 0;
@@ -317,7 +344,7 @@ async function enrichRows(list, companies = []) {
       }
 
       if (foundRec && foundRec.receivedQty != null) {
-        receivedQty = parseFloat(foundRec.receivedQty);
+        receivedQty = toBottles(parseFloat(foundRec.receivedQty));
       } else if (poQty !== null) {
         receivedQty = poQty;
       }

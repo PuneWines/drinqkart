@@ -182,12 +182,10 @@ export default function TaskNavigationTabs({
     }
   };
 
-  // Reset pagination when filters change
+  // Reset pagination when filters change without wiping tasks to prevent UI shuffle
   useEffect(() => {
     setCurrentPage(1)
-    setDisplayedTasks([])
     setHasMoreData(true)
-    setTotalCount(0)
   }, [taskView, dashboardType, dashboardStaffFilter, shopFilter, dateRange])
 
   // Function to load tasks from server

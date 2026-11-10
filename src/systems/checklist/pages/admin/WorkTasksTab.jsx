@@ -278,6 +278,11 @@ const WorkTasksTab = ({
   setIsSubmitting,
   registerSubmit,
   isModifyAllowed = true,
+  shopFilter = "all",
+  setShopFilter,
+  departmentFilter = "all",
+  setDepartmentFilter,
+  onDepartmentsChange,
 }) => {
   const { showToast } = useMagicToast();
 
@@ -379,8 +384,9 @@ const WorkTasksTab = ({
     const matchedNames = allManagerUsers
       .filter(u => {
         if (!isShopSelected) return true;
-        const shops = ([u.shop_name, u.user_access].filter(Boolean).join(",") || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-        return shops.includes(targetShopLower);
+        // Primary shop only (users.shop_name); assigned access in user_access does not count
+        const primaryShops = (u.shop_name || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+        return primaryShops.includes(targetShopLower);
       })
       .map(u => u.user_name)
       .filter(Boolean);
@@ -397,6 +403,12 @@ const WorkTasksTab = ({
     }, 350);
     return () => clearTimeout(handler);
   }, [searchTerm]);
+
+  useEffect(() => {
+    if (shopFilter && shopFilter !== "all") {
+      setHistoryShopFilter(shopFilter);
+    }
+  }, [shopFilter]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -527,7 +539,7 @@ const WorkTasksTab = ({
       }
 
       const tableName = "work_task_new";
-      let selectStr = "*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required))";
+      let selectStr = "*, task_assignments:assignment_id(id, manager_name, master_work_tasks:task_id(id, proof_required, department))";
       let query = supabase.from(tableName).select(selectStr);
 
       if (applyNameFilter && reportingUsers.length > 0) {
@@ -588,8 +600,9 @@ const WorkTasksTab = ({
         query = query.or(`name.ilike.%${cleanFilter}%,manager_name.ilike.%${cleanFilter}%`);
       }
 
-      if (showHistory && historyShopFilter && historyShopFilter !== "all") {
-        query = query.ilike('shop_name', historyShopFilter);
+      const effectiveShop = (shopFilter && shopFilter !== "all") ? shopFilter : historyShopFilter;
+      if (showHistory && effectiveShop && effectiveShop !== "all") {
+        query = query.ilike('shop_name', effectiveShop);
       }
 
       if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
@@ -618,7 +631,8 @@ const WorkTasksTab = ({
           id: item.id || item.task_id,
           _table: item._table || tableName,
           shop: item.shop || item.shop_name || "-",
-          manager_name: item.manager_name || item.task_assignments?.manager_name || item.given_by || "—"
+          manager_name: item.manager_name || item.task_assignments?.manager_name || item.given_by || "—",
+          department: item.department || item.task_assignments?.master_work_tasks?.department || ""
         };
 
         if ((mapped.work_status || mapped.status || "").toUpperCase() === "REJECTED") {
@@ -690,13 +704,13 @@ const WorkTasksTab = ({
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [username, userRole, showHistory, holidaysList, debouncedSearchTerm, workEmployeeFilter, dateFilter, startDate, endDate, historyShopFilter, historyManagerFilter]);
+  }, [username, userRole, showHistory, holidaysList, debouncedSearchTerm, workEmployeeFilter, dateFilter, startDate, endDate, historyShopFilter, historyManagerFilter, shopFilter]);
 
   useEffect(() => {
     setPage(0);
     setHasMore(true);
     fetchData(0, false);
-  }, [showHistory, debouncedSearchTerm, dateFilter, workEmployeeFilter, startDate, endDate, username, userRole, historyShopFilter, historyManagerFilter, fetchData]);
+  }, [showHistory, debouncedSearchTerm, dateFilter, workEmployeeFilter, startDate, endDate, username, userRole, historyShopFilter, historyManagerFilter, shopFilter, fetchData]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -706,6 +720,27 @@ const WorkTasksTab = ({
     }, 5 * 60 * 1000); // 5 minutes interval
     return () => clearInterval(timer);
   }, [fetchData]);
+
+  const availableDepartments = useMemo(() => {
+    const set = new Set();
+    const list = showHistory ? historyData : tasks;
+    list.forEach(t => {
+      const taskShop = (t.shop || t.shop_name || "").trim().toLowerCase();
+      if (shopFilter === "all" || taskShop === shopFilter.trim().toLowerCase()) {
+        const d = (t.department || t.task_assignments?.master_work_tasks?.department || "").trim();
+        if (d && d !== "-" && d !== "—" && d !== "N/A") {
+          set.add(d);
+        }
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [tasks, historyData, showHistory, shopFilter]);
+
+  useEffect(() => {
+    if (onDepartmentsChange) {
+      onDepartmentsChange(availableDepartments);
+    }
+  }, [availableDepartments, onDepartmentsChange]);
 
   const filteredPendingTasks = useMemo(() => {
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -724,6 +759,24 @@ const WorkTasksTab = ({
     const seen = new Set();
 
     return sortedTasks.filter((task) => {
+      if (shopFilter && shopFilter !== "all") {
+        const taskShop = (task.shop || task.shop_name || "").trim().toLowerCase();
+        if (taskShop !== shopFilter.trim().toLowerCase()) return false;
+      }
+
+      if (departmentFilter && departmentFilter !== "all") {
+        const taskDept = (task.department || "").trim().toLowerCase();
+        if (taskDept !== departmentFilter.trim().toLowerCase()) return false;
+      }
+
+      if (searchTerm && searchTerm.trim() !== "") {
+        const term = searchTerm.trim().toLowerCase();
+        const matchesSearch = Object.values(task).some(
+          (val) => val && typeof val !== 'object' && val.toString().toLowerCase().includes(term)
+        );
+        if (!matchesSearch) return false;
+      }
+
       const ds = getWorkTaskDynamicStatus(task, currentTime);
       const status = task.current_date ? getTimeStatus(task.current_date, task.status) : null;
 
@@ -753,7 +806,7 @@ const WorkTasksTab = ({
 
       return true;
     });
-  }, [tasks, dateFilter, getTimeStatus, currentTime]);
+  }, [tasks, dateFilter, getTimeStatus, currentTime, shopFilter, departmentFilter, searchTerm]);
 
   const filteredHistoryTasks = useMemo(() => {
     const completionField = "submission_date";
@@ -777,9 +830,24 @@ const WorkTasksTab = ({
         }
       }
       let matchesShop = true;
-      if (historyShopFilter && historyShopFilter !== "all") {
-        const taskShop = (task.shop_name || "").trim().toLowerCase();
-        matchesShop = taskShop === historyShopFilter.trim().toLowerCase();
+      const effectiveShop = (shopFilter && shopFilter !== "all") ? shopFilter : historyShopFilter;
+      if (effectiveShop && effectiveShop !== "all") {
+        const taskShop = (task.shop || task.shop_name || "").trim().toLowerCase();
+        matchesShop = taskShop === effectiveShop.trim().toLowerCase();
+      }
+
+      let matchesDept = true;
+      if (departmentFilter && departmentFilter !== "all") {
+        const taskDept = (task.department || "").trim().toLowerCase();
+        matchesDept = taskDept === departmentFilter.trim().toLowerCase();
+      }
+
+      let matchesSearch = true;
+      if (searchTerm && searchTerm.trim() !== "") {
+        const term = searchTerm.trim().toLowerCase();
+        matchesSearch = Object.values(task).some(
+          (val) => val && typeof val !== 'object' && val.toString().toLowerCase().includes(term)
+        );
       }
 
       let matchesManager = true;
@@ -788,9 +856,9 @@ const WorkTasksTab = ({
         matchesManager = taskManager === historyManagerFilter.trim().toLowerCase();
       }
 
-      return matchesDateRange && matchesShop && matchesManager;
+      return matchesDateRange && matchesShop && matchesDept && matchesSearch && matchesManager;
     });
-  }, [historyData, startDate, endDate, historyShopFilter, historyManagerFilter]);
+  }, [historyData, startDate, endDate, historyShopFilter, historyManagerFilter, shopFilter, departmentFilter, searchTerm]);
 
   const paginatedTasks = useMemo(() => {
     return showHistory ? filteredHistoryTasks : filteredPendingTasks;
@@ -1303,8 +1371,11 @@ const WorkTasksTab = ({
             <div className="flex items-center gap-2">
               <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Shop:</span>
               <select
-                value={historyShopFilter}
-                onChange={(e) => setHistoryShopFilter(e.target.value)}
+                value={shopFilter !== "all" ? shopFilter : historyShopFilter}
+                onChange={(e) => {
+                  setHistoryShopFilter(e.target.value);
+                  if (setShopFilter) setShopFilter(e.target.value);
+                }}
                 disabled={(userRole || "").toLowerCase() === "manager"}
                 className="text-xs sm:text-sm border border-gray-200 rounded-md p-1.5 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium text-gray-700 disabled:opacity-75 disabled:cursor-not-allowed"
               >
