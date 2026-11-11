@@ -25,6 +25,7 @@ import PurchaseOrderPreview from "../components/purchase-order/PurchaseOrderPrev
 import AddExcludedModal from "../components/purchase-order/AddExcludedModal";
 import Toast, { useToast } from "../components/Toast";
 import { ViewOnlyBanner, getPagePermission } from "../../../utils/permissionUtils";
+import { showConfirm } from "../../../context/DialogContext";
 
 // PDF Templates
 import TraderPDF from "../pdf/TraderPDF";
@@ -617,7 +618,7 @@ const PurchaseOrder = () => {
     }));
   };
 
-  const handleRemoveItem = (itemId) => {
+  const handleRemoveItem = async (itemId) => {
     if (poMode === "manual") {
       setManualItems((prev) => prev.filter((item) => item.id !== itemId));
       addToast("Item removed from manual list.", "info");
@@ -625,11 +626,13 @@ const PurchaseOrder = () => {
     }
     const item = itemsForActiveParty.find((i) => i.id === itemId);
     const itemName = item ? item.itemName : "this item";
-    if (
-      window.confirm(
-        `Are you sure you want to remove "${itemName}" from the Purchase Order?`,
-      )
-    ) {
+    const ok = await showConfirm({
+      title: "Remove Item",
+      message: `Are you sure you want to remove "${itemName}" from the Purchase Order?`,
+      confirmText: "Remove",
+      type: "danger"
+    });
+    if (ok) {
       setRemovedItemIds((prev) => {
         const next = new Set(prev);
         next.add(itemId);
@@ -860,12 +863,13 @@ const PurchaseOrder = () => {
   // Delete held batch from purchase_hold
   const handleDeleteHeldBatch = async (batchId) => {
     const targetBatch = heldPOs.find((b) => b.batchId === batchId);
-    if (
-      !window.confirm(
-        `Are you sure you want to delete this held PO for "${targetBatch?.partyName || "this vendor"}"?`,
-      )
-    )
-      return;
+    const ok = await showConfirm({
+      title: "Delete Held PO",
+      message: `Are you sure you want to delete this held PO for "${targetBatch?.partyName || "this vendor"}"?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       await deleteHeldFromHoldTable(
@@ -1058,7 +1062,13 @@ const PurchaseOrder = () => {
         ? `under shop "${selectedShop}"`
         : "across all shops";
     const confirmMsg = `Are you sure you want to delete "${displayLabel}" from available PO selection?\n\nThis will exclude ${itemsToExclude.length} approved item(s) belonging to "${displayLabel}" ${shopLabel}.`;
-    if (!window.confirm(confirmMsg)) return;
+    const ok = await showConfirm({
+      title: "Exclude Vendor Items",
+      message: confirmMsg,
+      confirmText: "Exclude",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       const idsToExclude = itemsToExclude.map((item) => item.id);

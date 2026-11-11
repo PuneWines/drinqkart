@@ -10,6 +10,7 @@ import {
   deletePurchaseItemRow
 } from '../../services/dbService';
 import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
+import { showConfirm } from '../../../../context/DialogContext';
 
 const toDateStr = (d) => d.toISOString().split('T')[0];
 
@@ -108,9 +109,14 @@ export default function PurchasedItems({ hideHeader = false, currentUser, showAc
   };
 
   const handleDelete = async (rowId) => {
-    if (!window.confirm('Are you sure you want to delete this purchase record? This will also revert the stock ledger calculations for this item and date.')) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Delete Purchase Record",
+      message: 'Are you sure you want to delete this purchase record? This will also revert the stock ledger calculations for this item and date.',
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
+
     try {
       await deletePurchaseItemRow(rowId);
       setPurchaseRecords(prev => prev.filter(row => row.id !== rowId));

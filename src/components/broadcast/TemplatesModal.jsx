@@ -1,6 +1,7 @@
 import React from 'react'
 import { useChatStore } from '../../store/useChatStore'
 import { X, Check, Plus, Trash2 } from 'lucide-react'
+import { showConfirm } from '../../context/DialogContext'
 
 export default function TemplatesModal() {
   const { 
@@ -63,10 +64,16 @@ export default function TemplatesModal() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0 self-center">
                   <button
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      if (window.confirm(`⚠️ Are you sure you want to delete the template "${tpl.name}"?`)) {
+                      const ok = await showConfirm({
+                        title: "Delete Template",
+                        message: `Are you sure you want to delete the template "${tpl.name}"?`,
+                        confirmText: "Delete",
+                        type: "danger"
+                      });
+                      if (ok) {
                         deleteTemplate(tpl.id);
                       }
                     }}

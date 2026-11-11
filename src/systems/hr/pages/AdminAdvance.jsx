@@ -6,6 +6,7 @@ import {
   DollarSign, FileText, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { showConfirm } from '../../../context/DialogContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
@@ -276,9 +277,13 @@ const AdminAdvance = () => {
 
   const handleDeleteRequest = async (id) => {
     if (!canModify) return;
-    if (!window.confirm("Are you sure you want to delete this advance request?")) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Delete Advance Request",
+      message: "Are you sure you want to delete this advance request?",
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
     try {
       const { error } = await supabase
         .from('hr_management_advance_requests')

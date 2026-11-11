@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Plus, ShieldAlert, CheckCircle, Search, Trash2, Calendar, Edit3, Save, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { showConfirm } from '../context/DialogContext';
 
 export default function ExpensesManagement({ readOnly = false }) {
   const [expenses, setExpenses] = useState([]);
@@ -91,7 +92,13 @@ export default function ExpensesManagement({ readOnly = false }) {
 
   const handleDeleteExpense = async (id, name) => {
     if (readOnly) return;
-    if (!window.confirm(`Are you sure you want to delete expense option "${name}"?`)) return;
+    const ok = await showConfirm({
+      title: "Delete Expense Option",
+      message: `Are you sure you want to delete expense option "${name}"?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       setDeletingId(id);

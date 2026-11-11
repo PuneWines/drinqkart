@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import useShopStore from '../../purchase/store/useShopStore';
 import toast, { Toaster } from 'react-hot-toast';
+import { showConfirm } from '../../../context/DialogContext';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
 import { getDefaultDateRange, todayISO, invalidateStockCache } from '../stock/stockData';
@@ -238,7 +239,13 @@ export default function StockBalance() {
   // Single Record Delete
   const handleDelete = async (id) => {
     if (!id || !canModify) return;
-    if (!window.confirm('Are you sure you want to delete this stock record?')) return;
+    const ok = await showConfirm({
+      title: "Delete Stock Record",
+      message: "Are you sure you want to delete this stock record?",
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
     
     const toastId = toast.loading('Deleting record...');
     try {
@@ -297,7 +304,13 @@ export default function StockBalance() {
     }
 
     const confirmMsg = `Are you sure you want to permanently delete ${selectedIds.size} selected stock records? This action cannot be undone.`;
-    if (!window.confirm(confirmMsg)) return;
+    const ok = await showConfirm({
+      title: "Bulk Delete Stock Records",
+      message: confirmMsg,
+      confirmText: `Delete ${selectedIds.size} Records`,
+      type: "danger"
+    });
+    if (!ok) return;
 
     setIsDeletingBulk(true);
     const toastId = toast.loading(`Deleting ${selectedIds.size} selected records...`);

@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { getUserAssignedShops } from '../../../utils/permissionUtils';
 import HelpCenterModal from '../../../components/help-center/HelpCenterModal';
+import { showConfirm } from '../../../context/DialogContext';
 import {
   HelpCircle,
   RefreshCw,
@@ -356,7 +357,13 @@ export default function HelpCenterRecords({ activeTab: propActiveTab = 'all' }) 
   // Delete Record
   const handleDeleteRecord = async (ticketId) => {
     if (!isModifyAllowed || activeTab === 'completed') return;
-    if (!window.confirm(`Are you sure you want to delete ticket ${ticketId}?`)) return;
+    const ok = await showConfirm({
+      title: "Delete Ticket",
+      message: `Are you sure you want to delete ticket ${ticketId}?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     setDeletingId(ticketId);
     try {

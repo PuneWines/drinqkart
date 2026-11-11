@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import districtService from "../services/districtService";
+import { showConfirm } from "../../../context/DialogContext";
+import toast from "react-hot-toast";
 import "../styles/Settings.css";
 
 // Skeleton Table Rows Loader
@@ -460,15 +462,21 @@ const Settings = ({ readOnly = false }) => {
 
   const handleDelete = async (userId) => {
     if (userId === currentUser?.id) {
-      alert("Cannot delete your own account!");
+      toast.error("Cannot delete your own account!");
       return;
     }
-    if (window.confirm("Are you sure you want to delete this user?")) {
+    const confirmed = await showConfirm({
+      title: "Delete User",
+      message: "Are you sure you want to delete this user? This action cannot be undone.",
+      confirmText: "Delete User",
+      type: "danger"
+    });
+    if (confirmed) {
       const res = await deleteUser(userId);
       if (res.success) {
-        alert("User deleted successfully!");
+        toast.success("User deleted successfully!");
       } else {
-        alert(`Error deleting user: ${res.error}`);
+        toast.error(`Error deleting user: ${res.error}`);
       }
     }
   };
@@ -781,12 +789,18 @@ const Settings = ({ readOnly = false }) => {
   };
 
   const handleDeleteVendor = async (vendorId) => {
-    if (window.confirm("Are you sure you want to delete this vendor?")) {
+    const confirmed = await showConfirm({
+      title: "Delete Vendor",
+      message: "Are you sure you want to delete this vendor? All associated records will be removed.",
+      confirmText: "Delete Vendor",
+      type: "danger"
+    });
+    if (confirmed) {
       const res = await deleteVendor(vendorId);
       if (res.success) {
-        alert("Vendor deleted successfully!");
+        toast.success("Vendor deleted successfully!");
       } else {
-        alert(`Error deleting vendor: ${res.error}`);
+        toast.error(`Error deleting vendor: ${res.error}`);
       }
     }
   };
@@ -1119,16 +1133,18 @@ const Settings = ({ readOnly = false }) => {
   };
 
   const handleDeleteCompany = async (companyId) => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete this company profile? This action cannot be undone.",
-      )
-    ) {
+    const confirmed = await showConfirm({
+      title: "Delete Company Profile",
+      message: "Are you sure you want to delete this company profile? This action cannot be undone.",
+      confirmText: "Delete Profile",
+      type: "danger"
+    });
+    if (confirmed) {
       const res = await deleteCompany(companyId);
       if (res.success) {
-        alert("Company profile deleted successfully!");
+        toast.success("Company profile deleted successfully!");
       } else {
-        alert(`Error deleting company profile: ${res.error}`);
+        toast.error(`Error deleting company profile: ${res.error}`);
       }
     }
   };
@@ -1207,8 +1223,15 @@ const Settings = ({ readOnly = false }) => {
   };
 
   const handleDeleteTransporter = async (id) => {
-    if (window.confirm("Delete this transporter?")) {
+    const confirmed = await showConfirm({
+      title: "Delete Transporter",
+      message: "Are you sure you want to delete this transporter?",
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (confirmed) {
       await supabase.from("purchase_transporters").delete().eq("id", id);
+      toast.success("Transporter deleted successfully!");
       fetchTransporters();
     }
   };
@@ -1240,17 +1263,24 @@ const Settings = ({ readOnly = false }) => {
     setIsReceiverSubmitting(false);
 
     if (!res.error) {
-      alert(`Receiver ${editingReceiver ? "updated" : "added"} successfully!`);
+      toast.success(`Receiver ${editingReceiver ? "updated" : "added"} successfully!`);
       setShowReceiverForm(false);
       fetchReceivers();
     } else {
-      alert(`Error: ${res.error.message}`);
+      toast.error(`Error: ${res.error.message}`);
     }
   };
 
   const handleDeleteReceiver = async (id) => {
-    if (window.confirm("Delete this receiver?")) {
+    const confirmed = await showConfirm({
+      title: "Delete Receiver",
+      message: "Are you sure you want to delete this receiver?",
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (confirmed) {
       await supabase.from("purchase_receivers").delete().eq("id", id);
+      toast.success("Receiver deleted successfully!");
       fetchReceivers();
     }
   };
@@ -1339,17 +1369,19 @@ const Settings = ({ readOnly = false }) => {
   };
 
   const handleDeleteDistrict = async (id, name) => {
-    if (
-      window.confirm(
-        `Are you sure you want to delete district "${name}"? This action cannot be undone.`,
-      )
-    ) {
+    const confirmed = await showConfirm({
+      title: "Delete District",
+      message: `Are you sure you want to delete district "${name}"? This action cannot be undone.`,
+      confirmText: "Delete District",
+      type: "danger"
+    });
+    if (confirmed) {
       const res = await districtService.deleteDistrict(id);
       if (res.success) {
-        alert("District deleted successfully!");
+        toast.success("District deleted successfully!");
         fetchDistricts();
       } else {
-        alert(`Error deleting district: ${res.error}`);
+        toast.error(`Error deleting district: ${res.error}`);
       }
     }
   };

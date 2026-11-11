@@ -6,6 +6,8 @@ import { useDispatch, useSelector } from "react-redux"
 import { checklistData, checklistHistoryData, updateChecklist } from "../../redux/slice/checklistSlice"
 import { postChecklistAdminDoneAPI } from "../../redux/api/checkListApi"
 import { uniqueDoerNameData } from "../../redux/slice/assignTaskSlice";
+import toast from 'react-hot-toast';
+import { showConfirm } from '../../../../context/DialogContext';
 
 export default function AccountDataPage({ showLayout = true, shopFilter = "" }) {
   const [searchTerm, setSearchTerm] = useState("")
@@ -80,10 +82,16 @@ export default function AccountDataPage({ showLayout = true, shopFilter = "" }) 
 
   const handleSubmit = async () => {
     const selectedIds = Array.from(selectedItems);
-    if (selectedIds.length === 0) return alert("Please select items to submit");
+    if (selectedIds.length === 0) {
+      toast.error("Please select items to submit");
+      return;
+    }
 
     const missingStatus = selectedIds.filter(id => !additionalData[id]);
-    if (missingStatus.length > 0) return alert("Please select Status (Yes/No) for all selected items.");
+    if (missingStatus.length > 0) {
+      toast.error("Please select Status (Yes/No) for all selected items.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -107,7 +115,7 @@ export default function AccountDataPage({ showLayout = true, shopFilter = "" }) 
       });
 
       await dispatch(updateChecklist(submissionData)).unwrap();
-      setSuccessMessage(`Successfully submitted ${selectedIds.length} tasks!`);
+      toast.success(`Successfully submitted ${selectedIds.length} tasks!`);
       setSelectedItems(new Set());
       setAdditionalData({});
       setRemarksData({});
@@ -115,7 +123,7 @@ export default function AccountDataPage({ showLayout = true, shopFilter = "" }) 
       setTimeout(() => window.location.reload(), 800);
     } catch (e) {
       console.error(e);
-      alert("Submission failed");
+      toast.error("Submission failed: " + (e.message || "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -123,16 +131,23 @@ export default function AccountDataPage({ showLayout = true, shopFilter = "" }) 
 
   const handleMarkMultipleDone = async () => {
     if (!selectedHistoryItems.length) return;
-    if (!confirm(`Mark ${selectedHistoryItems.length} items as Admin Done?`)) return;
+    const ok = await showConfirm({
+      title: "Mark Items Done",
+      message: `Mark ${selectedHistoryItems.length} items as Admin Done?`,
+      confirmText: "Mark Done",
+      type: "info"
+    });
+    if (!ok) return;
+
     setMarkingAsDone(true);
     try {
       const { error } = await postChecklistAdminDoneAPI(selectedHistoryItems);
       if (error) throw error;
       dispatch(checklistHistoryData(1));
       setSelectedHistoryItems([]);
-      setSuccessMessage("Items marked as done.");
+      toast.success("Items marked as done.");
     } catch (e) {
-      alert("Failed: " + e.message);
+      toast.error("Failed: " + e.message);
     } finally {
       setMarkingAsDone(false);
     }

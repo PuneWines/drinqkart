@@ -4,6 +4,7 @@ import {
     Search, Users, Download, Eye, Calendar, DollarSign, ArrowUpRight, ChevronLeft, ChevronRight, Filter, Settings, FileSpreadsheet, Send, HelpCircle, UserX, Clock, Sliders, Play, CheckCircle2, RotateCcw, AlertTriangle, AlertCircle, FileText, Check, ChevronDown, RefreshCw, X, ShieldAlert, CheckCircle, Info, Lock, Columns, Bookmark, TrendingUp, Loader2, Pencil, Save, Edit, Printer, Building2, Wallet, CreditCard, ArrowUpDown, SlidersHorizontal, Sparkles
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { showConfirm } from '../../../context/DialogContext';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
@@ -1604,7 +1605,13 @@ const Payroll = () => {
             return;
         }
 
-        if (!window.confirm(`Mark ${rowsToProcess.length} employee record(s) as Hold?`)) return;
+        const ok = await showConfirm({
+            title: "Hold Payroll Records",
+            message: `Mark ${rowsToProcess.length} employee record(s) as Hold?`,
+            confirmText: "Hold Records",
+            type: "warning"
+        });
+        if (!ok) return;
 
         setIsSavingToDB(true);
         try {

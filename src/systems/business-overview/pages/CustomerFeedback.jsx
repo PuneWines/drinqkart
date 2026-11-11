@@ -14,6 +14,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { showConfirm } from '../../../context/DialogContext';
 
 export default function CustomerFeedback() {
   const { user } = useAuth();
@@ -266,9 +267,13 @@ export default function CustomerFeedback() {
   };
 
   const handleDelete = async (row) => {
-    if (!window.confirm(`Are you sure you want to delete complaint ${row.complaint_id}? This will also delete any assignment or resolution details linked to it.`)) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Delete Complaint",
+      message: `Are you sure you want to delete complaint ${row.complaint_id}? This will also delete any assignment or resolution details linked to it.`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       const { error } = await supabase

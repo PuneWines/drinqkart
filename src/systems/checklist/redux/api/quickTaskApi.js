@@ -466,6 +466,42 @@ export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = ''
       };
     });
 
+    // Active master tasks with no active assignment row are AVAILABLE (Work Records shows them too).
+    // They have no assignment id, so they are flagged isVirtual and are read-only in the UI.
+    if (role !== 'user') {
+      const assignedTaskIds = new Set(mapped.map(r => r.task_id));
+      const { data: masters, error: masterErr } = await supabase
+        .from('master_work_tasks')
+        .select('*, shop(shop_name)')
+        .eq('is_active', true)
+        .limit(FETCH_LIMIT);
+
+      if (masterErr) {
+        console.error("Error when fetching unassigned master work tasks:", masterErr);
+      } else {
+        (masters || [])
+          .filter(m => !assignedTaskIds.has(m.id))
+          .forEach(m => {
+            const shopName = m.shop?.shop_name || "N/A";
+            mapped.push({
+              id: `master-${m.id}`,
+              isVirtual: true,
+              assignment_id: null,
+              task_id: m.id,
+              task_description: m.task_name || "N/A",
+              shop_name: shopName,
+              shop: shopName,
+              name: "",
+              given_by: "",
+              duration: m.estimated_minutes ? `${Math.floor(m.estimated_minutes / 60).toString().padStart(2, '0')}:${(m.estimated_minutes % 60).toString().padStart(2, '0')}` : "00:00",
+              task_start_date: null,
+              end_datetime: null,
+              status: 'AVAILABLE'
+            });
+          });
+      }
+    }
+
     if (nameFilter) {
       const term = nameFilter.toLowerCase();
       mapped = mapped.filter(item =>

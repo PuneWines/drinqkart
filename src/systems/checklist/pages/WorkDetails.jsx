@@ -28,6 +28,7 @@ import { useMagicToast } from "../context/MagicToastContext";
 import { generateWorkTasksApi, resetWorkTasksApi, checkAndPromoteAssignmentsApi, fetchPaginatedWorkRecordsApi, deactivateMasterTaskApi, deactivateMasterTasksBulkApi } from "../redux/api/workRecordsApi";
 import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../services/whatsappService";
 import { ViewOnlyBanner, getPagePermission, getUserAssignedShops } from "../../../utils/permissionUtils";
+import { showConfirm } from "../../../context/DialogContext";
 
 import { isAssignmentExpired } from "../utils/assignmentStatus";
 
@@ -903,7 +904,13 @@ export default function WorkDetails() {
       return;
     }
 
-    if (!window.confirm("Are you sure you want to unlock selected tasks? All generated work checklist tasks will be deleted, and HOD will be able to edit them again.")) return;
+    const ok = await showConfirm({
+      title: "Unlock Tasks",
+      message: "Are you sure you want to unlock selected tasks? All generated work checklist tasks will be deleted, and HOD will be able to edit them again.",
+      confirmText: "Unlock Tasks",
+      type: "warning"
+    });
+    if (!ok) return;
 
     try {
       await resetWorkTasksApi(selectedAsgnIds);
@@ -918,7 +925,13 @@ export default function WorkDetails() {
   const handleSingleDelete = async (item) => {
     if (!item?.taskId) return;
 
-    if (!window.confirm(`Are you sure you want to delete task "${item.task_name}"?`)) return;
+    const ok = await showConfirm({
+      title: "Delete Task",
+      message: `Are you sure you want to delete task "${item.task_name}"?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       await deactivateMasterTaskApi(item.taskId);
@@ -936,7 +949,13 @@ export default function WorkDetails() {
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to delete ${selectedTaskIds.length} selected task(s)?`)) return;
+    const ok = await showConfirm({
+      title: "Bulk Delete Tasks",
+      message: `Are you sure you want to delete ${selectedTaskIds.length} selected task(s)?`,
+      confirmText: `Delete ${selectedTaskIds.length} Tasks`,
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       await deactivateMasterTasksBulkApi(selectedTaskIds);

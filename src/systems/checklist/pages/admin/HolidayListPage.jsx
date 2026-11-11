@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Calendar as CalendarIcon, Plus, Trash2, Search, Loader2 } from 'lucide-react';
 import supabase from '../../SupabaseClient';
+import toast from 'react-hot-toast';
+import { showConfirm } from '../../../../context/DialogContext';
 
 const HolidayListPage = () => {
     const [holidays, setHolidays] = useState([]);
@@ -89,17 +91,23 @@ const HolidayListPage = () => {
 
             setNewHoliday({ holiday_date: '', holiday_name: '' });
             fetchHolidays();
-            alert('Holiday added and tasks cleaned up successfully!');
+            toast.success('Holiday added and tasks cleaned up successfully!');
         } catch (err) {
             console.error('Error adding holiday:', err);
-            alert(`Error adding holiday: ${err.message || 'Unknown error'}`);
+            toast.error(`Error adding holiday: ${err.message || 'Unknown error'}`);
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleDeleteHoliday = async (holiday) => {
-        if (!window.confirm(`Delete holiday "${holiday.holiday_name}"?`)) return;
+        const ok = await showConfirm({
+            title: "Delete Holiday",
+            message: `Delete holiday "${holiday.holiday_name}"?`,
+            confirmText: "Delete",
+            type: "danger"
+        });
+        if (!ok) return;
 
         try {
             const { error: deleteError } = await supabase

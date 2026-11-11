@@ -20,6 +20,8 @@ import {
 import { useRealtimeSync } from "../hooks/useRealtimeSync";
 import { deleteSupersededLifecycleItems } from "../services/purchaseOrderService";
 import { dashboardSyncService } from "../services/dashboardSyncService";
+import { showConfirm } from "../../../context/DialogContext";
+import toast from "react-hot-toast";
 
 const formatDateTime = (isoString) => {
   if (!isoString) return "—";
@@ -263,7 +265,13 @@ const Approval = () => {
       ? groupKey.split("::")[1]
       : groupKey;
     const confirmMsg = `Are you sure you want to permanently delete all ${items.length} items in batch ${displayLabel}? This action cannot be undone.`;
-    if (!window.confirm(confirmMsg)) return;
+    const confirmed = await showConfirm({
+      title: "Delete Batch",
+      message: confirmMsg,
+      confirmText: "Delete Batch",
+      type: "danger"
+    });
+    if (!confirmed) return;
 
     try {
       setIsLoading(true);
@@ -315,7 +323,7 @@ const Approval = () => {
         queryClient.invalidateQueries({ queryKey: ["approvalsData"] });
       }
 
-      alert(`Batch ${displayLabel} successfully deleted!`);
+      toast.success(`Batch ${displayLabel} successfully deleted!`);
 
       // Update local state by removing the deleted group
       setGroupedApprovals((prev) => {
@@ -325,7 +333,7 @@ const Approval = () => {
       });
     } catch (error) {
       console.error("Error deleting batch:", error);
-      alert("Failed to delete batch.");
+      toast.error("Failed to delete batch.");
     } finally {
       setIsLoading(false);
     }
@@ -334,7 +342,13 @@ const Approval = () => {
   const handleDeleteItem = async (itemId, itemName, itemObj = null) => {
     if (!isModifyAllowed) return;
     const confirmMsg = `Are you sure you want to permanently delete item "${itemName}"? This action cannot be undone.`;
-    if (!window.confirm(confirmMsg)) return;
+    const confirmed = await showConfirm({
+      title: "Delete Item",
+      message: confirmMsg,
+      confirmText: "Delete Item",
+      type: "danger"
+    });
+    if (!confirmed) return;
 
     try {
       setIsLoading(true);
@@ -384,7 +398,7 @@ const Approval = () => {
         queryClient.invalidateQueries({ queryKey: ["approvalsData"] });
       }
 
-      alert(`Item "${itemName}" successfully deleted!`);
+      toast.success(`Item "${itemName}" successfully deleted!`);
 
       // Update groupedApprovals state
       setGroupedApprovals((prev) => {
@@ -408,7 +422,7 @@ const Approval = () => {
       );
     } catch (error) {
       console.error("Error deleting item:", error);
-      alert("Failed to delete item.");
+      toast.error("Failed to delete item.");
     } finally {
       setIsLoading(false);
     }
@@ -773,7 +787,7 @@ const Approval = () => {
       );
 
       if (itemsToProcess.length === 0) {
-        alert("No items in the active filter selection to submit.");
+        toast.error("No items in the active filter selection to submit.");
         setIsLoading(false);
         return;
       }
@@ -992,7 +1006,7 @@ const Approval = () => {
         currentShopName: itemsToProcess[0]?.shop_name,
       });
 
-      alert("Successfully submitted approvals!");
+      toast.success("Successfully submitted approvals!");
 
       // Auto-close modal immediately upon submission
       setSelectedIndentId(null);

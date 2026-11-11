@@ -6,6 +6,8 @@ import {
   AlertCircle, Clock, Store, ChevronDown, Activity, Check, RotateCcw,
   UserX, Zap, Building, Phone, Calendar
 } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { showConfirm, showPrompt } from '../../../context/DialogContext'
 import { supabase } from '../lib/supabase'
 import { scopeQueryToUserShops, getUserAssignedShops, isApexAdmin, getPagePermission } from '../../../utils/permissionUtils'
 import { useAuth } from '../../../context/AuthContext'
@@ -408,7 +410,8 @@ export default function EmployeeManagement() {
       (userStatusRows || []).forEach((u) => {
         const st = (u.status || "active").toString().toLowerCase().trim() === "inactive" ? "Inactive" : "Active";
         if (u.employee_id) userStatusById[u.employee_id.toString().trim().toLowerCase()] = st;
-        if (u.user_name) userStatusByName[u.user_name.toString().trim().toLowerCase()] = st;
+        // Name fallback only for legacy users not linked to any employee id
+        if (u.user_name && !u.employee_id) userStatusByName[u.user_name.toString().trim().toLowerCase()] = st;
       });
 
       if (hrData && hrData.length > 0) {
@@ -474,7 +477,7 @@ export default function EmployeeManagement() {
             // Rows without the column (migration not yet run) are treated as Verified
             user_status: userStatusById[(empId || "").toString().trim().toLowerCase()]
               || userStatusByName[(name || "").toString().trim().toLowerCase()]
-              || (((emp.status || emp.employee_status || "Active").toString().toLowerCase() === "inactive") ? "Inactive" : "Active"),
+              || 'No Account',
             verification_status: emp.verification_status || 'Verified',
             verified_by: emp.verified_by || '',
             verified_at: emp.verified_at || null,
@@ -487,7 +490,7 @@ export default function EmployeeManagement() {
       setEmployees(mappedList)
     } catch (error) {
       console.error('Error fetching employees:', error)
-      alert('Error fetching employees: ' + error.message)
+      toast.error('Error fetching employees: ' + error.message)
     } finally {
       setLoading(false)
     }
@@ -504,7 +507,7 @@ export default function EmployeeManagement() {
     const matchesShop = shopFilter === '' || emp.joining_company_name === shopFilter
     const matchesTab = activeTab === 'all' || emp.verification_status === 'Pending'
 
-    const matchesStatus = statusFilter === '' || (emp.user_status || 'Active') === statusFilter
+    const matchesStatus = statusFilter === '' || emp.user_status === statusFilter
 
     return matchesSearch && matchesShop && matchesTab && matchesStatus;
   })
@@ -514,10 +517,22 @@ export default function EmployeeManagement() {
   const handleVerification = async (emp, newStatus) => {
     let remarks = null
     if (newStatus === 'Rejected') {
-      remarks = window.prompt(`Reason for rejecting ${emp.name_as_per_aadhar}?`)
+      remarks = await showPrompt({
+        title: 'Reject Employee Verification',
+        message: `Please specify the reason for rejecting ${emp.name_as_per_aadhar}:`,
+        placeholder: 'e.g. Incomplete KYC, invalid document, mismatched name...',
+        confirmText: 'Confirm Rejection',
+        type: 'danger'
+      })
       if (remarks === null) return
-    } else if (!window.confirm(`Mark ${emp.name_as_per_aadhar} (${emp.employee_id}) as Office Verified?`)) {
-      return
+    } else {
+      const confirmed = await showConfirm({
+        title: 'Office Verification',
+        message: `Mark ${emp.name_as_per_aadhar} (ID: ${emp.employee_id}) as Office Verified?`,
+        confirmText: 'Verify Employee',
+        type: 'success'
+      })
+      if (!confirmed) return
     }
     const { error } = await supabase
       .from('hr_management_employees')
@@ -529,9 +544,10 @@ export default function EmployeeManagement() {
       })
       .eq('id', emp.id)
     if (error) {
-      alert('Could not update verification: ' + error.message)
+      toast.error('Could not update verification: ' + error.message)
       return
     }
+    toast.success(newStatus === 'Verified' ? `${emp.name_as_per_aadhar} verified successfully!` : 'Verification rejected.')
     await fetchEmployees()
   }
 
@@ -655,12 +671,12 @@ export default function EmployeeManagement() {
 
     const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
     if (!validTypes.includes(file.type)) {
-      alert('Please upload a valid image (JPEG, PNG) or PDF file')
+      toast.error('Please upload a valid image (JPEG, PNG) or PDF file')
       return
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size should be less than 5MB')
+      toast.error('File size should be less than 5MB')
       return
     }
 
@@ -683,12 +699,12 @@ export default function EmployeeManagement() {
 
     const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
     if (!validTypes.includes(file.type)) {
-      alert('Please upload a valid image (JPEG, PNG) or PDF file')
+      toast.error('Please upload a valid image (JPEG, PNG) or PDF file')
       return
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size should be less than 5MB')
+      toast.error('File size should be less than 5MB')
       return
     }
 
@@ -751,7 +767,7 @@ export default function EmployeeManagement() {
         .maybeSingle()
 
       if (existingHr) {
-        alert(`Employee ID ${formData.employee_id} already exists! Please use a different ID.`)
+        toast.error(`Employee ID ${formData.employee_id} already exists! Please use a different ID.`)
         setSaving(false)
         setUploading(false)
         return
@@ -862,12 +878,12 @@ export default function EmployeeManagement() {
       }
 
       await fetchEmployees()
-      alert(`Employee added successfully! ID: ${formData.employee_id}`)
+      toast.success(`Employee added successfully! ID: ${formData.employee_id}`)
       resetForm()
       setShowForm(false)
     } catch (error) {
       console.error('Error saving employee:', error)
-      alert('Error saving employee: ' + error.message)
+      toast.error('Error saving employee: ' + error.message)
     } finally {
       setSaving(false)
       setUploading(false)
@@ -1028,7 +1044,7 @@ export default function EmployeeManagement() {
 
       await fetchEmployees()
 
-      alert('Employee updated successfully!')
+      toast.success('Employee updated successfully!')
       setShowEditPanel(false)
       setEditingEmployee(null)
       setEditFormData({})
@@ -1042,7 +1058,7 @@ export default function EmployeeManagement() {
       })
     } catch (error) {
       console.error('Error updating employee:', error)
-      alert('Error updating employee: ' + error.message)
+      toast.error('Error updating employee: ' + error.message)
     } finally {
       setSaving(false)
       setUploading(false)
@@ -1146,7 +1162,13 @@ export default function EmployeeManagement() {
 
   const handleDelete = async (employee) => {
     if (!canModify) return
-    if (!window.confirm(`Delete ${employee.name_as_per_aadhar}?`)) return
+    const confirmed = await showConfirm({
+      title: 'Delete Employee',
+      message: `Are you sure you want to permanently delete ${employee.name_as_per_aadhar} (ID: ${employee.employee_id})? This action cannot be undone.`,
+      confirmText: 'Delete Employee',
+      type: 'danger'
+    })
+    if (!confirmed) return
 
     try {
       const { error } = await supabase
@@ -1157,17 +1179,17 @@ export default function EmployeeManagement() {
       if (error) throw error
 
       setEmployees(employees.filter(emp => emp.id !== employee.id))
-      alert('Employee deleted successfully!')
+      toast.success('Employee deleted successfully!')
     } catch (error) {
       console.error('Error deleting employee:', error)
-      alert('Error deleting employee: ' + error.message)
+      toast.error('Error deleting employee: ' + error.message)
     }
   }
 
   const handleExportCSV = () => {
     try {
       if (employees.length === 0) {
-        alert('No employee data available to export');
+        toast.error('No employee data available to export');
         return;
       }
 
@@ -1216,9 +1238,10 @@ export default function EmployeeManagement() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      toast.success('CSV exported successfully!');
     } catch (error) {
       console.error('Error exporting CSV:', error);
-      alert('Failed to export CSV: ' + error.message);
+      toast.error('Failed to export CSV: ' + error.message);
     }
   };
 
@@ -1269,7 +1292,7 @@ export default function EmployeeManagement() {
 
         const rows = parseCSV(text);
         if (rows.length < 2) {
-          alert('CSV file must contain a header row and at least one employee row');
+          toast.error('CSV file must contain a header row and at least one employee row');
           return;
         }
 
@@ -1307,7 +1330,7 @@ export default function EmployeeManagement() {
 
         // Verify that we have the absolute minimum required headers
         if (headerIndices['employee_id'] === -1 || headerIndices['name_as_per_aadhar'] === -1) {
-          alert('CSV must contain at least "employee_id" and "name_as_per_aadhar" columns');
+          toast.error('CSV must contain at least "employee_id" and "name_as_per_aadhar" columns');
           return;
         }
 
@@ -1356,18 +1379,22 @@ export default function EmployeeManagement() {
         }
 
         if (duplicates.length > 0) {
-          alert(`Error: The following Employee ID(s) already exist: ${duplicates.join(', ')}. Import aborted to prevent changing previous records.`);
+          toast.error(`Error: The following Employee ID(s) already exist: ${duplicates.join(', ')}. Import aborted to prevent duplicate records.`);
           return;
         }
 
         if (employeesToImport.length === 0) {
-          alert('No new employees found to import');
+          toast.error('No new employees found to import');
           return;
         }
 
-        if (!window.confirm(`Are you sure you want to import ${employeesToImport.length} new employees?`)) {
-          return;
-        }
+        const confirmed = await showConfirm({
+          title: 'Import Employees',
+          message: `Are you sure you want to import ${employeesToImport.length} new employees into the directory?`,
+          confirmText: 'Import Records',
+          type: 'info'
+        });
+        if (!confirmed) return;
 
         setLoading(true);
         const { error } = await supabase
@@ -1376,11 +1403,11 @@ export default function EmployeeManagement() {
 
         if (error) throw error;
 
-        alert(`Successfully imported ${employeesToImport.length} new employees`);
+        toast.success(`Successfully imported ${employeesToImport.length} new employees`);
         await fetchEmployees();
       } catch (error) {
         console.error('Error importing CSV:', error);
-        alert('Failed to import CSV: ' + error.message);
+        toast.error('Failed to import CSV: ' + error.message);
       } finally {
         setLoading(false);
         e.target.value = ''; // Reset file input
@@ -1578,7 +1605,7 @@ export default function EmployeeManagement() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-extrabold text-emerald-600 font-mono">
-              {employees.filter(e => (e.user_status || 'Active') === 'Active').length}
+              {employees.filter(e => e.user_status === 'Active').length}
             </span>
             <span className="text-[11px] text-slate-400 font-medium">active status</span>
           </div>
@@ -1723,6 +1750,7 @@ export default function EmployeeManagement() {
                 <option value="">All Status</option>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
+                <option value="No Account">No Account</option>
               </select>
               <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
@@ -1906,6 +1934,11 @@ export default function EmployeeManagement() {
                           <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
                           Inactive
                         </span>
+                      ) : emp.user_status === 'No Account' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs" title="No user account created in Master Setting for this employee">
+                          <AlertCircle size={12} className="text-amber-600" />
+                          No Account
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs" title="Master User account status">
                           <span className="relative flex h-1.5 w-1.5">
@@ -1948,15 +1981,6 @@ export default function EmployeeManagement() {
                               "{emp.verification_remarks}"
                             </span>
                           )}
-                          {canModify && (
-                            <button
-                              type="button"
-                              onClick={() => handleVerification(emp, 'Verified')}
-                              className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 underline text-left cursor-pointer w-fit"
-                            >
-                              Re-verify
-                            </button>
-                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1.5">
@@ -1964,28 +1988,6 @@ export default function EmployeeManagement() {
                             <AlertCircle size={12} className="text-amber-600 animate-pulse" />
                             Action Required
                           </span>
-                          {canModify && (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleVerification(emp, 'Verified')}
-                                className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors cursor-pointer"
-                                title="Mark as Office Verified"
-                              >
-                                <Check size={11} strokeWidth={2.5} />
-                                Verify
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleVerification(emp, 'Rejected')}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
-                                title="Reject verification"
-                              >
-                                <X size={11} strokeWidth={2.5} />
-                                Reject
-                              </button>
-                            </div>
-                          )}
                         </div>
                       )}
                     </td>
@@ -2844,6 +2846,40 @@ export default function EmployeeManagement() {
 
               {/* Footer */}
               <div className="flex items-center justify-end gap-3 p-4 border-t bg-gray-50">
+                {canModify && (() => {
+                  const liveEmp = employees.find(e => e.id === editingEmployee.id) || editingEmployee
+                  const vs = liveEmp.verification_status
+                  return (
+                    <div className="mr-auto flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-600">
+                        Office Verification:{' '}
+                        <span className={vs === 'Verified' ? 'text-teal-700' : vs === 'Rejected' ? 'text-rose-700' : 'text-amber-700'}>
+                          {vs === 'Verified' ? 'Verified' : vs === 'Rejected' ? 'Rejected' : 'Action Required'}
+                        </span>
+                      </span>
+                      {vs !== 'Verified' && (
+                        <button
+                          type="button"
+                          onClick={() => handleVerification(liveEmp, 'Verified')}
+                          className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                        >
+                          <Check size={13} strokeWidth={2.5} />
+                          {vs === 'Rejected' ? 'Re-verify' : 'Verify'}
+                        </button>
+                      )}
+                      {vs !== 'Rejected' && (
+                        <button
+                          type="button"
+                          onClick={() => handleVerification(liveEmp, 'Rejected')}
+                          className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors"
+                        >
+                          <X size={13} strokeWidth={2.5} />
+                          Reject
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
                 <button
                   type="button"
                   onClick={() => {

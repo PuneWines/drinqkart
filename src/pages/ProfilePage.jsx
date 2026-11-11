@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import supabase from '../systems/checklist/SupabaseClient';
 import { systems } from '../layout/systemsConfig';
 import AddTutorialVideoModal from '../components/AddTutorialVideoModal';
+import { showConfirm } from '../context/DialogContext';
 import { 
   User, Mail, Phone, Shield, Store, Calendar, Clock, 
   CheckCircle2, XCircle, AlertCircle, ClipboardList, 
@@ -680,7 +681,13 @@ export default function ProfilePage() {
   };
 
   const handleDeleteVideo = async (videoItem) => {
-    if (!window.confirm('Are you sure you want to delete this training video?')) return;
+    const ok = await showConfirm({
+      title: "Delete Training Video",
+      message: "Are you sure you want to delete this training video?",
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       if (videoItem.id) {

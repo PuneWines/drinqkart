@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Hash, Plus, ShieldAlert, CheckCircle, Search, Trash2, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { showConfirm } from '../context/DialogContext';
 
 export default function CounterManagement({ readOnly = false }) {
   const [counters, setCounters] = useState([]);
@@ -67,7 +68,13 @@ export default function CounterManagement({ readOnly = false }) {
   };
 
   const handleDeleteCounter = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete counter "${name}"?`)) return;
+    const ok = await showConfirm({
+      title: "Delete Counter",
+      message: `Are you sure you want to delete counter "${name}"?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
     setDeletingId(id);
     try {
       const { error } = await supabase

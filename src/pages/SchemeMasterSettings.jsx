@@ -14,6 +14,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { showConfirm } from '../context/DialogContext';
 
 export const SCHEME_TRADERS_KEY = 'drinqkart_scheme_traders_v1';
 export const SCHEME_COMPANIES_KEY = 'drinqkart_scheme_companies_v1';
@@ -234,7 +235,13 @@ export default function SchemeMasterSettings({ readOnly = false }) {
         : activeTab === 'companies'
         ? 'Company'
         : 'Brand';
-    if (!window.confirm(`Are you sure you want to delete ${entityLabel.toLowerCase()} "${item.name}"?`)) return;
+    const ok = await showConfirm({
+      title: `Delete ${entityLabel}`,
+      message: `Are you sure you want to delete ${entityLabel.toLowerCase()} "${item.name}"?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       if (activeTab === 'traders') {

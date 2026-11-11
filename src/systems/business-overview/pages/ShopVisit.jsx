@@ -4,6 +4,7 @@ import { scopeQueryToUserShops, getPagePermission } from '../../../utils/permiss
 import { useAuth } from '../../../context/AuthContext';
 import { Plus, RefreshCw, Share2, CheckCircle2, ChevronDown, ClipboardList, Eye, Pencil, X, Store, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { showConfirm } from '../../../context/DialogContext';
 import html2pdf from 'html2pdf.js';
 import SignaturePadModal from '../components/SignaturePadModal';
 
@@ -868,7 +869,13 @@ function ViewModal({ visit, onClose, onEdit, onSaved, activeChecklist = null, ca
 
   const handleDelete = async () => {
     if (!canModify) return;
-    if (!window.confirm(`Are you sure you want to delete this inspection visit for ${shopName}?`)) return;
+    const ok = await showConfirm({
+      title: "Delete Inspection Visit",
+      message: `Are you sure you want to delete this inspection visit for ${shopName}?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
     try {
       const { error } = await supabase.from('shop_visit').delete().eq('id', visit.id);
       if (error) throw error;

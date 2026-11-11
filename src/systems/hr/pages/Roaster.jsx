@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
 import EmployeeOverviewModal from '../components/EmployeeOverviewModal';
 import { toast } from 'react-hot-toast';
+import { showConfirm } from '../../../context/DialogContext';
 import {
     Calendar,
     RefreshCw,
@@ -311,7 +312,13 @@ const Roster = () => {
 
     const handleDeleteCustomShift = async (id, shiftName) => {
         if (!canModify) return;
-        if (!confirm(`Are you sure you want to delete the shift "${shiftName}"?`)) return;
+        const ok = await showConfirm({
+            title: "Delete Custom Shift",
+            message: `Are you sure you want to delete the shift "${shiftName}"?`,
+            confirmText: "Delete",
+            type: "danger"
+        });
+        if (!ok) return;
 
         try {
             const isSysId = typeof id === 'string' && id.startsWith('sys-');
@@ -1063,9 +1070,12 @@ const Roster = () => {
         }
 
         const idsToDelete = Array.from(selectedShiftIdsToDelete);
-        const confirmed = window.confirm(
-            `Delete ${idsToDelete.length} selected shift(s) for ${deleteEmployee?.name_as_per_aadhar || deleteEmployee?.employee_id}?\n\nThis action cannot be undone.`
-        );
+        const confirmed = await showConfirm({
+            title: "Delete Shifts",
+            message: `Delete ${idsToDelete.length} selected shift(s) for ${deleteEmployee?.name_as_per_aadhar || deleteEmployee?.employee_id}?\n\nThis action cannot be undone.`,
+            confirmText: `Delete ${idsToDelete.length} Shift(s)`,
+            type: "danger"
+        });
         if (!confirmed) return;
 
         try {
@@ -1184,7 +1194,13 @@ const Roster = () => {
 
     const handleDeleteRoster = async (employeeId, date) => {
         if (!canModify) return;
-        if (!confirm('Are you sure you want to delete this roster entry?')) return;
+        const ok = await showConfirm({
+            title: "Delete Roster Entry",
+            message: "Are you sure you want to delete this roster entry?",
+            confirmText: "Delete",
+            type: "danger"
+        });
+        if (!ok) return;
 
         try {
             const dateStr = formatDate(date, 'yyyy-MM-dd');

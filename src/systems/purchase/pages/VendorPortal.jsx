@@ -13,6 +13,7 @@ import {
 import html2pdf from "html2pdf.js";
 import useCompanyStore from "../store/useCompanyStore";
 import { isTransporterSkippedForOrder } from "../utils/poHelpers";
+import { showConfirm, showPrompt } from "../../../context/DialogContext";
 import "../styles/PurchaseOrder.css"; // Kept solely for off-screen PDF styling
 
 // Company info is loaded dynamically from purchase_company_settings
@@ -866,11 +867,23 @@ const VendorPortal = () => {
 
   const handleRejectEntireOrder = async (po) => {
     const poId = po.id;
-    if (!window.confirm(`Are you sure you want to reject the entire Purchase Order (${po.po_number})?`)) {
+    const confirmed = await showConfirm({
+      title: "Reject Entire Purchase Order",
+      message: `Are you sure you want to reject the entire Purchase Order (${po.po_number})?`,
+      confirmText: "Reject Order",
+      type: "danger"
+    });
+    if (!confirmed) {
       return;
     }
 
-    const userRemarks = window.prompt("Optional: Enter remarks/reason for rejecting this entire order:");
+    const userRemarks = await showPrompt({
+      title: "Rejection Remarks",
+      message: "Optional: Enter remarks/reason for rejecting this entire order:",
+      placeholder: "e.g. Stock unavailable, price discrepancy...",
+      confirmText: "Submit Rejection",
+      type: "danger"
+    });
     if (userRemarks === null) return; // User cancelled
 
     const items = poItems[poId] || [];

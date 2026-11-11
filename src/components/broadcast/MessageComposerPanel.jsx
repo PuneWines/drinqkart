@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { useChatStore } from '../../store/useChatStore'
 import { FileText, Smile, Puzzle, Clock, History, Paperclip, Trash2, Send, Plus, X, ChevronDown, Check } from 'lucide-react'
+import { showConfirm } from '../../context/DialogContext'
 
 const EMOJI_CATEGORIES = [
   {
@@ -247,10 +248,16 @@ export default function MessageComposerPanel() {
                     <span className="text-[10px] text-gray-500 line-clamp-1">{tpl.content}</span>
                   </button>
                   <button
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      if (window.confirm(`⚠️ Are you sure you want to delete the template "${tpl.name}"?`)) {
+                      const ok = await showConfirm({
+                        title: "Delete Template",
+                        message: `Are you sure you want to delete the template "${tpl.name}"?`,
+                        confirmText: "Delete",
+                        type: "danger"
+                      });
+                      if (ok) {
                         deleteTemplate(tpl.id);
                       }
                     }}

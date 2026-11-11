@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import toast from "react-hot-toast";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../SupabaseClient";
 import { getUserAssignedShops, isUserShopScoped } from "../../../../utils/permissionUtils";
@@ -1032,21 +1033,21 @@ const AllTasks = () => {
   const handleSelectItem = useCallback((id, isChecked) => {
     if (isChecked) {
       if (!isModifyAllowed) {
-        alert("⚠️ You have view-only access. Selecting and submitting tasks is restricted.");
+        toast.error("You have view-only access. Selecting and submitting tasks is restricted.", { icon: "⚠️" });
         return;
       }
       // RBAC: Block selection of tasks that the current user cannot submit
       const task = tasks.find(t => t.id === id || t.task_id === id);
       if (task && !canSubmitTask(task)) {
         if (!isModifyAllowed) {
-          alert("⚠️ You have view-only access. Selecting and submitting tasks is restricted.");
+          toast.error("You have view-only access. Selecting and submitting tasks is restricted.", { icon: "⚠️" });
           return;
         }
         const role = (userRole || "").toLowerCase();
         if (role === "manager") {
-          alert(`⚠️ You can only submit tasks where you are both the Manager and the Employee assigned.\n\nManager Name and Employee must both match your username to submit.`);
+          toast.error("You can only submit tasks where BOTH Manager Name and Employee match your username.", { icon: "⚠️" });
         } else {
-          alert(`⚠️ You can only submit tasks assigned to you.`);
+          toast.error("You can only submit tasks assigned to you.", { icon: "⚠️" });
         }
         return; // Block the selection
       }
@@ -1195,7 +1196,10 @@ const AllTasks = () => {
       showToast("You have view-only access. Updating repair tasks is disabled.", "error");
       return;
     }
-    if (!updateForm.status) return alert("Please select a status");
+    if (!updateForm.status) {
+      toast.error("Please select a status");
+      return;
+    }
 
     // If status is Pending, just close modal and return (don't save/submit)
     if (updateForm.status === "Pending") {
@@ -1472,9 +1476,10 @@ const AllTasks = () => {
       setExtendedDateData({});
       tabDataCache.current = {};
       fetchData(true);
+      toast.success("Tasks submitted successfully!");
     } catch (err) {
       console.error("Submission error:", err);
-      alert("Failed to submit tasks: " + err.message);
+      toast.error("Failed to submit tasks: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -1508,11 +1513,11 @@ const AllTasks = () => {
         });
       }
 
-      setSuccessMessage(`Successfully sent urgent WhatsApp notifications for ${selectedItems.size} task(s)!`);
+      toast.success(`Successfully sent urgent WhatsApp notifications for ${selectedItems.size} task(s)!`);
       setSelectedItems(new Set());
     } catch (err) {
       console.error("WhatsApp error:", err);
-      alert("Failed to send WhatsApp messages: " + err.message);
+      toast.error("Failed to send WhatsApp messages: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -1968,14 +1973,14 @@ const AllTasks = () => {
                                               })()}
                                               onClick={() => {
                                                 if (!isModifyAllowed) {
-                                                  alert("⚠️ Submit Restricted\n\nYou have view-only access. Submitting tasks is disabled.");
+                                                  toast.error("Submit Restricted: You have view-only access.", { icon: "⚠️" });
                                                   return;
                                                 }
                                                 const role = (userRole || "").toLowerCase();
                                                 if (role === "manager") {
-                                                  alert(`⚠️ Submit Restricted\n\nYou can only submit tasks where BOTH:\n• Manager Name = your name\n• Employee = your name\n\nThis task is assigned to a different employee.`);
+                                                  toast.error("Submit Restricted: Manager Name and Employee must both match your username.", { icon: "⚠️" });
                                                 } else {
-                                                  alert(`⚠️ Submit Restricted\n\nYou can only submit tasks assigned to you.`);
+                                                  toast.error("Submit Restricted: You can only submit tasks assigned to you.", { icon: "⚠️" });
                                                 }
                                               }}
                                               className="h-4 w-4 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors cursor-not-allowed"
@@ -2385,14 +2390,14 @@ const AllTasks = () => {
                                           title={!isModifyAllowed ? "You have view-only access. Submitting tasks is disabled." : "You cannot submit this task"}
                                           onClick={() => {
                                             if (!isModifyAllowed) {
-                                              alert("⚠️ Submit Restricted\n\nYou have view-only access. Submitting tasks is disabled.");
+                                              toast.error("Submit Restricted: You have view-only access.", { icon: "⚠️" });
                                               return;
                                             }
                                             const role = (userRole || "").toLowerCase();
                                             if (role === "manager") {
-                                              alert(`⚠️ Submit Restricted\n\nYou can only submit tasks where BOTH:\n• Manager Name = your name\n• Employee = your name\n\nThis task is assigned to a different employee.`);
+                                              toast.error("Submit Restricted: Manager Name and Employee must both match your username.", { icon: "⚠️" });
                                             } else {
-                                              alert(`⚠️ Submit Restricted\n\nYou can only submit tasks assigned to you.`);
+                                              toast.error("Submit Restricted: You can only submit tasks assigned to you.", { icon: "⚠️" });
                                             }
                                           }}
                                           className="h-4 w-4 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors cursor-not-allowed"

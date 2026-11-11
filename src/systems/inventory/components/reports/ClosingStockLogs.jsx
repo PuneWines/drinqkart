@@ -9,6 +9,7 @@ import {
   deleteClosingStockItemRow
 } from '../../services/dbService';
 import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
+import { showConfirm } from '../../../../context/DialogContext';
 
 const formatTimestamp = (isoString) => {
   if (!isoString) return '—';
@@ -111,9 +112,14 @@ export default function ClosingStockLogs({ hideHeader = false, currentUser, show
   };
 
   const handleDelete = async (rowId) => {
-    if (!window.confirm('Are you sure you want to delete this closing stock record? This will also revert the stock ledger calculations for this item and date.')) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Delete Closing Stock Record",
+      message: 'Are you sure you want to delete this closing stock record? This will also revert the stock ledger calculations for this item and date.',
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
+
     try {
       await deleteClosingStockItemRow(rowId);
       setRecords(prev => prev.filter(row => row.id !== rowId));

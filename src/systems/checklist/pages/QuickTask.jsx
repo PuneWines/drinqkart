@@ -23,6 +23,7 @@ import {
   resetWorkPagination
 } from "../redux/slice/quickTaskSlice";
 import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
+import { showConfirm } from "../../../context/DialogContext";
 import { fetchUniqueShopDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
 import { fetchCustomDropdownsApi } from "../redux/api/settingApi";
 import { ReactMediaRecorder } from "react-media-recorder";
@@ -166,7 +167,8 @@ export default function QuickTask() {
           if (!err && assignmentsData) {
             const activeAssignments = assignmentsData.filter(item => item.master_work_tasks && item.master_work_tasks.is_active !== false);
             let uniqueShops = [...new Set(activeAssignments.map(item => item.master_work_tasks?.shop?.shop_name).filter(Boolean))].sort();
-            const uniqueStatuses = [...new Set(activeAssignments.map(item => item.status).filter(Boolean))].sort();
+            // AVAILABLE is derived (expired / unassigned tasks), so always offer it
+            const uniqueStatuses = [...new Set([...activeAssignments.map(item => item.status).filter(Boolean), 'AVAILABLE'])].sort();
             if (isScoped && assignedShops.length > 0) {
               uniqueShops = uniqueShops.filter(s => assignedShops.some(as => as.toLowerCase() === s.toLowerCase()));
             }
@@ -690,10 +692,11 @@ export default function QuickTask() {
           activeTab === 'delegation' ? filteredDelegationTasks :
             activeTab === 'work' ? filteredWorkTasks : [];
 
-    if (selectedTasks.length === currentTasks.length && currentTasks.length > 0) {
+    const selectable = currentTasks.filter(t => !t.isVirtual);
+    if (selectedTasks.length === selectable.length && selectable.length > 0) {
       setSelectedTasks([]);
     } else {
-      setSelectedTasks(currentTasks);
+      setSelectedTasks(selectable);
     }
   };
 
@@ -746,9 +749,13 @@ export default function QuickTask() {
     }
     if (selectedTasks.length === 0) return;
 
-    if (!window.confirm(`Are you sure you want to reset assignment details for ${selectedTasks.length} selected task(s)? Manager & Employee will be cleared, status set to ACTIVE, and live unsubmitted tasks will be cleared.`)) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Reset Task Assignments",
+      message: `Are you sure you want to reset assignment details for ${selectedTasks.length} selected task(s)? Manager & Employee will be cleared, status set to ACTIVE, and live unsubmitted tasks will be cleared.`,
+      confirmText: "Reset Assignments",
+      type: "warning"
+    });
+    if (!ok) return;
 
     setIsResetting(true);
     try {
@@ -1617,12 +1624,12 @@ export default function QuickTask() {
                                 type="checkbox"
                                 checked={!!selectedTasks.find(t => t.id === task.id)}
                                 onChange={() => handleCheckboxChange(task)}
-                                disabled={!isAdmin}
-                                className={`rounded border-gray-300 text-purple-600 focus:ring-purple-500 ${!isAdmin ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+                                disabled={!isAdmin || task.isVirtual}
+                                className={`rounded border-gray-300 text-purple-600 focus:ring-purple-500 ${(!isAdmin || task.isVirtual) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                               />
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">
-                              {isAdmin ? (
+                              {isAdmin && !task.isVirtual ? (
                                 <button
                                   onClick={() => handleEditClick(task)}
                                   className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 cursor-pointer"
@@ -1630,6 +1637,8 @@ export default function QuickTask() {
                                   <Edit size={13} />
                                   Edit
                                 </button>
+                              ) : task.isVirtual ? (
+                                <span className="text-[10px] text-gray-400" title="Not assigned yet. Assign it from Work Records.">Assign in Work Records</span>
                               ) : (
                                 <span className="text-gray-300">—</span>
                               )}
@@ -1695,12 +1704,12 @@ export default function QuickTask() {
                               type="checkbox"
                               checked={!!selectedTasks.find(t => t.id === task.id)}
                               onChange={() => handleCheckboxChange(task)}
-                              disabled={!isAdmin}
-                              className={`mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500 ${!isAdmin ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+                              disabled={!isAdmin || task.isVirtual}
+                              className={`mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500 ${(!isAdmin || task.isVirtual) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                             />
                             <div className="flex-grow min-w-0">
                               <div className="flex justify-between items-center mb-1">
-                                <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.id}</span>
+                                <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.task_id}</span>
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${task.status === 'GENERATED' ? 'bg-indigo-100 text-indigo-800' :
                                   task.status === 'LOCKED' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                                   {task.status || 'Active'}
@@ -1735,7 +1744,7 @@ export default function QuickTask() {
                                 </div>
                               </div>
                             </div>
-                            {isAdmin && (
+                            {isAdmin && !task.isVirtual && (
                               <button
                                 onClick={() => handleEditClick(task)}
                                 className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95 cursor-pointer"

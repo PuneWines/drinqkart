@@ -8,6 +8,7 @@ import {
   getTodayTotalSales
 } from '../../services/dbService';
 import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
+import { showConfirm } from '../../../../context/DialogContext';
 
 export default function CashTallyItems({ hideHeader = false, currentUser, showActions = false }) {
 
@@ -185,9 +186,14 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
   };
 
   const handleDelete = async (rowId) => {
-    if (!window.confirm('Are you sure you want to delete this daily sales record? This will also remove its operational entry from history.')) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Delete Daily Sales Record",
+      message: 'Are you sure you want to delete this daily sales record? This will also remove its operational entry from history.',
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
+
     try {
       await deleteDailySalesSummaryRow(rowId);
       setRecords(prev => prev.filter(row => row.id !== rowId));

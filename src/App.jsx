@@ -4,6 +4,7 @@ import { Provider } from 'react-redux';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { CartProvider } from './context/CartContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { DialogProvider } from './context/DialogContext';
 import AgeVerificationModal from './components/AgeVerificationModal';
 import Navbar from './components/Navbar';
 import CartDrawer from './components/CartDrawer';
@@ -320,9 +321,11 @@ function App() {
   return (
     <AuthProvider>
       <CartProvider>
-        <Router>
-          <AppLayout />
-        </Router>
+        <DialogProvider>
+          <Router>
+            <AppLayout />
+          </Router>
+        </DialogProvider>
       </CartProvider>
     </AuthProvider>
   );

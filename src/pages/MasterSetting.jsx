@@ -26,6 +26,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { showConfirm } from "../context/DialogContext";
 import { fetchPlaceForShop } from "../utils/shopLocation";
 import { useAuth } from "../context/AuthContext";
 import JoiningCompany from "../systems/hr/pages/JoiningCompany";
@@ -1125,8 +1126,13 @@ export default function MasterSetting() {
     const userId = userObj?.id;
     const username = userObj?.user_name || userObj?.username || "user";
 
-    if (!window.confirm(`Are you sure you want to delete user "${username}"?`))
-      return;
+    const confirmed = await showConfirm({
+      title: "Delete User",
+      message: `Are you sure you want to permanently delete user "${username}"?`,
+      confirmText: "Delete User",
+      type: "danger"
+    });
+    if (!confirmed) return;
     try {
       const { error } = await supabase.from("users").delete().eq("id", userId);
 

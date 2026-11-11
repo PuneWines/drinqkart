@@ -4,6 +4,7 @@ import { Bell, Plus, Trash2, Shield, User, Globe, Clock, Loader2, X, CheckCheck 
 import AdminLayout from "../../components/layout/AdminLayout";
 import { fetchNotifications, createNotification, removeNotification, markAsRead } from "../../redux/slice/notificationSlice";
 import { useMagicToast } from "../../context/MagicToastContext";
+import { showConfirm } from "../../../../context/DialogContext";
 
 export default function Notifications() {
   const dispatch = useDispatch();
@@ -55,7 +56,13 @@ export default function Notifications() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this notification?")) return;
+    const ok = await showConfirm({
+      title: "Delete Notification",
+      message: "Are you sure you want to delete this notification?",
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
     try {
       await dispatch(removeNotification(id)).unwrap();
       showToast("Notification deleted", "success");

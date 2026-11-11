@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import supabase from "../SupabaseClient";
+import { showConfirm } from "../../../context/DialogContext";
 
 // Systems and standard page modules in Drinqkart Master App
 const AVAILABLE_SYSTEMS = [
@@ -250,13 +251,13 @@ export default function MasterSetting() {
 
   const handleDeleteUser = async (userToDelete) => {
     const name = userToDelete.user_name || userToDelete.username || "this user";
-    if (
-      !window.confirm(
-        `Are you sure you want to delete user "${name}"? This action cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Delete User",
+      message: `Are you sure you want to delete user "${name}"? This action cannot be undone.`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       const { error } = await supabase

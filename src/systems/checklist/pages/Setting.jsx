@@ -11,6 +11,7 @@ import CalendarComponent from '../components/CalendarComponent';
 import { createPortal } from 'react-dom';
 import { sendTaskReassignmentNotification } from '../services/whatsappService';
 import { useMagicToast } from '../context/MagicToastContext';
+import { showConfirm } from '../../../context/DialogContext';
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
 const formatDateISO = (date) => {
@@ -196,7 +197,13 @@ const Setting = () => {
   };
 
   const handleDeleteShift = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this shift?")) return;
+    const ok = await showConfirm({
+      title: "Delete Shift",
+      message: "Are you sure you want to delete this shift?",
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
     try {
       await deleteShiftApi(id);
       showToast("Shift deleted successfully!", "success");
@@ -482,7 +489,13 @@ const Setting = () => {
       ? `Shift ${tasksToShift.length} selected task(s) from "${leavePersonName}" to "${shiftToPerson}"?`
       : `Mark "${leavePersonName}" as On Leave? (No tasks found to shift)`;
 
-    if (!window.confirm(confirmMsg)) return;
+    const ok = await showConfirm({
+      title: tasksToShift.length > 0 ? "Shift Tasks" : "Mark On Leave",
+      message: confirmMsg,
+      confirmText: tasksToShift.length > 0 ? "Shift Tasks" : "Mark Leave",
+      type: "warning"
+    });
+    if (!ok) return;
 
     setLeaveSubmitting(true);
     try {
@@ -2006,9 +2019,15 @@ const Setting = () => {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                       <button
-                                        onClick={(e) => {
+                                        onClick={async (e) => {
                                           e.stopPropagation();
-                                          if (window.confirm(`Delete machine "${machineName}" and all its parts?`)) {
+                                          const ok = await showConfirm({
+                                            title: "Delete Machine",
+                                            message: `Delete machine "${machineName}" and all its parts?`,
+                                            confirmText: "Delete Machine",
+                                            type: "danger"
+                                          });
+                                          if (ok) {
                                             data.ids.forEach(id => dispatch(deleteCustomDropdown(id)));
                                           }
                                         }}
@@ -2050,9 +2069,15 @@ const Setting = () => {
                                                     />
                                                   </label>
                                                   <button
-                                                    onClick={(e) => {
+                                                    onClick={async (e) => {
                                                       e.stopPropagation();
-                                                      if (window.confirm(`Delete part "${part.value}"?`)) {
+                                                      const ok = await showConfirm({
+                                                        title: "Delete Part",
+                                                        message: `Delete part "${part.value}"?`,
+                                                        confirmText: "Delete",
+                                                        type: "danger"
+                                                      });
+                                                      if (ok) {
                                                         dispatch(deleteCustomDropdown(part.id));
                                                       }
                                                     }}
@@ -2095,9 +2120,15 @@ const Setting = () => {
                                   <span className="text-sm font-bold text-indigo-900">{machineName}</span>
                                 </div>
                                 <button
-                                  onClick={(e) => {
+                                  onClick={async (e) => {
                                     e.stopPropagation();
-                                    if (window.confirm(`Delete machine "${machineName}" and all its parts?`)) {
+                                    const ok = await showConfirm({
+                                      title: "Delete Machine",
+                                      message: `Delete machine "${machineName}" and all its parts?`,
+                                      confirmText: "Delete Machine",
+                                      type: "danger"
+                                    });
+                                    if (ok) {
                                       data.ids.forEach(id => dispatch(deleteCustomDropdown(id)));
                                     }
                                   }}
@@ -2148,9 +2179,15 @@ const Setting = () => {
                                               />
                                             </label>
                                             <button
-                                              onClick={(e) => {
+                                              onClick={async (e) => {
                                                 e.stopPropagation();
-                                                if (window.confirm(`Delete part "${part.value}"?`)) {
+                                                const ok = await showConfirm({
+                                                  title: "Delete Part",
+                                                  message: `Delete part "${part.value}"?`,
+                                                  confirmText: "Delete",
+                                                  type: "danger"
+                                                });
+                                                if (ok) {
                                                   dispatch(deleteCustomDropdown(part.id));
                                                 }
                                               }}
@@ -2242,8 +2279,14 @@ const Setting = () => {
                               <Edit size={16} />
                             </button>
                             <button
-                              onClick={() => {
-                                if (window.confirm("Delete this master task?")) {
+                              onClick={async () => {
+                                const ok = await showConfirm({
+                                  title: "Delete Master Task",
+                                  message: "Delete this master task?",
+                                  confirmText: "Delete",
+                                  type: "danger"
+                                });
+                                if (ok) {
                                   dispatch(deleteMasterTask(t.id));
                                 }
                               }}
@@ -2282,8 +2325,14 @@ const Setting = () => {
                           <Edit size={14} />
                         </button>
                         <button
-                          onClick={() => {
-                            if (window.confirm("Delete this level? This may affect users and master tasks using it.")) {
+                          onClick={async () => {
+                            const ok = await showConfirm({
+                              title: "Delete Level",
+                              message: "Delete this level? This may affect users and master tasks using it.",
+                              confirmText: "Delete",
+                              type: "danger"
+                            });
+                            if (ok) {
                               dispatch(deleteLevel(l.id));
                             }
                           }}

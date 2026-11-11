@@ -20,6 +20,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { showConfirm } from '../context/DialogContext';
 
 // 53 Default Initial Checklist Items matching ShopVisit
 export const DEFAULT_CHECKLIST_DATA = [
@@ -400,7 +401,13 @@ export default function ShopVisitSettings({ readOnly = false }) {
   };
 
   const handleDeleteItem = async (item) => {
-    if (!window.confirm(`Are you sure you want to delete "${item.label}"?`)) return;
+    const ok = await showConfirm({
+      title: "Delete Checklist Item",
+      message: `Are you sure you want to delete "${item.label}"?`,
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
 
     try {
       const updated = items.filter((it) => it.id !== item.id);
@@ -448,12 +455,13 @@ export default function ShopVisitSettings({ readOnly = false }) {
   };
 
   const handleResetToDefaults = async () => {
-    if (
-      !window.confirm(
-        'Are you sure you want to reset all checklist items back to the original 53 defaults? Any custom added options will be overwritten.'
-      )
-    )
-      return;
+    const ok = await showConfirm({
+      title: "Reset to Defaults",
+      message: 'Are you sure you want to reset all checklist items back to the original 53 defaults? Any custom added options will be overwritten.',
+      confirmText: "Reset Defaults",
+      type: "warning"
+    });
+    if (!ok) return;
 
     try {
       await persistItems(INITIAL_FLAT_ITEMS);

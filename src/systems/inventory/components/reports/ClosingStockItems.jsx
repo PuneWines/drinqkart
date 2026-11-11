@@ -8,6 +8,7 @@ import {
   getShops
 } from '../../services/dbService';
 import { isUserShopScoped, getUserAssignedShops } from '../../../../utils/permissionUtils';
+import { showConfirm } from '../../../../context/DialogContext';
 
 export default function CurrentStockItems({ hideHeader = false, currentUser, showActions = false }) {
   const [itemsList, setItemsList] = useState([]);
@@ -76,9 +77,14 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
   };
 
   const handleDelete = async (rowId) => {
-    if (!window.confirm('Are you sure you want to delete this item from the database? This action is permanent and will remove the item record.')) {
-      return;
-    }
+    const ok = await showConfirm({
+      title: "Delete Stock Item",
+      message: 'Are you sure you want to delete this item from the database? This action is permanent and will remove the item record.',
+      confirmText: "Delete",
+      type: "danger"
+    });
+    if (!ok) return;
+
     try {
       await deleteItem(rowId);
       setStockItems(prev => prev.filter(row => row.id !== rowId));
