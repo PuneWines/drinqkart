@@ -4,7 +4,7 @@ import {
   Filter, Upload, Image, File, User, CreditCard, BookOpen, FileText,
   ExternalLink, ChevronLeft, ChevronRight, Printer, Download, CheckCircle2,
   AlertCircle, Clock, Store, ChevronDown, Activity, Check, RotateCcw,
-  UserX, Zap, Building, Phone, Calendar
+  UserX, Zap, Building, Phone, Calendar, ShieldCheck
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { showConfirm, showPrompt } from '../../../context/DialogContext'
@@ -1784,9 +1784,9 @@ export default function EmployeeManagement() {
         </div>
       </div>
 
-      {/* Table Container */}
+      {/* Table Container - clean horizontal scroll only, no trapped vertical inner div */}
       <div className="bg-white rounded-xl overflow-hidden border border-slate-200/80 shadow-2xs">
-        <div className="overflow-x-auto overflow-y-auto max-h-[73vh] table-scrollbar">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[1250px] text-left text-xs whitespace-nowrap border-collapse">
             <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-xs text-slate-600 text-[11px] font-bold tracking-wider uppercase border-b border-slate-200 shadow-2xs select-none">
               <tr>
@@ -2841,59 +2841,115 @@ export default function EmployeeManagement() {
 
                     </div>
                   </div>
+
+                  {/* Office Verification Section - Placed right after Banking Information */}
+                  {(() => {
+                    const liveEmp = employees.find(e => e.id === editingEmployee.id) || editingEmployee;
+                    const vs = liveEmp.verification_status;
+                    return (
+                      <div className="bg-white border border-slate-200/90 rounded-xl shadow-2xs p-5 sm:p-6 transition-all">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-2xs">
+                              <ShieldCheck size={20} />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+                                Office Verification
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Review records, KYC documents, and update employee onboarding authorization.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-start sm:self-center">
+                            <span className="text-xs font-semibold text-slate-500">Status:</span>
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                              vs === 'Verified'
+                                ? 'bg-teal-50 text-teal-700 border border-teal-200/80 shadow-2xs'
+                                : vs === 'Rejected'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200/80 shadow-2xs'
+                            }`}>
+                              <span className={`w-2 h-2 rounded-full ${
+                                vs === 'Verified' ? 'bg-teal-500' : vs === 'Rejected' ? 'bg-rose-500' : 'bg-amber-500 animate-pulse'
+                              }`}></span>
+                              {vs === 'Verified' ? 'Verified' : vs === 'Rejected' ? 'Rejected' : 'Action Required'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Rejection Remarks / Verification details & Action Buttons */}
+                        <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            {liveEmp.verification_remarks ? (
+                              <div className="text-xs bg-rose-50/70 border border-rose-200/80 rounded-xl p-3">
+                                <span className="font-bold text-rose-800">Rejection Remarks: </span>
+                                <span className="italic text-rose-700 font-sans">"{liveEmp.verification_remarks}"</span>
+                              </div>
+                            ) : vs === 'Verified' ? (
+                              <div className="text-xs text-slate-600 flex items-center gap-1.5">
+                                <CheckCircle2 size={14} className="text-teal-600" />
+                                <span>
+                                  Officially verified{liveEmp.verified_by ? ` by ${liveEmp.verified_by}` : ''}
+                                  {liveEmp.verified_at ? ` on ${new Date(liveEmp.verified_at).toLocaleDateString('en-IN')}` : ''}
+                                </span>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic">
+                                Action required: Click Verify to approve this employee or Reject to provide rejection remarks.
+                              </p>
+                            )}
+                          </div>
+
+                          {canModify && (
+                            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                              {vs !== 'Verified' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerification(liveEmp, 'Verified')}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
+                                >
+                                  <Check size={14} strokeWidth={2.5} />
+                                  <span>{vs === 'Rejected' ? 'Re-verify' : 'Verify'}</span>
+                                </button>
+                              )}
+                              {vs !== 'Rejected' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerification(liveEmp, 'Rejected')}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs hover:border-rose-300 transition-all cursor-pointer"
+                                >
+                                  <X size={14} strokeWidth={2.5} />
+                                  <span>Reject</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-3 p-4 border-t bg-gray-50">
-                {canModify && (() => {
-                  const liveEmp = employees.find(e => e.id === editingEmployee.id) || editingEmployee
-                  const vs = liveEmp.verification_status
-                  return (
-                    <div className="mr-auto flex items-center gap-2">
-                      <span className="text-xs font-semibold text-gray-600">
-                        Office Verification:{' '}
-                        <span className={vs === 'Verified' ? 'text-teal-700' : vs === 'Rejected' ? 'text-rose-700' : 'text-amber-700'}>
-                          {vs === 'Verified' ? 'Verified' : vs === 'Rejected' ? 'Rejected' : 'Action Required'}
-                        </span>
-                      </span>
-                      {vs !== 'Verified' && (
-                        <button
-                          type="button"
-                          onClick={() => handleVerification(liveEmp, 'Verified')}
-                          className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-                        >
-                          <Check size={13} strokeWidth={2.5} />
-                          {vs === 'Rejected' ? 'Re-verify' : 'Verify'}
-                        </button>
-                      )}
-                      {vs !== 'Rejected' && (
-                        <button
-                          type="button"
-                          onClick={() => handleVerification(liveEmp, 'Rejected')}
-                          className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors"
-                        >
-                          <X size={13} strokeWidth={2.5} />
-                          Reject
-                        </button>
-                      )}
-                    </div>
-                  )
-                })()}
+              <div className="flex items-center justify-end gap-3 p-4 border-t bg-gray-50/80">
                 <button
                   type="button"
                   onClick={() => {
                     setShowEditPanel(false)
                     setEditingEmployee(null)
                   }}
-                  className="px-4 py-2 text-sm text-gray-600 border border-gray-300  hover:bg-gray-200 transition-colors font-medium"
+                  className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleUpdate}
                   disabled={saving || uploading}
-                  className="px-6 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2 font-medium shadow-sm"
+                  className="px-6 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors flex items-center gap-2 font-semibold shadow-sm cursor-pointer"
                 >
                   {(saving || uploading) && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
                   {uploading ? 'Uploading...' : saving ? 'Updating...' : 'Update Employee'}
@@ -3174,6 +3230,96 @@ export default function EmployeeManagement() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Office Verification Section */}
+                  {(() => {
+                    const liveEmp = employees.find(e => e.id === selectedEmployee.id) || selectedEmployee;
+                    const vs = liveEmp.verification_status;
+                    return (
+                      <div className="bg-white border border-slate-200/90 rounded-xl shadow-2xs p-5 sm:p-6 transition-all">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-2xs">
+                              <ShieldCheck size={20} />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+                                Office Verification
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Review records, KYC documents, and update employee onboarding authorization.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-start sm:self-center">
+                            <span className="text-xs font-semibold text-slate-500">Status:</span>
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                              vs === 'Verified'
+                                ? 'bg-teal-50 text-teal-700 border border-teal-200/80 shadow-2xs'
+                                : vs === 'Rejected'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200/80 shadow-2xs'
+                            }`}>
+                              <span className={`w-2 h-2 rounded-full ${
+                                vs === 'Verified' ? 'bg-teal-500' : vs === 'Rejected' ? 'bg-rose-500' : 'bg-amber-500 animate-pulse'
+                              }`}></span>
+                              {vs === 'Verified' ? 'Verified' : vs === 'Rejected' ? 'Rejected' : 'Action Required'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Rejection Remarks / Verification details & Action Buttons */}
+                        <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            {liveEmp.verification_remarks ? (
+                              <div className="text-xs bg-rose-50/70 border border-rose-200/80 rounded-xl p-3">
+                                <span className="font-bold text-rose-800">Rejection Remarks: </span>
+                                <span className="italic text-rose-700 font-sans">"{liveEmp.verification_remarks}"</span>
+                              </div>
+                            ) : vs === 'Verified' ? (
+                              <div className="text-xs text-slate-600 flex items-center gap-1.5">
+                                <CheckCircle2 size={14} className="text-teal-600" />
+                                <span>
+                                  Officially verified{liveEmp.verified_by ? ` by ${liveEmp.verified_by}` : ''}
+                                  {liveEmp.verified_at ? ` on ${new Date(liveEmp.verified_at).toLocaleDateString('en-IN')}` : ''}
+                                </span>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic">
+                                Action required: Click Verify to approve this employee or Reject to provide rejection remarks.
+                              </p>
+                            )}
+                          </div>
+
+                          {canModify && (
+                            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                              {vs !== 'Verified' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerification(liveEmp, 'Verified')}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
+                                >
+                                  <Check size={14} strokeWidth={2.5} />
+                                  <span>{vs === 'Rejected' ? 'Re-verify' : 'Verify'}</span>
+                                </button>
+                              )}
+                              {vs !== 'Rejected' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerification(liveEmp, 'Rejected')}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs hover:border-rose-300 transition-all cursor-pointer"
+                                >
+                                  <X size={14} strokeWidth={2.5} />
+                                  <span>Reject</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Documents */}
                   <div className="bg-white  border border-gray-200 shadow-sm p-6">

@@ -140,7 +140,8 @@ export default function LeaveManagement() {
           .eq('employee_id', leaveToUpdate.employee_id)
           .eq('status', 'Approved')
           .neq('id', leaveId)
-          .or(`from_date.lte.${leaveToUpdate.to_date},to_date.gte.${leaveToUpdate.from_date}`)
+          .lte('from_date', leaveToUpdate.to_date)
+          .gte('to_date', leaveToUpdate.from_date)
 
         if (overlappingLeaves && overlappingLeaves.length > 0) {
           alert('Employee already has approved leaves during this period!')

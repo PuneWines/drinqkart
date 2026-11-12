@@ -125,12 +125,12 @@ const renderUserStatus = (task, formatDateWithTime) => {
 
   if (isDone) {
     return (
-      <div className="flex flex-col">
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 w-fit">
+      <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
           Done
         </span>
         {task.submission_date && (
-          <span className="text-[10px] text-gray-500 mt-0.5">
+          <span className="text-[11px] text-slate-400 font-mono">
             {formatDateWithTime ? formatDateWithTime(task.submission_date) : task.submission_date}
           </span>
         )}
@@ -139,13 +139,13 @@ const renderUserStatus = (task, formatDateWithTime) => {
   }
   if (wStatus === "REJECTED") {
     return (
-      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit">
+      <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-rose-50 text-rose-700 border border-rose-200/80">
         Rejected
       </span>
     );
   }
   return (
-    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit">
+    <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-rose-50 text-rose-700 border border-rose-200/80">
       Not Done
     </span>
   );
@@ -158,15 +158,15 @@ const renderManagerStatus = (task, formatDateWithTime) => {
 
   if (isApproved) {
     return (
-      <div className="flex flex-col">
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 w-fit">
+      <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
           Approved
         </span>
         {task.manager_approved_by && (
-          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.manager_approved_by}</span>
+          <span className="text-[11px] text-slate-600 font-medium">By: {task.manager_approved_by}</span>
         )}
         {task.manager_approval_date && (
-          <span className="text-[10px] text-gray-500 mt-0.5">
+          <span className="text-[11px] text-slate-400 font-mono">
             {formatDateWithTime ? formatDateWithTime(task.manager_approval_date) : task.manager_approval_date}
           </span>
         )}
@@ -175,15 +175,15 @@ const renderManagerStatus = (task, formatDateWithTime) => {
   }
   if (isRejected) {
     return (
-      <div className="flex flex-col">
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit" title={task.rejection_reason}>
+      <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-rose-50 text-rose-700 border border-rose-200/80" title={task.rejection_reason}>
           Rejected
         </span>
         {task.manager_approved_by && (
-          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.manager_approved_by}</span>
+          <span className="text-[11px] text-slate-600 font-medium">By: {task.manager_approved_by}</span>
         )}
         {task.manager_approval_date && (
-          <span className="text-[10px] text-gray-500 mt-0.5">
+          <span className="text-[11px] text-slate-400 font-mono">
             {formatDateWithTime ? formatDateWithTime(task.manager_approval_date) : task.manager_approval_date}
           </span>
         )}
@@ -192,10 +192,10 @@ const renderManagerStatus = (task, formatDateWithTime) => {
   }
   const isUserSubmitted = !!(task.submission_date || wStatus === "SUBMITTED");
   if (!isUserSubmitted) {
-    return <span className="text-gray-400 text-xs">—</span>;
+    return <span className="text-slate-400 text-xs">—</span>;
   }
   return (
-    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 w-fit">
+    <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200/80">
       Pending
     </span>
   );
@@ -208,15 +208,15 @@ const renderAdminStatus = (task, formatDateWithTime) => {
 
   if (isApproved) {
     return (
-      <div className="flex flex-col">
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 w-fit">
+      <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
           Approved
         </span>
         {task.admin_approved_by && (
-          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.admin_approved_by}</span>
+          <span className="text-[11px] text-slate-600 font-medium">By: {task.admin_approved_by}</span>
         )}
         {task.admin_approval_date && (
-          <span className="text-[10px] text-gray-500 mt-0.5">
+          <span className="text-[11px] text-slate-400 font-mono">
             {formatDateWithTime ? formatDateWithTime(task.admin_approval_date) : task.admin_approval_date}
           </span>
         )}
@@ -225,15 +225,15 @@ const renderAdminStatus = (task, formatDateWithTime) => {
   }
   if (isRejected) {
     return (
-      <div className="flex flex-col">
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit" title={task.rejection_reason}>
+      <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-rose-50 text-rose-700 border border-rose-200/80" title={task.rejection_reason}>
           Rejected
         </span>
         {task.admin_approved_by && (
-          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.admin_approved_by}</span>
+          <span className="text-[11px] text-slate-600 font-medium">By: {task.admin_approved_by}</span>
         )}
         {task.admin_approval_date && (
-          <span className="text-[10px] text-gray-500 mt-0.5">
+          <span className="text-[11px] text-slate-400 font-mono">
             {formatDateWithTime ? formatDateWithTime(task.admin_approval_date) : task.admin_approval_date}
           </span>
         )}
@@ -448,7 +448,6 @@ const WorkTasksTab = ({
 
   const tableHeaders = useMemo(() => {
     const baseHeaders = [
-      { id: "time_status", label: "Time" },
       { id: "id", label: "ID" },
       { id: "task_description", label: "Description" },
       { id: "manager_name", label: "Manager Name" },
@@ -463,20 +462,20 @@ const WorkTasksTab = ({
       const role = (userRole || "").toLowerCase();
       if (role === "admin") {
         return [
-          ...baseHeaders.filter(h => h.id !== "time_status"),
+          ...baseHeaders,
           { id: "user_status", label: "Employee Task" },
           { id: "manager_status", label: "Manager Approval" },
           { id: "admin_status", label: "Admin Approval" }
         ];
       } else if (role === "manager") {
         return [
-          ...baseHeaders.filter(h => h.id !== "time_status"),
+          ...baseHeaders,
           { id: "user_status", label: "Employee Task" },
           { id: "manager_status", label: "Manager Approval" }
         ];
       } else {
         return [
-          ...baseHeaders.filter(h => h.id !== "time_status"),
+          ...baseHeaders,
           { id: "user_status", label: "Task Status" }
         ];
       }
@@ -1339,37 +1338,37 @@ const WorkTasksTab = ({
       )}
 
       {/* Table Container */}
-      <div className="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
         {showHistory && (
-          <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50 flex flex-wrap gap-4 items-center">
+          <div className="p-3 sm:p-4 border-b border-slate-200/80 bg-slate-50/70 flex flex-wrap gap-4 items-center">
             <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Filter by Range:</span>
+              <span className="text-xs sm:text-sm font-semibold text-slate-700 whitespace-nowrap">Filter by Range:</span>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">From</span>
+                <span className="text-xs text-slate-500">From</span>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="text-xs sm:text-sm border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none"
+                  className="text-xs sm:text-sm border border-slate-200 rounded-lg p-1.5 focus:ring-1 focus:ring-indigo-500 outline-none bg-white text-slate-800"
                 />
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">To</span>
+                <span className="text-xs text-slate-500">To</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="text-xs sm:text-sm border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none"
+                  className="text-xs sm:text-sm border border-slate-200 rounded-lg p-1.5 focus:ring-1 focus:ring-indigo-500 outline-none bg-white text-slate-800"
                 />
               </div>
               {(startDate || endDate) && (
-                <button onClick={() => { setStartDate(""); setEndDate(""); }} className="text-xs text-red-500 hover:underline">Clear</button>
+                <button onClick={() => { setStartDate(""); setEndDate(""); }} className="text-xs text-rose-500 hover:underline font-semibold cursor-pointer">Clear</button>
               )}
             </div>
 
             {/* Shop Filter */}
             <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Shop:</span>
+              <span className="text-xs sm:text-sm font-semibold text-slate-700 whitespace-nowrap">Shop:</span>
               <select
                 value={shopFilter !== "all" ? shopFilter : historyShopFilter}
                 onChange={(e) => {
@@ -1377,7 +1376,7 @@ const WorkTasksTab = ({
                   if (setShopFilter) setShopFilter(e.target.value);
                 }}
                 disabled={(userRole || "").toLowerCase() === "manager"}
-                className="text-xs sm:text-sm border border-gray-200 rounded-md p-1.5 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium text-gray-700 disabled:opacity-75 disabled:cursor-not-allowed"
+                className="text-xs sm:text-sm border border-slate-200 rounded-lg p-1.5 focus:ring-1 focus:ring-indigo-500 outline-none bg-white font-semibold text-slate-700 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer"
               >
                 <option value="all">All Shops</option>
                 {availableShops.map(s => (
@@ -1389,11 +1388,11 @@ const WorkTasksTab = ({
             {/* Manager Filter (shown for admin role only) */}
             {(userRole || "").toLowerCase() === "admin" && (
               <div className="flex items-center gap-2">
-                <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Manager:</span>
+                <span className="text-xs sm:text-sm font-semibold text-slate-700 whitespace-nowrap">Manager:</span>
                 <select
                   value={historyManagerFilter}
                   onChange={(e) => setHistoryManagerFilter(e.target.value)}
-                  className="text-xs sm:text-sm border border-gray-200 rounded-md p-1.5 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium text-gray-700"
+                  className="text-xs sm:text-sm border border-slate-200 rounded-lg p-1.5 focus:ring-1 focus:ring-indigo-500 outline-none bg-white font-semibold text-slate-700 cursor-pointer"
                 >
                   <option value="all">All Managers</option>
                   {availableManagers.map(m => (
@@ -1406,7 +1405,7 @@ const WorkTasksTab = ({
             {/* Export CSV Button */}
             <button
               onClick={handleExportCSV}
-              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-sm transition-colors cursor-pointer"
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
             >
               <Download className="h-4 w-4" />
               <span>Export CSV</span>
@@ -1414,26 +1413,26 @@ const WorkTasksTab = ({
           </div>
         )}
 
-        <div className="min-h-[300px]">
+        <div>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-500 mb-2"></div>
-              <p className="text-purple-600 text-sm font-bold uppercase tracking-wider">Loading data...</p>
+              <div className="w-8 h-8 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-2"></div>
+              <p className="text-slate-600 text-xs font-bold uppercase tracking-wider">Loading tasks...</p>
             </div>
           ) : error ? (
             <div className="py-20 text-center">
-              <p className="text-red-500 mb-2 font-medium">{error}</p>
-              <button onClick={fetchData} className="text-sm text-purple-600 underline">Try again</button>
+              <p className="text-rose-500 mb-2 font-medium text-xs">{error}</p>
+              <button onClick={fetchData} className="text-xs text-indigo-600 underline font-semibold">Try again</button>
             </div>
           ) : (
             <>
               {/* Desktop view */}
-              <div className="hidden md:block overflow-auto max-h-[calc(100vh-280px)] custom-scrollbar">
-                <table className="min-w-full divide-y divide-gray-200 relative">
-                  <thead className="bg-gray-50 sticky top-0 z-20 shadow-xs transition-all duration-300">
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs whitespace-nowrap border-collapse">
+                  <thead className="bg-slate-50/95 backdrop-blur-xs text-slate-600 text-[11px] font-bold tracking-wider uppercase border-b border-slate-200 shadow-2xs select-none">
                     <tr>
                       {!showHistory && (
-                        <th className="px-3 py-2.5 text-left font-bold text-gray-900">
+                        <th className="px-3.5 py-3 text-left font-bold text-slate-900 w-10">
                           <input
                             type="checkbox"
                             checked={(() => {
@@ -1448,30 +1447,30 @@ const WorkTasksTab = ({
                             })()}
                             onChange={handleSelectAll}
                             disabled={!isModifyAllowed}
-                            className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                           />
                         </th>
                       )}
                       {tableHeaders.map((header) => (
-                        <th key={header.id} className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th key={header.id} className="px-3.5 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">
                           {header.label}
                         </th>
                       ))}
                       {!showHistory && (
                         <>
-                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">Remarks</th>
-                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">Image</th>
+                          <th className="px-3.5 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider">Remarks</th>
+                          <th className="px-3.5 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider">Image</th>
                         </>
                       )}
                       {showHistory && (
                         <>
-                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">Remarks</th>
-                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">Attachment</th>
+                          <th className="px-3.5 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider">Remarks</th>
+                          <th className="px-3.5 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider">Attachment</th>
                         </>
                       )}
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-slate-100">
                     {paginatedTasks.length > 0 ? (
                       paginatedTasks.map((task, index) => {
                         const ds = getWorkTaskDynamicStatus(task, currentTime);
@@ -1485,20 +1484,20 @@ const WorkTasksTab = ({
                         return (
                           <Fragment key={task.id}>
                             {showGroupHeader && !showHistory && (
-                              <tr className="bg-gray-100/30">
-                                <td colSpan={tableHeaders.length + 6} className="px-4 sm:px-6 py-2">
+                              <tr className="bg-slate-100/60 border-y border-slate-200/60">
+                                <td colSpan={tableHeaders.length + 6} className="px-3.5 py-2">
                                   <div className="flex items-center gap-2">
-                                    <div className={`w-1.5 h-1.5 rounded-full ${currentStatus === 'Active' ? 'bg-green-500' : currentStatus === 'Upcoming' ? 'bg-blue-500' : 'bg-red-500'}`}></div>
-                                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
+                                    <div className={`w-2 h-2 rounded-full ${currentStatus === 'Active' ? 'bg-emerald-500' : currentStatus === 'Upcoming' ? 'bg-sky-500' : 'bg-rose-500'}`}></div>
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
                                       {currentStatus} Tasks
                                     </span>
                                   </div>
                                 </td>
                               </tr>
                             )}
-                            <tr className="hover:bg-gray-50">
+                            <tr className="hover:bg-slate-50/80 transition-colors align-middle border-b border-slate-100">
                               {!showHistory && (
-                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                                <td className="px-3.5 py-3 whitespace-nowrap">
                                   <input
                                     type="checkbox"
                                     checked={selectedItems.has(task.id)}
@@ -1509,46 +1508,25 @@ const WorkTasksTab = ({
                                       const isAssignedByMe = !isAdmin && role === "manager" && task.manager_name === username && task.name !== username;
                                       return ds === "UPCOMING" || isAssignedByMe;
                                     })()}
-                                    className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                                    className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                                   />
                                 </td>
                               )}
                               {tableHeaders.map((header) => (
-                                <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'}`}>
-                                  {header.id === "time_status" ? (
-                                    (() => {
-                                      const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                      const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
-                                      const label = ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
-                                      return (
-                                        <div className="flex flex-col gap-1 items-start">
-                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>
-                                          {ds === 'ACTIVE' && (
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-200">
-                                              <Clock size={10} className="shrink-0 animate-pulse text-red-500" />
-                                              <span>{getWorkTaskRemainingExpiry(task, currentTime)}</span>
-                                            </span>
-                                          )}
-                                          {ds === 'UPCOMING' && (
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                              <Clock size={10} className="shrink-0 text-emerald-600" />
-                                              <span>{getWorkTaskTimeUntilStart(task, currentTime)}</span>
-                                            </span>
-                                          )}
-                                        </div>
-                                      );
-                                    })()
-                                  ) : header.id === "current_date" ? (
-                                    <div className="flex flex-col">
-                                      <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
-                                      <span className="text-[11px] text-gray-400">
-                                        {task.start_time ? formatTimeOnly(task.start_time) : task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : ""}
-                                      </span>
+                                <td key={header.id} className={`px-3.5 py-3 text-xs text-slate-700 ${header.id === 'task_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'}`}>
+                                  {header.id === "current_date" ? (
+                                    <div className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+                                      <span className="font-semibold text-slate-800">{formatDate(task[header.id])}</span>
+                                      {(task.start_time || task.task_assignments?.start_datetime) && (
+                                        <span className="text-[11px] font-mono text-slate-400">
+                                          {task.start_time ? formatTimeOnly(task.start_time) : formatTimeOnly(task.task_assignments.start_datetime)}
+                                        </span>
+                                      )}
                                     </div>
                                   ) : header.id === "id" ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-bold text-gray-900">{task[header.id]}</span>
-                                    </div>
+                                    <span className="font-mono font-bold text-slate-900">#{task[header.id]}</span>
+                                  ) : header.id === "duration" ? (
+                                    <span className="font-mono text-slate-600 font-medium">{task[header.id] ? `${task[header.id]}m` : "—"}</span>
                                   ) : header.id === "submission_date" ? (
                                     formatDateWithTime(task[header.id])
                                   ) : header.id === "user_status" ? (
@@ -1560,36 +1538,40 @@ const WorkTasksTab = ({
                                   ) : header.id === "status" ? (
                                     (() => {
                                       const wStatus = (task.work_status || task.status || "").toUpperCase();
-                                      if (wStatus === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
-                                      const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                      if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
-                                      if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
-                                      if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
-                                      if (ds === "UPCOMING") {
+                                      if (wStatus === "REJECTED") return <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-rose-50 text-rose-700 border border-rose-200/80">Rejected</span>;
+                                      const dynamicSt = getWorkTaskDynamicStatus(task, currentTime);
+                                      if (dynamicSt === "APPROVED") return <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">Approved</span>;
+                                      if (dynamicSt === "SUBMITTED") return <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200/80">Pending Approval</span>;
+                                      if (dynamicSt === "NOT_DONE") return <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-rose-50 text-rose-700 border border-rose-200/80">Not Done</span>;
+                                      if (dynamicSt === "UPCOMING") {
                                         return (
-                                          <div className="flex flex-col gap-1 items-start">
-                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                              <Clock size={11} className="shrink-0 text-emerald-600" />
+                                          <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                            <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-sky-50 text-sky-700 border border-sky-200/80">Upcoming</span>
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-slate-50 text-slate-600 border border-slate-200/80">
+                                              <Clock size={11} className="shrink-0 text-sky-600" />
                                               <span>Starts in {getWorkTaskTimeUntilStart(task, currentTime)}</span>
                                             </span>
                                           </div>
                                         );
                                       }
                                       return (
-                                        <div className="flex flex-col gap-1 items-start">
-                                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>
-                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">
-                                            <Clock size={11} className="shrink-0 animate-pulse text-red-500" />
+                                        <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                          <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">Active</span>
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-rose-50 text-rose-600 border border-rose-200/80">
+                                            <Clock size={11} className="shrink-0 animate-pulse text-rose-500" />
                                             <span>Expires in {getWorkTaskRemainingExpiry(task, currentTime)}</span>
                                           </span>
                                         </div>
                                       );
                                     })()
                                   ) : (header.id === 'name' || header.id === 'manager_name') ? (
-                                    <span className="font-bold text-gray-900">{task[header.id] || "—"}</span>
+                                    <span className="font-semibold text-slate-900">{task[header.id] || "—"}</span>
+                                  ) : (header.id === 'shop_name' || header.id === 'department') ? (
+                                    <span className="font-medium text-slate-700">{task[header.id] || "—"}</span>
                                   ) : header.id === 'task_description' ? (
-                                    <RenderDescription text={task[header.id]} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                    <div className="max-w-xs md:max-w-md">
+                                      <RenderDescription text={task[header.id]} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                    </div>
                                   ) : isAudioUrl(task[header.id]) ? (
                                     <AudioPlayer url={task[header.id]} />
                                   ) : (
@@ -1599,23 +1581,23 @@ const WorkTasksTab = ({
                               ))}
                               {!showHistory && (
                                 <>
-                                  <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                  <td className="px-3.5 py-3 whitespace-nowrap">
                                     <input
                                       type="text"
                                       placeholder="Enter remarks"
                                       value={remarksData[task.id] || ""}
                                       onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                      className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
+                                      className="w-full min-w-[130px] h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-xs text-slate-800 disabled:opacity-40 transition-colors"
                                       disabled={!isModifyAllowed || !selectedItems.has(task.id)}
                                     />
                                   </td>
-                                  <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 bg-emerald-50/30">
-                                    <div className="flex flex-col gap-2">
+                                  <td className="px-3.5 py-3 whitespace-nowrap">
+                                    <div className="flex items-center gap-2">
                                       {imagePreviews[task.id] && (
-                                        <div className="relative w-16 h-16 mb-1 group">
+                                        <div className="relative w-8 h-8 shrink-0 group">
                                           <img
                                             src={imagePreviews[task.id]}
-                                            className="w-full h-full object-cover rounded-md border-2 border-purple-200 shadow-sm"
+                                            className="w-full h-full object-cover rounded-md border border-slate-200 shadow-2xs"
                                             alt="Preview"
                                           />
                                           <button
@@ -1632,20 +1614,20 @@ const WorkTasksTab = ({
                                                 return next;
                                               });
                                             }}
-                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                           >
                                             <X size={10} />
                                           </button>
                                         </div>
                                       )}
-                                      <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
+                                      <label className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${selectedItems.has(task.id) ? "bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 border-indigo-100" : "bg-slate-50 text-slate-400 border-slate-200/60 cursor-not-allowed"}`}>
                                         <Camera className="h-3.5 w-3.5" />
                                         <span>
                                           {uploadedImages[task.id]
-                                            ? "Retake Photo"
+                                            ? "Retake"
                                             : (task.proof_required || task.task_assignments?.master_work_tasks?.proof_required || task.master_work_tasks?.proof_required || task.require_attachment || task.attachment)
-                                            ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span>
-                                            : "Take Photo"}
+                                            ? <span>Photo <span className="text-rose-500 font-bold">*</span></span>
+                                            : "Photo"}
                                         </span>
                                         <input
                                           type="file"
@@ -1678,10 +1660,19 @@ const WorkTasksTab = ({
                       })
                     ) : (
                       <tr>
-                        <td colSpan={tableHeaders.length + 6} className="px-6 py-20 text-center text-gray-400">
-                          <div className="flex flex-col items-center gap-2">
-                            <Search size={40} className="text-gray-200" />
-                            <p>No {showHistory ? "history" : "pending tasks"} found.</p>
+                        <td colSpan={tableHeaders.length + 6} className="px-6 py-20 text-center">
+                          <div className="flex flex-col items-center justify-center max-w-sm mx-auto text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-2 border border-slate-200/60">
+                              <Search size={22} />
+                            </div>
+                            <h3 className="text-sm font-bold text-slate-800">No {showHistory ? "history records" : "tasks"} found</h3>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {debouncedSearchTerm
+                                ? `No tasks matching "${debouncedSearchTerm}". Try different search terms.`
+                                : shopFilter !== "all"
+                                ? `No tasks found for ${shopFilter} under current filters.`
+                                : "All assigned tasks are up to date."}
+                            </p>
                           </div>
                         </td>
                       </tr>
@@ -1846,20 +1837,20 @@ const WorkTasksTab = ({
                                       if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
                                       if (ds === "UPCOMING") {
                                         return (
-                                          <div className="flex flex-col gap-1 items-start">
-                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                              <Clock size={11} className="shrink-0 text-emerald-600" />
+                                          <div className="inline-flex items-center gap-1.5 flex-wrap">
+                                            <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-sky-50 text-sky-700 border border-sky-200/80">Upcoming</span>
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-slate-50 text-slate-600 border border-slate-200/80">
+                                              <Clock size={11} className="shrink-0 text-sky-600" />
                                               <span>Starts in {getWorkTaskTimeUntilStart(task, currentTime)}</span>
                                             </span>
                                           </div>
                                         );
                                       }
                                       return (
-                                        <div className="flex flex-col gap-1 items-start">
-                                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>
-                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">
-                                            <Clock size={11} className="shrink-0 animate-pulse text-red-500" />
+                                        <div className="inline-flex items-center gap-1.5 flex-wrap">
+                                          <span className="px-2.5 py-0.5 inline-flex text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">Active</span>
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-rose-50 text-rose-600 border border-rose-200/80">
+                                            <Clock size={11} className="shrink-0 animate-pulse text-rose-500" />
                                             <span>Expires in {getWorkTaskRemainingExpiry(task, currentTime)}</span>
                                           </span>
                                         </div>

@@ -142,6 +142,17 @@ const monthNames = [
   "July", "August", "September", "October", "November", "December"
 ];
 
+// Same payable rule as Payroll.jsx: Loss of Pay / Unpaid / Non Payable leaves are not payable
+const isLeavePayable = (leave) => {
+  const isPayableVal = String(leave?.is_payable ?? '').trim().toLowerCase();
+  const leaveTypeVal = String(leave?.leave_type ?? '').trim().toLowerCase();
+  const nonPayable = isPayableVal.includes('non') || isPayableVal.includes('unpaid') || isPayableVal.includes('loss');
+  const payable = isPayableVal.includes('payable') || isPayableVal.includes('paid') || isPayableVal === 'yes' || isPayableVal === 'true';
+  if (nonPayable) return false;
+  if (!payable && (leaveTypeVal.includes('unpaid') || leaveTypeVal.includes('loss of pay'))) return false;
+  return true;
+};
+
 export default function EmployeeOverviewModal({
   isOpen,
   onClose,
@@ -155,6 +166,7 @@ export default function EmployeeOverviewModal({
 
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [rosterLogs, setRosterLogs] = useState([]);
+  const [leaveLogs, setLeaveLogs] = useState([]);
   const [holidayLogs, setHolidayLogs] = useState([]);
   const [learningSubmission, setLearningSubmission] = useState(null);
   const [learningLoading, setLearningLoading] = useState(false);
@@ -402,6 +414,23 @@ export default function EmployeeOverviewModal({
       } else {
         setRosterLogs([]);
       }
+
+      // 3. Fetch approved leaves overlapping this month
+      const { data: leaveData } = await supabase
+        .from('hr_management_leaves')
+        .select('*')
+        .lte('from_date', endDate)
+        .gte('to_date', startDate);
+
+      setLeaveLogs((leaveData || []).filter(l => {
+        if (String(l.status || '').trim().toLowerCase() !== 'approved') return false;
+        const lid = String(l.employee_id || '').trim().toLowerCase();
+        const lidClean = lid.replace(/^0+/, '');
+        return uniqueIds.some(candId => {
+          const c = candId.toLowerCase();
+          return lid === c || (lidClean && lidClean === c.replace(/^0+/, ''));
+        });
+      }));
     } catch (err) {
       console.error('Error fetching attendance in Overview modal:', err);
     } finally {
@@ -560,6 +589,7 @@ export default function EmployeeOverviewModal({
   let totalDayOff = 0;
   let totalHoliday = 0;
   let totalUnpunchedHoliday = 0;
+  let totalPayableLeave = 0;
   let totalLateMins = 0;
   let totalWorkMs = 0;
   let workingDaysCount = 0;
@@ -694,7 +724,8 @@ export default function EmployeeOverviewModal({
     const statusLower = String(status || '').toLowerCase().trim();
     const isExplicitWeeklyOff = statusLower === 'weekly off' || statusLower === 'wo' || statusLower === 'weeklyoff' || isRosterWeeklyOff;
     const isExplicitDayOff = statusLower === 'day off' || statusLower === 'do' || statusLower === 'dayoff' || isRosterDayOff;
-    const isExplicitOnLeave = statusLower === 'on leave' || statusLower === 'leave';
+    const matchedLeave = leaveLogs.find(l => l.from_date <= dateStr && l.to_date >= dateStr) || null;
+    const isExplicitOnLeave = statusLower === 'on leave' || statusLower === 'leave' || !!matchedLeave;
     const isExplicitHalfDay = (
       statusLower === 'half day' || 
       statusLower === 'hd' || 
@@ -749,6 +780,8 @@ export default function EmployeeOverviewModal({
         totalDayOff++;
       } else if (status === 'Absent') {
         totalAbsent++;
+      } else if (status === 'On Leave' && matchedLeave && isLeavePayable(matchedLeave)) {
+        totalPayableLeave++;
       }
 
       totalWorkMs += dayWorkMs;
@@ -826,7 +859,7 @@ export default function EmployeeOverviewModal({
   const totalWorkHrsInt = Math.floor(totalWorkHrsDec);
   const totalWorkMinsInt = Math.round((totalWorkHrsDec - totalWorkHrsInt) * 60);
   const totalWorkFormatted = `${totalWorkHrsInt}h ${totalWorkMinsInt}m`;
-  const totalPayableDays = totalPresent + (totalHalfDay * 0.5) + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff;
+  const totalPayableDays = totalPresent + (totalHalfDay * 0.5) + totalUnpunchedHoliday + totalWeeklyOff + totalDayOff + totalPayableLeave;
 
   return (
     <div

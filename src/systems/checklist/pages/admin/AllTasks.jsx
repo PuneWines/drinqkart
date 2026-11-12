@@ -547,7 +547,6 @@ const AllTasks = () => {
           completionField = "submission_date";
           if (showHistory) {
             headers = [
-              { id: "time_status", label: "Time" },
               { id: "id", label: "ID" },
               { id: "task_description", label: "Description" },
               { id: "shop", label: "Shop" },
@@ -562,7 +561,6 @@ const AllTasks = () => {
             ];
           } else {
             headers = [
-              { id: "time_status", label: "Time" },
               { id: "id", label: "ID" },
               { id: "task_description", label: "Description" },
               { id: "shop", label: "Shop" },
@@ -586,7 +584,6 @@ const AllTasks = () => {
           nameField = "assigned_person";
           if (showHistory) {
             headers = [
-              { id: "time_status", label: "Time Status" },
               { id: "id", label: "Task ID" },
               { id: "issue_description", label: "Issue Detail" },
               { id: "shop", label: "Shop" },
@@ -604,7 +601,6 @@ const AllTasks = () => {
           } else {
             headers = [
               { id: "action", label: "Action" },
-              { id: "time_status", label: "Time" },
               { id: "id", label: "ID" },
               { id: "issue_description", label: "Detail" },
               { id: "shop", label: "Shop" },
@@ -626,7 +622,6 @@ const AllTasks = () => {
           completionField = "status";
           nameField = "doer_name";
           headers = [
-            { id: "time_status", label: "Time" },
             { id: "task_id", label: "ID" },
             { id: "task_description", label: "Description" },
             { id: "shop", label: "Shop" },
@@ -646,7 +641,6 @@ const AllTasks = () => {
           dateColumn = "task_start_date"; // task_start_date = original admin start date; used for lte filter in query
           completionField = "submission_date";
           headers = [
-            { id: "time_status", label: "Time" },
             { id: "id", label: "ID" },
             { id: "task_description", label: "Description" },
             { id: "shop", label: "Shop" },
@@ -662,7 +656,7 @@ const AllTasks = () => {
           break;
       }
 
-      setTableHeaders(showHistory ? headers.filter(h => h.id !== "time_status") : headers);
+      setTableHeaders(headers);
 
       let query = supabase.from(tableName).select("*");
 
@@ -1839,7 +1833,7 @@ const AllTasks = () => {
 
 
             {/* Table Container */}
-            <div className="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
 
               {showHistory && (
                 <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50 flex flex-col sm:flex-row gap-3 items-center">
@@ -1870,7 +1864,7 @@ const AllTasks = () => {
                 </div>
               )}
 
-              <div className="min-h-[300px]">
+              <div>
                 {isLoading ? (
                   <div className="flex flex-col items-center justify-center py-20">
                     <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-500 mb-2"></div>
@@ -1884,9 +1878,9 @@ const AllTasks = () => {
                 ) : (
                   <>
                     {/* Desktop view */}
-                    <div className="hidden md:block overflow-auto max-h-[68vh] custom-scrollbar">
-                      <table className="min-w-full divide-y divide-gray-200 relative">
-                        <thead className="bg-gray-50 sticky top-0 z-20 shadow-xs transition-all duration-300">
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-left border-collapse">
+                        <thead className="bg-slate-50 text-slate-600 text-[11px] font-bold tracking-wider uppercase border-b border-slate-200 select-none">
                           <tr>
                             {!showHistory && (
                               <th className="px-3 py-2.5 text-left font-bold text-gray-900">
@@ -2083,30 +2077,34 @@ const AllTasks = () => {
                                               )
                                               : header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date" || header.id === "updated_at" || header.id === "current_date"
                                                 ? (
-                                                  <div className="flex flex-col">
-                                                    <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
-                                                    <span className="text-[11px] text-gray-400">{header.id === "current_date" ? (task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : "") : formatTimeOnly(task[header.id])}</span>
+                                                  <div className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs">
+                                                    <span className="font-semibold text-slate-800">{formatDate(task[header.id])}</span>
+                                                    {(header.id === "current_date" ? (task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : "") : formatTimeOnly(task[header.id])) ? (
+                                                      <span className="text-[11px] text-slate-400 font-mono">
+                                                        {header.id === "current_date" ? (task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : "") : formatTimeOnly(task[header.id])}
+                                                      </span>
+                                                    ) : null}
                                                   </div>
                                                 )
                                                 : (header.id === "id" || header.id === "task_id")
                                                   ? (
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="font-bold text-gray-900">{task[header.id]}</span>
+                                                    <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                                      <span className="font-mono font-bold text-slate-900 text-xs">{task[header.id]}</span>
                                                       {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
-                                                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded uppercase tracking-tighter border border-amber-200 shadow-sm animate-pulse">Extended</span>
+                                                        <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded border border-amber-200 uppercase">Extended</span>
                                                       )}
                                                     </div>
                                                   )
-                                                  : header.id === "submission_date"
-                                                    ? (activeTab === "maintenance" && showHistory)
-                                                      ? (
-                                                        <div className="flex flex-col">
-                                                          <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
-                                                          <span className="text-[11px] text-gray-400">{formatTimeOnly(task[header.id])}</span>
-                                                        </div>
-                                                      )
-                                                      : formatDateWithTime(task[header.id])
-                                                    : header.id === "status"
+                                                : header.id === "submission_date"
+                                                  ? (activeTab === "maintenance" && showHistory)
+                                                    ? (
+                                                      <div className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs">
+                                                        <span className="font-semibold text-slate-800">{formatDate(task[header.id])}</span>
+                                                        {formatTimeOnly(task[header.id]) ? <span className="text-[11px] text-slate-400 font-mono">{formatTimeOnly(task[header.id])}</span> : null}
+                                                      </div>
+                                                    )
+                                                    : formatDateWithTime(task[header.id])
+                                                : header.id === "status"
                                                       ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
                                                         ? (
                                                           <select

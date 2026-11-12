@@ -1063,8 +1063,10 @@ const AttendanceDaily = () => {
     );
 
     // If marked absent explicitly (or manual punches has absent: true)
+    // Weekly Off / Day Off / On Leave / Half Day / Holiday also store absent:true but keep their own status
+    const keepsOwnStatus = ['Half Day', 'Weekly Off', 'Day Off', 'On Leave', 'Holiday', 'HOLIDAY'].includes(modified.status);
     if (modified.manual_punches?.absent === true || modified.manual_punches?.manual?.absent === true || (isManualRecord && modified.status === 'Absent')) {
-      modified.status = 'Absent';
+      modified.status = keepsOwnStatus ? modified.status : 'Absent';
       modified.in_time = '-';
       modified.out_time = '-';
       modified.working_hour = '00:00:00';
@@ -2511,12 +2513,40 @@ const AttendanceDaily = () => {
     const record = attendanceMap.get(`${empIdClean}_${date}`) || (numEmpId ? attendanceMap.get(`${numEmpId}_${date}`) : null);
 
     if (record) {
-      const isManualAbsent = record.manual_punches?.absent === true ||
+      const keepsOwnStatus = ['Half Day', 'Weekly Off', 'Day Off', 'On Leave', 'Holiday', 'HOLIDAY'].includes(record.status);
+      const isManualAbsent = !keepsOwnStatus && (
+        record.manual_punches?.absent === true ||
         record.manual_punches?.manual?.absent === true ||
         (record.manual_punches?.is_manual === true && record.status === 'Absent') ||
-        record.status === 'Absent';
+        record.status === 'Absent');
 
       if (isManualAbsent) {
+        // An approved leave or roster weekly/day off overrides a stored Absent row that has no punches
+        const absentHasPunches = Boolean(
+          (record.in_time && record.in_time !== '-') ||
+          (record.out_time && record.out_time !== '-')
+        );
+        if (!absentHasPunches) {
+          const overrideLeave = getLeaveForEmployeeAndDate(empIdClean, date);
+          if (overrideLeave) {
+            return {
+              ...record,
+              status: 'On Leave',
+              in_time: '-',
+              out_time: '-',
+              leave_type: overrideLeave.leave_type || overrideLeave.leaveType || 'Approved Leave',
+              reason: overrideLeave.reason || overrideLeave.remarks || 'Approved Leave Application'
+            };
+          }
+          const overrideRoster = getEmployeeRoster(employeeId, date);
+          const oType = (overrideRoster?.shift_type || '').trim().toLowerCase();
+          if (oType === 'day off' || oType === 'do') {
+            return { ...record, status: 'Day Off', in_time: '-', out_time: '-' };
+          }
+          if (oType === 'weekly off' || oType === 'wo' || oType === 'off') {
+            return { ...record, status: 'Weekly Off', in_time: '-', out_time: '-' };
+          }
+        }
         return {
           ...record,
           status: 'Absent',
