@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
+import { isLeavePayable } from '../utils/leavePayable';
 
 const Payroll = () => {
     const { user: authUser } = useAuth();
@@ -874,15 +875,8 @@ const Payroll = () => {
                         const status = leave.status?.toString().trim().toLowerCase();
                         if (status !== 'approved') return;
 
-                        const isPayableVal = leave.is_payable?.toString().trim().toLowerCase() || '';
-                        const leaveTypeVal = leave.leave_type?.toString().trim().toLowerCase() || '';
-
-                        // If is_payable explicitly indicates non-payable / unpaid / loss of pay, skip.
-                        const isExplicitlyNonPayable = isPayableVal.includes('non') || isPayableVal.includes('unpaid') || isPayableVal.includes('loss');
-                        const isExplicitlyPayable = isPayableVal.includes('payable') || isPayableVal.includes('paid') || isPayableVal === 'yes' || isPayableVal === 'true';
-
-                        if (isExplicitlyNonPayable) return;
-                        if (!isExplicitlyPayable && (leaveTypeVal.includes('unpaid') || leaveTypeVal.includes('loss of pay'))) return;
+                        // Shared rule: skip non-payable / unpaid / loss of pay leaves
+                        if (!isLeavePayable(leave)) return;
 
                         // Calculate overlapping days within the selected month
                         const leaveFrom = new Date(leave.from_date);

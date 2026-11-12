@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { isLeavePayable } from '../utils/leavePayable';
 
 const parseDateTimeHelper = (str, dateStr = '') => {
   if (!str || str === '-') return null;
@@ -141,17 +142,6 @@ const monthNames = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
 ];
-
-// Same payable rule as Payroll.jsx: Loss of Pay / Unpaid / Non Payable leaves are not payable
-const isLeavePayable = (leave) => {
-  const isPayableVal = String(leave?.is_payable ?? '').trim().toLowerCase();
-  const leaveTypeVal = String(leave?.leave_type ?? '').trim().toLowerCase();
-  const nonPayable = isPayableVal.includes('non') || isPayableVal.includes('unpaid') || isPayableVal.includes('loss');
-  const payable = isPayableVal.includes('payable') || isPayableVal.includes('paid') || isPayableVal === 'yes' || isPayableVal === 'true';
-  if (nonPayable) return false;
-  if (!payable && (leaveTypeVal.includes('unpaid') || leaveTypeVal.includes('loss of pay'))) return false;
-  return true;
-};
 
 export default function EmployeeOverviewModal({
   isOpen,
@@ -355,13 +345,25 @@ export default function EmployeeOverviewModal({
         logsQuery = logsQuery.or(orClauses.join(','));
       }
 
-      const [{ data: logsData }, { data: dbHolidays }] = await Promise.all([
+      // Fetch everything in parallel and commit all state together, so the totals
+      // (e.g. Payable Days) never render from partial data
+      const [{ data: logsData }, { data: dbHolidays }, { data: rosterData }, { data: leaveData }] = await Promise.all([
         logsQuery,
         supabase
           .from('holidays')
           .select('*')
           .gte('holiday_date', startDate)
-          .lte('holiday_date', endDate)
+          .lte('holiday_date', endDate),
+        supabase
+          .from('hr_management_shift_roster')
+          .select('*')
+          .gte('date', startDate)
+          .lte('date', endDate),
+        supabase
+          .from('hr_management_leaves')
+          .select('*')
+          .lte('from_date', endDate)
+          .gte('to_date', startDate)
       ]);
 
       const combinedLogs = (logsData || []).map(l => ({ ...l, date: l.date || l.attendance_date }));
@@ -383,18 +385,9 @@ export default function EmployeeOverviewModal({
         return Boolean(eName && nameCol && nameCol === eName);
       });
 
-      setAttendanceLogs(filteredAtt);
-      setHolidayLogs(dbHolidays || []);
-
-      // 2. Fetch rosters
-      const { data: rosterData } = await supabase
-        .from('hr_management_shift_roster')
-        .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate);
-
+      let nextRosterLogs = [];
       if (rosterData) {
-        const filteredRoster = rosterData.filter(r => {
+        nextRosterLogs = rosterData.filter(r => {
           const idCol = String(r.employee_id || r.emp_id || '').trim().toLowerCase();
           const idColClean = idCol.replace(/^0+/, '');
           const nameCol = String(r.employee_name || r.name || '').trim().toLowerCase();
@@ -410,19 +403,9 @@ export default function EmployeeOverviewModal({
 
           return Boolean(eName && nameCol && nameCol === eName);
         });
-        setRosterLogs(filteredRoster);
-      } else {
-        setRosterLogs([]);
       }
 
-      // 3. Fetch approved leaves overlapping this month
-      const { data: leaveData } = await supabase
-        .from('hr_management_leaves')
-        .select('*')
-        .lte('from_date', endDate)
-        .gte('to_date', startDate);
-
-      setLeaveLogs((leaveData || []).filter(l => {
+      const nextLeaveLogs = (leaveData || []).filter(l => {
         if (String(l.status || '').trim().toLowerCase() !== 'approved') return false;
         const lid = String(l.employee_id || '').trim().toLowerCase();
         const lidClean = lid.replace(/^0+/, '');
@@ -430,7 +413,12 @@ export default function EmployeeOverviewModal({
           const c = candId.toLowerCase();
           return lid === c || (lidClean && lidClean === c.replace(/^0+/, ''));
         });
-      }));
+      });
+
+      setAttendanceLogs(filteredAtt);
+      setHolidayLogs(dbHolidays || []);
+      setRosterLogs(nextRosterLogs);
+      setLeaveLogs(nextLeaveLogs);
     } catch (err) {
       console.error('Error fetching attendance in Overview modal:', err);
     } finally {
@@ -725,7 +713,8 @@ export default function EmployeeOverviewModal({
     const isExplicitWeeklyOff = statusLower === 'weekly off' || statusLower === 'wo' || statusLower === 'weeklyoff' || isRosterWeeklyOff;
     const isExplicitDayOff = statusLower === 'day off' || statusLower === 'do' || statusLower === 'dayoff' || isRosterDayOff;
     const matchedLeave = leaveLogs.find(l => l.from_date <= dateStr && l.to_date >= dateStr) || null;
-    const isExplicitOnLeave = statusLower === 'on leave' || statusLower === 'leave' || !!matchedLeave;
+    // Leave only counts when an approved leave covers the day; a stale stored "On Leave" status is ignored
+    const isExplicitOnLeave = !!matchedLeave;
     const isExplicitHalfDay = (
       statusLower === 'half day' || 
       statusLower === 'hd' || 
@@ -846,6 +835,9 @@ export default function EmployeeOverviewModal({
       isHoliday: isBeforeJoining ? false : isExplicitHoliday,
       isWeeklyOff: isBeforeJoining ? false : isExplicitWeeklyOff,
       isDayOff: isBeforeJoining ? false : isExplicitDayOff,
+      leaveUnpaid: !matchedLeave || !isLeavePayable(matchedLeave),
+      leaveUnlinked: !matchedLeave,
+      leaveType: matchedLeave?.leave_type || null,
       shiftSegments,
       rawPunchList,
       hasValidWorkingPunch: isBeforeJoining ? false : (hasValidWorkingPunch && !isSingleMidnightPunch),
@@ -986,7 +978,7 @@ export default function EmployeeOverviewModal({
             </div>
             <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 text-center">
               <p className="text-[10px] font-medium text-cyan-300 uppercase tracking-wider">Payable Days</p>
-              <p className="text-base font-bold text-cyan-300 mt-0.5">{totalPayableDays}</p>
+              <p className="text-base font-bold text-cyan-300 mt-0.5">{loading ? '…' : totalPayableDays}</p>
             </div>
             <div className="bg-emerald-500/10 rounded-xl p-2 border border-emerald-500/20 text-center">
               <p className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Present</p>
@@ -1071,7 +1063,9 @@ export default function EmployeeOverviewModal({
                               : isWeekendAbsent 
                               ? 'bg-red-100/70 hover:bg-red-100 border-l-4 border-l-red-500' 
                               : row.status === 'On Leave'
-                              ? 'bg-rose-50/80 hover:bg-rose-100/80 border-l-4 border-l-rose-400'
+                              ? (row.leaveUnpaid
+                                ? 'bg-red-100/80 hover:bg-red-100 border-l-4 border-l-red-500'
+                                : 'bg-sky-50/80 hover:bg-sky-100/80 border-l-4 border-l-sky-400')
                               : row.status === 'Absent'
                               ? 'bg-red-50/40 hover:bg-red-50/80'
                               : 'hover:bg-slate-50/80'
@@ -1171,7 +1165,9 @@ export default function EmployeeOverviewModal({
                                   if (row.status === 'Half Day' || row.status === 'HD' || row.status === 'H') return <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold">HD</span>;
                                   if (row.status === 'Weekly Off' || row.status === 'WO') return <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">WO</span>;
                                   if (row.status === 'Day Off' || row.status === 'DO') return <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700 text-[10px] font-bold">DO</span>;
-                                  if (row.status === 'On Leave' || row.status === 'Leave') return <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">Leave</span>;
+                                  if (row.status === 'On Leave' || row.status === 'Leave') return row.leaveUnpaid
+                                    ? <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-300 text-[10px] font-bold">LP</span>
+                                    : <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold">Leave</span>;
                                   return <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-[10px] font-bold">A</span>;
                                 })()}
                               </td>
@@ -1332,8 +1328,10 @@ export default function EmployeeOverviewModal({
                         <span className="text-xs font-bold text-slate-800">📅 Day Off (Payable Day Off)</span>
                       </div>
                     ) : row.status === 'On Leave' ? (
-                      <div className="py-2.5 px-4 text-center rounded-xl bg-sky-100/80 border border-sky-300 flex items-center justify-center gap-2">
-                        <span className="text-xs font-bold text-sky-900">✈️ Approved Leave</span>
+                      <div className={`py-2.5 px-4 text-center rounded-xl border flex items-center justify-center gap-2 ${row.leaveUnpaid ? 'bg-red-100/80 border-red-300' : 'bg-sky-100/80 border-sky-300'}`}>
+                        <span className={`text-xs font-bold ${row.leaveUnpaid ? 'text-red-900' : 'text-sky-900'}`}>
+                          {row.leaveUnlinked ? '✈️ On Leave - no approved leave record (unpaid)' : row.leaveUnpaid ? '✈️ Loss of Pay Leave' : '✈️ Approved Leave (Payable)'}{row.leaveType ? ` · ${row.leaveType}` : ''}
+                        </span>
                       </div>
                     ) : row.status === 'Half Day' || row.status === 'HD' || row.status === 'H' ? (
                       <div className="py-2.5 px-4 text-center rounded-xl bg-yellow-100/70 border border-yellow-300 flex items-center justify-center gap-2">

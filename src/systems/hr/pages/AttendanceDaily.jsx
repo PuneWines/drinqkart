@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import useShopStore from '../../purchase/store/useShopStore';
 import { useAuth } from '../../../context/AuthContext';
 import { getPagePermission } from '../../../utils/permissionUtils';
+import { isLeavePayable } from '../utils/leavePayable';
 const ALL_DEVICES_OPTION = { name: 'ALL DEVICES', serial: 'ALL', apiName: 'ALL' };
 
 // Module-level shared formatter and helpers to eliminate allocation churn
@@ -374,6 +375,12 @@ const STATUS_CONFIG = {
   'Holiday': { color: 'bg-purple-100 text-purple-700', label: 'HD', fullLabel: 'Holiday', bgColor: 'bg-purple-200/60' },
   'Day Off': { color: 'bg-gray-100 text-gray-700', label: 'DO', fullLabel: 'Day Off', bgColor: 'bg-gray-200' },
   'Future': { color: 'bg-transparent text-gray-300 font-normal', label: '-', fullLabel: 'Future', bgColor: 'bg-transparent' },
+};
+
+// Cell look for On Leave days: payable leave is blue, loss of pay / non payable is red
+const LEAVE_CELL_CONFIG = {
+  payable: { color: 'bg-sky-100 text-sky-700', label: 'PL', fullLabel: 'Paid Leave' },
+  unpaid: { color: 'bg-red-100 text-red-700', label: 'LP', fullLabel: 'Loss of Pay' },
 };
 
 const AttendanceDaily = () => {
@@ -2534,6 +2541,7 @@ const AttendanceDaily = () => {
               status: 'On Leave',
               in_time: '-',
               out_time: '-',
+              leave_payable: isLeavePayable(overrideLeave),
               leave_type: overrideLeave.leave_type || overrideLeave.leaveType || 'Approved Leave',
               reason: overrideLeave.reason || overrideLeave.remarks || 'Approved Leave Application'
             };
@@ -2557,6 +2565,32 @@ const AttendanceDaily = () => {
 
       // If it is Half Day, Weekly Off, Day Off, On Leave, Holiday - return as is
       if (['Half Day', 'Weekly Off', 'Day Off', 'On Leave', 'Holiday', 'HOLIDAY'].includes(record.status)) {
+        if (record.status === 'On Leave') {
+          const recLeave = getLeaveForEmployeeAndDate(empIdClean, date);
+          if (recLeave) {
+            return { ...record, leave_payable: isLeavePayable(recLeave), leave_type: record.leave_type || recLeave.leave_type || recLeave.leaveType };
+          }
+          // Stored On Leave but no approved leave covers this date (e.g. leave was rejected):
+          // fall back to punches, then roster off, then Absent
+          const staleHasPunches = Boolean(
+            (record.in_time && record.in_time !== '-') ||
+            (record.out_time && record.out_time !== '-') ||
+            (record.punch_log && record.punch_log !== '-')
+          );
+          if (staleHasPunches) {
+            const staleRoster = getEmployeeRoster(employeeId, date);
+            const staleLate = record.in_time ? calculateLateMinutes(record.in_time, date, staleRoster) : (record.late_minute || 0);
+            return { ...record, late_minute: staleLate, status: staleLate > 0 ? 'Late' : 'Present' };
+          }
+          const staleRosterType = (getEmployeeRoster(employeeId, date)?.shift_type || '').trim().toLowerCase();
+          if (staleRosterType === 'day off' || staleRosterType === 'do') {
+            return { ...record, status: 'Day Off', in_time: '-', out_time: '-' };
+          }
+          if (staleRosterType === 'weekly off' || staleRosterType === 'wo' || staleRosterType === 'off') {
+            return { ...record, status: 'Weekly Off', in_time: '-', out_time: '-' };
+          }
+          return { ...record, status: 'Absent', in_time: '-', out_time: '-' };
+        }
         return record;
       }
 
@@ -2606,6 +2640,7 @@ const AttendanceDaily = () => {
         status: 'On Leave',
         in_time: '-',
         out_time: '-',
+        leave_payable: isLeavePayable(approvedLeave),
         leave_type: approvedLeave.leave_type || approvedLeave.leaveType || 'Approved Leave',
         reason: approvedLeave.reason || approvedLeave.remarks || 'Approved Leave Application'
       };
@@ -3420,7 +3455,8 @@ const AttendanceDaily = () => {
                               while (j < days.length) {
                                 const nextAtt = getAttendanceForDate(employee.id, days[j].fullDate);
                                 const nextSt = nextAtt.status || 'Absent';
-                                if (nextSt === 'On Leave') {
+                                // Stop the streak when payable status changes so paid and loss-of-pay leave stay separate
+                                if (nextSt === 'On Leave' && (nextAtt.leave_payable !== false) === (att.leave_payable !== false)) {
                                   streak.push({ day: days[j], idx: j, attendance: nextAtt, status: nextSt });
                                   j++;
                                 } else {
@@ -3428,15 +3464,28 @@ const AttendanceDaily = () => {
                                 }
                               }
 
-                              segments.push({
-                                type: 'merged_span',
-                                spanKind: 'leave',
-                                colSpan: streak.length,
-                                startIndex: i,
-                                streak: streak,
-                                startDay: streak[0].day,
-                                endDay: streak[streak.length - 1].day
-                              });
+                              if (streak.length === 1) {
+                                // Single leave day renders as a normal cell (like P / WO / DO)
+                                segments.push({
+                                  type: 'single',
+                                  colSpan: 1,
+                                  day: d,
+                                  idx: i,
+                                  attendance: att,
+                                  status: st
+                                });
+                              } else {
+                                segments.push({
+                                  type: 'merged_span',
+                                  spanKind: 'leave',
+                                  colSpan: streak.length,
+                                  startIndex: i,
+                                  streak: streak,
+                                  startDay: streak[0].day,
+                                  endDay: streak[streak.length - 1].day,
+                                  leaveUnpaid: att.leave_payable === false
+                                });
+                              }
                               i = j;
                             } else if (st === 'Absent') {
                               let j = i;
@@ -3514,7 +3563,7 @@ const AttendanceDaily = () => {
 
                               if (kind === 'present') presentCount += seg.colSpan;
                               else if (kind === 'late') lateCount += seg.colSpan;
-                              else if (kind === 'leave' || kind === 'absent') absentCount += seg.colSpan;
+                              else if (kind === 'absent' || (kind === 'leave' && seg.leaveUnpaid)) absentCount += seg.colSpan;
 
                               const isTopRow = empIdx < 2;
                               const isLeftCol = seg.startIndex <= 2;
@@ -3544,7 +3593,17 @@ const AttendanceDaily = () => {
                               let popoverTitle = '';
                               let badgeClass = '';
 
-                              if (kind === 'leave') {
+                              if (kind === 'leave' && seg.leaveUnpaid) {
+                                themeContainer = 'bg-gradient-to-r from-red-100 via-red-50 to-red-100 border-red-300 text-red-800 hover:bg-red-200 hover:border-red-400';
+                                themeBubbleGradient = 'from-red-600 to-red-700';
+                                themeBubbleBorder = 'border-t-red-700';
+                                themePulseDot = 'bg-red-500';
+                                themeNodeHovered = 'bg-red-600 text-white shadow-md scale-110 ring-2 ring-white z-20';
+                                themeNodeDefault = 'text-red-800 font-bold';
+                                labelText = `Loss of Pay (${seg.colSpan}d)`;
+                                popoverTitle = 'Loss of Pay Leave';
+                                badgeClass = 'bg-red-500/20 text-red-300 border-red-500/30';
+                              } else if (kind === 'leave') {
                                 themeContainer = 'bg-gradient-to-r from-blue-100 via-sky-50 to-blue-100 border-blue-300 text-blue-900 hover:bg-blue-200 hover:border-blue-400';
                                 themeBubbleGradient = 'from-blue-600 to-indigo-700';
                                 themeBubbleBorder = 'border-t-indigo-700';
@@ -3718,11 +3777,14 @@ const AttendanceDaily = () => {
 
                             // Single cell rendering
                             const { day, idx, attendance, status } = seg;
-                            const config = STATUS_CONFIG[status] || STATUS_CONFIG['Absent'];
+                            const isLeaveCell = status === 'On Leave';
+                            const config = isLeaveCell
+                              ? (attendance?.leave_payable === false ? LEAVE_CELL_CONFIG.unpaid : LEAVE_CELL_CONFIG.payable)
+                              : (STATUS_CONFIG[status] || STATUS_CONFIG['Absent']);
 
                             if (status === 'Present') presentCount++;
                             else if (status === 'Late') lateCount++;
-                            else if (status === 'Absent' || status === 'On Leave') absentCount++;
+                            else if (status === 'Absent' || (isLeaveCell && attendance?.leave_payable === false)) absentCount++;
                             else if (status === 'Half Day') halfDayCount++;
 
                             const isFuture = status === 'Future';
@@ -3739,7 +3801,9 @@ const AttendanceDaily = () => {
                                 onClick={() => !isFuture && handleEmployeeSelect(employee, day.fullDate, status, attendance.in_time, attendance.out_time)}
                               >
                                 <div className="relative inline-block">
-                                  <div className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${config.color} font-medium text-[10px] transition-transform ${!isFuture ? 'hover:scale-105' : ''}`}>
+                                  <div
+                                    title={isLeaveCell ? (attendance?.leave_unlinked ? 'On Leave - no approved leave record (unpaid)' : `${config.fullLabel}${attendance?.leave_type ? ` - ${attendance.leave_type}` : ''}`) : undefined}
+                                    className={`inline-flex items-center justify-center ${isLeaveCell && config.label.length > 1 ? 'min-w-5 px-1 h-5 rounded-full' : 'w-5 h-5 rounded-full'} ${config.color} font-medium text-[10px] transition-transform ${!isFuture ? 'hover:scale-105' : ''}`}>
                                     {config.label}
                                   </div>
                                   {(() => {
