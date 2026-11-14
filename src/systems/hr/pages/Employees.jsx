@@ -83,6 +83,11 @@ const resolveDeviceStore = (log, devices = []) => {
   return log.store_name || log.shop_name || log.device_name || log.device_location || '';
 };
 
+const formatVerifierLabel = (val) => {
+  if (!val) return '';
+  const s = String(val).trim();
+  return /^\d+$/.test(s) ? `Emp ID: ${s}` : s;
+};
 
 export default function EmployeeManagement() {
   const { user: authUser } = useAuth()
@@ -516,12 +521,12 @@ export default function EmployeeManagement() {
 
   const handleVerification = async (emp, newStatus) => {
     let remarks = null
-    if (newStatus === 'Rejected') {
+    if (newStatus === 'Rejected' || newStatus === 'Unverified') {
       remarks = await showPrompt({
-        title: 'Reject Employee Verification',
-        message: `Please specify the reason for rejecting ${emp.name_as_per_aadhar}:`,
+        title: 'Unverify Employee',
+        message: `Please specify the reason for marking ${emp.name_as_per_aadhar} as unverified:`,
         placeholder: 'e.g. Incomplete KYC, invalid document, mismatched name...',
-        confirmText: 'Confirm Rejection',
+        confirmText: 'Confirm Unverified',
         type: 'danger'
       })
       if (remarks === null) return
@@ -537,7 +542,7 @@ export default function EmployeeManagement() {
     const { error } = await supabase
       .from('hr_management_employees')
       .update({
-        verification_status: newStatus,
+        verification_status: newStatus === 'Unverified' ? 'Rejected' : newStatus,
         verified_by: authUser?.user_name || authUser?.name || authUser?.email || null,
         verified_at: new Date().toISOString(),
         verification_remarks: remarks
@@ -547,7 +552,7 @@ export default function EmployeeManagement() {
       toast.error('Could not update verification: ' + error.message)
       return
     }
-    toast.success(newStatus === 'Verified' ? `${emp.name_as_per_aadhar} verified successfully!` : 'Verification rejected.')
+    toast.success(newStatus === 'Verified' ? `${emp.name_as_per_aadhar} verified successfully!` : `${emp.name_as_per_aadhar} marked as Unverified.`)
     await fetchEmployees()
   }
 
@@ -563,16 +568,16 @@ export default function EmployeeManagement() {
   const renderPagination = () => {
     if (totalPages <= 1) return null;
     return (
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-50/80 border-t border-slate-200/80 text-xs font-sans">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 border-t border-slate-200/80 text-xs font-sans">
         <div className="text-slate-500 font-medium">
-          Showing <span className="font-semibold text-slate-800">{(activePage - 1) * pageSize + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(activePage * pageSize, filteredEmployees.length)}</span> of <span className="font-semibold text-slate-800">{filteredEmployees.length}</span> employees
+          Showing <span className="font-semibold text-slate-800 font-mono">{(activePage - 1) * pageSize + 1}</span> to <span className="font-semibold text-slate-800 font-mono">{Math.min(activePage * pageSize, filteredEmployees.length)}</span> of <span className="font-semibold text-slate-800 font-mono">{filteredEmployees.length}</span> employees
         </div>
         <div className="flex items-center gap-1.5">
           <button
             disabled={activePage === 1}
             type="button"
             onClick={() => setCurrentPage(activePage - 1)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold rounded-lg shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-semibold rounded-lg shadow-2xs cursor-pointer"
           >
             <ChevronLeft size={13} />
             <span>Previous</span>
@@ -588,7 +593,7 @@ export default function EmployeeManagement() {
                     <button
                       onClick={() => setCurrentPage(page)}
                       type="button"
-                      className={`min-w-7 h-7 px-2 flex items-center justify-center font-bold text-xs rounded-lg transition-colors cursor-pointer ${
+                      className={`min-w-8 h-8 px-2 flex items-center justify-center font-bold font-mono text-xs rounded-lg transition-colors cursor-pointer ${
                         activePage === page
                           ? 'bg-indigo-600 text-white shadow-2xs'
                           : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'
@@ -604,7 +609,7 @@ export default function EmployeeManagement() {
             disabled={activePage === totalPages}
             type="button"
             onClick={() => setCurrentPage(activePage + 1)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold rounded-lg shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-semibold rounded-lg shadow-2xs cursor-pointer"
           >
             <span>Next</span>
             <ChevronRight size={13} />
@@ -1967,18 +1972,18 @@ export default function EmployeeManagement() {
                             </span>
                           )}
                         </div>
-                      ) : emp.verification_status === 'Rejected' ? (
-                        <div className="flex flex-col gap-1">
+                      ) : (emp.verification_status === 'Rejected' || emp.verification_status === 'Unverified') ? (
+                        <div className="flex flex-col gap-0.5">
                           <span
-                            title={emp.verification_remarks ? `Reason: ${emp.verification_remarks}` : 'Rejected'}
+                            title={emp.verification_remarks ? `Remarks: ${emp.verification_remarks}` : 'Unverified'}
                             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs w-fit"
                           >
                             <XCircle size={12} className="text-rose-600" />
-                            Rejected
+                            Unverified
                           </span>
                           {emp.verification_remarks && (
-                            <span className="text-[10px] text-rose-500 italic truncate max-w-[170px]" title={emp.verification_remarks}>
-                              "{emp.verification_remarks}"
+                            <span className="text-[10px] text-slate-500 font-medium truncate max-w-[170px]" title={emp.verification_remarks}>
+                              <span className="text-rose-600 font-semibold">Note:</span> "{emp.verification_remarks}"
                             </span>
                           )}
                         </div>
@@ -2846,6 +2851,7 @@ export default function EmployeeManagement() {
                   {(() => {
                     const liveEmp = employees.find(e => e.id === editingEmployee.id) || editingEmployee;
                     const vs = liveEmp.verification_status;
+                    const isUnverified = vs === 'Rejected' || vs === 'Unverified';
                     return (
                       <div className="bg-white border border-slate-200/90 rounded-xl shadow-2xs p-5 sm:p-6 transition-all">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -2868,24 +2874,24 @@ export default function EmployeeManagement() {
                             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
                               vs === 'Verified'
                                 ? 'bg-teal-50 text-teal-700 border border-teal-200/80 shadow-2xs'
-                                : vs === 'Rejected'
+                                : isUnverified
                                 ? 'bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs'
                                 : 'bg-amber-50 text-amber-700 border border-amber-200/80 shadow-2xs'
                             }`}>
                               <span className={`w-2 h-2 rounded-full ${
-                                vs === 'Verified' ? 'bg-teal-500' : vs === 'Rejected' ? 'bg-rose-500' : 'bg-amber-500 animate-pulse'
+                                vs === 'Verified' ? 'bg-teal-500' : isUnverified ? 'bg-rose-500' : 'bg-amber-500 animate-pulse'
                               }`}></span>
-                              {vs === 'Verified' ? 'Verified' : vs === 'Rejected' ? 'Rejected' : 'Action Required'}
+                              {vs === 'Verified' ? 'Office Verified' : isUnverified ? 'Unverified' : 'Action Required'}
                             </span>
                           </div>
                         </div>
 
-                        {/* Rejection Remarks / Verification details & Action Buttons */}
+                        {/* Unverified Remarks / Verification details & Action Buttons */}
                         <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             {liveEmp.verification_remarks ? (
                               <div className="text-xs bg-rose-50/70 border border-rose-200/80 rounded-xl p-3">
-                                <span className="font-bold text-rose-800">Rejection Remarks: </span>
+                                <span className="font-bold text-rose-800">Unverified Remarks: </span>
                                 <span className="italic text-rose-700 font-sans">"{liveEmp.verification_remarks}"</span>
                               </div>
                             ) : vs === 'Verified' ? (
@@ -2898,7 +2904,7 @@ export default function EmployeeManagement() {
                               </div>
                             ) : (
                               <p className="text-xs text-slate-400 italic">
-                                Action required: Click Verify to approve this employee or Reject to provide rejection remarks.
+                                Action required: Click Verify to approve this employee or Unverify to record remarks.
                               </p>
                             )}
                           </div>
@@ -2912,17 +2918,17 @@ export default function EmployeeManagement() {
                                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
                                 >
                                   <Check size={14} strokeWidth={2.5} />
-                                  <span>{vs === 'Rejected' ? 'Re-verify' : 'Verify'}</span>
+                                  <span>{isUnverified ? 'Re-verify' : 'Verify'}</span>
                                 </button>
                               )}
-                              {vs !== 'Rejected' && (
+                              {!isUnverified && (
                                 <button
                                   type="button"
                                   onClick={() => handleVerification(liveEmp, 'Rejected')}
                                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs hover:border-rose-300 transition-all cursor-pointer"
                                 >
                                   <X size={14} strokeWidth={2.5} />
-                                  <span>Reject</span>
+                                  <span>Unverify</span>
                                 </button>
                               )}
                             </div>
@@ -3235,6 +3241,7 @@ export default function EmployeeManagement() {
                   {(() => {
                     const liveEmp = employees.find(e => e.id === selectedEmployee.id) || selectedEmployee;
                     const vs = liveEmp.verification_status;
+                    const isUnverified = vs === 'Rejected' || vs === 'Unverified';
                     return (
                       <div className="bg-white border border-slate-200/90 rounded-xl shadow-2xs p-5 sm:p-6 transition-all">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -3257,24 +3264,24 @@ export default function EmployeeManagement() {
                             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
                               vs === 'Verified'
                                 ? 'bg-teal-50 text-teal-700 border border-teal-200/80 shadow-2xs'
-                                : vs === 'Rejected'
+                                : isUnverified
                                 ? 'bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs'
                                 : 'bg-amber-50 text-amber-700 border border-amber-200/80 shadow-2xs'
                             }`}>
                               <span className={`w-2 h-2 rounded-full ${
-                                vs === 'Verified' ? 'bg-teal-500' : vs === 'Rejected' ? 'bg-rose-500' : 'bg-amber-500 animate-pulse'
+                                vs === 'Verified' ? 'bg-teal-500' : isUnverified ? 'bg-rose-500' : 'bg-amber-500 animate-pulse'
                               }`}></span>
-                              {vs === 'Verified' ? 'Verified' : vs === 'Rejected' ? 'Rejected' : 'Action Required'}
+                              {vs === 'Verified' ? 'Office Verified' : isUnverified ? 'Unverified' : 'Action Required'}
                             </span>
                           </div>
                         </div>
 
-                        {/* Rejection Remarks / Verification details & Action Buttons */}
+                        {/* Unverified Remarks / Verification details & Action Buttons */}
                         <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             {liveEmp.verification_remarks ? (
                               <div className="text-xs bg-rose-50/70 border border-rose-200/80 rounded-xl p-3">
-                                <span className="font-bold text-rose-800">Rejection Remarks: </span>
+                                <span className="font-bold text-rose-800">Unverified Remarks: </span>
                                 <span className="italic text-rose-700 font-sans">"{liveEmp.verification_remarks}"</span>
                               </div>
                             ) : vs === 'Verified' ? (
@@ -3287,7 +3294,7 @@ export default function EmployeeManagement() {
                               </div>
                             ) : (
                               <p className="text-xs text-slate-400 italic">
-                                Action required: Click Verify to approve this employee or Reject to provide rejection remarks.
+                                Action required: Click Verify to approve this employee or Unverify to record remarks.
                               </p>
                             )}
                           </div>
@@ -3301,17 +3308,17 @@ export default function EmployeeManagement() {
                                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
                                 >
                                   <Check size={14} strokeWidth={2.5} />
-                                  <span>{vs === 'Rejected' ? 'Re-verify' : 'Verify'}</span>
+                                  <span>{isUnverified ? 'Re-verify' : 'Verify'}</span>
                                 </button>
                               )}
-                              {vs !== 'Rejected' && (
+                              {!isUnverified && (
                                 <button
                                   type="button"
                                   onClick={() => handleVerification(liveEmp, 'Rejected')}
                                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs hover:border-rose-300 transition-all cursor-pointer"
                                 >
                                   <X size={14} strokeWidth={2.5} />
-                                  <span>Reject</span>
+                                  <span>Unverify</span>
                                 </button>
                               )}
                             </div>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Toast from '../ui/Toast';
+import SortableTh from '../ui/SortableTh';
+import { sortRows } from '../../utils/sortRows';
 import {
   getShops,
   getDailySalesSummary,
@@ -23,8 +25,25 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
   const [selectedShopId, setSelectedShopId] = useState('');
 
   // Data state
-  const [records, setRecords] = useState([]);
+  const [rawRecords, setRawRecords] = useState([]);
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+
+  // Sorting: newest entry date first by default; click a column header to change.
+  // Derived from rawRecords, so edits, deletes and exports always follow the same order.
+  const [sort, setSort] = useState({ key: 'transaction_date', dir: 'desc' });
+  const handleSort = (key) => {
+    setSort(prev => prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: key === 'transaction_date' ? 'desc' : 'asc' });
+  };
+  const setRecords = setRawRecords;
+  const records = useMemo(() => {
+    const withDiff = rawRecords.map(r => ({
+      ...r,
+      diff: (parseFloat(r.total_sales_amt) || 0) - (parseFloat(r.total_closing_amount) || 0)
+    }));
+    return sortRows(withDiff, sort.key, sort.dir, ['created_at', 'desc']);
+  }, [rawRecords, sort]);
 
   // Today's sales state
   const [todaySales, setTodaySales] = useState({
@@ -415,14 +434,14 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead className="bg-slate-50/70 text-slate-600 text-xs font-bold uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">Shop Name</th>
-                <th className="px-6 py-4 text-right w-36">G-Pay Balance (₹)</th>
-                <th className="px-6 py-4 text-right w-36">Cash Balance (₹)</th>
-                <th className="px-6 py-4 text-right w-36">Expense (₹)</th>
-                <th className="px-6 py-4 text-right w-40">Net Sales Amount (₹)</th>
-                <th className="px-6 py-4 text-right w-40">Total Sales Amt (₹)</th>
-                <th className="px-6 py-4 text-right w-36">Diff (₹)</th>
+                <SortableTh label="Date" sortKey="transaction_date" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="Shop Name" sortKey="shop_name" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="G-Pay Balance (₹)" sortKey="gpay_amount" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-36" />
+                <SortableTh label="Cash Balance (₹)" sortKey="cash_amount" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-36" />
+                <SortableTh label="Expense (₹)" sortKey="expense_amount" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-36" />
+                <SortableTh label="Net Sales Amount (₹)" sortKey="total_closing_amount" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-40" />
+                <SortableTh label="Total Sales Amt (₹)" sortKey="total_sales_amt" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-40" />
+                <SortableTh label="Diff (₹)" sortKey="diff" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-36" />
                 {showActions && <th className="px-6 py-4 text-center w-36">Actions</th>}
               </tr>
             </thead>

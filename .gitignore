@@ -26,3 +26,5 @@ dist-ssr
 Sale Page NO 1.png
 k6_load_test.js
 query_optimization_indexes.sql
+src/systems/inventory/atomic_transactions_rpc.sql
+src/systems/inventory/schema_integrity_update.sql

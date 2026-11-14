@@ -123,27 +123,14 @@ export async function getLastClosingQty(itemId) {
 
 /**
  * Submit Purchase Transaction (Mode 1)
+ *
+ * Runs as ONE database transaction (RPC submit_purchase): the transaction row and
+ * all purchase item rows are written, or none are.
  */
 export async function submitPurchaseTransaction(date, vendorId, itemsList, shopId) {
   try {
-    // 1. Insert transaction
-    const { data: tx, error: txErr } = await supabase
-      .from('Inventory_inventory_transactions')
-      .insert([{
-        transaction_date: date,
-        transaction_type: 'purchase',
-        shop_id: shopId ? parseInt(shopId, 10) : null
-      }])
-      .select()
-      .single();
-
-    if (txErr) throw txErr;
-
-    // 2. Map items with transaction ID and vendor ID
     const purchaseItems = itemsList.map(item => ({
-      transaction_id: tx.id,
       item_id: item.itemId,
-      vendor_id: vendorId ? parseInt(vendorId, 10) : null,
       purchase_rate: parseFloat(item.rate) || 0,
       quantity: parseFloat(item.quantity) || 0,
       gst_percent: parseFloat(item.gst) || 0,
@@ -152,16 +139,18 @@ export async function submitPurchaseTransaction(date, vendorId, itemsList, shopI
       total_amount: parseFloat(item.total) || 0
     }));
 
-    // 3. Insert items detail
-    const { error: detailsErr } = await supabase
-      .from('Inventory_purchase_items')
-      .insert(purchaseItems);
+    const { data, error } = await supabase.rpc('submit_purchase', {
+      p_date: date,
+      p_vendor_id: vendorId ? parseInt(vendorId, 10) : null,
+      p_shop_id: shopId ? parseInt(shopId, 10) : null,
+      p_items: purchaseItems
+    });
 
-    if (detailsErr) throw detailsErr;
-    return { success: true, transactionId: tx.id };
+    if (error) throw error;
+    return { success: true, transactionId: data };
   } catch (err) {
     console.error('Purchase transaction insert failed:', err.message);
-    throw err;
+    throw friendlySaleAmountError(err);
   }
 }
 
@@ -211,45 +200,32 @@ export async function hasClosingStockForDate(date, shopId) {
 
 /**
  * Submit Closing Stock Transaction (Mode 2)
+ *
+ * Runs as ONE database transaction (RPC submit_closing_stock): the transaction row
+ * and the closing stock item row are written, or neither is.
  */
 export async function submitClosingStockTransaction(date, itemId, itemName, lastClosing, godownQty, counterQty, totalQty, shopId) {
   try {
-    // 1. Insert transaction
-    const { data: tx, error: txErr } = await supabase
-      .from('Inventory_inventory_transactions')
-      .insert([{
-        transaction_date: date,
-        transaction_type: 'closing_stock',
-        shop_id: shopId ? parseInt(shopId, 10) : null
-      }])
-      .select()
-      .single();
+    const { data, error } = await supabase.rpc('submit_closing_stock', {
+      p_date: date,
+      p_shop_id: shopId ? parseInt(shopId, 10) : null,
+      p_item_id: itemId,
+      p_last_closing: parseFloat(lastClosing) || 0,
+      p_godown: parseFloat(godownQty) || 0,
+      p_counter: parseFloat(counterQty) || 0,
+      p_total: parseFloat(totalQty) || 0
+    });
 
-    if (txErr) throw txErr;
-
-    // 2. Insert detail
-    const { error: detailErr } = await supabase
-      .from('Inventory_closing_stock_items')
-      .insert([{
-        transaction_id: tx.id,
-        item_id: itemId,
-        shop_id: shopId ? parseInt(shopId, 10) : null,
-        last_closing_qty: parseFloat(lastClosing) || 0,
-        godown_qty: parseFloat(godownQty) || 0,
-        counter_qty: parseFloat(counterQty) || 0,
-        total_qty: parseFloat(totalQty) || 0
-      }]);
-
-    if (detailErr) throw detailErr;
+    if (error) throw error;
 
     // sale_history is written at midnight by fn_midnight_stock_sync,
     // not here — multiple closing entries per day would otherwise create
     // duplicate rows with wrong sale quantities.
 
-    return { success: true, transactionId: tx.id };
+    return { success: true, transactionId: data };
   } catch (err) {
     console.error('Closing stock transaction failed:', err.message);
-    throw err;
+    throw friendlySaleAmountError(err);
   }
 }
 
@@ -311,11 +287,17 @@ function friendlySaleAmountError(err) {
   if (msg.includes('SHOP_NOT_FOUND')) {
     return new Error('Selected shop could not be found.');
   }
+  if (msg.includes('ROW_NOT_FOUND')) {
+    return new Error('This entry no longer exists. It may have already been deleted. Please refresh.');
+  }
+  if (msg.includes('NO_ITEMS')) {
+    return new Error('Add at least one item before submitting.');
+  }
   if (msg.includes('_pkey')) {
     return new Error('Database id counter is out of sync. Please contact the admin to run the sequence repair script.');
   }
   if (msg.includes('Could not find the function')) {
-    return new Error('Database function missing. Run src/systems/inventory/sale_amount_rpc.sql in Supabase.');
+    return new Error('Database function missing. Run sale_amount_rpc.sql and atomic_transactions_rpc.sql (src/systems/inventory) in Supabase.');
   }
   return new Error(msg);
 }
@@ -850,43 +832,14 @@ export async function updatePurchaseItemRow(rowId, fields) {
  */
 export async function deletePurchaseItemRow(rowId) {
   try {
-    // Fetch transaction_id before deleting (for parent cleanup)
-    const { data: row, error: fetchErr } = await supabase
-      .from('Inventory_purchase_items')
-      .select('transaction_id')
-      .eq('id', rowId)
-      .single();
-
-    if (fetchErr) throw fetchErr;
-    const txId = row.transaction_id;
-
-    const { error: deleteErr } = await supabase
-      .from('Inventory_purchase_items')
-      .delete()
-      .eq('id', rowId);
-
-    if (deleteErr) throw deleteErr;
-    // DB trigger fn_after_purchase_change handles ledger recalculation automatically
-
-    // Clean up transaction header if no other items remain
-    if (txId) {
-      const { count, error: countErr } = await supabase
-        .from('Inventory_purchase_items')
-        .select('*', { count: 'exact', head: true })
-        .eq('transaction_id', txId);
-
-      if (!countErr && count === 0) {
-        await supabase
-          .from('Inventory_inventory_transactions')
-          .delete()
-          .eq('id', txId);
-      }
-    }
-
+    // Atomic (RPC delete_purchase_item_row): item delete and parent cleanup together.
+    // DB trigger fn_after_purchase_change handles ledger recalculation automatically.
+    const { error } = await supabase.rpc('delete_purchase_item_row', { p_row_id: rowId });
+    if (error) throw error;
     return { success: true };
   } catch (err) {
     console.error(`Failed to delete purchase item row ID ${rowId}:`, err.message);
-    throw err;
+    throw friendlySaleAmountError(err);
   }
 }
 
@@ -926,36 +879,15 @@ export async function updateClosingStockItemRow(rowId, fields) {
  */
 export async function deleteClosingStockItemRow(rowId) {
   try {
-    // Fetch transaction_id before deleting (for parent cleanup)
-    const { data: oldRow, error: fetchErr } = await supabase
-      .from('Inventory_closing_stock_items')
-      .select('transaction_id')
-      .eq('id', rowId)
-      .single();
-
-    if (fetchErr) throw fetchErr;
-    const txId = oldRow.transaction_id;
-
-    const { error: deleteErr } = await supabase
-      .from('Inventory_closing_stock_items')
-      .delete()
-      .eq('id', rowId);
-
-    if (deleteErr) throw deleteErr;
-    // DB trigger fn_after_closing_change handles ledger recalculation and cascade automatically
-
-    // Delete parent transaction (closing entries are always 1-per-transaction)
-    if (txId) {
-      await supabase
-        .from('Inventory_inventory_transactions')
-        .delete()
-        .eq('id', txId);
-    }
-
+    // Atomic (RPC delete_closing_stock_item_row): item and parent transaction are
+    // removed together (closing entries are always 1-per-transaction).
+    // DB trigger fn_after_closing_change handles ledger recalculation and cascade automatically.
+    const { error } = await supabase.rpc('delete_closing_stock_item_row', { p_row_id: rowId });
+    if (error) throw error;
     return { success: true };
   } catch (err) {
     console.error(`Failed to delete closing stock item row ID ${rowId}:`, err.message);
-    throw err;
+    throw friendlySaleAmountError(err);
   }
 }
 
@@ -1195,9 +1127,6 @@ export async function deleteVendor(vendorId) {
 /**
  * Fetch daily sales summary logs.
  */
-/**
- * Fetch daily sales summary logs.
- */
 export async function getDailySalesSummary({ fromDate, toDate, shopId, limit = 500 } = {}) {
   try {
     let query = supabase
@@ -1233,76 +1162,26 @@ export async function getDailySalesSummary({ fromDate, toDate, shopId, limit = 5
     const { data, error } = await query;
     if (error) throw error;
 
-    // Flatten data for UI
+    // Flatten data for UI, newest entry DATE first (the query itself can only order by
+    // when the row was logged, which is not the same as the date the entry is for).
     return (data || []).map(row => ({
       id: row.id,
       transaction_id: row.transaction_id,
       transaction_date: row.inventory_transactions?.transaction_date,
+      created_at: row.created_at,
       shop_name: row.inventory_transactions?.shop?.shop_name || 'Global / Unknown',
       gpay_amount: parseFloat(row.gpay_amount) || 0,
       cash_amount: parseFloat(row.cash_amount) || 0,
       expense_amount: parseFloat(row.expense_amount) || 0,
       total_closing_amount: parseFloat(row.total_closing_amount) || 0,
-      total_sales_amt: parseFloat(row.Total_sales_amt) || 0, // Add this line
+      total_sales_amt: parseFloat(row.Total_sales_amt) || 0,
       withdrawal_amount: parseFloat(row.withdrawal_amount) || 0
-    }));
+    })).sort((a, b) =>
+      String(b.transaction_date || '').localeCompare(String(a.transaction_date || '')) ||
+      String(b.created_at || '').localeCompare(String(a.created_at || ''))
+    );
   } catch (err) {
     console.error('Failed to fetch daily sales summary:', err.message);
-    throw err;
-  }
-}
-
-/**
- * Recalculate manager report balances chronologically starting from startDate.
- */
-export async function recalculateManagerReportBalances(shopName, startDate) {
-  if (!supabase) return;
-  try {
-    // 1. Get the balance of the last record before startDate
-    const { data: prevReport, error: prevErr } = await supabase
-      .from('Inventory_manager_report')
-      .select('balance')
-      .eq('shop_name', shopName)
-      .lt('report_date', startDate)
-      .order('report_date', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (prevErr) throw prevErr;
-    let runningBalance = parseFloat(prevReport?.balance) || 0;
-
-    // 2. Fetch all records from startDate onwards, sorted ascending
-    const { data: reports, error: fetchErr } = await supabase
-      .from('Inventory_manager_report')
-      .select('*')
-      .eq('shop_name', shopName)
-      .gte('report_date', startDate)
-      .order('report_date', { ascending: true })
-      .order('id', { ascending: true });
-
-    if (fetchErr) throw fetchErr;
-
-    // 3. Recalculate and update each report
-    for (const report of (reports || [])) {
-      const gpay = parseFloat(report.gpay_amount) || 0;
-      const cash = parseFloat(report.cash_amount) || 0;
-      const expense = parseFloat(report.expense_amount) || 0;
-      const withdrawal = parseFloat(report.withdrawal_amount) || 0;
-      runningBalance = runningBalance + gpay + cash - expense - withdrawal;
-
-      const { error: updateErr } = await supabase
-        .from('Inventory_manager_report')
-        .update({
-          balance: runningBalance,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', report.id);
-
-      if (updateErr) throw updateErr;
-    }
-  } catch (err) {
-    console.error(`Failed to recalculate manager report balances for ${shopName} starting from ${startDate}:`, err.message);
     throw err;
   }
 }
@@ -1318,7 +1197,11 @@ export async function updateDailySalesSummaryRow(rowId, fields) {
       p_gpay: parseFloat(fields.gpay_amount) || 0,
       p_cash: parseFloat(fields.cash_amount) || 0,
       p_expense: parseFloat(fields.expense_amount) || 0,
-      p_total_closing: parseFloat(fields.total_closing_amount) || 0
+      p_total_closing: parseFloat(fields.total_closing_amount) || 0,
+      // null = keep the saved withdrawal (the edit UI doesn't change it)
+      p_withdrawal: fields.withdrawal_amount === undefined || fields.withdrawal_amount === ''
+        ? null
+        : (parseFloat(fields.withdrawal_amount) || 0)
     });
 
     if (error) throw error;
@@ -1719,10 +1602,6 @@ export async function adminCreateUser(username, password, role, shopId, isApprov
  * Fetch today's total sales summary
  * Returns the total G-Pay, Cash, Expense, and Net Sales for today
  */
-/**
- * Fetch today's total sales summary
- * Returns the total G-Pay, Cash, Expense, and Net Sales for today
- */
 export async function getTodayTotalSales(shopId = null) {
   try {
     // Get today's date in YYYY-MM-DD format
@@ -1934,131 +1813,3 @@ export async function getManagerReports({ fromDate, toDate, shopName }) {
   if (error) throw error;
   return data || [];
 }
-
-
-/**
- * Submit data to manager_report table
- * Fetches GPay, Cash, Expense from daily_sales_summary
- * Calculates balance = GPay + Cash - Expense
- *
- * @param {Object} params - The report data
- * @param {string} params.reportDate - The report date (YYYY-MM-DD)
- * @param {string} params.shopName - The shop name
- */
-// export async function submitInManagerReport({
-//   reportDate,
-//   shopName
-// }) {
-//   // 1. Fetch shop ID by name
-//   const { data: shopData, error: shopError } = await supabase
-//     .from('shop')
-//     .select('id')
-//     .eq('shop_name', shopName)
-//     .maybeSingle();
-
-//   if (shopError) {
-//     console.error('Error fetching shop:', shopError);
-//     throw new Error(`Failed to find shop: ${shopError.message}`);
-//   }
-
-//   if (!shopData) {
-//     throw new Error(`Shop "${shopName}" not found`);
-//   }
-
-//   const shopId = shopData.id;
-
-//   let gpay = 0;
-//   let cash = 0;
-//   let expense = 0;
-
-//   // 2. Fetch the values from daily_sales_summary for this date and shop
-//   // First, get the inventory_transaction_id for this date and shop
-//   const { data: inventoryData, error: inventoryError } = await supabase
-//     .from('inventory_transactions')
-//     .select('id')
-//     .eq('transaction_date', reportDate)
-//     .eq('shop_id', shopId)
-//     .maybeSingle();
-
-//   if (inventoryError) {
-//     console.error('Error fetching inventory transaction:', inventoryError);
-//   }
-
-//   // If inventory transaction exists, fetch the daily_sales_summary
-//   if (inventoryData) {
-//     const { data: salesData, error: salesError } = await supabase
-//       .from('daily_sales_summary')
-//       .select('gpay_amount, cash_amount, expense_amount')
-//       .eq('inventory_transaction_id', inventoryData.id)
-//       .maybeSingle();
-
-//     if (salesError) {
-//       console.error('Error fetching daily_sales_summary for manager report:', salesError);
-//     } else if (salesData) {
-//       gpay = Number(salesData.gpay_amount) || 0;
-//       cash = Number(salesData.cash_amount) || 0;
-//       expense = Number(salesData.expense_amount) || 0;
-//     }
-//   }
-
-//   // 3. Calculate balance = GPay + Cash - Expense
-//   const balance = gpay + cash - expense;
-
-//   // 4. Check if a record already exists for this date and shop
-//   const { data: existingRecord, error: checkError } = await supabase
-//     .from('manager_report')
-//     .select('id')
-//     .eq('report_date', reportDate)
-//     .eq('shop_name', shopName)
-//     .maybeSingle();
-
-//   if (checkError) {
-//     console.error('Error checking existing record:', checkError);
-//   }
-
-//   let result;
-
-//   if (existingRecord) {
-//     // Update existing record
-//     const { data, error } = await supabase
-//       .from('manager_report')
-//       .update({
-//         gpay_amount: gpay,
-//         cash_amount: cash,
-//         expense_amount: expense,
-//         balance: balance,
-//         updated_at: new Date().toISOString()
-//       })
-//       .eq('id', existingRecord.id)
-//       .select();
-
-//     if (error) {
-//       console.error('Error updating manager_report:', error);
-//       throw new Error(`Failed to update manager report: ${error.message}`);
-//     }
-//     result = data;
-//   } else {
-//     // Insert new record
-//     const { data, error } = await supabase
-//       .from('manager_report')
-//       .insert([
-//         {
-//           report_date: reportDate,
-//           shop_name: shopName,
-//           gpay_amount: gpay,
-//           cash_amount: cash,
-//           expense_amount: expense,
-//           balance: balance
-//         }
-//       ])
-//       .select();
-
-//     if (error) {
-//       console.error('Error submitting to manager_report:', error);
-//       throw new Error(`Failed to save manager report: ${error.message}`);
-//     }
-//     result = data;
-//   }
-
-//   return result;
-// }

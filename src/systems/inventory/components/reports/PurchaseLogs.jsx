@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import SearchableDropdown from '../ui/SearchableDropdown';
 import Toast from '../ui/Toast';
+import SortableTh from '../ui/SortableTh';
+import { sortRows } from '../../utils/sortRows';
 import {
   getItems,
   getVendors,
@@ -214,14 +216,23 @@ export default function PurchaseLogs({ hideHeader = false, currentUser, showActi
     loadRecords();
   }, [fromDate, toDate, selectedItemId, selectedVendorId, selectedShopId, shopsList, isScoped]);
 
-  // Client side search text filter (mirrors ClosingStockLogs pattern)
+  // Sorting: newest purchase date first by default; click a column header to change
+  const [sort, setSort] = useState({ key: 'transaction_date', dir: 'desc' });
+  const handleSort = (key) => {
+    setSort(prev => prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: key === 'transaction_date' || key === 'created_at' ? 'desc' : 'asc' });
+  };
+
+  // Client side search text filter (mirrors ClosingStockLogs pattern), then sorted.
+  // Summary and CSV/Excel exports use this list too, so they match what is on screen.
   const filteredRecords = useMemo(() => {
-    if (!selectedItemName) return purchaseRecords;
-    const query = selectedItemName.toLowerCase();
-    return purchaseRecords.filter(row =>
-      row.item_name && row.item_name.toLowerCase().includes(query)
-    );
-  }, [purchaseRecords, selectedItemName]);
+    const query = selectedItemName ? selectedItemName.toLowerCase() : '';
+    const rows = query
+      ? purchaseRecords.filter(row => row.item_name && row.item_name.toLowerCase().includes(query))
+      : purchaseRecords;
+    return sortRows(rows, sort.key, sort.dir, ['created_at', 'desc']);
+  }, [purchaseRecords, selectedItemName, sort]);
 
   // Summary Metrics calculations
   const summary = useMemo(() => {
@@ -496,16 +507,16 @@ export default function PurchaseLogs({ hideHeader = false, currentUser, showActi
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead className="bg-slate-50/70 text-slate-600 text-xs font-bold uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4 whitespace-nowrap">Logged At</th>
-                <th className="px-6 py-4">Item Name</th>
-                <th className="px-6 py-4">Vendor</th>
-                <th className="px-6 py-4">Shop Name</th>
-                <th className="px-6 py-4 text-right w-24">Rate (₹)</th>
-                <th className="px-6 py-4 text-right w-20">Qty</th>
-                <th className="px-6 py-4 text-right w-20">GST %</th>
-                <th className="px-6 py-4 text-right w-28">Discount</th>
-                <th className="px-6 py-4 text-right w-32">Total (₹)</th>
+                <SortableTh label="Date" sortKey="transaction_date" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="Logged At" sortKey="created_at" sort={sort} onSort={handleSort} className="px-6 py-4 whitespace-nowrap" />
+                <SortableTh label="Item Name" sortKey="item_name" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="Vendor" sortKey="vendor_name" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="Shop Name" sortKey="shop_name" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="Rate (₹)" sortKey="purchase_rate" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-24" />
+                <SortableTh label="Qty" sortKey="quantity" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-20" />
+                <SortableTh label="GST %" sortKey="gst_percent" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-20" />
+                <SortableTh label="Discount" sortKey="discount" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-28" />
+                <SortableTh label="Total (₹)" sortKey="total_amount" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-32" />
                 {showActions && <th className="px-6 py-4 text-center w-28">Actions</th>}
               </tr>
             </thead>

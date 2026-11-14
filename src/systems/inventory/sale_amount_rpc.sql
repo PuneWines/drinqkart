@@ -48,6 +48,9 @@ DECLARE
   running numeric;
   rec record;
 BEGIN
+  -- Serialise balance chains per shop (lock order everywhere: sale-day lock, then this one)
+  PERFORM pg_advisory_xact_lock(hashtext('inv_mgr:' || COALESCE(p_shop_name, '')));
+
   SELECT COALESCE(balance, 0) INTO running
   FROM public."Inventory_manager_report"
   WHERE shop_name = p_shop_name AND report_date < p_start_date
@@ -76,6 +79,37 @@ END;
 $$;
 
 -- ----------------------------------------------------------------------------
+-- 2b. Helper: resolve shop name (same lookup for submit / update / delete)
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.inv_resolve_shop_name(p_shop_id bigint)
+RETURNS text
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_name text;
+BEGIN
+  IF p_shop_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT shop_name INTO v_name FROM public."Inventory_shop" WHERE id = p_shop_id;
+  IF v_name IS NULL THEN
+    BEGIN
+      EXECUTE 'SELECT COALESCE(shop_name, name) FROM public.shop WHERE id = $1'
+        INTO v_name USING p_shop_id;
+    EXCEPTION WHEN OTHERS THEN
+      v_name := NULL;
+    END;
+  END IF;
+
+  IF v_name = '' THEN
+    v_name := NULL;
+  END IF;
+  RETURN v_name;
+END;
+$$;
+
+-- ----------------------------------------------------------------------------
 -- 3. Submit Sale Amount (atomic, one entry per shop per day)
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.submit_sale_amount(
@@ -96,19 +130,14 @@ DECLARE
   v_total_sales numeric := 0;
 BEGIN
   -- Resolve shop name
-  SELECT shop_name INTO v_shop_name FROM public."Inventory_shop" WHERE id = p_shop_id;
+  v_shop_name := public.inv_resolve_shop_name(p_shop_id);
   IF v_shop_name IS NULL THEN
-    BEGIN
-      EXECUTE 'SELECT COALESCE(shop_name, name) FROM public.shop WHERE id = $1'
-        INTO v_shop_name USING p_shop_id;
-    EXCEPTION WHEN OTHERS THEN
-      v_shop_name := NULL;
-    END;
-  END IF;
-
-  IF v_shop_name IS NULL OR v_shop_name = '' THEN
     RAISE EXCEPTION 'SHOP_NOT_FOUND: shop % does not exist', p_shop_id;
   END IF;
+
+  -- Serialise all sale-amount writes for this shop + day. This closes the
+  -- check-then-insert race below (double click / retry / two devices).
+  PERFORM pg_advisory_xact_lock(hashtext('inv_sale:' || v_shop_name || ':' || p_date::text));
 
   -- Same-day guard: one Sale Amount entry per shop per date
   IF EXISTS (
@@ -167,10 +196,12 @@ DECLARE
   v_gpay numeric;
   v_cash numeric;
   v_exp numeric;
+  v_wd numeric;
   v_report_id bigint;
 BEGIN
-  SELECT count(*), COALESCE(sum(d.gpay_amount),0), COALESCE(sum(d.cash_amount),0), COALESCE(sum(d.expense_amount),0)
-  INTO v_count, v_gpay, v_cash, v_exp
+  SELECT count(*), COALESCE(sum(d.gpay_amount),0), COALESCE(sum(d.cash_amount),0), COALESCE(sum(d.expense_amount),0),
+         COALESCE(sum(d.withdrawal_amount),0)
+  INTO v_count, v_gpay, v_cash, v_exp, v_wd
   FROM public."Inventory_daily_sales_summary" d
   JOIN public."Inventory_inventory_transactions" t ON t.id = d.transaction_id
   WHERE t.transaction_type = 'sale_amount'
@@ -188,12 +219,13 @@ BEGIN
 
     IF v_report_id IS NOT NULL THEN
       UPDATE public."Inventory_manager_report"
-      SET gpay_amount = v_gpay, cash_amount = v_cash, expense_amount = v_exp, updated_at = now()
+      SET gpay_amount = v_gpay, cash_amount = v_cash, expense_amount = v_exp,
+          withdrawal_amount = v_wd, updated_at = now()
       WHERE id = v_report_id;
     ELSE
       INSERT INTO public."Inventory_manager_report"
-        (report_date, shop_name, entry_type, gpay_amount, cash_amount, expense_amount, balance, updated_at)
-      VALUES (p_date, p_shop_name, 'sales', v_gpay, v_cash, v_exp, 0, now());
+        (report_date, shop_name, entry_type, gpay_amount, cash_amount, expense_amount, withdrawal_amount, balance, updated_at)
+      VALUES (p_date, p_shop_name, 'sales', v_gpay, v_cash, v_exp, v_wd, 0, now());
     END IF;
   END IF;
 
@@ -204,12 +236,17 @@ $$;
 -- ----------------------------------------------------------------------------
 -- 5. Update a saved Sale Amount row (atomic)
 -- ----------------------------------------------------------------------------
+-- The old 5-argument version is dropped: keeping both overloads would make
+-- named-argument RPC calls ambiguous. p_withdrawal NULL = keep the saved value.
+DROP FUNCTION IF EXISTS public.update_sale_amount_summary(bigint, numeric, numeric, numeric, numeric);
+
 CREATE OR REPLACE FUNCTION public.update_sale_amount_summary(
   p_row_id bigint,
   p_gpay numeric,
   p_cash numeric,
   p_expense numeric,
-  p_total_closing numeric
+  p_total_closing numeric,
+  p_withdrawal numeric DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -219,13 +256,27 @@ DECLARE
   v_shop_id bigint;
   v_shop_name text;
 BEGIN
-  SELECT t.transaction_date, t.shop_id, s.shop_name
-  INTO v_date, v_shop_id, v_shop_name
+  SELECT t.transaction_date, t.shop_id
+  INTO v_date, v_shop_id
   FROM public."Inventory_daily_sales_summary" d
   JOIN public."Inventory_inventory_transactions" t ON t.id = d.transaction_id
-  LEFT JOIN public."Inventory_shop" s ON s.id = t.shop_id
   WHERE d.id = p_row_id;
 
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ROW_NOT_FOUND: summary row % does not exist', p_row_id;
+  END IF;
+
+  -- A shop that cannot be resolved must fail loudly. Skipping the report sync
+  -- would leave Inventory_manager_report out of step with the summary.
+  v_shop_name := public.inv_resolve_shop_name(v_shop_id);
+  IF v_shop_id IS NOT NULL AND v_shop_name IS NULL THEN
+    RAISE EXCEPTION 'SHOP_NOT_FOUND: shop % does not exist', v_shop_id;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('inv_sale:' || COALESCE(v_shop_name, '') || ':' || v_date::text));
+
+  -- Re-check under the lock and lock the row itself
+  PERFORM 1 FROM public."Inventory_daily_sales_summary" WHERE id = p_row_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'ROW_NOT_FOUND: summary row % does not exist', p_row_id;
   END IF;
@@ -234,10 +285,12 @@ BEGIN
   SET gpay_amount = COALESCE(p_gpay, 0),
       cash_amount = COALESCE(p_cash, 0),
       expense_amount = COALESCE(p_expense, 0),
-      total_closing_amount = COALESCE(p_total_closing, 0)
+      total_closing_amount = COALESCE(p_total_closing, 0),
+      withdrawal_amount = COALESCE(p_withdrawal, withdrawal_amount)
   WHERE id = p_row_id;
 
-  IF v_date IS NOT NULL AND v_shop_name IS NOT NULL THEN
+  -- Legacy rows without a shop have no manager-report key; nothing to sync.
+  IF v_shop_name IS NOT NULL THEN
     PERFORM public.inv_sync_manager_report_day(v_shop_id, v_shop_name, v_date);
   END IF;
 END;
@@ -256,13 +309,25 @@ DECLARE
   v_shop_id bigint;
   v_shop_name text;
 BEGIN
-  SELECT d.transaction_id, t.transaction_date, t.shop_id, s.shop_name
-  INTO v_tx_id, v_date, v_shop_id, v_shop_name
+  SELECT d.transaction_id, t.transaction_date, t.shop_id
+  INTO v_tx_id, v_date, v_shop_id
   FROM public."Inventory_daily_sales_summary" d
   JOIN public."Inventory_inventory_transactions" t ON t.id = d.transaction_id
-  LEFT JOIN public."Inventory_shop" s ON s.id = t.shop_id
   WHERE d.id = p_row_id;
 
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ROW_NOT_FOUND: summary row % does not exist', p_row_id;
+  END IF;
+
+  -- Fail loudly instead of deleting the data but leaving the manager report behind
+  v_shop_name := public.inv_resolve_shop_name(v_shop_id);
+  IF v_shop_id IS NOT NULL AND v_shop_name IS NULL THEN
+    RAISE EXCEPTION 'SHOP_NOT_FOUND: shop % does not exist', v_shop_id;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('inv_sale:' || COALESCE(v_shop_name, '') || ':' || v_date::text));
+
+  PERFORM 1 FROM public."Inventory_daily_sales_summary" WHERE id = p_row_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'ROW_NOT_FOUND: summary row % does not exist', p_row_id;
   END IF;
@@ -273,16 +338,17 @@ BEGIN
     DELETE FROM public."Inventory_inventory_transactions" WHERE id = v_tx_id;
   END IF;
 
-  IF v_date IS NOT NULL AND v_shop_name IS NOT NULL THEN
+  IF v_shop_name IS NOT NULL THEN
     PERFORM public.inv_sync_manager_report_day(v_shop_id, v_shop_name, v_date);
   END IF;
 END;
 $$;
 
+GRANT EXECUTE ON FUNCTION public.inv_resolve_shop_name(bigint) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.inv_recalc_manager_balances(text, date) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.inv_sync_manager_report_day(bigint, text, date) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.submit_sale_amount(date, bigint, numeric, numeric, numeric, numeric, numeric) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.update_sale_amount_summary(bigint, numeric, numeric, numeric, numeric) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.update_sale_amount_summary(bigint, numeric, numeric, numeric, numeric, numeric) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.delete_sale_amount_summary(bigint) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';

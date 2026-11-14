@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import SearchableDropdown from '../ui/SearchableDropdown';
 import Toast from '../ui/Toast';
+import SortableTh from '../ui/SortableTh';
+import { sortRows } from '../../utils/sortRows';
 import {
   getCurrentStockItems,
   updateCurrentStockItem,
@@ -158,7 +160,16 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
     loadRecords();
   }, [selectedItemId, selectedShopId, shopsList, isScoped]);
 
-  // Client side search text filter
+  // Sorting: item name A-Z by default (then shop name); click a column header to change.
+  const [sort, setSort] = useState({ key: 'item_name', dir: 'asc' });
+  const handleSort = (key) => {
+    setSort(prev => prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' });
+  };
+
+  // Client side search text filter, then sorted. Summary and CSV/Excel exports use
+  // this list too, so they match what is on screen.
   const filteredStockItems = useMemo(() => {
     let filtered = stockItems;
     if (selectedItemName) {
@@ -167,8 +178,16 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
         row.item_name && row.item_name.toLowerCase().includes(query)
       );
     }
-    return filtered;
-  }, [stockItems, selectedItemName]);
+    const withValues = filtered.map(row => {
+      const stock = row.current_stock || 0;
+      return {
+        ...row,
+        mrp_value: stock * (row.mrp || 0),
+        purchase_value: stock * (row.purchase_rate || 0)
+      };
+    });
+    return sortRows(withValues, sort.key, sort.dir, ['shop_name', 'asc']);
+  }, [stockItems, selectedItemName, sort]);
 
   // Summary Metrics calculations
   const summary = useMemo(() => {
@@ -376,13 +395,13 @@ export default function CurrentStockItems({ hideHeader = false, currentUser, sho
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead className="bg-slate-50/70 text-slate-600 text-xs font-bold uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4">Shop Name</th>
-                <th className="px-6 py-4">Item Name</th>
-                <th className="px-6 py-4 text-right w-32">Current Stock</th>
-                <th className="px-6 py-4 text-right w-28">Purchase Rate (₹)</th>
-                <th className="px-6 py-4 text-right w-28">MRP (₹)</th>
-                <th className="px-6 py-4 text-right w-36">Stock Value on MRP (₹)</th>
-                <th className="px-6 py-4 text-right w-40">Stock Value on Purchase Rate (₹)</th>
+                <SortableTh label="Shop Name" sortKey="shop_name" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="Item Name" sortKey="item_name" sort={sort} onSort={handleSort} className="px-6 py-4" />
+                <SortableTh label="Current Stock" sortKey="current_stock" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-32" />
+                <SortableTh label="Purchase Rate (₹)" sortKey="purchase_rate" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-28" />
+                <SortableTh label="MRP (₹)" sortKey="mrp" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-28" />
+                <SortableTh label="Stock Value on MRP (₹)" sortKey="mrp_value" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-36" />
+                <SortableTh label="Stock Value on Purchase Rate (₹)" sortKey="purchase_value" sort={sort} onSort={handleSort} className="px-6 py-4 text-right w-40" />
                 {showActions && <th className="px-6 py-4 text-center w-36">Actions</th>}
               </tr>
             </thead>

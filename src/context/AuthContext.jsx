@@ -212,6 +212,7 @@ const syncSubsystemSessions = (userObj) => {
     "designation",
     userObj.designation || userObj.Designation || "",
   );
+  localStorage.setItem("employee_id", userObj.employee_id || "");
 
   const allowedPages = parseChecklistAllowedPages(userObj);
   localStorage.setItem("page_access", JSON.stringify(allowedPages));
@@ -324,6 +325,7 @@ const clearSubsystemSessions = () => {
   localStorage.removeItem("profile_image");
   localStorage.removeItem("can_self_assign");
   localStorage.removeItem("designation");
+  localStorage.removeItem("employee_id");
   localStorage.removeItem("page_access");
   localStorage.removeItem("master_user_system_page_access");
   localStorage.removeItem("hr_user");
@@ -352,7 +354,7 @@ export const AuthProvider = ({ children }) => {
         const { data } = await supabase
           .from("users")
           .select(
-            "master_user_system_page_access, shop_name, user_access, counter_access, role, user_name, email_id",
+            "master_user_system_page_access, shop_name, user_access, counter_access, role, user_name, email_id, employee_id",
           )
           .eq("id", user.id)
           .maybeSingle();
@@ -360,6 +362,7 @@ export const AuthProvider = ({ children }) => {
           const updatedUser = {
             ...user,
             ...data,
+            employee_id: data.employee_id || user.employee_id || null,
             master_user_system_page_access: data.master_user_system_page_access,
             shop_name: data.shop_name,
             user_access: data.user_access,
@@ -486,7 +489,7 @@ export const AuthProvider = ({ children }) => {
           try {
             const { data: dbUser } = await supabase
               .from("users")
-              .select("master_user_system_page_access, status, counter_access")
+              .select("master_user_system_page_access, status, counter_access, employee_id")
               .eq("id", userObj.id)
               .maybeSingle();
 
@@ -494,6 +497,9 @@ export const AuthProvider = ({ children }) => {
               const latestStatus = (dbUser.status || "active").toLowerCase().trim();
               if (latestStatus !== "active") {
                 return { success: false, isInactive: true };
+              }
+              if (dbUser.employee_id) {
+                userObj.employee_id = dbUser.employee_id;
               }
               if (dbUser.master_user_system_page_access) {
                 userObj.master_user_system_page_access =
