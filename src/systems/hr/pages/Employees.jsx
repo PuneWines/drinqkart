@@ -479,12 +479,12 @@ export default function EmployeeManagement() {
             resume_url: emp.resume_url || details.resume_url || null,
             created_at: emp.created_at || details.created_at,
             updated_at: emp.updated_at || details.updated_at || null,
-            // Rows without the column (migration not yet run) are treated as Verified
             user_status: userStatusById[(empId || "").toString().trim().toLowerCase()]
               || userStatusByName[(name || "").toString().trim().toLowerCase()]
               || 'No Account',
-            verification_status: emp.verification_status || 'Verified',
+            verification_status: emp.verification_status || 'Pending',
             verified_by: emp.verified_by || '',
+            verified_by_emp_id: emp.verified_by_emp_id || '',
             verified_at: emp.verified_at || null,
             verification_remarks: emp.verification_remarks || '',
             _raw: emp
@@ -539,15 +539,54 @@ export default function EmployeeManagement() {
       })
       if (!confirmed) return
     }
-    const { error } = await supabase
+    // Resolve verifier Employee ID from current logged-in user account
+    let verifierEmpId = (authUser?.employee_id || '').toString().trim()
+    if (!verifierEmpId && typeof localStorage !== 'undefined') {
+      verifierEmpId = (localStorage.getItem('employee_id') || '').trim()
+    }
+    if (!verifierEmpId && authUser?.id) {
+      try {
+        const { data: u } = await supabase
+          .from('users')
+          .select('employee_id')
+          .eq('id', authUser.id)
+          .maybeSingle()
+        if (u?.employee_id) verifierEmpId = u.employee_id.toString().trim()
+      } catch (e) {
+        console.warn('Could not fetch verifier employee_id:', e)
+      }
+    }
+    if (!verifierEmpId) {
+      verifierEmpId = authUser?.user_name || 'Admin'
+    }
+
+    const payload = {
+      verification_status: newStatus === 'Unverified' ? 'Rejected' : newStatus,
+      verified_by: verifierEmpId,
+      verified_by_emp_id: verifierEmpId,
+      verified_at: new Date().toISOString(),
+      verification_remarks: remarks
+    }
+
+    let { error } = await supabase
       .from('hr_management_employees')
-      .update({
+      .update(payload)
+      .eq('id', emp.id)
+
+    // Resilient fallback if verified_by_emp_id column is not yet present in Supabase table
+    if (error && error.message && error.message.includes('verified_by_emp_id')) {
+      const fallbackPayload = {
         verification_status: newStatus === 'Unverified' ? 'Rejected' : newStatus,
-        verified_by: authUser?.user_name || authUser?.name || authUser?.email || null,
+        verified_by: verifierEmpId,
         verified_at: new Date().toISOString(),
         verification_remarks: remarks
-      })
-      .eq('id', emp.id)
+      }
+      const res = await supabase
+        .from('hr_management_employees')
+        .update(fallbackPayload)
+        .eq('id', emp.id)
+      error = res.error
+    }
     if (error) {
       toast.error('Could not update verification: ' + error.message)
       return
@@ -1960,15 +1999,15 @@ export default function EmployeeManagement() {
                       {emp.verification_status === 'Verified' ? (
                         <div className="flex flex-col gap-0.5">
                           <span
-                            title={emp.verified_by ? `Verified by ${emp.verified_by}${emp.verified_at ? ' on ' + new Date(emp.verified_at).toLocaleDateString('en-IN') : ''}` : 'Office Verified'}
+                            title={(emp.verified_by || emp.verified_by_emp_id) ? `Verified by ${formatVerifierLabel(emp.verified_by_emp_id || emp.verified_by)}${emp.verified_at ? ' on ' + new Date(emp.verified_at).toLocaleDateString('en-IN') : ''}` : 'Office Verified'}
                             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200/80 shadow-2xs w-fit"
                           >
                             <CheckCircle2 size={12} className="text-teal-600" />
                             Office Verified
                           </span>
-                          {emp.verified_by && (
-                            <span className="text-[10px] text-slate-400 font-medium truncate max-w-[170px]" title={`By ${emp.verified_by}`}>
-                              by {emp.verified_by}
+                          {(emp.verified_by || emp.verified_by_emp_id) && (
+                            <span className="text-[10px] text-slate-400 font-medium truncate max-w-[170px]" title={`By ${formatVerifierLabel(emp.verified_by_emp_id || emp.verified_by)}`}>
+                              by {formatVerifierLabel(emp.verified_by_emp_id || emp.verified_by)}
                             </span>
                           )}
                         </div>
@@ -2898,7 +2937,7 @@ export default function EmployeeManagement() {
                               <div className="text-xs text-slate-600 flex items-center gap-1.5">
                                 <CheckCircle2 size={14} className="text-teal-600" />
                                 <span>
-                                  Officially verified{liveEmp.verified_by ? ` by ${liveEmp.verified_by}` : ''}
+                                  Officially verified{(liveEmp.verified_by || liveEmp.verified_by_emp_id) ? ` by ${formatVerifierLabel(liveEmp.verified_by_emp_id || liveEmp.verified_by)}` : ''}
                                   {liveEmp.verified_at ? ` on ${new Date(liveEmp.verified_at).toLocaleDateString('en-IN')}` : ''}
                                 </span>
                               </div>
@@ -3288,7 +3327,7 @@ export default function EmployeeManagement() {
                               <div className="text-xs text-slate-600 flex items-center gap-1.5">
                                 <CheckCircle2 size={14} className="text-teal-600" />
                                 <span>
-                                  Officially verified{liveEmp.verified_by ? ` by ${liveEmp.verified_by}` : ''}
+                                  Officially verified{(liveEmp.verified_by || liveEmp.verified_by_emp_id) ? ` by ${formatVerifierLabel(liveEmp.verified_by_emp_id || liveEmp.verified_by)}` : ''}
                                   {liveEmp.verified_at ? ` on ${new Date(liveEmp.verified_at).toLocaleDateString('en-IN')}` : ''}
                                 </span>
                               </div>
