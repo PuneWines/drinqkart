@@ -171,9 +171,9 @@ BEGIN
      COALESCE(p_total_closing, 0), v_total_sales, COALESCE(p_withdrawal, 0));
 
   INSERT INTO public."Inventory_manager_report"
-    (report_date, shop_name, entry_type, gpay_amount, cash_amount, expense_amount, withdrawal_amount, balance, updated_at)
+    (report_date, shop_name, shop_id, entry_type, gpay_amount, cash_amount, expense_amount, withdrawal_amount, balance, updated_at)
   VALUES
-    (p_date, v_shop_name, 'sales', COALESCE(p_gpay, 0), COALESCE(p_cash, 0), COALESCE(p_expense, 0),
+    (p_date, v_shop_name, p_shop_id, 'sales', COALESCE(p_gpay, 0), COALESCE(p_cash, 0), COALESCE(p_expense, 0),
      COALESCE(p_withdrawal, 0), 0, now());
 
   PERFORM public.inv_recalc_manager_balances(v_shop_name, p_date);
@@ -224,8 +224,8 @@ BEGIN
       WHERE id = v_report_id;
     ELSE
       INSERT INTO public."Inventory_manager_report"
-        (report_date, shop_name, entry_type, gpay_amount, cash_amount, expense_amount, withdrawal_amount, balance, updated_at)
-      VALUES (p_date, p_shop_name, 'sales', v_gpay, v_cash, v_exp, v_wd, 0, now());
+        (report_date, shop_name, shop_id, entry_type, gpay_amount, cash_amount, expense_amount, withdrawal_amount, balance, updated_at)
+      VALUES (p_date, p_shop_name, p_shop_id, 'sales', v_gpay, v_cash, v_exp, v_wd, 0, now());
     END IF;
   END IF;
 

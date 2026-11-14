@@ -204,7 +204,10 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
     }
   };
 
+  const [deletingRowId, setDeletingRowId] = useState(null);
+
   const handleDelete = async (rowId) => {
+    if (deletingRowId !== null) return; // a delete is already running
     const ok = await showConfirm({
       title: "Delete Daily Sales Record",
       message: 'Are you sure you want to delete this daily sales record? This will also remove its operational entry from history.',
@@ -213,6 +216,7 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
     });
     if (!ok) return;
 
+    setDeletingRowId(rowId);
     try {
       await deleteDailySalesSummaryRow(rowId);
       setRecords(prev => prev.filter(row => row.id !== rowId));
@@ -222,6 +226,8 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
     } catch (err) {
       console.error('Failed to delete daily sales record:', err);
       showToast(`Failed to delete: ${err.message}`, 'error');
+    } finally {
+      setDeletingRowId(null);
     }
   };
 
@@ -578,7 +584,8 @@ export default function CashTallyItems({ hideHeader = false, currentUser, showAc
                               <button
                                 type="button"
                                 onClick={() => handleDelete(row.id)}
-                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                disabled={deletingRowId !== null}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 title="Delete Item"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">

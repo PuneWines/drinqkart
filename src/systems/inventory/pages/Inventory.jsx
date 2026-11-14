@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import SearchableDropdown from '../components/ui/SearchableDropdown';
 import Toast from '../components/ui/Toast';
-import { isUserShopScoped, getUserAssignedShops } from '../../../utils/permissionUtils';
+import { isUserShopScoped, getUserAssignedShops, getPagePermission } from '../../../utils/permissionUtils';
 import PurchaseLogs from '../components/reports/PurchaseLogs';
 import CurrentStockItems from '../components/reports/ClosingStockItems';
 import ClosingStockLogs from '../components/reports/ClosingStockLogs';
@@ -97,6 +97,12 @@ export default function Inventory({ currentUser }) {
     hasMasterPerm('Form Entry') ||
     allowedPermissions.includes('entry_cashtally')
   ), [isMasterAdmin, isAdmin, hasMasterPerm, allowedPermissions]);
+
+  // Edit / Delete on the log tabs need MODIFY rights (same check FormEntry uses to
+  // allow submitting). View-only users still see the logs, without the action buttons.
+  const canModifyPurchases = useMemo(() => getPagePermission(currentUser, 'inventory', 'Purchase Form Entry').canModify, [currentUser]);
+  const canModifyClosing = useMemo(() => getPagePermission(currentUser, 'inventory', 'Closing Stock Form Entry').canModify, [currentUser]);
+  const canModifyCashTally = useMemo(() => getPagePermission(currentUser, 'inventory', 'Cash Tally Form Entry').canModify, [currentUser]);
 
   const allowedTypes = useMemo(() => {
     const types = [];
@@ -819,13 +825,13 @@ export default function Inventory({ currentUser }) {
           </div>
 
           {dashboardTab === 'purchases' ? (
-            <PurchaseLogs key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={true} />
+            <PurchaseLogs key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={canModifyPurchases} />
           ) : dashboardTab === 'closing' ? (
-            <CurrentStockItems key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={true} />
+            <CurrentStockItems key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={canModifyClosing} />
           ) : dashboardTab === 'closing_logs' ? (
-            <ClosingStockLogs key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={true} />
+            <ClosingStockLogs key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={canModifyClosing} />
           ) : (
-            <CashTallyItems key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={true} />
+            <CashTallyItems key={refreshKey} hideHeader={true} currentUser={currentUser} showActions={canModifyCashTally} />
           )}
         </div>
       </div>
