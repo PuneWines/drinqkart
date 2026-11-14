@@ -118,7 +118,7 @@ BEGIN
       AND shop_id IS NOT DISTINCT FROM p_shop_id
   ) OR EXISTS (
     SELECT 1 FROM public."Inventory_manager_report"
-    WHERE report_date = p_date AND shop_name = v_shop_name
+    WHERE report_date = p_date AND shop_name = v_shop_name AND entry_type = 'sales'
   ) THEN
     RAISE EXCEPTION 'SALE_ALREADY_ENTERED: sale amount already entered for % on %', v_shop_name, p_date;
   END IF;
@@ -142,9 +142,9 @@ BEGIN
      COALESCE(p_total_closing, 0), v_total_sales, COALESCE(p_withdrawal, 0));
 
   INSERT INTO public."Inventory_manager_report"
-    (report_date, shop_name, gpay_amount, cash_amount, expense_amount, withdrawal_amount, balance, updated_at)
+    (report_date, shop_name, entry_type, gpay_amount, cash_amount, expense_amount, withdrawal_amount, balance, updated_at)
   VALUES
-    (p_date, v_shop_name, COALESCE(p_gpay, 0), COALESCE(p_cash, 0), COALESCE(p_expense, 0),
+    (p_date, v_shop_name, 'sales', COALESCE(p_gpay, 0), COALESCE(p_cash, 0), COALESCE(p_expense, 0),
      COALESCE(p_withdrawal, 0), 0, now());
 
   PERFORM public.inv_recalc_manager_balances(v_shop_name, p_date);
@@ -154,7 +154,55 @@ END;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 4. Update a saved Sale Amount row (atomic)
+-- 4. Helper: make the manager report row for (shop, date) equal the SUM of all
+--    summary rows for that shop/date (handles dates that have several summary rows).
+--    Deletes the manager report row when no summary rows remain.
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.inv_sync_manager_report_day(p_shop_id bigint, p_shop_name text, p_date date)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_count int;
+  v_gpay numeric;
+  v_cash numeric;
+  v_exp numeric;
+  v_report_id bigint;
+BEGIN
+  SELECT count(*), COALESCE(sum(d.gpay_amount),0), COALESCE(sum(d.cash_amount),0), COALESCE(sum(d.expense_amount),0)
+  INTO v_count, v_gpay, v_cash, v_exp
+  FROM public."Inventory_daily_sales_summary" d
+  JOIN public."Inventory_inventory_transactions" t ON t.id = d.transaction_id
+  WHERE t.transaction_type = 'sale_amount'
+    AND t.transaction_date = p_date
+    AND t.shop_id IS NOT DISTINCT FROM p_shop_id;
+
+  IF v_count = 0 THEN
+    DELETE FROM public."Inventory_manager_report"
+    WHERE report_date = p_date AND shop_name = p_shop_name AND entry_type = 'sales';
+  ELSE
+    SELECT id INTO v_report_id
+    FROM public."Inventory_manager_report"
+    WHERE report_date = p_date AND shop_name = p_shop_name AND entry_type = 'sales'
+    ORDER BY id LIMIT 1;
+
+    IF v_report_id IS NOT NULL THEN
+      UPDATE public."Inventory_manager_report"
+      SET gpay_amount = v_gpay, cash_amount = v_cash, expense_amount = v_exp, updated_at = now()
+      WHERE id = v_report_id;
+    ELSE
+      INSERT INTO public."Inventory_manager_report"
+        (report_date, shop_name, entry_type, gpay_amount, cash_amount, expense_amount, balance, updated_at)
+      VALUES (p_date, p_shop_name, 'sales', v_gpay, v_cash, v_exp, 0, now());
+    END IF;
+  END IF;
+
+  PERFORM public.inv_recalc_manager_balances(p_shop_name, p_date);
+END;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- 5. Update a saved Sale Amount row (atomic)
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.update_sale_amount_summary(
   p_row_id bigint,
@@ -168,11 +216,11 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   v_date date;
+  v_shop_id bigint;
   v_shop_name text;
-  v_report_id bigint;
 BEGIN
-  SELECT t.transaction_date, s.shop_name
-  INTO v_date, v_shop_name
+  SELECT t.transaction_date, t.shop_id, s.shop_name
+  INTO v_date, v_shop_id, v_shop_name
   FROM public."Inventory_daily_sales_summary" d
   JOIN public."Inventory_inventory_transactions" t ON t.id = d.transaction_id
   LEFT JOIN public."Inventory_shop" s ON s.id = t.shop_id
@@ -190,32 +238,13 @@ BEGIN
   WHERE id = p_row_id;
 
   IF v_date IS NOT NULL AND v_shop_name IS NOT NULL THEN
-    SELECT id INTO v_report_id
-    FROM public."Inventory_manager_report"
-    WHERE report_date = v_date AND shop_name = v_shop_name
-    ORDER BY id LIMIT 1;
-
-    IF v_report_id IS NOT NULL THEN
-      UPDATE public."Inventory_manager_report"
-      SET gpay_amount = COALESCE(p_gpay, 0),
-          cash_amount = COALESCE(p_cash, 0),
-          expense_amount = COALESCE(p_expense, 0),
-          updated_at = now()
-      WHERE id = v_report_id;
-    ELSE
-      INSERT INTO public."Inventory_manager_report"
-        (report_date, shop_name, gpay_amount, cash_amount, expense_amount, balance, updated_at)
-      VALUES
-        (v_date, v_shop_name, COALESCE(p_gpay, 0), COALESCE(p_cash, 0), COALESCE(p_expense, 0), 0, now());
-    END IF;
-
-    PERFORM public.inv_recalc_manager_balances(v_shop_name, v_date);
+    PERFORM public.inv_sync_manager_report_day(v_shop_id, v_shop_name, v_date);
   END IF;
 END;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 5. Delete a saved Sale Amount row (atomic)
+-- 6. Delete a saved Sale Amount row (atomic)
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.delete_sale_amount_summary(p_row_id bigint)
 RETURNS void
@@ -224,10 +253,11 @@ AS $$
 DECLARE
   v_tx_id bigint;
   v_date date;
+  v_shop_id bigint;
   v_shop_name text;
 BEGIN
-  SELECT d.transaction_id, t.transaction_date, s.shop_name
-  INTO v_tx_id, v_date, v_shop_name
+  SELECT d.transaction_id, t.transaction_date, t.shop_id, s.shop_name
+  INTO v_tx_id, v_date, v_shop_id, v_shop_name
   FROM public."Inventory_daily_sales_summary" d
   JOIN public."Inventory_inventory_transactions" t ON t.id = d.transaction_id
   LEFT JOIN public."Inventory_shop" s ON s.id = t.shop_id
@@ -237,22 +267,20 @@ BEGIN
     RAISE EXCEPTION 'ROW_NOT_FOUND: summary row % does not exist', p_row_id;
   END IF;
 
-  IF v_date IS NOT NULL AND v_shop_name IS NOT NULL THEN
-    DELETE FROM public."Inventory_manager_report"
-    WHERE report_date = v_date AND shop_name = v_shop_name;
-
-    PERFORM public.inv_recalc_manager_balances(v_shop_name, v_date);
-  END IF;
-
   DELETE FROM public."Inventory_daily_sales_summary" WHERE id = p_row_id;
 
   IF v_tx_id IS NOT NULL THEN
     DELETE FROM public."Inventory_inventory_transactions" WHERE id = v_tx_id;
   END IF;
+
+  IF v_date IS NOT NULL AND v_shop_name IS NOT NULL THEN
+    PERFORM public.inv_sync_manager_report_day(v_shop_id, v_shop_name, v_date);
+  END IF;
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.inv_recalc_manager_balances(text, date) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.inv_sync_manager_report_day(bigint, text, date) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.submit_sale_amount(date, bigint, numeric, numeric, numeric, numeric, numeric) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.update_sale_amount_summary(bigint, numeric, numeric, numeric, numeric) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.delete_sale_amount_summary(bigint) TO anon, authenticated, service_role;
