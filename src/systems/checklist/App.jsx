@@ -10,6 +10,7 @@ import RepairTask from "./pages/admin/RepairTask"           // New
 import EATask from "./pages/admin/EATask"                   // New
 import CalendarPage from "./pages/admin/CalendarPage"       // New
 import QuickTask from "./pages/QuickTask"
+import MasterWork from "./pages/MasterWork"
 import Demo from "./pages/user/Demo"
 import Setting from "./pages/Setting"
 import MisReport from "./pages/MisReport"
@@ -121,6 +122,14 @@ function ChecklistDashboard() {
                     element={
                         <ProtectedRoute>
                             <QuickTask />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="master-work"
+                    element={
+                        <ProtectedRoute>
+                            <MasterWork />
                         </ProtectedRoute>
                     }
                 />

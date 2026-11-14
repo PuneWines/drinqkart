@@ -47,6 +47,7 @@ const AVAILABLE_SYSTEMS = [
           "Dashboard",
           "Announcements",
           "Quick Task",
+          "Master Work",
           "Assign Task",
           "Work Records",
           "Delegation",

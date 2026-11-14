@@ -301,158 +301,50 @@ export async function getSaleHistory({ fromDate, toDate, shopId, itemName, limit
 }
 
 /**
- * Submit Daily Sales Summary Transaction (Mode 3)
+ * Turn raw Postgres/PostgREST errors from the sale-amount RPCs into readable messages.
  */
+function friendlySaleAmountError(err) {
+  const msg = err?.message || String(err);
+  if (msg.includes('SALE_ALREADY_ENTERED')) {
+    return new Error('Sale amount has already been entered for this shop and date. Edit it from the Sales Summary instead.');
+  }
+  if (msg.includes('SHOP_NOT_FOUND')) {
+    return new Error('Selected shop could not be found.');
+  }
+  if (msg.includes('_pkey')) {
+    return new Error('Database id counter is out of sync. Please contact the admin to run the sequence repair script.');
+  }
+  if (msg.includes('Could not find the function')) {
+    return new Error('Database function missing. Run src/systems/inventory/sale_amount_rpc.sql in Supabase.');
+  }
+  return new Error(msg);
+}
+
 /**
  * Submit Daily Sales Summary Transaction (Mode 3)
+ *
+ * Runs as ONE database transaction (RPC submit_sale_amount): the transaction row,
+ * daily sales summary row and manager report row are all written, or none are.
+ * Only one entry per shop per date is allowed.
  */
 export async function submitSaleAmountTransaction(date, gpay, cash, expense, totalClosing, shopId, withdrawal = 0) {
   try {
-    // 1. Insert transaction
-    const { data: tx, error: txErr } = await supabase
-      .from('Inventory_inventory_transactions')
-      .insert([{
-        transaction_date: date,
-        transaction_type: 'sale_amount',
-        shop_id: shopId ? parseInt(shopId, 10) : null
-      }])
-      .select()
-      .single();
-
-    if (txErr) throw txErr;
-
-    // 2. Get items with their MRP (scoped to this shop)
-    const { data: itemsData, error: itemsError } = await supabase
-      .from('Inventory_items')
-      .select('id, item_name, mrp')
-      .eq('shop_id', shopId ? parseInt(shopId, 10) : null);
-
-    if (itemsError) throw itemsError;
-
-    // 3. Get today's sale_qty straight from Inventory_stock_ledger (real-time, unlike
-    // sale_history which is only backfilled for past dates by the midnight sync)
-    const itemIds = (itemsData || []).map(item => item.id);
-    let salesData = [];
-    if (itemIds.length > 0) {
-      const { data, error: salesError } = await supabase
-        .from('Inventory_stock_ledger')
-        .select('item_id, sale_qty')
-        .eq('ledger_date', date)
-        .in('item_id', itemIds);
-
-      if (salesError) throw salesError;
-      salesData = data || [];
-    }
-
-    // Create MRP map
-    const mrpMap = {};
-    (itemsData || []).forEach(item => {
-      mrpMap[item.id] = parseFloat(item.mrp) || 20;
+    const { data, error } = await supabase.rpc('submit_sale_amount', {
+      p_date: date,
+      p_shop_id: shopId ? parseInt(shopId, 10) : null,
+      p_gpay: parseFloat(gpay) || 0,
+      p_cash: parseFloat(cash) || 0,
+      p_expense: parseFloat(expense) || 0,
+      p_total_closing: parseFloat(totalClosing) || 0,
+      p_withdrawal: parseFloat(withdrawal) || 0
     });
 
-    // Calculate total sales from ledger
-    let totalSalesAmt = 0;
-    salesData.forEach(row => {
-      const qty = parseFloat(row.sale_qty) || 0;
-      const mrp = mrpMap[row.item_id] !== undefined ? mrpMap[row.item_id] : 20;
-      totalSalesAmt += qty * mrp;
-    });
+    if (error) throw error;
 
-    const withdrawalAmt = parseFloat(withdrawal) || 0;
-
-    // 4. Insert detail with Total_sales_amt
-    const { error: detailErr } = await supabase
-      .from('Inventory_daily_sales_summary')
-      .insert([{
-        transaction_id: tx.id,
-        gpay_amount: parseFloat(gpay) || 0,
-        cash_amount: parseFloat(cash) || 0,
-        expense_amount: parseFloat(expense) || 0,
-        total_closing_amount: parseFloat(totalClosing) || 0,
-        Total_sales_amt: totalSalesAmt,
-        withdrawal_amount: withdrawalAmt
-      }]);
-
-    if (detailErr) throw detailErr;
-
-    // ==========================================================
-    // Manager Report Logic (Added)
-    // ==========================================================
-
-    // Get shop name
-    let shopNameStr = '';
-    const { data: invShopData } = await supabase
-      .from('Inventory_shop')
-      .select('shop_name')
-      .eq('id', parseInt(shopId, 10))
-      .maybeSingle();
-
-    if (invShopData?.shop_name) {
-      shopNameStr = invShopData.shop_name;
-    } else {
-      const { data: shopData } = await supabase
-        .from('shop')
-        .select('shop_name, name')
-        .eq('id', parseInt(shopId, 10))
-        .maybeSingle();
-      shopNameStr = shopData?.shop_name || shopData?.name || '';
-    }
-
-    // 1. Check if a manager report row already exists for this date and shop
-    if (shopNameStr) {
-      const { data: existingReport, error: checkError } = await supabase
-        .from('Inventory_manager_report')
-        .select('id')
-        .eq('report_date', date)
-        .eq('shop_name', shopNameStr)
-        .maybeSingle();
-
-      if (checkError) throw checkError;
-
-      const gpayAmt = parseFloat(gpay) || 0;
-      const cashAmt = parseFloat(cash) || 0;
-      const expenseAmt = parseFloat(expense) || 0;
-
-      if (existingReport) {
-        const { error: managerUpdateErr } = await supabase
-          .from('Inventory_manager_report')
-          .update({
-            gpay_amount: gpayAmt,
-            cash_amount: cashAmt,
-            expense_amount: expenseAmt,
-            withdrawal_amount: withdrawalAmt,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingReport.id);
-
-        if (managerUpdateErr) throw managerUpdateErr;
-      } else {
-        const { error: managerInsertErr } = await supabase
-          .from('Inventory_manager_report')
-          .insert([{
-            report_date: date,
-            shop_name: shopNameStr,
-            gpay_amount: gpayAmt,
-            cash_amount: cashAmt,
-            expense_amount: expenseAmt,
-            withdrawal_amount: withdrawalAmt,
-            balance: 0, // temporary, will be recalculated below
-            updated_at: new Date().toISOString()
-          }]);
-
-        if (managerInsertErr) throw managerInsertErr;
-      }
-
-      // Recalculate subsequent balances starting from this date
-      await recalculateManagerReportBalances(shopNameStr, date);
-    }
-
-    // ==========================================================
-
-    return { success: true, transactionId: tx.id };
+    return { success: true, transactionId: data };
   } catch (err) {
     console.error('Daily sales transaction failed:', err.message);
-    throw err;
+    throw friendlySaleAmountError(err);
   }
 }
 
@@ -1417,156 +1309,46 @@ export async function recalculateManagerReportBalances(shopName, startDate) {
 
 /**
  * Update a daily sales summary row by ID.
+ * Atomic (RPC update_sale_amount_summary): summary row and manager report change together.
  */
 export async function updateDailySalesSummaryRow(rowId, fields) {
   try {
-    // 1. Fetch current transaction date and shop name first
-    const { data: rowInfo, error: fetchErr } = await supabase
-      .from('Inventory_daily_sales_summary')
-      .select(`
-        transaction_id,
-        inventory_transactions:Inventory_inventory_transactions!inner(
-          transaction_date,
-          shop:Inventory_shop(id, shop_name)
-        )
-      `)
-      .eq('id', rowId)
-      .single();
-
-    if (fetchErr) throw fetchErr;
-    const reportDate = rowInfo.inventory_transactions?.transaction_date;
-    const shopName = rowInfo.inventory_transactions?.shop?.shop_name;
-
-    // 2. Update daily_sales_summary
-    const { data, error } = await supabase
-      .from('Inventory_daily_sales_summary')
-      .update({
-        gpay_amount: parseFloat(fields.gpay_amount) || 0,
-        cash_amount: parseFloat(fields.cash_amount) || 0,
-        expense_amount: parseFloat(fields.expense_amount) || 0,
-        total_closing_amount: parseFloat(fields.total_closing_amount) || 0
-      })
-      .eq('id', rowId)
-      .select()
-      .single();
+    const { error } = await supabase.rpc('update_sale_amount_summary', {
+      p_row_id: rowId,
+      p_gpay: parseFloat(fields.gpay_amount) || 0,
+      p_cash: parseFloat(fields.cash_amount) || 0,
+      p_expense: parseFloat(fields.expense_amount) || 0,
+      p_total_closing: parseFloat(fields.total_closing_amount) || 0
+    });
 
     if (error) throw error;
 
-    // 3. Update manager_report if date and shop name exist
-    if (reportDate && shopName) {
-      const { data: existingReport, error: checkError } = await supabase
-        .from('Inventory_manager_report')
-        .select('id')
-        .eq('report_date', reportDate)
-        .eq('shop_name', shopName)
-        .maybeSingle();
-
-      if (checkError) throw checkError;
-
-      const gpayAmt = parseFloat(fields.gpay_amount) || 0;
-      const cashAmt = parseFloat(fields.cash_amount) || 0;
-      const expenseAmt = parseFloat(fields.expense_amount) || 0;
-
-      if (existingReport) {
-        const { error: managerUpdateErr } = await supabase
-          .from('Inventory_manager_report')
-          .update({
-            gpay_amount: gpayAmt,
-            cash_amount: cashAmt,
-            expense_amount: expenseAmt,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingReport.id);
-
-        if (managerUpdateErr) throw managerUpdateErr;
-      } else {
-        const { error: managerInsertErr } = await supabase
-          .from('Inventory_manager_report')
-          .insert([{
-            report_date: reportDate,
-            shop_name: shopName,
-            gpay_amount: gpayAmt,
-            cash_amount: cashAmt,
-            expense_amount: expenseAmt,
-            balance: 0, // temporary, will be recalculated
-            updated_at: new Date().toISOString()
-          }]);
-
-        if (managerInsertErr) throw managerInsertErr;
-      }
-
-      // Recalculate subsequent balances starting from this date
-      await recalculateManagerReportBalances(shopName, reportDate);
-    }
+    const { data } = await supabase
+      .from('Inventory_daily_sales_summary')
+      .select()
+      .eq('id', rowId)
+      .maybeSingle();
 
     return data;
   } catch (err) {
     console.error(`Failed to update daily sales summary row ID ${rowId}:`, err.message);
-    throw err;
+    throw friendlySaleAmountError(err);
   }
 }
 
 /**
  * Delete a daily sales summary row by ID.
- * Also cleans up the corresponding parent inventory transaction.
+ * Atomic (RPC delete_sale_amount_summary): manager report, summary row and parent
+ * transaction are removed together, and running balances recalculated.
  */
 export async function deleteDailySalesSummaryRow(rowId) {
   try {
-    // 1. Fetch transaction_id, date, and shop name
-    const { data: rowInfo, error: fetchErr } = await supabase
-      .from('Inventory_daily_sales_summary')
-      .select(`
-        transaction_id,
-        inventory_transactions:Inventory_inventory_transactions!inner(
-          transaction_date,
-          shop:Inventory_shop(id, shop_name)
-        )
-      `)
-      .eq('id', rowId)
-      .single();
-
-    if (fetchErr) throw fetchErr;
-    const txId = rowInfo.transaction_id;
-    const reportDate = rowInfo.inventory_transactions?.transaction_date;
-    const shopName = rowInfo.inventory_transactions?.shop?.shop_name;
-
-    // 2. Delete corresponding manager report if date and shop name exist
-    if (reportDate && shopName) {
-      const { error: managerDeleteErr } = await supabase
-        .from('Inventory_manager_report')
-        .delete()
-        .eq('report_date', reportDate)
-        .eq('shop_name', shopName);
-      if (managerDeleteErr) {
-        console.error('Failed to delete from manager_report:', managerDeleteErr.message);
-        throw managerDeleteErr;
-      }
-
-      // Recalculate subsequent running balances after deletion
-      await recalculateManagerReportBalances(shopName, reportDate);
-    }
-
-    // 3. Delete from daily_sales_summary
-    const { error: deleteErr } = await supabase
-      .from('Inventory_daily_sales_summary')
-      .delete()
-      .eq('id', rowId);
-
-    if (deleteErr) throw deleteErr;
-
-    // 4. Delete parent transaction
-    if (txId) {
-      const { error: txDeleteErr } = await supabase
-        .from('Inventory_inventory_transactions')
-        .delete()
-        .eq('id', txId);
-      if (txDeleteErr) throw txDeleteErr;
-    }
-
+    const { error } = await supabase.rpc('delete_sale_amount_summary', { p_row_id: rowId });
+    if (error) throw error;
     return { success: true };
   } catch (err) {
     console.error(`Failed to delete daily sales summary row ID ${rowId}:`, err.message);
-    throw err;
+    throw friendlySaleAmountError(err);
   }
 }
 
@@ -2118,11 +1900,12 @@ export async function getSalesByDate(date, shopId = null) {
       cash: summaryResult.cash,
       expense: summaryResult.expense,
       netSales: summaryResult.netSales,
-      calculatedSales
+      calculatedSales,
+      entryExists: filteredSummary.length > 0
     };
   } catch (err) {
     console.error('Error fetching sales by date:', err);
-    return { gpay: 0, cash: 0, expense: 0, netSales: 0, calculatedSales: 0 };
+    return { gpay: 0, cash: 0, expense: 0, netSales: 0, calculatedSales: 0, entryExists: false };
   }
 }
 

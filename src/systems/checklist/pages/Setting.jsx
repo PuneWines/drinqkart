@@ -26,6 +26,7 @@ const ALL_PAGES = [
   { id: 'dashboard', label: 'Dashboard', path: '/dashboard/admin' },
   { id: 'announcements', label: 'Announcements', path: '/dashboard/notifications' },
   { id: 'quick_task', label: 'Quick Task', path: '/dashboard/quick-task' },
+  { id: 'master_work', label: 'Master Work', path: '/dashboard/master-work' },
   { id: 'assign_task', label: 'Assign Task', path: '/dashboard/assign-task' },
   { id: 'work_records', label: 'Work Records', path: '/dashboard/work-details' },
   { id: 'delegation', label: 'Delegation', path: '/dashboard/delegation' },

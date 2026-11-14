@@ -43,6 +43,7 @@ const parseChecklistAllowedPages = (userData) => {
       "Dashboard",
       "Announcements",
       "Quick Task",
+      "Master Work",
       "Assign Task",
       "Work Records",
       "Work Details",
@@ -69,6 +70,7 @@ const parseChecklistAllowedPages = (userData) => {
     if (lower.includes("dashboard")) pageSet.add("Dashboard");
     if (lower.includes("announcement") || lower.includes("notification")) pageSet.add("Announcements");
     if (lower.includes("quick_task") || lower.includes("quick task") || lower.includes("quicktask")) pageSet.add("Quick Task");
+    if (lower.includes("master_work") || lower.includes("master work") || lower.includes("masterwork")) pageSet.add("Master Work");
     if (lower.includes("assign_task") || lower.includes("assign task") || lower.includes("assigntask")) pageSet.add("Assign Task");
     if (lower.includes("work_records") || lower.includes("work records") || lower.includes("workrecords") || lower.includes("work_details") || lower.includes("work details") || lower.includes("workdetails") || lower.includes("work_tasks") || lower.includes("work tasks") || lower.includes("worktasks")) {
       pageSet.add("Work Records");
@@ -195,6 +197,13 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
       icon: Zap,
       active: location.pathname === "/dashboard/quick-task",
       showFor: ["admin", "user", "hod", "manager"],
+    },
+    {
+      href: "/dashboard/master-work",
+      label: "Master Work",
+      icon: Zap,
+      active: location.pathname === "/dashboard/master-work",
+      showFor: ["admin", "hod", "manager"],
     },
     {
       href: "/dashboard/assign-task",

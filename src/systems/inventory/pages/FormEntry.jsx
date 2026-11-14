@@ -215,7 +215,7 @@ export default function FormEntry({ currentUser }) {
         setSalesByDate(sales);
       } catch (err) {
         console.error('Failed to load sales by date:', err);
-        setSalesByDate({ gpay: 0, cash: 0, expense: 0, netSales: 0, calculatedSales: 0 });
+        setSalesByDate({ gpay: 0, cash: 0, expense: 0, netSales: 0, calculatedSales: 0, entryExists: false });
       } finally {
         setIsLoadingSales(false);
       }
@@ -385,7 +385,7 @@ export default function FormEntry({ currentUser }) {
   const [cashBalance, setCashBalance] = useState('');
   const [expense, setExpense] = useState('');
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
-  const [salesByDate, setSalesByDate] = useState({ gpay: 0, cash: 0, expense: 0, netSales: 0, calculatedSales: 0 });
+  const [salesByDate, setSalesByDate] = useState({ gpay: 0, cash: 0, expense: 0, netSales: 0, calculatedSales: 0, entryExists: false });
   const [isLoadingSales, setIsLoadingSales] = useState(false);
   const [closingStockEntered, setClosingStockEntered] = useState(true);
   const [isCheckingClosingStock, setIsCheckingClosingStock] = useState(false);
@@ -515,6 +515,10 @@ export default function FormEntry({ currentUser }) {
     } else if (quantityType === 'Sale Amount') {
       if (!closingStockEntered) {
         showToast('❌ Closing Stock has not been entered for this date yet. Please submit Closing Stock first — otherwise Total Sales Amt will be recorded as ₹0.', 'error');
+        return;
+      }
+      if (salesByDate.entryExists) {
+        showToast(`❌ Sale amount for ${date} has already been submitted for this shop. Edit it from the Sales Summary instead.`, 'error');
         return;
       }
       if (gpayBalance === '' && cashBalance === '' && expense === '') {
@@ -1027,6 +1031,20 @@ export default function FormEntry({ currentUser }) {
                   </h3>
                 </div>
 
+                {salesByDate.entryExists && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start space-x-3">
+                    <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    </svg>
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wide">Already submitted for {date}</h4>
+                      <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                        Sale Amount can only be entered once per shop per day. The saved values are shown in the Sales Summary. To correct them, edit the entry from the Sales Summary table.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {!isCheckingClosingStock && !closingStockEntered && (
                   <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start space-x-3">
                     <svg className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1113,6 +1131,34 @@ export default function FormEntry({ currentUser }) {
                             </div>
                           </div>
 
+                          {quantityType === 'Sale Amount' && !salesByDate.entryExists && (gpayBalance !== '' || cashBalance !== '' || expense !== '' || withdrawalAmount !== '') && (
+                            <div className="p-3 mb-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                              <span className="text-[10px] font-extrabold text-indigo-800 block uppercase tracking-wider mb-2">
+                                Pending Entry (not saved yet)
+                              </span>
+                              <div className="flex items-center justify-between py-1">
+                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">G-Pay</span>
+                                <span className="text-xs font-bold text-slate-700">₹{(parseFloat(gpayBalance) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between py-1">
+                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cash</span>
+                                <span className="text-xs font-bold text-slate-700">₹{(parseFloat(cashBalance) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between py-1">
+                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Expense</span>
+                                <span className="text-xs font-bold text-rose-600">₹{(parseFloat(expense) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between py-1">
+                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Withdrawal</span>
+                                <span className="text-xs font-bold text-rose-600">₹{(parseFloat(withdrawalAmount) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between pt-2 mt-1 border-t border-indigo-100">
+                                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Net Total</span>
+                                <span className="text-sm font-extrabold text-indigo-600">₹{((parseFloat(gpayBalance) || 0) + (parseFloat(cashBalance) || 0)).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="pt-2 border-t border-slate-200">
                             <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider mb-2">
                               Logged Financial Sheet
@@ -1149,13 +1195,13 @@ export default function FormEntry({ currentUser }) {
                 disabled={
                   !isCurrentTypeModifyAllowed ||
                   (quantityType === 'Closing Quantity' && isClosingOverflow) ||
-                  (quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered)
+                  (quantityType === 'Sale Amount' && (salesByDate.entryExists || (!isCheckingClosingStock && !closingStockEntered)))
                 }
                 className={`w-full inline-flex items-center justify-center px-8 py-3.5 rounded-xl text-sm font-bold text-white transition-all duration-300 cursor-pointer ${
                   !isCurrentTypeModifyAllowed
                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-75 shadow-none'
                     : (quantityType === 'Closing Quantity' && isClosingOverflow) ||
-                      (quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered)
+                      (quantityType === 'Sale Amount' && (salesByDate.entryExists || (!isCheckingClosingStock && !closingStockEntered)))
                     ? 'bg-slate-300 cursor-not-allowed opacity-60'
                     : 'bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 shadow-md hover:shadow-lg'
                 }`}
@@ -1168,7 +1214,7 @@ export default function FormEntry({ currentUser }) {
                   : quantityType === 'Closing Quantity' && isClosingOverflow
                     ? 'Cannot Submit — Stock Overflow'
                     : quantityType === 'Sale Amount' && !isCheckingClosingStock && !closingStockEntered
-                      ? 'Cannot Submit — Closing Stock Missing'
+                      ? (salesByDate.entryExists ? 'Already Submitted for ' + date : 'Cannot Submit — Closing Stock Missing')
                       : 'Submit Data'}
               </button>
             </div>

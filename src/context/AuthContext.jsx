@@ -23,6 +23,7 @@ export const parseChecklistAllowedPages = (userData) => {
       "Dashboard",
       "Announcements",
       "Quick Task",
+      "Master Work",
       "Assign Task",
       "Work Records",
       "Work Details",
@@ -59,6 +60,12 @@ export const parseChecklistAllowedPages = (userData) => {
       lower === "quick_task"
     )
       pageSet.add("Quick Task");
+    else if (
+      lower === "master work" ||
+      lower === "masterwork" ||
+      lower === "master_work"
+    )
+      pageSet.add("Master Work");
     else if (
       lower === "assign task" ||
       lower === "assigntask" ||

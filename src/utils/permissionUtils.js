@@ -246,6 +246,7 @@ export const PAGE_ALIASES = {
   'alltasks': ['task', 'alltasks', 'tasks', 'all_task', 'all task'],
   'assigntask': ['assigntask', 'checklisttask', 'assign_task', 'assign task', 'maintenancetask', 'repairtask', 'eatask'],
   'quicktask': ['quicktask', 'quick_task', 'quick task'],
+  'masterwork': ['masterwork', 'master_work', 'master work'],
   'workrecords': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],
   'workdetails': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],
   'scheduledworktasks': ['workrecords', 'workdetails', 'scheduledworktasks', 'scheduled', 'work_records', 'work records', 'work_details', 'work details'],

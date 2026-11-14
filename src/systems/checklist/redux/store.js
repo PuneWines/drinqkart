@@ -11,6 +11,7 @@ import repairReducer from "./slice/repairSlice";
 import eaReducer from "./slice/eaSlice";
 import notificationReducer from "./slice/notificationSlice";
 import workRecordsReducer from "./slice/workRecordsSlice";
+import masterWorkReducer from "./slice/masterWorkSlice";
 
 const store = configureStore({
     reducer: {
@@ -25,7 +26,8 @@ const store = configureStore({
         repair: repairReducer,
         ea: eaReducer,
         notifications: notificationReducer,
-        workRecords: workRecordsReducer
+        workRecords: workRecordsReducer,
+        masterWork: masterWorkReducer
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({
