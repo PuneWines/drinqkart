@@ -139,7 +139,8 @@ export async function submitPurchaseTransaction(date, vendorId, itemsList, shopI
       total_amount: parseFloat(item.total) || 0
     }));
 
-    const { data, error } = await supabase.rpc('submit_purchase', {
+    const { data, error } = await supabase.rpc('submit_purchase', 
+      {
       p_date: date,
       p_vendor_id: vendorId ? parseInt(vendorId, 10) : null,
       p_shop_id: shopId ? parseInt(shopId, 10) : null,

@@ -4,6 +4,7 @@ import { getUserAssignedShops } from "../utils/permissionUtils";
 
 const AuthContext = createContext();
 
+
 export const useAuth = () => useContext(AuthContext);
 
 // Single unified session for Drinqkart Master project. Every logged-in user's
