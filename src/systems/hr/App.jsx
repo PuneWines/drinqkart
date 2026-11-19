@@ -1,13 +1,9 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { Provider } from "react-redux";
-import { QueryClientProvider } from "@tanstack/react-query";
-import checklistStore from "../checklist/redux/store";
-import checklistQueryClient from "../checklist/queryClient";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import Attendance from "./pages/Attendance";
 import LeaveManagement from "./pages/LeaveManagement";
-import HolidayListPage from "../checklist/pages/admin/HolidayListPage";
+import Holiday from "./pages/Holiday";
 import Payroll from "./pages/Payroll";
 import MisReport from "./pages/MisReport";
 import AdminAdvance from "./pages/AdminAdvance";
@@ -45,16 +41,7 @@ function HrApp() {
             <Route path="attendance/monthly" element={<Attendance />} />
             <Route path="payroll" element={<Payroll />} />
             <Route path="leave" element={<LeaveManagement />} />
-            <Route
-              path="holiday"
-              element={
-                <Provider store={checklistStore}>
-                  <QueryClientProvider client={checklistQueryClient}>
-                    <HolidayListPage />
-                  </QueryClientProvider>
-                </Provider>
-              }
-            />
+            <Route path="holiday" element={<Holiday />} />
             <Route path="recruitment" element={<Recruitment />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />

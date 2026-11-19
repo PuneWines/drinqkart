@@ -28,7 +28,6 @@ export const systems = [
       { label: 'Delegation', to: '/dashboard/delegation' },
       { label: 'All Tasks', to: '/dashboard/task' },
       { label: 'Calendar', to: '/dashboard/calendar' },
-      { label: 'Holiday List', to: '/dashboard/holiday-list' },
       { label: 'Working Day Calendar', to: '/dashboard/working-day-calendar' },
       { label: 'MIS Report', to: '/dashboard/mis-report' },
       { label: 'Admin Approval', to: '/dashboard/admin-approval' },
@@ -127,7 +126,8 @@ export const systems = [
     base: '/systems/whatsapp',
     icon: MessageSquare,
     subtabs: [
-      { label: 'Dashboard', to: '/systems/whatsapp' },
+      { label: 'Live Chats', to: '/systems/whatsapp?tab=whatsapp' },
+      { label: 'Broadcast Campaign', to: '/systems/whatsapp?tab=broadcast' },
     ]
   },
   {
@@ -332,7 +332,7 @@ export const getVisibleSystems = (user) => {
         }
       }
       if (systemId === 'checklist') {
-        if (sub.label === 'Holiday List' || sub.label === 'Working Day Calendar') {
+        if (sub.label === 'Working Day Calendar') {
           labelsToCheck.push('Holiday');
         }
       }
@@ -383,6 +383,9 @@ export const getVisibleSystems = (user) => {
       }
       if (systemId === 'stock-report' || systemId === 'stock_report' || systemId === 'stock-balance') {
         labelsToCheck.push('Stock / Report', 'Stock Balance Sheet', 'Stock Balance', 'Stock Report', 'Sheet', 'Not Sold Stock', 'Req Stock Report', 'Valuation Report', 'Current Stock', 'BIO order dashboard');
+      }
+      if (systemId === 'whatsapp') {
+        labelsToCheck.push('WhatsApp Broadcast', 'whatsapp', 'Dashboard', 'Live Chats', 'Broadcast Campaign');
       }
 
       const hasMasterPerm = labelsToCheck.some((lbl) => {

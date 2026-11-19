@@ -32,7 +32,6 @@ const ALL_PAGES = [
   { id: 'delegation', label: 'Delegation', path: '/dashboard/delegation' },
   { id: 'task', label: 'Task', path: '/dashboard/task' },
   { id: 'calendar', label: 'Calendar', path: '/dashboard/calendar' },
-  { id: 'holiday', label: 'Holiday List', path: '/dashboard/holiday-list' },
   { id: 'working_day', label: 'Working Day Calendar', path: '/dashboard/working-day-calendar' },
   { id: 'admin_approval', label: 'Admin Approval', path: '/dashboard/admin-approval' },
   { id: 'settings', label: 'Settings', path: '/dashboard/setting' },

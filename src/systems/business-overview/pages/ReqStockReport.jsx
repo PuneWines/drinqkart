@@ -13,6 +13,31 @@ const DEFAULT_ORDER_DAYS = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
+const fmtBox = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const inferBottlesPerCase = (bpc, mls, name = '') => {
+  const numBpc = Number(bpc) || 0;
+  if (numBpc > 0) return numBpc;
+  const ml = Number(mls) || 0;
+  if (ml === 90) return 96;
+  if (ml === 180) return 48;
+  if (ml === 375) return 24;
+  if (ml === 750 || ml === 1000) return 12;
+  if (ml === 650) return 12;
+  if (ml === 500 || ml === 330) return 24;
+
+  const match = (name || '').match(/(\d+)\s*(?:ml|ML)/);
+  if (match) {
+    const extractedMl = parseInt(match[1], 10);
+    if (extractedMl === 90) return 96;
+    if (extractedMl === 180) return 48;
+    if (extractedMl === 375) return 24;
+    if (extractedMl === 750 || extractedMl === 1000) return 12;
+    if (extractedMl === 650) return 12;
+    if (extractedMl === 500 || extractedMl === 330) return 24;
+  }
+  return 0;
+};
 
 const daysBetween = (fromISO, toISO) =>
   Math.round((new Date(`${toISO}T00:00:00`) - new Date(`${fromISO}T00:00:00`)) / DAY_MS);
@@ -62,13 +87,23 @@ export default function ReqStockReport() {
       const key = `${r.store_name}||${r.item_id}`;
       let s = perShopItem.get(key);
       if (!s) {
-        s = { itemId: r.item_id, name: r.item_description, lastDate: r.snapshot_date, closing: Number(r.closing_qty) || 0, sale: 0 };
+        s = {
+          itemId: r.item_id,
+          name: r.item_description,
+          lastDate: r.snapshot_date,
+          closing: Number(r.closing_qty) || 0,
+          sale: 0,
+          bottlesPerCase: inferBottlesPerCase(r.bottles_per_case, r.mls, r.item_description)
+        };
         perShopItem.set(key, s);
       }
       s.sale += Number(r.qty_out) || 0;
       if (r.snapshot_date >= s.lastDate) {
         s.lastDate = r.snapshot_date;
         s.closing = Number(r.closing_qty) || 0;
+      }
+      if (!s.bottlesPerCase) {
+        s.bottlesPerCase = inferBottlesPerCase(r.bottles_per_case, r.mls, r.item_description);
       }
     });
 
@@ -77,17 +112,27 @@ export default function ReqStockReport() {
     perShopItem.forEach((s) => {
       let it = byItem.get(s.itemId);
       if (!it) {
-        it = { itemId: s.itemId, name: s.name, sale: 0, current: 0 };
+        it = {
+          itemId: s.itemId,
+          name: s.name,
+          sale: 0,
+          current: 0,
+          bottlesPerCase: s.bottlesPerCase || 0
+        };
         byItem.set(s.itemId, it);
       }
       it.sale += s.sale;
       it.current += s.closing;
+      if (!it.bottlesPerCase && s.bottlesPerCase) it.bottlesPerCase = s.bottlesPerCase;
     });
 
     return [...byItem.values()].map((it) => {
       // per day is rounded to 1 decimal (as shown), so the order is exactly the displayed per day x days
       const perDay = Math.round((it.sale / rangeDays) * 10) / 10;
-      return { ...it, perDay, order: Math.round(perDay * days * 10) / 10 };
+      const order = Math.round(perDay * days * 10) / 10;
+      const bpc = it.bottlesPerCase || 0;
+      const orderBox = bpc > 0 ? Math.round((order / bpc) * 100) / 100 : 0;
+      return { ...it, perDay, order, bpc, orderBox };
     });
   }, [rows, shopFilter, rangeDays, days]);
 
@@ -107,6 +152,7 @@ export default function ReqStockReport() {
   }, [items, search, minSale, sort]);
 
   const totalOrder = useMemo(() => visible.reduce((sum, it) => sum + it.order, 0), [visible]);
+  const totalOrderBox = useMemo(() => visible.reduce((sum, it) => sum + (it.orderBox || 0), 0), [visible]);
 
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   useEffect(() => {
@@ -124,7 +170,8 @@ export default function ReqStockReport() {
       'Sale': it.sale,
       'Current Closing Qty': it.current,
       'Per Day': Number(it.perDay.toFixed(1)),
-      [`Order -${days}`]: Number(it.order.toFixed(1))
+      [`Order -${days}`]: Number(it.order.toFixed(1)),
+      [`Order Box (-${days})`]: Number(it.orderBox.toFixed(2))
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -207,6 +254,9 @@ export default function ReqStockReport() {
             </span>
             <span className="flex items-center h-9 bg-slate-50 px-3 rounded-xl border border-slate-200/60">
               Order:&nbsp;<b className="text-indigo-900">{fmtQty(totalOrder)}</b>
+            </span>
+            <span className="flex items-center h-9 bg-slate-50 px-3 rounded-xl border border-slate-200/60">
+              Order Box:&nbsp;<b className="text-emerald-700">{fmtBox(totalOrderBox)}</b>
             </span>
           </div>
         </div>
@@ -295,7 +345,8 @@ export default function ReqStockReport() {
                   ['sale', 'Sale', 'text-right'],
                   ['current', 'Current Closing Qty', 'text-right'],
                   ['perDay', 'Per Day', 'text-right'],
-                  ['order', `Order -${days}`, 'text-right']
+                  ['order', `Order -${days}`, 'text-right'],
+                  ['orderBox', `Order Box (-${days})`, 'text-right']
                 ].map(([key, label, align]) => (
                   <th
                     key={key}
@@ -312,7 +363,7 @@ export default function ReqStockReport() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-400">
+                  <td colSpan={7} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={20} className="animate-spin text-indigo-600" />
                       <span className="text-xs font-semibold text-slate-600">{loadingLabel}</span>
@@ -321,7 +372,7 @@ export default function ReqStockReport() {
                 </tr>
               ) : pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-14 text-slate-400">
+                  <td colSpan={7} className="text-center py-14 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
                       <span className="text-sm font-semibold text-slate-600">No items to order</span>
@@ -340,6 +391,7 @@ export default function ReqStockReport() {
                     <td className="px-3 py-2.5 text-right font-mono text-slate-700">{fmtQty(it.current)}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-slate-700">{fmtQty(it.perDay)}</td>
                     <td className="px-3 py-2.5 text-right font-mono font-bold text-indigo-700 bg-indigo-50/40">{fmtQty(it.order)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-700 bg-emerald-50/40">{fmtBox(it.orderBox)}</td>
                   </tr>
                 ))
               )}

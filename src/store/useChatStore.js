@@ -148,31 +148,173 @@ export const useChatStore = create((set, get) => ({
 
       if (shopsErr) throw shopsErr;
 
-      // 2. Fetch active employees with a valid mobile number from hr_management_employees table
+      // 2. Fetch master users to determine active/inactive status and authoritative roles
+      const { data: usersDb, error: usersErr } = await supabase
+        .from('users')
+        .select('id, employee_id, user_name, role, designation, status, shop_name, mobile_no');
+
+      if (usersErr) console.warn('Could not fetch master users list:', usersErr);
+
+      // Build master user lookup by employee_id, user_name, and phone
+      const masterUserByEmpId = new Map();
+      const masterUserByName = new Map();
+      const masterUserByPhone = new Map();
+
+      (usersDb || []).forEach((u) => {
+        if (u.employee_id) masterUserByEmpId.set(String(u.employee_id).trim().toLowerCase(), u);
+        if (u.user_name) masterUserByName.set(String(u.user_name).trim().toLowerCase(), u);
+        if (u.mobile_no) {
+          const digits = String(u.mobile_no).replace(/\D/g, '').slice(-10);
+          if (digits) masterUserByPhone.set(digits, u);
+        }
+      });
+
+      // 3. Fetch HR employees
       const { data: hrEmpsDb, error: hrEmpsErr } = await supabase
         .from('hr_management_employees')
-        .select('id, name_as_per_aadhar, mobile_no, designation, joining_company_name, status')
+        .select('id, employee_id, name_as_per_aadhar, mobile_no, designation, joining_company_name, status')
         .not('mobile_no', 'is', null)
         .order('name_as_per_aadhar', { ascending: true });
 
       if (hrEmpsErr) throw hrEmpsErr;
 
-      // 3. Group and map employees to shops based on joining_company_name
+      // 4. Group and map ONLY master active status employees to shops
       const mappedShops = (shopsDb || []).map((shop) => {
-        const shopEmployees = (hrEmpsDb || [])
-          .filter((emp) => {
-            const isMatchingShop = emp.joining_company_name === shop.shop_name;
-            const hasMobile = emp.mobile_no && String(emp.mobile_no).trim() !== '';
-            const isActive = !emp.status || ['active', 'Active'].includes(emp.status);
-            return isMatchingShop && hasMobile && isActive;
-          })
-          .map((emp) => ({
-            id: emp.id.toString(), // Stringified for safe string-comparison in UI checkboxes
-            name: emp.name_as_per_aadhar || 'Unnamed',
-            role: emp.designation || 'EMPLOYEE',
-            phone: String(emp.mobile_no).trim(),
+        const shopLower = (shop.shop_name || '').toLowerCase().trim();
+        const seenDigits = new Set();
+        const shopEmployees = [];
+
+        (hrEmpsDb || []).forEach((emp) => {
+          const empShop = (emp.joining_company_name || '').toLowerCase().trim();
+          if (empShop !== shopLower) return;
+
+          const rawPhone = emp.mobile_no ? String(emp.mobile_no).trim() : '';
+          const digits = rawPhone.replace(/\D/g, '').slice(-10);
+          if (!digits || digits.length < 10) return;
+
+          const empIdKey = emp.employee_id ? String(emp.employee_id).trim().toLowerCase() : '';
+          const nameKey = emp.name_as_per_aadhar ? String(emp.name_as_per_aadhar).trim().toLowerCase() : '';
+
+          const masterUser = (empIdKey && masterUserByEmpId.get(empIdKey)) ||
+                             (nameKey && masterUserByName.get(nameKey)) ||
+                             (digits && masterUserByPhone.get(digits));
+
+          // Strict Master Active Status:
+          // Check HR status
+          const hrStatus = (emp.status || 'active').toLowerCase().trim();
+          if (hrStatus === 'inactive') return;
+
+          // Check Master User status (from users table)
+          if (masterUser) {
+            const masterStatus = (masterUser.status || 'active').toLowerCase().trim();
+            if (masterStatus === 'inactive') return;
+          }
+
+          if (seenDigits.has(digits)) return;
+          seenDigits.add(digits);
+
+          // Determine role category: 'admin', 'manager', or 'employee'
+          const userRole = (masterUser?.role || '').toLowerCase().trim();
+          const desig = (emp.designation || masterUser?.designation || '').toLowerCase().trim();
+
+          let roleCategory = 'employee';
+          if (
+            userRole === 'admin' ||
+            userRole === 'superadmin' ||
+            userRole === 'masteradmin' ||
+            userRole === 'hod' ||
+            userRole === 'owner' ||
+            userRole === 'director' ||
+            userRole.includes('admin') ||
+            desig.includes('admin') ||
+            desig.includes('hod') ||
+            desig.includes('owner') ||
+            desig.includes('director') ||
+            desig.includes('head') ||
+            desig.includes('partner')
+          ) {
+            roleCategory = 'admin';
+          } else if (
+            userRole === 'manager' ||
+            desig.includes('manager') ||
+            desig.includes('incharge') ||
+            desig.includes('supervisor')
+          ) {
+            roleCategory = 'manager';
+          } else {
+            roleCategory = 'employee';
+          }
+
+          const displayRole = emp.designation || masterUser?.designation || (roleCategory === 'admin' ? 'Admin' : roleCategory === 'manager' ? 'Manager' : 'Employee');
+
+          shopEmployees.push({
+            id: emp.id.toString(),
+            name: emp.name_as_per_aadhar || masterUser?.user_name || 'Unnamed',
+            role: displayRole,
+            roleCategory,
+            phone: rawPhone,
             status: 'online',
-          }));
+          });
+        });
+
+        // Also include active users from usersDb directly assigned to this shop or all shops
+        (usersDb || []).forEach((u) => {
+          const masterStatus = (u.status || 'active').toLowerCase().trim();
+          if (masterStatus === 'inactive') return;
+
+          const uPhone = u.mobile_no ? String(u.mobile_no).trim() : '';
+          const uDigits = uPhone.replace(/\D/g, '').slice(-10);
+          if (!uDigits || uDigits.length < 10) return;
+
+          const uShop = (u.shop_name || '').toLowerCase().trim();
+          const isAllShops = !uShop || uShop === 'all' || uShop === 'all shops';
+          const isDirectMatch = uShop === shopLower;
+          const isCommaMatch = uShop.includes(',') && uShop.split(',').map((s) => s.trim()).includes(shopLower);
+          const isOfficeMatch = (shopLower === 'office' || shopLower.includes('office')) && isAllShops;
+
+          // If user belongs to all shops, direct match, or office match
+          if (!isDirectMatch && !isCommaMatch && !isOfficeMatch && !isAllShops) return;
+
+          if (seenDigits.has(uDigits)) return;
+          seenDigits.add(uDigits);
+
+          const uRole = (u.role || '').toLowerCase().trim();
+          const uDesig = (u.designation || '').toLowerCase().trim();
+          let roleCat = 'employee';
+          if (
+            uRole === 'admin' ||
+            uRole === 'superadmin' ||
+            uRole === 'masteradmin' ||
+            uRole === 'hod' ||
+            uRole === 'owner' ||
+            uRole === 'director' ||
+            uRole.includes('admin') ||
+            uDesig.includes('admin') ||
+            uDesig.includes('hod') ||
+            uDesig.includes('owner') ||
+            uDesig.includes('director') ||
+            uDesig.includes('head') ||
+            uDesig.includes('partner')
+          ) {
+            roleCat = 'admin';
+          } else if (
+            uRole === 'manager' ||
+            uDesig.includes('manager') ||
+            uDesig.includes('incharge') ||
+            uDesig.includes('supervisor')
+          ) {
+            roleCat = 'manager';
+          }
+
+          shopEmployees.push({
+            id: `user-${u.id}`,
+            name: u.user_name || 'User',
+            role: u.designation || (roleCat === 'admin' ? (u.role ? u.role.toUpperCase() : 'Admin') : roleCat === 'manager' ? 'Manager' : 'Employee'),
+            roleCategory: roleCat,
+            phone: uPhone,
+            status: 'online',
+          });
+        });
 
         return {
           id: shop.id.toString(),
@@ -183,7 +325,7 @@ export const useChatStore = create((set, get) => ({
         };
       });
 
-      // 4. Update store and pre-select the first shop + its employees
+      // 5. Update store and pre-select the first shop + its employees
       const firstShop = mappedShops[0];
       set({
         shops: mappedShops,
@@ -203,6 +345,24 @@ export const useChatStore = create((set, get) => ({
   setShopSearchQuery: (q) => set({ shopSearchQuery: q, storeSearchQuery: q }),
   setStoreSearchQuery: (q) => set({ shopSearchQuery: q, storeSearchQuery: q }),
   setRoleFilter: (f) => set({ roleFilter: f }),
+
+  selectAllShops: () =>
+    set((s) => {
+      const allShopIds = s.shops.map((st) => st.id)
+      const allEmpIds = s.shops.flatMap((st) => st.employees.map((e) => e.id))
+      return {
+        selectedShopIds: allShopIds,
+        selectedStoreIds: allShopIds,
+        selectedEmployeeIds: Array.from(new Set(allEmpIds)),
+      }
+    }),
+
+  clearAllShops: () =>
+    set(() => ({
+      selectedShopIds: [],
+      selectedStoreIds: [],
+      selectedEmployeeIds: [],
+    })),
 
   toggleShopSelection: (shopId) =>
     set((s) => {
@@ -959,25 +1119,50 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  updateWhatsAppContactName: async (cid, newName) => {
-    if (!cid || !newName) return;
+  updateWhatsAppContact: async (cid, { name, phone_number, avatar_url } = {}) => {
+    if (!cid) return;
     try {
       const nowIso = new Date().toISOString();
+      const updates = { updated_at: nowIso };
+      if (name !== undefined) updates.name = name.trim();
+      if (phone_number !== undefined) {
+        const cleanPhone = String(phone_number).replace(/\D/g, '');
+        if (cleanPhone) updates.phone_number = cleanPhone;
+      }
+      if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+
       const { error } = await supabase
         .from('whatsapp_contacts')
-        .update({
-          name: newName,
-          updated_at: nowIso,
-        })
+        .update(updates)
         .eq('id', cid);
 
       if (error) throw error;
 
+      // Update local state immediately
+      set((state) => ({
+        whatsappConversations: state.whatsappConversations.map((c) => {
+          if (c.id === cid || c.contact_id === cid) {
+            return {
+              ...c,
+              whatsapp_contacts: {
+                ...(c.whatsapp_contacts || {}),
+                ...updates,
+              },
+            };
+          }
+          return c;
+        }),
+      }));
+
       await get().fetchWhatsAppConversations();
     } catch (err) {
-      console.error('Failed to update contact name:', err);
+      console.error('Failed to update contact:', err);
       throw err;
     }
+  },
+
+  updateWhatsAppContactName: async (cid, newName) => {
+    return get().updateWhatsAppContact(cid, { name: newName });
   },
 
   sendSystemWhatsAppMessage: async ({ phone, text, mediaUrl = null, contactName = null }) => {

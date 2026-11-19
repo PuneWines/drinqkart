@@ -30,6 +30,8 @@ const AdminAdvance = () => {
   const { user: authUser } = useAuth();
   const canModify = getPagePermission(authUser, 'hr', 'Admin Advance').canModify;
   const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [mainTab, setMainTab] = useState('monthly'); // 'monthly' | 'fixed'
   const [subTab, setSubTab] = useState('pending');   // 'pending' | 'history'
   const [currentPage, setCurrentPage] = useState(1);
@@ -211,7 +213,7 @@ const AdminAdvance = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedShop, mainTab, subTab]);
+  }, [searchTerm, selectedShop, mainTab, subTab, startDate, endDate]);
 
   const handleCreateRequest = async (e) => {
     e.preventDefault();
@@ -459,6 +461,32 @@ const AdminAdvance = () => {
 
     if (selectedShop !== 'ALL') {
       list = list.filter(item => resolveShopName(item.shopName).toLowerCase() === selectedShop.toLowerCase());
+    }
+
+    if (startDate) {
+      list = list.filter(item => {
+        if (!item.timestamp) return false;
+        const d = new Date(item.timestamp);
+        if (isNaN(d.getTime())) return false;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${day}`;
+        return dateStr >= startDate;
+      });
+    }
+
+    if (endDate) {
+      list = list.filter(item => {
+        if (!item.timestamp) return false;
+        const d = new Date(item.timestamp);
+        if (isNaN(d.getTime())) return false;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${day}`;
+        return dateStr <= endDate;
+      });
     }
 
     return list.filter(item =>
@@ -764,12 +792,51 @@ const AdminAdvance = () => {
               <ChevronDown size={11} className="text-slate-400 absolute right-2 pointer-events-none" />
             </div>
 
+            {/* Date Range Filter */}
+            <div className="h-8 flex items-center gap-2 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 px-2.5 rounded-lg text-[11px] transition-colors">
+              <Calendar size={13} className="text-slate-400 shrink-0" />
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">From:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent focus:outline-none text-slate-700 font-medium cursor-pointer text-[11px]"
+                />
+              </div>
+              <span className="text-slate-300">|</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To:</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent focus:outline-none text-slate-700 font-medium cursor-pointer text-[11px]"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                  className="p-0.5 text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
+                  title="Clear dates"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+
             {/* Reset Filter Button */}
-            {(selectedShop !== 'ALL' || searchTerm) && (
+            {(selectedShop !== 'ALL' || searchTerm || startDate || endDate) && (
               <button
                 onClick={() => {
                   setSelectedShop('ALL');
                   setSearchTerm('');
+                  setStartDate('');
+                  setEndDate('');
                   setCurrentPage(1);
                 }}
                 className="h-8 px-2.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 !rounded-lg transition-colors flex items-center gap-1 cursor-pointer border border-dashed border-slate-200 font-sans"

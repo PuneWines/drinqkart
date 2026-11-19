@@ -96,8 +96,8 @@ const ConsoleRoute = ({ children, systemId }) => {
           externalCollapsed={isSidebarCollapsed}
           onExternalCollapse={setIsSidebarCollapsed}
         />
-        <main className="flex-1 bg-gray-100 overflow-y-auto overflow-x-hidden min-w-0 min-h-0">
-          <div className="min-w-0 max-w-full p-1.5 sm:p-3 md:p-4">
+        <main className={`flex-1 bg-gray-100 min-w-0 min-h-0 ${targetSysId === 'whatsapp' ? 'overflow-hidden flex flex-col p-0' : 'overflow-y-auto overflow-x-hidden'}`}>
+          <div className={`min-w-0 max-w-full ${targetSysId === 'whatsapp' ? 'h-full flex flex-col p-0 overflow-hidden' : 'p-1.5 sm:p-3 md:p-4'}`}>
             {childrenWithProps}
           </div>
         </main>

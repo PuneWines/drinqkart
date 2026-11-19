@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useChatStore } from '../store/useChatStore'
 import Header from '../components/broadcast/Header'
 import ShopEmployeePanel from '../components/broadcast/ShopEmployeePanel'
@@ -12,13 +13,24 @@ import CreateTemplateModal from '../components/broadcast/CreateTemplateModal'
 import NewContactModal from '../components/broadcast/NewContactModal'
 
 export default function BroadcastDashboard() {
+  const [searchParams] = useSearchParams()
   const {
     loadShopsAndEmployees,
     fetchTemplates,
     fetchBroadcastHistory,
     fetchMessageStats,
     activeDashboardTab,
+    setActiveDashboardTab,
   } = useChatStore()
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') || searchParams.get('view')
+    if (tabParam === 'whatsapp' || tabParam === 'chats' || tabParam === 'live' || tabParam === 'chat') {
+      setActiveDashboardTab('whatsapp')
+    } else if (tabParam === 'broadcast') {
+      setActiveDashboardTab('broadcast')
+    }
+  }, [searchParams, setActiveDashboardTab])
 
   useEffect(() => {
     loadShopsAndEmployees()
@@ -34,7 +46,7 @@ export default function BroadcastDashboard() {
   }, [loadShopsAndEmployees, fetchTemplates, fetchBroadcastHistory, fetchMessageStats])
 
   return (
-    <div className="h-screen w-full flex flex-col bg-[#f3f6fb] overflow-hidden">
+    <div className="h-full max-h-full w-full flex flex-col bg-[#f3f6fb] overflow-hidden">
       {/* Top Navigation Header with View Toggle */}
       <Header />
 

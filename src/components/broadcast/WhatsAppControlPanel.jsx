@@ -21,6 +21,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react'
 import EditContactModal from './EditContactModal'
+import WhatsAppContactAvatar from './WhatsAppContactAvatar'
 
 export default function WhatsAppControlPanel() {
   const {
@@ -46,8 +47,10 @@ export default function WhatsAppControlPanel() {
   const [activeEmojiCategory, setActiveEmojiCategory] = useState('smileys')
   const [isSending, setIsSending] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [contactToEdit, setContactToEdit] = useState(null)
 
   const messagesEndRef = useRef(null)
+  const messagesContainerRef = useRef(null)
   const imageInputRef = useRef(null)
   const docInputRef = useRef(null)
   const audioInputRef = useRef(null)
@@ -121,10 +124,12 @@ export default function WhatsAppControlPanel() {
     }
   }, [fetchWhatsAppConversations, fetchWhatsAppMessages, selectedConversationId])
 
-  // 2. Auto-scroll to bottom of chat feed when new message arrives
+  // 2. Auto-scroll to bottom of chat feed when messages or selected chat changes (without scrolling parent containers)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [whatsappMessages])
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
+  }, [whatsappMessages, selectedConversationId])
 
   // Filter conversations by search query
   const filteredConversations = whatsappConversations.filter((c) => {
@@ -138,6 +143,23 @@ export default function WhatsAppControlPanel() {
     (c) => c.id === selectedConversationId
   )
   const activeContact = activeConversation?.whatsapp_contacts
+
+  const handleOpenContactProfile = (contactOrConv) => {
+    if (!contactOrConv) return
+    const contactData = contactOrConv.whatsapp_contacts || contactOrConv || {}
+    const cid = contactOrConv.id || contactData.id || selectedConversationId
+    const phone = contactData.phone_number || contactOrConv.phone_number || cid?.split('@')[0]
+    const name = contactData.name || contactOrConv.name || phone
+    const avatar = contactData.avatar_url || contactOrConv.avatar_url || null
+
+    setContactToEdit({
+      id: cid,
+      phone_number: phone,
+      name: name,
+      avatar_url: avatar,
+    })
+    setIsEditModalOpen(true)
+  }
 
   const handleSelectFile = async (e) => {
     const files = e.target.files
@@ -276,9 +298,9 @@ export default function WhatsAppControlPanel() {
       {/* ======================================================== */}
       {/* LEFT SIDEBAR: CONVERSATIONS LIST                          */}
       {/* ======================================================== */}
-      <div className="w-full md:w-72 lg:w-80 border-r border-gray-100 flex flex-col h-full bg-white shrink-0 min-h-0">
-        {/* Sidebar Header */}
-        <div className="p-3.5 border-b border-gray-100 flex items-center justify-between">
+      <div className="w-full md:w-72 lg:w-80 border-r border-gray-100 flex flex-col h-full bg-white shrink-0 min-h-0 overflow-hidden">
+        {/* Sidebar Header - Fixed Position */}
+        <div className="sticky top-0 z-10 shrink-0 p-3.5 border-b border-gray-100 flex items-center justify-between bg-white">
           <h2 className="text-sm font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <span>💬</span> WhatsApp Live Chats
           </h2>
@@ -293,8 +315,8 @@ export default function WhatsAppControlPanel() {
           </button>
         </div>
 
-        {/* Search Bar */}
-        <div className="p-3 border-b border-gray-100 bg-gray-50/50">
+        {/* Search Bar - Fixed Position */}
+        <div className="shrink-0 p-3 border-b border-gray-100 bg-gray-50/50">
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-gray-400" />
             <input
@@ -308,7 +330,7 @@ export default function WhatsAppControlPanel() {
         </div>
 
         {/* Conversations Scroll List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+        <div className="flex-1 overflow-y-auto divide-y divide-gray-50 min-h-0">
           {filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-gray-400">
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30 text-emerald-500" />
@@ -328,18 +350,23 @@ export default function WhatsAppControlPanel() {
                   className={`p-3 flex items-center gap-3 cursor-pointer transition-all hover:bg-emerald-50/60 ${isSelected ? 'bg-emerald-50/90 border-l-4 border-[#25D366]' : ''
                     }`}
                 >
-                  {/* Avatar */}
-                  {contact?.avatar_url ? (
-                    <img
-                      src={contact.avatar_url}
-                      alt={displayName}
-                      className="w-10 h-10 rounded-full object-cover shrink-0"
+                  {/* Clickable Avatar to view profile & edit */}
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleOpenContactProfile(conv)
+                    }}
+                    title="Click to view profile & edit contact"
+                    className="cursor-pointer hover:opacity-80 transition-all shrink-0 hover:scale-105 active:scale-95"
+                  >
+                    <WhatsAppContactAvatar
+                      avatarUrl={contact?.avatar_url}
+                      name={contact?.name || displayName}
+                      phoneNumber={contact?.phone_number || conv.id}
+                      size="md"
+                      className="ring-2 ring-transparent hover:ring-emerald-500 transition-all"
                     />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs shrink-0">
-                      {displayName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
@@ -375,22 +402,29 @@ export default function WhatsAppControlPanel() {
       {/* ======================================================== */}
       {selectedConversationId ? (
         <div className="flex-1 flex flex-col h-full min-h-0 bg-[#efeae2]/30 relative overflow-hidden">
-          {/* Chat Header */}
-          <div className="p-3.5 bg-white border-b border-gray-100 flex items-center justify-between shadow-xs z-10">
+          {/* Chat Header - Fixed Position */}
+          <div className="sticky top-0 z-20 shrink-0 p-3.5 bg-white border-b border-gray-100 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-3">
-              {activeContact?.avatar_url ? (
-                <img
-                  src={activeContact.avatar_url}
-                  alt="Avatar"
-                  className="w-10 h-10 rounded-full object-cover"
+              {/* Clickable Profile Picture */}
+              <div
+                onClick={() => handleOpenContactProfile(activeConversation || { id: selectedConversationId, whatsapp_contacts: activeContact })}
+                title="Click to view profile & edit contact"
+                className="cursor-pointer hover:opacity-85 transition-all shrink-0 hover:scale-105 active:scale-95"
+              >
+                <WhatsAppContactAvatar
+                  avatarUrl={activeContact?.avatar_url}
+                  name={activeContact?.name || selectedConversationId}
+                  phoneNumber={activeContact?.phone_number || selectedConversationId}
+                  size="md"
+                  className="ring-2 ring-transparent hover:ring-emerald-500 transition-all"
                 />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold flex items-center justify-center text-sm">
-                  {(activeContact?.name || selectedConversationId).charAt(0).toUpperCase()}
-                </div>
-              )}
+              </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900">
+                <h3 
+                  onClick={() => handleOpenContactProfile(activeConversation || { id: selectedConversationId, whatsapp_contacts: activeContact })}
+                  className="text-sm font-bold text-gray-900 cursor-pointer hover:text-emerald-700 transition-colors"
+                  title="Click to edit contact"
+                >
                   {activeContact?.name || selectedConversationId.split('@')[0]}
                 </h3>
                 <p className="text-[11px] text-gray-500 font-medium flex items-center gap-1.5">
@@ -402,7 +436,7 @@ export default function WhatsAppControlPanel() {
 
             <div className="flex items-center">
               <button
-                onClick={() => setIsEditModalOpen(true)}
+                onClick={() => handleOpenContactProfile(activeConversation || { id: selectedConversationId, whatsapp_contacts: activeContact })}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
               >
                 <Edit2 className="w-3.5 h-3.5" />
@@ -412,7 +446,7 @@ export default function WhatsAppControlPanel() {
           </div>
 
           {/* Messages Scroll Feed */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-3">
+          <div ref={messagesContainerRef} className="flex-1 p-4 overflow-y-auto space-y-3 min-h-0">
             {whatsappMessages.length === 0 ? (
               <div className="h-full flex items-center justify-center text-center text-gray-400">
                 <div>
@@ -477,8 +511,8 @@ export default function WhatsAppControlPanel() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Bottom Message Input Bar */}
-          <div className="p-3 bg-white border-t border-gray-100 relative">
+          {/* Bottom Message Input Bar - Fixed bottom */}
+          <div className="sticky bottom-0 z-20 shrink-0 p-3 bg-white border-t border-gray-100 relative">
             {/* Attachment Menu Popup */}
             {showAttachmentMenu && (
               <div className="absolute bottom-16 left-3 bg-white border border-gray-200 rounded-2xl p-3 shadow-xl flex flex-col gap-2 z-30 animate-in fade-in slide-in-from-bottom-2 min-w-[200px]">
@@ -692,15 +726,20 @@ export default function WhatsAppControlPanel() {
         </div>
       )}
 
-      {/* Edit Contact Name Modal */}
+      {/* Edit Contact Profile Modal */}
       <EditContactModal
         isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
+        onClose={() => {
+          setIsEditModalOpen(false)
+          setContactToEdit(null)
+        }}
         contact={
+          contactToEdit ||
           activeContact || {
             id: selectedConversationId,
             phone_number: selectedConversationId?.split('@')[0],
             name: selectedConversationId?.split('@')[0],
+            avatar_url: activeContact?.avatar_url,
           }
         }
       />

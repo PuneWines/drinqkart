@@ -60,6 +60,10 @@ export interface CategoryAmounts {
 
   transactionStatus: string;
   status?: string;
+  completedBy?: string | null;
+  completedAt?: string | null;
+  completedByEmail?: string | null;
+  completedByRole?: string | null;
 
   date: string;
 }
@@ -424,6 +428,10 @@ export default function PettyCashModal({
           ...initialData,
           username: initialData.username || defaultUser,
           status: initialData.status || "pending",
+          completedBy: initialData.completedBy || null,
+          completedAt: initialData.completedAt || null,
+          completedByEmail: initialData.completedByEmail || null,
+          completedByRole: initialData.completedByRole || null,
         });
 
         if (initialData.id) {
@@ -484,6 +492,10 @@ export default function PettyCashModal({
 
           transactionStatus: "Pending",
           status: "pending",
+          completedBy: null,
+          completedAt: null,
+          completedByEmail: null,
+          completedByRole: null,
           date: new Date().toISOString().split("T")[0],
         });
       }
@@ -499,6 +511,30 @@ export default function PettyCashModal({
 
     if (name === "miscExpense" && (parseFloat(value) > 0 || value.length > 0)) {
       setShowMiscRemarks(true);
+    }
+
+    if (name === "status") {
+      if (value === "completed") {
+        setFormData(prev => ({
+          ...prev,
+          status: value,
+          completedBy: prev.completedBy || user?.name || user?.username || 'Admin',
+          completedAt: prev.completedAt || new Date().toISOString(),
+          completedByEmail: prev.completedByEmail || user?.email || null,
+          completedByRole: prev.completedByRole || user?.role || null,
+        }));
+        return;
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          status: value,
+          completedBy: null,
+          completedAt: null,
+          completedByEmail: null,
+          completedByRole: null,
+        }));
+        return;
+      }
     }
 
     setFormData({ ...formData, [name]: value });
@@ -597,6 +633,27 @@ export default function PettyCashModal({
 
     try {
       const buildRecords = (baseId: string) => {
+        const isCompleted = (formData.status || '').toLowerCase() === 'completed';
+        const completedBy = isCompleted
+          ? (formData.completedBy || user?.name || user?.username || 'Admin')
+          : null;
+        const completedAt = isCompleted
+          ? (formData.completedAt || new Date().toISOString())
+          : null;
+        const completedByEmail = isCompleted
+          ? (formData.completedByEmail || user?.email || null)
+          : null;
+        const completedByRole = isCompleted
+          ? (formData.completedByRole || user?.role || null)
+          : null;
+
+        const auditFields = {
+          completed_by: completedBy,
+          completed_at: completedAt,
+          completed_by_email: completedByEmail,
+          completed_by_role: completedByRole,
+        };
+
         if (!formData.otherExpenses || formData.otherExpenses.length === 0) {
           return [{
             patty_id: `${baseId}-01`,
@@ -635,7 +692,8 @@ export default function PettyCashModal({
             from_shop: null,
             to_shop: null,
             description: null,
-            amount: 0
+            amount: 0,
+            ...auditFields
           }];
         } else {
           return formData.otherExpenses.map((entry, index) => ({
@@ -675,9 +733,21 @@ export default function PettyCashModal({
             from_shop: null,
             to_shop: entry.expenseName === 'Shop Name' ? (entry.toShop || null) : null,
             description: entry.description || null,
-            amount: parseFloat(entry.amount) || 0
+            amount: parseFloat(entry.amount) || 0,
+            ...auditFields
           }));
         }
+      };
+
+      const safeInsertRecords = async (records: any[]) => {
+        let { error } = await supabase.from('petty_cash_expense').insert(records);
+        if (error && (error.message?.includes('completed_by') || error.message?.includes('completed_at') || error.code === '42703')) {
+          console.warn("Column 'completed_by' not found in 'petty_cash_expense'. Please run database migration. Retrying without audit fields...");
+          const stripped = records.map(({ completed_by, completed_at, completed_by_email, completed_by_role, ...rest }: any) => rest);
+          const retryRes = await supabase.from('petty_cash_expense').insert(stripped);
+          error = retryRes.error;
+        }
+        return { error };
       };
 
       let finalId = initialData?.id || formData.id;
@@ -746,9 +816,7 @@ export default function PettyCashModal({
         while (!insertSuccess && attempts < 5) {
           attempts++;
           const recordsToSubmit = buildRecords(currentCandidateId);
-          const { error: insertError } = await supabase
-            .from('petty_cash_expense')
-            .insert(recordsToSubmit);
+          const { error: insertError } = await safeInsertRecords(recordsToSubmit);
 
           if (!insertError) {
             insertSuccess = true;
@@ -775,9 +843,7 @@ export default function PettyCashModal({
         if (delError) throw delError;
 
         const recordsToSubmit = buildRecords(finalId);
-        const { error: insertError } = await supabase
-          .from('petty_cash_expense')
-          .insert(recordsToSubmit);
+        const { error: insertError } = await safeInsertRecords(recordsToSubmit);
 
         if (insertError) throw insertError;
       }
@@ -1228,17 +1294,29 @@ export default function PettyCashModal({
 
             <div className="flex items-center gap-3 w-full sm:w-auto">
               {initialData?.id && (
-                <div className="flex items-center gap-1.5 mr-2">
-                  <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Status:</label>
-                  <select
-                    name="status"
-                    value={formData.status || "pending"}
-                    onChange={handleChange}
-                    className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800"
-                  >
-                    <option value="pending">pending</option>
-                    <option value="completed">completed</option>
-                  </select>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mr-2">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Status:</label>
+                    <select
+                      name="status"
+                      value={formData.status || "pending"}
+                      onChange={handleChange}
+                      className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-[#2a5298] focus:border-[#2a5298] bg-white font-semibold text-gray-800"
+                    >
+                      <option value="pending">pending</option>
+                      <option value="completed">completed</option>
+                    </select>
+                  </div>
+                  {formData.status === 'completed' && (formData.completedBy || user?.name) && (
+                    <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md flex items-center gap-1 font-medium">
+                      <span>Completed by: <strong className="font-bold text-emerald-900">{formData.completedBy || user?.name}</strong></span>
+                      {formData.completedAt && (
+                        <span className="text-[10px] text-emerald-600">
+                          ({new Date(formData.completedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <button

@@ -270,6 +270,7 @@ export default function ProfilePage() {
       setProfile(prev => ({ ...prev, profileImage: publicUrl }));
       setImageError(false);
       localStorage.setItem('profile_image', publicUrl);
+      window.dispatchEvent(new Event('profile_image_updated'));
       
       const userRaw = localStorage.getItem('user');
       if (userRaw) {
@@ -277,6 +278,15 @@ export default function ProfilePage() {
           const parsed = JSON.parse(userRaw);
           parsed.profile_image = publicUrl;
           localStorage.setItem('user', JSON.stringify(parsed));
+        } catch(e) {}
+      }
+
+      const dkUserRaw = localStorage.getItem('drinqkart_user');
+      if (dkUserRaw) {
+        try {
+          const parsed = JSON.parse(dkUserRaw);
+          parsed.profile_image = publicUrl;
+          localStorage.setItem('drinqkart_user', JSON.stringify(parsed));
         } catch(e) {}
       }
 
@@ -435,7 +445,10 @@ export default function ProfilePage() {
 
       if (dbUser) {
         const fetchedImage = dbUser.profile_image || dbUser.profile_pic || dbUser.image_url || '';
-        if (fetchedImage) localStorage.setItem('profile_image', fetchedImage);
+        if (fetchedImage) {
+          localStorage.setItem('profile_image', fetchedImage);
+          window.dispatchEvent(new Event('profile_image_updated'));
+        }
         setProfile(prev => ({
           ...prev,
           userName: dbUser.user_name || dbUser.username || dbUser.name || prev?.userName,

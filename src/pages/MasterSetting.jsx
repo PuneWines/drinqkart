@@ -53,7 +53,6 @@ const AVAILABLE_SYSTEMS = [
           "Delegation",
           "Task",
           "Calendar",
-          "Holiday List",
           "Working Day Calendar",
           "MIS Report",
           "Admin Approval",

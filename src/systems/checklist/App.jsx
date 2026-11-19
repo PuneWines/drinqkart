@@ -25,7 +25,6 @@ import AdminDataPage from "./pages/admin/admin-data-page"
 import AccountDataPage from "./pages/delegation"
 import AdminDelegationTask from "./pages/delegation-data"
 import AllTasks from "./pages/admin/AllTasks"
-import HolidayListPage from "./pages/admin/HolidayListPage"         // New
 import WorkingDayCalendarPage from "./pages/admin/WorkingDayCalendarPage" // New
 import AdminApprovalPage from "./pages/admin/AdminApprovalPage" // New
 import NotificationsPage from "./pages/admin/Notifications"
@@ -62,9 +61,6 @@ const SuperAdminRoute = ({ children }) => {
 
     const path = window.location.pathname;
     if (path.includes("setting") && pageAccess.includes("Settings")) {
-        return children;
-    }
-    if (path.includes("holiday-list") && (pageAccess.includes("Holiday List") || pageAccess.includes("Holiday"))) {
         return children;
     }
     if (path.includes("working-day-calendar") && (pageAccess.includes("Working Day Calendar") || pageAccess.includes("Holiday"))) {
@@ -185,11 +181,7 @@ function ChecklistDashboard() {
 
                 <Route
                     path="holiday-list"
-                    element={
-                        <SuperAdminRoute>
-                            <HolidayListPage />
-                        </SuperAdminRoute>
-                    }
+                    element={<Navigate to="/dashboard/working-day-calendar" replace />}
                 />
 
                 <Route

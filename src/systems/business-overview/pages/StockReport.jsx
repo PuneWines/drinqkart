@@ -1,6 +1,6 @@
 import { Fragment, useState, useMemo, useEffect } from 'react';
 import {
-  FileSpreadsheet, RefreshCw, Search, Calendar, Store, Download, AlertTriangle,
+  FileSpreadsheet, RefreshCw, Search, Calendar, Store, Layers, Download, AlertTriangle,
   ChevronRight, ChevronDown, ChevronLeft, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
@@ -17,8 +17,34 @@ const VIEWS = [
   { id: 'detail', label: 'Detail' }
 ];
 
-// Detail view: one row per shop + date + item, with every stock balance column
-// key, header label, header align, cell render, cell class
+// Heuristic: infer bottles per case from mls and/or item description if missing/zero
+const inferBottlesPerCase = (bpc, mls, desc = '') => {
+  const direct = Number(bpc) || 0;
+  if (direct > 0) return direct;
+  const m = Number(mls) || 0;
+  if (m === 750 || m === 1000) return 12;
+  if (m === 375) return 24;
+  if (m === 180) return 48;
+  if (m === 90) return 96;
+  if (m === 650) return 12;
+  if (m === 500 || m === 330) return 24;
+  const d = String(desc).toUpperCase();
+  if (d.includes('90 ML') || d.includes('90ML')) return 96;
+  if (d.includes('180 ML') || d.includes('180ML') || d.includes('NIP')) return 48;
+  if (d.includes('375 ML') || d.includes('375ML') || d.includes('PINT')) return 24;
+  if (d.includes('750 ML') || d.includes('750ML') || d.includes('QUART')) return 12;
+  if (d.includes('1000 ML') || d.includes('1000ML') || d.includes('1 LTR') || d.includes('1LTR')) return 12;
+  if (d.includes('650 ML') || d.includes('650ML')) return 12;
+  if (d.includes('500 ML') || d.includes('500ML') || d.includes('CAN')) return 24;
+  return 0;
+};
+
+const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
+const fmtBox = (n) =>
+  Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmtMoney = (n) =>
+  Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const fmtMoney0 = (n) => `₹${n}`;
 const DETAIL_COLUMNS = [
   ['shop', 'Shop', '', (r) => r.shop || '—', 'font-bold text-indigo-900'],
@@ -28,7 +54,9 @@ const DETAIL_COLUMNS = [
   ['opening', 'Opening Qty', 'text-right', (r) => r.opening, 'text-right font-mono text-slate-600'],
   ['qtyIn', 'Qty In', 'text-right', (r) => `+${r.qtyIn}`, 'text-right font-mono text-emerald-600 font-semibold'],
   ['qtyOut', 'Qty Out', 'text-right', (r) => `-${r.qtyOut}`, 'text-right font-mono text-amber-600 font-semibold'],
+  ['qtyOutBox', 'Qty Out Box', 'text-right', (r) => fmtBox(r.qtyOutBox), 'text-right font-mono text-amber-700 font-semibold'],
   ['closing', 'Closing Qty', 'text-right', (r) => r.closing, 'text-right font-mono font-bold text-indigo-700 bg-indigo-50/40'],
+  ['closingBox', 'Closing Box Qty', 'text-right', (r) => fmtBox(r.closingBox), 'text-right font-mono font-bold text-indigo-900 bg-indigo-50/60'],
   ['purchaseRate', 'Purchase Rate', 'text-right', (r) => fmtMoney0(r.purchaseRate), 'text-right font-mono text-slate-700'],
   ['mrpRate', 'MRP Rate', 'text-right', (r) => fmtMoney0(r.mrpRate), 'text-right font-mono text-slate-700 font-semibold'],
   ['subhead', 'Subhead', '', (r) => r.subhead || '—', 'text-slate-600'],
@@ -46,18 +74,16 @@ const DETAIL_COLUMNS = [
 // Group rows have none of these (undefined), so they render as a dash.
 const EXTRA_KEYS = ['shop', 'date', 'itemId', 'purchaseRate', 'mrpRate', 'subhead', 'brandId', 'brandName', 'liquorType', 'bottlesPerCase', 'mls', 'types', 'company', 'party'];
 const EXTRA_COLUMNS = DETAIL_COLUMNS.filter(([key]) => EXTRA_KEYS.includes(key));
-const GROUP_COLUMN_COUNT = 8 + EXTRA_COLUMNS.length; // expander + label + 6 totals + check + extras
+const GROUP_COLUMN_COUNT = 10 + EXTRA_COLUMNS.length; // expander + label + 8 totals + check + extras
 
-const fmtQty = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
-const fmtMoney = (n) =>
-  Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const emptyTotals = () => ({ opening: 0, qtyIn: 0, qtyOut: 0, closing: 0, purchaseValue: 0, mrpValue: 0 });
+const emptyTotals = () => ({ opening: 0, qtyIn: 0, qtyOut: 0, qtyOutBox: 0, closing: 0, closingBox: 0, purchaseValue: 0, mrpValue: 0 });
 const addTotals = (t, l) => {
   t.opening += l.opening;
   t.qtyIn += l.qtyIn;
   t.qtyOut += l.qtyOut;
+  t.qtyOutBox += (l.qtyOutBox || 0);
   t.closing += l.closing;
+  t.closingBox += (l.closingBox || 0);
   t.purchaseValue += l.purchaseValue;
   t.mrpValue += l.mrpValue;
 };
@@ -127,6 +153,7 @@ export default function StockReport() {
   const [view, setView] = useState('item');
   const [shopFilter, setShopFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState('');
   const [hideIdle, setHideIdle] = useState(true);
   const [sort, setSort] = useState({ key: 'label', dir: 'asc' });
@@ -162,6 +189,13 @@ export default function StockReport() {
 
   const shops = useMemo(() => [...new Set(rows.map((r) => r.store_name).filter(Boolean))].sort(), [rows]);
   const types = useMemo(() => [...new Set(rows.map((r) => r.liquor_type).filter(Boolean))].sort(), [rows]);
+  const categories = useMemo(() => {
+    let sourceRows = rows;
+    if (typeFilter) {
+      sourceRows = rows.filter((r) => r.liquor_type === typeFilter);
+    }
+    return [...new Set(sourceRows.map((r) => r.subhead).filter(Boolean))].sort();
+  }, [rows, typeFilter]);
 
   // One line per shop + item: opening of its first day, movement over the range, closing of its last day
   const lines = useMemo(() => {
@@ -170,11 +204,13 @@ export default function StockReport() {
     rows.forEach((r) => {
       if (shopFilter && r.store_name !== shopFilter) return;
       if (typeFilter && r.liquor_type !== typeFilter) return;
+      if (categoryFilter && r.subhead !== categoryFilter) return;
       if (term && !`${r.item_description || ''} ${r.item_id || ''} ${r.subhead || ''} ${r.brand_name || ''} ${r.party_name || ''} ${r.company_name || ''}`.toLowerCase().includes(term)) return;
 
       const key = `${r.store_name}||${r.item_id}`;
       let l = byKey.get(key);
       if (!l) {
+        const bpc = inferBottlesPerCase(r.bottles_per_case, r.mls, r.item_description);
         l = {
           shop: r.store_name,
           itemId: r.item_id,
@@ -191,7 +227,7 @@ export default function StockReport() {
           mrpRate: Number(r.mrp_bottle_rate) || 0,
           brandId: r.brand_id ?? '',
           brandName: r.brand_name || '',
-          bottlesPerCase: Number(r.bottles_per_case) || 0,
+          bottlesPerCase: bpc,
           mls: r.mls ?? '',
           types: [r.type1, r.type2, r.type3, r.type4, r.type5, r.type6].filter(Boolean).join(', '),
           company: r.company_name || '',
@@ -214,9 +250,20 @@ export default function StockReport() {
     });
 
     return [...byKey.values()]
-      .map((l) => ({ ...l, purchaseValue: l.closing * l.purchaseRate, mrpValue: l.closing * l.mrpRate }))
+      .map((l) => {
+        const bpc = l.bottlesPerCase || inferBottlesPerCase(0, l.mls, l.name);
+        const qtyOutBox = bpc > 0 ? l.qtyOut / bpc : 0;
+        const closingBox = bpc > 0 ? l.closing / bpc : 0;
+        return {
+          ...l,
+          qtyOutBox,
+          closingBox,
+          purchaseValue: l.closing * l.purchaseRate,
+          mrpValue: l.closing * l.mrpRate
+        };
+      })
       .filter((l) => !hideIdle || l.qtyIn !== 0 || l.qtyOut !== 0);
-  }, [rows, shopFilter, typeFilter, search, hideIdle]);
+  }, [rows, shopFilter, typeFilter, categoryFilter, search, hideIdle]);
 
   // Detail view rows: every snapshot row that passes the filters, not rolled up
   const detailRows = useMemo(() => {
@@ -226,10 +273,15 @@ export default function StockReport() {
     rows.forEach((r) => {
       if (shopFilter && r.store_name !== shopFilter) return;
       if (typeFilter && r.liquor_type !== typeFilter) return;
+      if (categoryFilter && r.subhead !== categoryFilter) return;
       if (term && !`${r.item_description || ''} ${r.item_id || ''} ${r.subhead || ''} ${r.brand_name || ''} ${r.party_name || ''} ${r.company_name || ''}`.toLowerCase().includes(term)) return;
       const qtyIn = Number(r.qty_in) || 0;
       const qtyOut = Number(r.qty_out) || 0;
       if (hideIdle && qtyIn === 0 && qtyOut === 0) return;
+      const bpc = inferBottlesPerCase(r.bottles_per_case, r.mls, r.item_description);
+      const closing = Number(r.closing_qty) || 0;
+      const qtyOutBox = bpc > 0 ? qtyOut / bpc : 0;
+      const closingBox = bpc > 0 ? closing / bpc : 0;
       out.push({
         key: `${r.store_name}||${r.snapshot_date}||${r.item_id}`,
         shop: r.store_name || '',
@@ -239,14 +291,16 @@ export default function StockReport() {
         opening: Number(r.opening_qty) || 0,
         qtyIn,
         qtyOut,
-        closing: Number(r.closing_qty) || 0,
+        qtyOutBox,
+        closing,
+        closingBox,
         purchaseRate: Number(r.purchase_bottle_rate) || 0,
         mrpRate: Number(r.mrp_bottle_rate) || 0,
         subhead: r.subhead || '',
         brandId: r.brand_id ?? '',
         brandName: r.brand_name || '',
         liquorType: r.liquor_type || '',
-        bottlesPerCase: Number(r.bottles_per_case) || 0,
+        bottlesPerCase: bpc,
         mls: r.mls ?? '',
         types: [r.type1, r.type2, r.type3, r.type4, r.type5, r.type6].filter(Boolean).join(', '),
         company: r.company_name || '',
@@ -254,7 +308,7 @@ export default function StockReport() {
       });
     });
     return out;
-  }, [rows, view, shopFilter, typeFilter, search, hideIdle]);
+  }, [rows, view, shopFilter, typeFilter, categoryFilter, search, hideIdle]);
 
   const tableRows = useMemo(() => {
     if (view === 'detail') {
@@ -317,8 +371,8 @@ export default function StockReport() {
       URL.revokeObjectURL(url);
       return;
     }
-    const head = ['Group', 'Item', 'Opening Qty', 'Qty In', 'Qty Out', 'Closing Qty', 'Purchase Value', 'MRP Value'];
-    const num = (r) => [r.opening, r.qtyIn, r.qtyOut, r.closing, r.purchaseValue.toFixed(2), r.mrpValue.toFixed(2)];
+    const head = ['Group', 'Item', 'Opening Qty', 'Qty In', 'Qty Out', 'Qty Out Box', 'Closing Qty', 'Closing Box Qty', 'Purchase Value', 'MRP Value'];
+    const num = (r) => [r.opening, r.qtyIn, r.qtyOut, (r.qtyOutBox || 0).toFixed(1), r.closing, (r.closingBox || 0).toFixed(1), r.purchaseValue.toFixed(2), r.mrpValue.toFixed(2)];
     const out = [head];
     tableRows.forEach((r) => {
       if (r.children) {
@@ -346,7 +400,9 @@ export default function StockReport() {
     ['opening', 'Opening Qty', 'text-right'],
     ['qtyIn', 'Qty In', 'text-right'],
     ['qtyOut', 'Qty Out', 'text-right'],
+    ['qtyOutBox', 'Qty Out Box', 'text-right'],
     ['closing', 'Closing Qty', 'text-right'],
+    ['closingBox', 'Closing Box Qty', 'text-right'],
     ['purchaseValue', 'Purchase Value', 'text-right'],
     ['mrpValue', 'MRP Value', 'text-right']
   ];
@@ -356,7 +412,9 @@ export default function StockReport() {
       <td className={`px-3 py-2.5 text-right font-mono text-slate-600 ${cls}`}>{fmtQty(r.opening)}</td>
       <td className={`px-3 py-2.5 text-right font-mono text-emerald-600 font-semibold ${cls}`}>+{fmtQty(r.qtyIn)}</td>
       <td className={`px-3 py-2.5 text-right font-mono text-amber-600 font-semibold ${cls}`}>-{fmtQty(r.qtyOut)}</td>
+      <td className={`px-3 py-2.5 text-right font-mono text-amber-700 font-semibold ${cls}`}>{fmtBox(r.qtyOutBox)}</td>
       <td className={`px-3 py-2.5 text-right font-mono font-bold text-indigo-700 ${cls}`}>{fmtQty(r.closing)}</td>
+      <td className={`px-3 py-2.5 text-right font-mono font-bold text-indigo-900 ${cls}`}>{fmtBox(r.closingBox)}</td>
       <td className={`px-3 py-2.5 text-right font-mono text-slate-700 ${cls}`}>{fmtMoney(r.purchaseValue)}</td>
       <td className={`px-3 py-2.5 text-right font-mono text-slate-700 ${cls}`}>{fmtMoney(r.mrpValue)}</td>
       {EXTRA_COLUMNS.map(([key, , , render, colCls]) => (
@@ -382,7 +440,9 @@ export default function StockReport() {
     ['Opening', fmtQty(grand.opening), 'text-slate-800'],
     ['Qty In', `+${fmtQty(grand.qtyIn)}`, 'text-emerald-600'],
     ['Qty Out', `-${fmtQty(grand.qtyOut)}`, 'text-amber-600'],
+    ['Qty Out Box', fmtBox(grand.qtyOutBox), 'text-amber-700'],
     ['Closing', fmtQty(grand.closing), 'text-indigo-700'],
+    ['Closing Box Qty', fmtBox(grand.closingBox), 'text-indigo-900'],
     ['Purchase Value', fmtMoney(grand.purchaseValue), 'text-slate-800'],
     ['MRP Value', fmtMoney(grand.mrpValue), 'text-slate-800']
   ];
@@ -470,12 +530,34 @@ export default function StockReport() {
           <div className="flex items-center gap-1.5 h-9 bg-slate-50 border border-slate-200 px-2.5 rounded-xl">
             <select
               value={typeFilter}
-              onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                const val = e.target.value;
+                setTypeFilter(val);
+                setPage(1);
+                if (val && categoryFilter) {
+                  const match = rows.some((r) => r.liquor_type === val && r.subhead === categoryFilter);
+                  if (!match) setCategoryFilter('');
+                }
+              }}
               className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
             >
               <option value="">All Liquor Types</option>
               {types.map((t) => (
                 <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 h-9 bg-slate-50 border border-slate-200 px-2.5 rounded-xl">
+            <Layers size={14} className="text-slate-400 shrink-0" />
+            <select
+              value={categoryFilter}
+              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+              className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer max-w-44 truncate"
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
@@ -520,6 +602,23 @@ export default function StockReport() {
             Reset (7D)
           </button>
 
+          {(shopFilter || typeFilter || categoryFilter || search) && (
+            <button
+              type="button"
+              onClick={() => {
+                setShopFilter('');
+                setTypeFilter('');
+                setCategoryFilter('');
+                setSearch('');
+                setPage(1);
+              }}
+              className="h-9 text-[11px] text-rose-600 hover:text-rose-800 font-semibold px-3 rounded-xl hover:bg-rose-50 transition cursor-pointer"
+              title="Clear all filters"
+            >
+              Clear Filters
+            </button>
+          )}
+
           <label
             className={`flex items-center gap-1.5 h-9 px-3 text-xs font-semibold border rounded-xl cursor-pointer select-none transition ${
               hideIdle ? 'bg-indigo-50 border-indigo-200 text-indigo-800' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -543,7 +642,7 @@ export default function StockReport() {
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         {cards.map(([label, value, color]) => (
           <div key={label} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm px-4 py-3 min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
@@ -622,7 +721,7 @@ export default function StockReport() {
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileSpreadsheet size={32} className="text-slate-300" />
                       <span className="text-sm font-semibold text-slate-600">No stock data for these filters</span>
-                      <p className="text-xs text-slate-400">Try another date range, shop or turn off "Hide items with no In/Out".</p>
+                      <p className="text-xs text-slate-400">Try another date range, shop, category or turn off "Hide items with no In/Out".</p>
                     </div>
                   </td>
                 </tr>

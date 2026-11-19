@@ -51,7 +51,6 @@ const parseChecklistAllowedPages = (userData) => {
       "Task",
       "All Tasks",
       "Calendar",
-      "Holiday List",
       "Working Day Calendar",
       "Admin Approval",
       "MIS Report",
@@ -82,15 +81,8 @@ const parseChecklistAllowedPages = (userData) => {
       pageSet.add("All Tasks");
     }
     if (lower.includes("calendar") && !lower.includes("working_day_calendar") && !lower.includes("working day calendar")) pageSet.add("Calendar");
-    if (lower.includes("holiday_list") || lower.includes("holiday list") || lower.includes("holidaylist") || lower === "holiday") {
-      pageSet.add("Holiday List");
-      pageSet.add("Holiday");
-      pageSet.add("Working Day Calendar");
-    }
     if (lower.includes("working_day_calendar") || lower.includes("working day calendar") || lower.includes("workingdaycalendar")) {
       pageSet.add("Working Day Calendar");
-      pageSet.add("Holiday List");
-      pageSet.add("Holiday");
     }
     if (lower.includes("admin_approval") || lower.includes("admin approval") || lower.includes("adminapproval") || lower.includes("manager approval")) pageSet.add("Admin Approval");
     if (lower.includes("mis_report") || lower.includes("mis report") || lower.includes("misreport") || lower.includes("mis_reporting")) pageSet.add("MIS Report");
@@ -241,27 +233,11 @@ function AdminLayoutInner({ children, darkMode, toggleDarkMode, showLayout = tru
       showFor: ["admin", "user", "hod", "manager"],
     },
     {
-      label: "Holiday",
+      href: "/dashboard/working-day-calendar",
+      label: "Working Day Calendar",
       icon: CalendarIcon,
+      active: location.pathname === "/dashboard/working-day-calendar",
       showFor: ["admin", "user", "hod", "manager"],
-      isSubmenu: true,
-      isOpen: isHolidaySubmenuOpen,
-      setIsOpen: setIsHolidaySubmenuOpen,
-      active: location.pathname.includes("/dashboard/holiday") || location.pathname.includes("/dashboard/working-day"),
-      subItems: [
-        {
-          href: "/dashboard/holiday-list",
-          label: "Holiday List",
-          active: location.pathname === "/dashboard/holiday-list",
-          showFor: ["admin", "user", "hod", "manager"],
-        },
-        {
-          href: "/dashboard/working-day-calendar",
-          label: "Working Day Calendar",
-          active: location.pathname === "/dashboard/working-day-calendar",
-          showFor: ["admin", "user", "hod", "manager"],
-        }
-      ]
     },
     {
       href: "/dashboard/admin-approval",

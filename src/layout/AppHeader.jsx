@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useChatStore } from '../store/useChatStore';
 import { supabase } from '../lib/supabase';
 import { getVisibleSystems, getActiveSystem } from './systemsConfig';
 import { LogOut, HelpCircle, Menu, X, ChevronDown, Video, PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -65,6 +66,15 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
     navigate('/login');
   };
 
+  const handleOpenWhatsAppLiveChats = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    useChatStore.getState().setActiveDashboardTab('whatsapp');
+    navigate('/systems/whatsapp?tab=whatsapp');
+  };
+
   const userObj = user || {};
   const userName = userObj.user_name || userObj.username || 'User';
   const role = (userObj.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('role') || localStorage.getItem('currentUserRole') : '') || 'User').toLowerCase().trim();
@@ -73,6 +83,54 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
     role === 'masteradmin' ||
     role === 'superadmin' ||
     role === 'hod';
+
+  const [profileImage, setProfileImage] = useState(() => {
+    return userObj.profile_image || (typeof localStorage !== 'undefined' ? localStorage.getItem('profile_image') : '') || '';
+  });
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    const syncImage = () => {
+      const stored = (typeof localStorage !== 'undefined' ? localStorage.getItem('profile_image') : '') || '';
+      if (stored) {
+        setProfileImage(stored);
+        setImgError(false);
+      }
+    };
+    syncImage();
+    window.addEventListener('profile_image_updated', syncImage);
+    window.addEventListener('storage', syncImage);
+    return () => {
+      window.removeEventListener('profile_image_updated', syncImage);
+      window.removeEventListener('storage', syncImage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (userObj.profile_image) {
+      setProfileImage(userObj.profile_image);
+      setImgError(false);
+    } else {
+      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('profile_image') : '';
+      if (stored) {
+        setProfileImage(stored);
+        setImgError(false);
+      } else if (userObj.id || (userName && userName !== 'User')) {
+        let q = supabase.from('users').select('profile_image');
+        if (userObj.id) q = q.eq('id', userObj.id);
+        else q = q.ilike('user_name', userName);
+        q.maybeSingle().then(({ data }) => {
+          if (data?.profile_image) {
+            setProfileImage(data.profile_image);
+            setImgError(false);
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('profile_image', data.profile_image);
+            }
+          }
+        });
+      }
+    }
+  }, [userObj.profile_image, userObj.id, userName]);
 
   const lastFetchRef = useRef(0);
 
@@ -186,13 +244,23 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
             )}
           </button>
 
-          <Link 
-            to="/systems/profile" 
-            title="View Profile"
-            className="w-7 h-7 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-[10px] uppercase border border-[#C9A84C]/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+          <button 
+            type="button"
+            onClick={handleOpenWhatsAppLiveChats}
+            title="Open 💬 WhatsApp Live Chats"
+            className="w-7 h-7 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-[10px] uppercase border border-[#C9A84C]/40 hover:scale-105 active:scale-95 transition-all cursor-pointer overflow-hidden shadow-xs shrink-0"
           >
-            {userName.slice(0, 2)}
-          </Link>
+            {profileImage && !imgError ? (
+              <img 
+                src={profileImage} 
+                alt={userName} 
+                className="w-full h-full object-cover rounded-full" 
+                onError={() => setImgError(true)} 
+              />
+            ) : (
+              userName.slice(0, 2)
+            )}
+          </button>
 
           <button
             id="mobile-header-logout-btn"
@@ -235,18 +303,35 @@ const AppHeader = ({ isMobileMenuOpen, onToggleMobileMenu }) => {
             )}
           </button>
 
-          {/* Clickable Profile Avatar & User Welcome */}
-          <Link 
-            to="/systems/profile" 
-            title="View Profile"
-            className="flex items-center gap-2.5 text-xs text-[#2C1D11] hover:opacity-85 transition-opacity cursor-pointer group"
-          >
-            <span className="text-gray-500 font-sans group-hover:text-gray-700">Welcome,</span>
-            <span className="font-semibold capitalize font-sans group-hover:underline">{userName}</span>
-            <div className="w-8 h-8 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-xs uppercase shadow-sm border border-[#C9A84C]/40 group-hover:scale-105 transition-transform">
-              {userName.slice(0, 2)}
-            </div>
-          </Link>
+          {/* Welcome User (Profile Link) & Clickable Profile Avatar (WhatsApp Live Chats) */}
+          <div className="flex items-center gap-2.5 text-xs text-[#2C1D11]">
+            <Link 
+              to="/systems/profile" 
+              title="View Profile & Settings"
+              className="flex items-center gap-1 hover:opacity-85 transition-opacity cursor-pointer group"
+            >
+              <span className="text-gray-500 font-sans group-hover:text-gray-700">Welcome,</span>
+              <span className="font-semibold capitalize font-sans group-hover:underline">{userName}</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleOpenWhatsAppLiveChats}
+              title="Open 💬 WhatsApp Live Chats"
+              className="w-8 h-8 rounded-full bg-[#2C1D11] text-[#C9A84C] flex items-center justify-center font-bold text-xs uppercase shadow-sm border border-[#C9A84C]/40 hover:scale-110 active:scale-95 transition-all cursor-pointer overflow-hidden shrink-0 group focus:outline-none"
+            >
+              {profileImage && !imgError ? (
+                <img 
+                  src={profileImage} 
+                  alt={userName} 
+                  className="w-full h-full object-cover rounded-full" 
+                  onError={() => setImgError(true)} 
+                />
+              ) : (
+                userName.slice(0, 2)
+              )}
+            </button>
+          </div>
 
           <div className="h-5 w-px bg-gray-200" />
 

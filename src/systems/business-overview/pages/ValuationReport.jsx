@@ -29,7 +29,7 @@ export default function ValuationReport() {
   const [startDate, setStartDate] = useState(() => getDefaultDateRange().start);
   const [endDate, setEndDate] = useState(() => getDefaultDateRange().end);
   const [snapshotDate, setSnapshotDate] = useState(''); // snapshot actually valued (latest one inside the range)
-  const [shopFilter, setShopFilter] = useState('');
+  const [selectedShops, setSelectedShops] = useState(() => new Set());
   // Value Type: tick Purchase Value, MRP Value or both; nothing ticked shows both
   const [kpiSel, setKpiSel] = useState(() => new Set(KPI_OPTIONS));
   const showPurchase = kpiSel.size === 0 || kpiSel.has('Purchase Value');
@@ -89,7 +89,10 @@ export default function ValuationReport() {
 
   // Shop list comes from the whole snapshot so filtering doesn't shrink the dropdown
   const allShops = useMemo(() => [...new Set(rows.map((r) => r.store_name).filter(Boolean))].sort(), [rows]);
-  const shops = useMemo(() => (shopFilter ? [shopFilter] : allShops), [shopFilter, allShops]);
+  const shops = useMemo(
+    () => (selectedShops.size === 0 ? allShops : allShops.filter((s) => selectedShops.has(s))),
+    [selectedShops, allShops]
+  );
 
   // Group -> items -> per-shop cells
   const { groups, grand } = useMemo(() => {
@@ -101,7 +104,7 @@ export default function ValuationReport() {
 
     rows.forEach((r) => {
       const shop = r.store_name;
-      if (shopFilter && shop !== shopFilter) return;
+      if (selectedShops.size > 0 && !selectedShops.has(shop)) return;
       if (term) {
         const hay = `${r.item_description || ''} ${r.item_id || ''} ${r.subhead || ''} ${r.liquor_type || ''} ${r.type5 || ''}`.toLowerCase();
         if (!hay.includes(term)) return;
@@ -152,7 +155,7 @@ export default function ValuationReport() {
           a.biobii.localeCompare(b.biobii)
       );
     return { groups: list, grand: { cells: grandCells, total } };
-  }, [rows, shops, shopFilter, search]);
+  }, [rows, shops, selectedShops, search]);
 
   const toggle = (key) =>
     setExpanded((prev) => {
@@ -263,18 +266,14 @@ export default function ValuationReport() {
           Reset (7D)
         </button>
 
-        <div className="flex items-center gap-1.5">
-          <Store size={14} className="text-slate-400 shrink-0" />
-          <select
-            value={shopFilter}
-            onChange={(e) => setShopFilter(e.target.value)}
-            className="px-3 py-2 text-xs border border-slate-200 rounded-xl font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 outline-none transition cursor-pointer"
-          >
-            <option value="">All Shops</option>
-            {allShops.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+        <div className="w-52">
+          <MultiSelectDropdown
+            label="Shop"
+            icon={Store}
+            options={allShops}
+            selected={selectedShops}
+            onChange={setSelectedShops}
+          />
         </div>
 
         <div className="w-44">

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   FaPlus, FaEdit, FaTrash, FaSync, FaSearch,
-  FaFileAlt, FaStore, FaTimes, FaSave, FaCoins, FaWallet, FaUndo,
+  FaFileAlt, FaStore, FaTimes, FaSave, FaCoins, FaWallet, FaUndo, FaFileCsv,
 } from 'react-icons/fa';
 import PettyCashModal, { CategoryAmounts } from '../components/PettyCashModal';
 import { supabase } from '../supabase';
@@ -21,6 +21,8 @@ interface PettyCashRow {
   totalAmount: number;
   transactionStatus: string;
   status: string;
+  completedBy?: string | null;
+  completedAt?: string | null;
   raw: Record<string, any>;
 }
 
@@ -84,6 +86,10 @@ function mapToFormData(rec: Record<string, any>): CategoryAmounts {
     miscRemarks: rec.misc_remarks || '',
     transactionStatus: rec.transaction_status || 'Pending',
     status: rec.status || 'pending',
+    completedBy: rec.completed_by || null,
+    completedAt: rec.completed_at || null,
+    completedByEmail: rec.completed_by_email || null,
+    completedByRole: rec.completed_by_role || null,
     date: rec.date || new Date().toISOString().split('T')[0],
   };
 }
@@ -177,6 +183,8 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
         totalAmount: rec.total_amount || 0,
         transactionStatus: rec.transaction_status || 'Pending',
         status: rec.status || 'pending',
+        completedBy: rec.completed_by || null,
+        completedAt: rec.completed_at || null,
         raw: rec,
       })));
     } catch (err) { console.error('Error fetching petty cash:', err); }
@@ -247,6 +255,107 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
     setFromDate('');
     setToDate('');
     setShopFilter('');
+  };
+
+  const handleExportCSV = () => {
+    if (filtered.length === 0) {
+      alert('No records available to export.');
+      return;
+    }
+
+    const headers = [
+      '#',
+      'ID',
+      'Date',
+      'Shop',
+      'User',
+      'Opening Amount',
+      'Total Expense',
+      'Closing Amount',
+      'Status',
+      'Completed By',
+      'Completed Date',
+      'Tea & Snacks',
+      'Water Jar',
+      'Light Bill',
+      'Recharge',
+      'Post Office',
+      'Customer Discount',
+      'Repair & Maintenance',
+      'Stationary',
+      'Excise / Police',
+      'Desi Bhada',
+      'Purchase Voucher No',
+      'Other Vendor Payment',
+      'Difference Amount',
+      'Petrol',
+      'Patil Petrol',
+      'Room Expense',
+      'Office Expense',
+      'Personal Expense',
+      'Misc Expense',
+      'Credit Card Charges',
+      'Misc Remarks',
+    ];
+
+    const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+    const csvRows = [headers.join(',')];
+
+    filtered.forEach((row, idx) => {
+      const raw = row.raw || {};
+      const dateStr = row.date
+        ? new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '';
+
+      const values = [
+        idx + 1,
+        escapeCsv(row.id),
+        escapeCsv(dateStr),
+        escapeCsv(row.shopName),
+        escapeCsv(row.username),
+        Number(row.openingQty) || 0,
+        Number(row.totalExpense) || 0,
+        Number(row.closing) || 0,
+        escapeCsv(row.status || 'pending'),
+        escapeCsv(row.completedBy || ''),
+        escapeCsv(row.completedAt ? new Date(row.completedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''),
+        Number(raw.tea_nasta) || 0,
+        Number(raw.water_jar) || 0,
+        Number(raw.light_bill) || 0,
+        Number(raw.recharge) || 0,
+        Number(raw.post_office) || 0,
+        Number(raw.customer_discount) || 0,
+        Number(raw.repair_maintenance) || 0,
+        Number(raw.stationary) || 0,
+        Number(raw.excise_police) || 0,
+        Number(raw.desi_bhada) || 0,
+        escapeCsv(raw.other_purchase_voucher_no || ''),
+        Number(raw.other_vendor_payment) || 0,
+        Number(raw.difference_amount) || 0,
+        Number(raw.petrol) || 0,
+        Number(raw.patil_petrol) || 0,
+        Number(raw.room_expense) || 0,
+        Number(raw.office_expense) || 0,
+        Number(raw.personal_expense) || 0,
+        Number(raw.misc_expense) || 0,
+        Number(raw.credit_card_charges) || 0,
+        escapeCsv(raw.misc_remarks || ''),
+      ];
+      csvRows.push(values.join(','));
+    });
+
+    const csvContent = '\uFEFF' + csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const dateSuffix = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `Petty_Cash_Export_${dateSuffix}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -453,6 +562,18 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
               <span className="hidden sm:inline">Refresh</span>
             </button>
 
+            {/* Export CSV */}
+            <button
+              onClick={handleExportCSV}
+              disabled={loading || filtered.length === 0}
+              title={filtered.length === 0 ? "No records to export" : "Export filtered records as CSV"}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-semibold rounded-lg cursor-pointer shadow-xs"
+            >
+              <FaFileCsv className="text-[13px] text-emerald-700" />
+              <span className="hidden sm:inline">Export CSV</span>
+              <span className="sm:hidden">Export</span>
+            </button>
+
             {/* Add New Expense */}
             {isModifyAllowed && (
               <button
@@ -516,12 +637,22 @@ export default function PettyCash({ onClose = () => { } }: PettyCashProps) {
                   <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">{fmt(row.totalExpense)}</td>
                   <td className="px-4 py-3 text-emerald-700 font-semibold whitespace-nowrap">{fmt(row.closing)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${row.status === 'completed'
-                        ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                        : 'bg-amber-100 text-amber-700 border-amber-300'
-                      }`}>
-                      {row.status || 'pending'}
-                    </span>
+                    <div className="flex flex-col items-start gap-1">
+                      <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${row.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                          : 'bg-amber-100 text-amber-700 border-amber-300'
+                        }`}>
+                        {row.status || 'pending'}
+                      </span>
+                      {row.status === 'completed' && row.completedBy && (
+                        <span
+                          className="text-[11px] text-gray-500 font-medium leading-tight"
+                          title={row.completedAt ? `Completed on ${new Date(row.completedAt).toLocaleString('en-IN')}` : undefined}
+                        >
+                          by <span className="font-semibold text-gray-700">{row.completedBy}</span>
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {isModifyAllowed && (

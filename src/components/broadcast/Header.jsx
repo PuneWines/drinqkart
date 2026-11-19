@@ -46,7 +46,8 @@ export default function Header() {
           }`}
         >
           <Smartphone className="w-3.5 h-3.5" />
-          <span>Mobile View</span>
+          <span className="hidden sm:inline">💬 WhatsApp Live Chats</span>
+          <span className="sm:hidden">💬 Live Chats</span>
         </button>
       </div>
 

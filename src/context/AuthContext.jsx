@@ -32,7 +32,6 @@ export const parseChecklistAllowedPages = (userData) => {
       "Task",
       "All Tasks",
       "Calendar",
-      "Holiday List",
       "Working Day Calendar",
       "Admin Approval",
       "MIS Report",
@@ -355,7 +354,7 @@ export const AuthProvider = ({ children }) => {
         const { data } = await supabase
           .from("users")
           .select(
-            "master_user_system_page_access, shop_name, user_access, counter_access, role, user_name, email_id, employee_id",
+            "master_user_system_page_access, shop_name, user_access, counter_access, role, user_name, email_id, employee_id, profile_image",
           )
           .eq("id", user.id)
           .maybeSingle();
@@ -363,6 +362,7 @@ export const AuthProvider = ({ children }) => {
           const updatedUser = {
             ...user,
             ...data,
+            profile_image: data.profile_image || user.profile_image || "",
             employee_id: data.employee_id || user.employee_id || null,
             master_user_system_page_access: data.master_user_system_page_access,
             shop_name: data.shop_name,
@@ -377,6 +377,9 @@ export const AuthProvider = ({ children }) => {
               : JSON.stringify(data.master_user_system_page_access),
           );
           syncSubsystemSessions(updatedUser);
+          if (data.profile_image) {
+            window.dispatchEvent(new Event("profile_image_updated"));
+          }
           setUser(updatedUser);
           return updatedUser;
         }
